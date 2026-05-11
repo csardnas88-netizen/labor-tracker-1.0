@@ -1,0 +1,2219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>Paychex Labor Tracker v3.1</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --navy:#0f2544;--navy2:#1a3a6e;--gold:#b8972a;--gold2:#d4af37;--gold3:#f5e6a3;
+  --white:#fff;--offwhite:#f8f9fc;--surface:#f0f4fa;--border:#dde3ef;--border2:#c8d0e0;
+  --text:#0f2544;--text2:#3d5070;--text3:#6b7a99;
+  --green:#1a6e3e;--green2:#e6f5ee;--green3:#c8ebd8;
+  --red:#9b1c1c;--red2:#fde8e8;
+  --amber:#92400e;--amber2:#fef3c7;--amber3:#fde68a;
+  --blue:#1d4ed8;--blue2:#dbeafe;
+  --purple:#5b21b6;--purple2:#ede9fe;
+  --radius:14px;--radius-sm:9px;--radius-xs:6px;
+  --shadow:0 2px 12px rgba(15,37,68,.10);--shadow-sm:0 1px 4px rgba(15,37,68,.08);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--surface);color:var(--text);font-size:14px;min-height:100vh}
+header{background:linear-gradient(135deg,#0a1628 0%,#0f2544 45%,#1a1a1a 100%);color:#fff;padding:13px 20px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;box-shadow:0 2px 24px rgba(0,0,0,.55),0 1px 0 rgba(212,175,55,.2);border-bottom:1px solid rgba(212,175,55,.15)}
+.hdr-logo{width:56px;height:56px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2.5px solid var(--gold2);box-shadow:0 0 0 1px rgba(212,175,55,.3),0 0 16px rgba(212,175,55,.25)}
+.hdr-text{flex:1;min-width:0}
+.hdr-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:3px}
+.hdr-title h1{font-size:17px;font-weight:800;letter-spacing:.2px;color:#fff;white-space:nowrap}
+.hdr-badge{font-size:10px;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.45);color:#f5e6a3;padding:2px 10px;border-radius:99px;font-weight:700;white-space:nowrap;letter-spacing:.5px;text-transform:uppercase}
+.hdr-sub{font-size:10px;color:rgba(255,255,255,.5);font-weight:500;letter-spacing:.5px;text-transform:uppercase}
+.hdr-sub span{color:rgba(212,175,55,.7);margin:0 4px}
+.hdr-date{text-align:right;font-size:10px;color:rgba(255,255,255,.45);flex-shrink:0;line-height:1.5}
+main{padding:16px;max-width:1080px;margin:0 auto}
+.upload-card{background:var(--white);border-radius:var(--radius);border:2px dashed var(--border2);padding:36px 20px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:18px;box-shadow:var(--shadow-sm)}
+.upload-card:hover,.upload-card.drag{border-color:var(--gold2);background:#fffef5}
+.upload-card input{display:none}
+.upload-icon{width:56px;height:56px;background:linear-gradient(135deg,var(--navy),var(--navy2));border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+.upload-card h2{font-size:17px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.upload-card p{font-size:13px;color:var(--text3);margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;border:none;min-height:44px;transition:.15s}
+.btn:active{transform:scale(.97)}
+.btn-navy{background:var(--navy);color:#fff}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#fff}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-ghost{background:transparent;border:1.5px solid var(--border2);color:var(--text2)}
+.btn-sm{padding:6px 13px;font-size:12px;min-height:34px;border-radius:var(--radius-xs)}
+.btn-lg{padding:14px 28px;font-size:15px;min-height:50px}
+.prog-wrap{background:var(--border);border-radius:99px;height:6px;margin:10px 0;overflow:hidden}
+.prog-bar{background:linear-gradient(90deg,var(--navy2),var(--gold2));height:100%;border-radius:99px;transition:width .35s}
+.prog-msg{font-size:12px;color:var(--text3);text-align:center;margin-top:5px}
+.section{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px;overflow:hidden}
+.sec-header{background:var(--navy);color:#fff;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.sec-header h2{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.sec-body{padding:16px}
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+.metric{background:var(--offwhite);border-radius:var(--radius-sm);padding:14px;border:1px solid var(--border);position:relative;overflow:hidden}
+.metric::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--navy2)}
+.metric.m-gold::before{background:linear-gradient(90deg,var(--gold),var(--gold2))}
+.metric.m-red::before{background:var(--red)}
+.metric.m-green::before{background:var(--green)}
+.metric.m-amber::before{background:var(--amber)}
+.metric.m-blue::before{background:var(--blue)}
+.metric .val{font-size:26px;font-weight:800;color:var(--navy);line-height:1;margin-bottom:4px}
+.metric .lbl{font-size:10px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.5px;line-height:1.3}
+.tabs{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--offwhite);border-bottom:1px solid var(--border)}
+.tab{padding:12px 16px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--text3);border-bottom:3px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px}
+.tab:hover{color:var(--navy)}
+.tab.active{color:var(--navy);border-bottom-color:var(--gold2);background:var(--white)}
+.tab .tcnt{background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:99px;font-weight:700}
+.tab-body{padding:16px;display:none}
+.tab-body.active{display:block}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--radius-xs);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead tr{background:var(--navy)}
+th{color:rgba(255,255,255,.9);font-weight:600;padding:10px;text-align:left;white-space:nowrap;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--offwhite)}
+tbody tr:nth-child(even) td{background:rgba(240,244,250,.4)}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap}
+.b-red{background:var(--red2);color:var(--red)}
+.b-amber{background:var(--amber2);color:var(--amber)}
+.b-yellow{background:#fffbe6;color:#856404}
+.b-green{background:var(--green2);color:var(--green)}
+.b-blue{background:var(--blue2);color:var(--blue)}
+.b-navy{background:#e8edf5;color:var(--navy)}
+.b-gold{background:var(--gold3);color:#7a5f00}
+.b-gray{background:#f3f4f6;color:#4b5563}
+.b-purple{background:var(--purple2);color:var(--purple)}
+.row-no-break td{background:#fde8e8!important}
+.row-short td{background:#fef0e0!important}
+.row-ot td{background:#ede9fe!important}
+.pos-group{margin-bottom:20px}
+.pos-group-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:linear-gradient(135deg,var(--navy),var(--navy2));border-radius:var(--radius-xs);margin-bottom:8px;color:#fff}
+.pos-group-hdr h3{font-size:13px;font-weight:700}
+.pos-tots{display:flex;gap:20px}
+.pos-tots span{display:flex;flex-direction:column;align-items:center}
+.pos-tots strong{font-size:16px;font-weight:800}
+.pos-tots small{font-size:9px;text-transform:uppercase;letter-spacing:.5px;opacity:.75}
+.filter-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center}
+.filter-bar label{font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.fbtn{padding:7px 15px;border-radius:99px;border:1.5px solid var(--border2);background:var(--white);font-size:12px;cursor:pointer;font-weight:600;color:var(--text2);min-height:34px}
+.fbtn.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.rev-wrap{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:var(--radius-xs);padding:4px 7px;max-width:180px;background:#fff;color:var(--text)}
+.info-box{border-radius:var(--radius-xs);padding:12px 14px;font-size:12.5px;font-weight:500;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px}
+.info-amber{background:var(--amber2);color:var(--amber);border:1px solid var(--amber3)}
+.info-red{background:var(--red2);color:var(--red);border:1px solid #fca5a5}
+.info-green{background:var(--green2);color:var(--green);border:1px solid var(--green3)}
+.info-navy{background:#e8edf5;color:var(--navy);border:1px solid var(--border2)}
+.mins-wrap{display:flex;align-items:center;gap:7px}
+.mins-bar{height:7px;border-radius:99px;background:var(--border);width:70px;overflow:hidden;flex-shrink:0}
+.mins-fill{height:100%;border-radius:99px}
+.mins-lbl{font-size:12px;font-weight:700;min-width:38px}
+.empty{text-align:center;padding:36px;color:var(--text3);font-size:13px}
+.roster-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:16px}
+.roster-pos-card{background:var(--offwhite);border-radius:var(--radius-sm);border:1px solid var(--border);overflow:hidden}
+.roster-pos-hdr{background:var(--navy);color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+.roster-pos-hdr span{font-size:13px;font-weight:700}
+.roster-pos-hdr .cnt{font-size:11px;background:rgba(255,255,255,.2);padding:2px 8px;border-radius:99px}
+.roster-emp-list{padding:10px 14px}
+.roster-emp-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);gap:8px}
+.roster-emp-row:last-child{border-bottom:none}
+.roster-emp-row span{font-size:12.5px;color:var(--text)}
+.roster-emp-row.new-emp span{color:var(--green);font-weight:600}
+.roster-emp-row.inactive-emp{opacity:.5}
+.roster-emp-row.inactive-emp span{text-decoration:line-through}
+.roster-search{width:100%;padding:9px 12px;border:1.5px solid var(--border2);border-radius:var(--radius-xs);font-size:13px;color:var(--text);background:#fff;margin-bottom:12px}
+.roster-search:focus{outline:none;border-color:var(--gold2)}
+.roster-emp-actions{display:flex;gap:4px;flex-shrink:0}
+.edit-btn{padding:4px 10px;border-radius:var(--radius-xs);border:1.5px solid var(--border2);background:var(--white);font-size:11px;cursor:pointer;color:var(--text2);font-weight:600;min-height:28px}
+.edit-btn:hover{border-color:var(--navy);color:var(--navy)}
+.pos-change-badge{font-size:9px;background:var(--amber2);color:var(--amber);padding:1px 6px;border-radius:99px;font-weight:700;margin-left:4px}
+.roster-stats{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.roster-stat{background:var(--offwhite);border:1px solid var(--border);border-radius:var(--radius-xs);padding:8px 12px;font-size:12px;flex:1;min-width:80px;text-align:center}
+.roster-stat strong{display:block;font-size:18px;font-weight:800;color:var(--navy)}
+.add-emp-form{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
+.add-emp-form input{flex:1;min-width:120px;padding:7px 10px;border:1.5px solid var(--border2);border-radius:var(--radius-xs);font-size:12px;color:var(--text)}
+.add-emp-form input:focus{outline:none;border-color:var(--gold2)}
+.modal-overlay{position:fixed;inset:0;background:rgba(15,37,68,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--white);border-radius:var(--radius);padding:24px;width:100%;max-width:460px;box-shadow:0 8px 32px rgba(0,0,0,.25)}
+.modal h3{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:16px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+.form-group input,.form-group select{width:100%;padding:10px 12px;border:1.5px solid var(--border2);border-radius:var(--radius-xs);font-size:14px;color:var(--text);background:#fff}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--gold2)}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:12px 22px;border-radius:99px;font-size:13px;font-weight:600;z-index:999;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .3s;display:flex;align-items:center;gap:8px}
+.toast.show{opacity:1}
+
+/* ── MONTHLY DASHBOARD ── */
+.month-section{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px;overflow:hidden}
+.month-header{background:linear-gradient(135deg,#1a2a1a 0%,#2d4a2d 100%);color:#fff;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.month-header h2{font-size:14px;font-weight:700}
+.month-body{padding:14px}
+.month-nav{display:flex;align-items:center;gap:8px}
+.month-nav button{background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:var(--radius-xs);padding:6px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:34px}
+.month-nav button:hover{background:rgba(255,255,255,.28)}
+.month-nav span{font-size:14px;font-weight:700;min-width:130px;text-align:center}
+/* Monthly summary cards */
+.month-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-bottom:14px}
+.month-kpi{background:var(--offwhite);border:1px solid var(--border);border-radius:var(--radius-xs);padding:11px 10px;text-align:center}
+.month-kpi .mkval{font-size:20px;font-weight:800;color:var(--navy);line-height:1;margin-bottom:3px}
+.month-kpi .mklbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px}
+/* Week accordion */
+.week-block{border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden}
+.week-block-hdr{background:var(--navy);color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:10px}
+.week-block-hdr:hover{background:var(--navy2)}
+.week-block-hdr h3{font-size:13px;font-weight:700;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.week-block-hdr h3 .wk-dates{font-size:11px;font-weight:400;opacity:.7}
+.week-kpis{display:flex;gap:14px;align-items:center;flex-shrink:0}
+.week-kpi{text-align:center;min-width:44px}
+.week-kpi .wkval{font-size:14px;font-weight:800;line-height:1}
+.week-kpi .wklbl{font-size:9px;opacity:.7;text-transform:uppercase;letter-spacing:.3px}
+.wk-toggle{font-size:16px;transition:transform .2s;flex-shrink:0}
+.wk-toggle.open{transform:rotate(180deg)}
+.week-block-body{display:none;padding:14px;border-top:1px solid var(--border)}
+.week-block-body.open{display:block}
+/* Day cards row */
+.day-row{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:14px}
+.day-hdr{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:4px}
+.day-hdr-cell{text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);padding:4px 0}
+.day-card{background:var(--offwhite);border:1.5px solid var(--border);border-radius:var(--radius-xs);padding:7px 5px;text-align:center;min-height:80px;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.day-card.loaded{border-color:#2d4a2d;background:#f0f7f0}
+.day-card.evaluating{border-color:var(--gold2)!important;background:#fffef5!important;box-shadow:0 0 0 2px rgba(212,175,55,.25)}
+.day-card.today-card{border-color:var(--blue2);background:var(--blue3)}
+.day-card.future{opacity:.3;pointer-events:none}
+.day-card.no-ops{background:#fafafa;opacity:.6}
+.dc-weekday{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--text3)}
+.dc-date{font-size:14px;font-weight:800;color:var(--navy);line-height:1}
+.dc-paid{font-size:16px;font-weight:800;color:var(--navy);line-height:1}
+.dc-budget{font-size:10px;color:var(--text3)}
+.dc-rooms{font-size:10px;color:var(--text3)}
+.dc-eval{font-size:9px;font-weight:700;color:var(--gold2);text-transform:uppercase;letter-spacing:.3px}
+.dc-dot{width:7px;height:7px;border-radius:50%;background:var(--green);position:absolute;top:6px;right:6px}
+/* Rooms input inside week */
+.rooms-row{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:12px}
+.rooms-cell{display:flex;flex-direction:column;align-items:center;gap:3px}
+.rooms-cell label{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--text3);letter-spacing:.3px}
+.rooms-cell input{width:100%;padding:5px 3px;border:1.5px solid var(--border2);border-radius:var(--radius-xs);font-size:13px;font-weight:700;text-align:center;color:var(--navy);background:#fff;min-width:0}
+.rooms-cell input:focus{outline:none;border-color:var(--gold2)}
+.rooms-cell input.has-rooms{border-color:var(--green);background:#f0f7f0}
+.rooms-cell input.locked{background:var(--offwhite);color:var(--text3);border-color:var(--border)}
+/* Position table inside week */
+.pos-week-table{width:100%;border-collapse:collapse;font-size:12px}
+.pos-week-table th{background:#2d4a2d;color:#fff;padding:8px 8px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+.pos-week-table th:first-child{text-align:left}
+.pos-week-table td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.pos-week-table tr:last-child td{border-bottom:none}
+.pos-week-table tr:hover td{background:var(--offwhite)}
+.day-cell-val{font-size:15px;font-weight:800;color:var(--navy);display:block;line-height:1}
+.day-cell-bud{font-size:10px;color:var(--text3);display:block}
+.yd-col{background:rgba(212,175,55,.07);border-left:2px solid rgba(212,175,55,.35);border-right:2px solid rgba(212,175,55,.35)}
+.variance-pos{color:var(--green);font-weight:700}
+.variance-neg{color:var(--red);font-weight:700}
+.week-alert-bar{background:var(--amber2);border:1px solid var(--amber3);border-radius:var(--radius-xs);padding:8px 12px;font-size:12px;color:var(--amber);font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+
+
+.budget-bar-wrap{display:flex;align-items:center;gap:6px;min-width:120px}
+.budget-bar{height:8px;border-radius:99px;background:var(--border);flex:1;overflow:hidden}
+.budget-fill{height:100%;border-radius:99px;transition:width .4s}
+.budget-fill.under{background:var(--green)}
+.budget-fill.near{background:var(--gold2)}
+.budget-fill.over{background:var(--red)}
+.budget-pct{font-size:11px;font-weight:700;min-width:38px;text-align:right}
+.budget-pct.under{color:var(--green)}
+.budget-pct.near{color:var(--amber)}
+.budget-pct.over{color:var(--red)}
+.rooms-input-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding:12px 14px;background:var(--offwhite);border-radius:var(--radius-xs);border:1px solid var(--border)}
+.rooms-day-input{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:60px}
+.rooms-day-input label{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);letter-spacing:.4px}
+.rooms-day-input input{width:60px;padding:6px 4px;border:1.5px solid var(--border2);border-radius:var(--radius-xs);font-size:14px;font-weight:700;text-align:center;color:var(--navy);background:#fff}
+.rooms-day-input input:focus{outline:none;border-color:var(--gold2)}
+.rooms-day-input input.has-data{border-color:var(--green);background:#f0f7f0}
+.budget-summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.budget-sum-card{flex:1;min-width:100px;background:var(--offwhite);border:1px solid var(--border);border-radius:var(--radius-xs);padding:10px 12px;text-align:center}
+.budget-sum-card .bval{font-size:20px;font-weight:800;color:var(--navy);line-height:1}
+.budget-sum-card .blbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.week-pos-table td.budget-cell{padding:6px 8px}
+.variance-pos{color:var(--green);font-weight:700}
+.variance-neg{color:var(--red);font-weight:700}
+.day-badge{display:inline-block;width:22px;height:22px;border-radius:50%;font-size:10px;font-weight:700;line-height:22px;text-align:center;margin:0 1px}
+.day-badge.on{background:#2d4a2d;color:#fff}
+.day-badge.off{background:var(--border);color:var(--text3)}
+.week-alert-bar{background:#fef3c7;border:1px solid var(--amber3);border-radius:var(--radius-xs);padding:10px 14px;font-size:12px;color:var(--amber);font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+@media(max-width:540px){
+  header{padding:11px 14px;gap:10px}
+  .hdr-logo{width:46px;height:46px}
+  .hdr-title h1{font-size:15px}
+  .hdr-badge{display:none}
+  .metrics-grid{grid-template-columns:repeat(2,1fr)}
+  .metric .val{font-size:20px}
+  table{font-size:11px}
+  th,td{padding:7px}
+  .pos-tots{gap:10px}
+  .roster-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header>
+  <img class="hdr-logo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDAwMEBAQFBgoGBgUFBgwICQcKDgwPDg4MDQ0PERYTDxAVEQ0NExoTFRcYGRkZDxIbHRsYHRYYGRj/2wBDAQQEBAYFBgsGBgsYEA0QGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBj/wAARCACMAIwDASIAAhEBAxEB/8QAHQAAAAYDAQAAAAAAAAAAAAAAAQQFBgcIAAIDCf/EAEYQAAEDAgQDBQUFBQUGBwAAAAECAwQFEQAGEiEHMUETIlFhcQgUMoGhI0JSkbEWgsHR8BUkYpLhFzM0U3KiNURjssLS8f/EABoBAAIDAQEAAAAAAAAAAAAAAAEDAAIEBQb/xAAxEQABAwIEBAQFBAMAAAAAAAABAAIRAyEEEjFREyJBYQUycZGBodHh8BQVI0IzscH/2gAMAwEAAhEDEQA/ALLYzfnjDzIwF9uePOrqoeu+MvYXGMvtbb54AkeOCoh6c8a3thKzBmWh5Xoq6rX6nHgREbdo8q1z+FI5qPkATit+ePankFxyFkqnJjI5CbNT2jyvNLQ7qR/1E+mLNY52iq54bqrRFwISpajpSOaidh6nDYqnEnIVGd7Oo5wozLg+4JKXFfki5xRnMmc8+ZpQifXqjU5Ed4lLa5KldkojchCBZHhy8sKVJ4WZrrBCGajG7V2kJrEVlDlveWysoCElKdnLi1j1IF8O4AbdxS+MT5Qrcq468K0Kt+1jS/NEZ8//AAwcicYuGcxaUt5zpiFHYB9SmTf99IxRzMGVzQp9MalVBx5udBjzw6nWNCXb3SUk3umxB8SMOuTwtjaaEnL+fGZr1ddQinxno70dx1CnCguEHUAlJBJvvYbDBNJg6oCq7ZXlg1WnVRgPU2fFmtkX1xXUuj/tJwcCttje2POlFKzlRAmp05brjQqDlNZlRFkKdfR8SUFshZ23Btvh/wCVfaOz9lpxMOsvJqrDStKmqkCXB5dqLKB/6wcVOHP9TKIrDqFdi5A64zwxG+QeM+UM99nEjyDTqqsf+Hy1DUs9ezWNnB6WPliRgoHkcIIIMFNBBEhbeeMG9sB8/mcD64CKEDGW8RgAefngb4iiC3XGdeeMPXGt7b39MRRYTYcvPEecT+LNE4cUj7bTMq7yCqNASuxI/G4fuoHjzPIdSDfFHiLT+HWTVVJ4Nvz3yWoMRSrds5bcnwQkbqPoOZGKP1N/M2c5lZzXMTJqDbKkuzphA0p1q0ov0Cb7JSOQHgMOpUs1zol1KmWw1SnVcw5t4s8QYrdRqrfvUx4MRlSXOxYZCjshA3Dael9ydr3OHZQuGsRml1J5hsz5Bp0hhYfQUP0mqs/aBC0AkFKghQSs3B5cyMI9Gy5Az3lONGyxHjwM1UwASIxe7NFQY1f8QFKNkuIJ72/Lcchg3W+I9RpGb26jRJ8Z+uMR1U6q1Jnvw6oE2S27pUASoDYkjcpBF+r3EnlYkgDVycHEZibnbIkDOdOi1WRGchomuPP1FtEOEpILbrLTCrEuEp1d3py52wj0LPlEp2SKM27UnWapFplSpZ7FsqW2FrS7GWLDkHB47WxHzNMny4zTch1SGEEltDpJCbm50t32+dsGlwaZCbBlPOOddGrSD8k2+uFlzAMkz6LpUvDMQ8cVwDRu4x90r8Qs4M54qNIqrVOdiy2KemPMQluzZdC1KJbt906iem5wq0rO9EiZ1ynVXm5LMfL9FMZAcavrlJQ4U2APwlawb/nhoJbhrQVs0BxxvkHCj+eNkN0Z14srjriOn7pKmz+v8MTOIiCr/tRJkVBJ3BA9yFMuVqpGzBVMuz4kWJOlUGkv1WTT6K0hlTtQfXoCG29h2iUjUee488RpVGq7xD4rx6CzOqU+QXRCZdqrCGpDaAbrLwQBunvXJ3snpywjO0d9p5L0KQQtG6SToUk9LKHL5470LMNTyy7UmGyuLIqbaY71RAJlMNFepwtG9rqHMg9OmDTLTJYbrLisDXw/+Vtt+n56rbMOUZeX3JlYobshyiNVJUCK/LSGHZDiBdSktfFsR8Q5bbA4mvg/7Q60ljLue5RWzYNs1V499o9Ev/iT/wCpz/FcbgvKzNT5cccR36lMUy2hyl0OSWDMRSNKf+JlJBv2zqhsOgUOfLEQ1WhZizU1UM80jJ5p9OabS685EQUx9QA7RaArmkm6ilFwm5xYHOIesl2GWr0EbdS62lSFJUlQBCkm4II6HHQW8MVb9nji+tL0fIWYHj2Sz2dOfcVu0vowT+E/cPQ93qLWhSQoA+OMz2FpgrS1wcJC39DgR6YBNugxsACMURWt8cZDzMeO488tKG0JKlLUbBIAuST4Ab47cvXEM+0fm5WXuFCqVFd0S6y77pcGxSyBqdP+Wyf38Wa3MYQcYEquPEnNlW4scVVppUd+U0pRi0yI2LnsQSQQPxLIKifDboMPajt0bKOXI9OrUFVQyt74iV729FU0/TZ+jSlE+Pf7Ru+6b7EAWviJMpVikUisKnVWnTZJXZTL8GYqLIiKBuFtqAIJttZQIxI+eOKceqZcSMuV+e7ImsmFOhVGCixbKf8AeJWLhKuhCTpN9QSkjGqo02YBZZmkXcTdR/miJRYGYEU7K9WeqakN9nLnMpCGX3lElQYSNw3Y6QCd7E8sDFgM0yEZj6UrdSL2HJPSw8+W+MotPSwwJTibuL+AHoPH1P6WwcREKqRBlyZYksVJt5JQUgBp1twpUi/XulCgdueE1KmblBsPmvSeH4NmGyPqjnfOXZu090T96qkhsFiD2aV7pW4oAW8f6Hyx3iU1thZkPOdtIuSXCNh6D+PPHBgrpTwYfVrirP2b3gfBXn+v54Oze0XS3vdzqWWzpt19MJcTo2wK61BrSDUqy57ehix7AAC/Qrg1HdqE1+ZCWtAaa0pWPhdWNwPMWv8AmMdEGLUYTfboQoKTq03sU+Y6je++C6K+wxIgRGVBMUM2cKT94i2/mDc/O+AiR2ItaLMSQp9ttj7RZtuonYbbcv44EO/tbZJoYhjngNIdmMO2kwRA2iR3iShSxUIJ0xymUz0S4rSpP8P0xs06mo9rDmRtC0d4p1cvMEcj53xk+YtC/doou8QSTfZA6m/T16euH3krhDmPMFJE1mdFpiXFnUubHcWVW2HI2B66RuL96xOLQS3M7VUrYilh6gYHHJeRqPQWn1vA07KO4supZXqiX2OzkxVLSpceQkrjydO4DrdwFWO9jttceGJZn1uq8QMrU6NTJMNrtIrL+Zas+tbcCI22TojWNtANtS2291G3TfDYpGRa3m2s1ai09DZYpsgsSZ05CmEoUFEJ7idStfdJsOQFzzw5Y/s+V1UI097O7aIinA85HZgvqQVWsFaSQNVvHDg8HzmCF53G0qQfOGMtPTbso0z6zlaFnJNVyZUWnaXLSXgw0FNriKCiFIsd0jUNSOukjw3t9wU4gKz7w6aemuhdVhERpv8AjVa6XP307+oViqvETJeX8jx4lMiVKTUaq8rtHXXFtthpsDkGUFRFyfiWoHbYczhV9nrNysscW4tPedCYVVtBdBNgFE3aV8ld30UcMe0PpyOiwtcWvgq8IIAwIJt0+eOaFahe1sdBa24xkWmFqo2H88Uy9puvrqfF4UhKx2NMhtsAeC3PtF/TQPli5bh7hHXHn7xPlP1njhmRxDa3nF1R5CENgrJCLNgADc7Jw/DiXSlVjyppH4th0wYp8b3qpNtqHdv3h5Wufpt88aIiylhvRDkK7QKKLNKOu3Mp23t1I5YUaGpLTcqWRshHjz3P/wBRjTVdlYSFfw6i2riWNfpqfQXShOkPOve4Qk3dULKV0Qnz/rywcRG15NqtJS6UKgus1WOv4rJJDL+3zbV8sEIalR4PaKTd6R9opSh+Q/rxwr0RbLeYKd7+f7tKUqA+Ty7N9JbJ+RKT8sYA7KYC9RjKBr0DXd5tQNht7XPf0SEtU+c4qmuFDYSftnW99ulvM/1a2D760wKYVoRdDQAAv8ueMiQ3aaHokjUZTTy23yob60qKSPp9cJ79ReeXJ7JaUIZCUlDiQrXdWk38MQ8zoGgTmVBRo8Z5Je8WOpAiRsLC53KItPMIC1PR4Tq1qJUpx4Dn4eHywfoboSHIgS2QnvlbZCuZsLnGkMumldow02UREJK0lAJcuTt5AC5vgtGlPtuSVsKQhtCi5o0AarrAtfpzw13MC1c6hU4D6dQmbHoNOt+txfrbulCY37k65ObTrac2faPh+IeHP63xY3gtkMZfyaMwT5L6ZVUbTJREQtQajNkd3ug7uKTYlR5A2HW9f0LbmwQooPZvIIKT4HY4sFw3zs/O4aw5FThSUphrFLVJbbU4h1aNKEkFO6SboG4tfkThBccsdUfF6QaWPYeUyfj99Y3kpw0KgsZaiVVxVRclyKlPXPkPLZSgKUoABKUpJAASnmee5wz8/Z8peV4BLyUy576SpploNOW6BatTZAQDYbKJ8Bzwq8TF5jj5IVXMrSlR0x0H39h6NqcDB5ut6rFKk8yOVtxuN67TREk0JtwtzpFVmtKmTKjIkJWh8KCglITa+pKkAFV9+95YjGZudy5dKnxHCmOv57JtVGpSqvVH6lOWlciQvW4pCEtpvy2SAABtawwXZeejT2ZMVWl5B1IVfkpJ1JP5jGzcWW4NbUSQ4kqICktKUCedgQP6tjRTTydDhZcASpKiSg7Dn+hv6Y6vZchejWWKwivZRptZbI0zYrUgAdNaAo/UnC0OXP64iz2fqgqdwCoYWskxw7Gv5IdUB9LYlEDwGOYRBIW4XErVy2nFAnJzFP48T50+euAhmrSlrdSlxYNn1HSoNlK9KuRKTffkRfF/HtmlG1zbHn3xOhGBxmzPFJPdqbyxfckOHWP/AHYfh7khKraAp+wM/ZZgVqLJGZpsmKFyX1Ikx3u1ZW48hSUnRYBAbRZIbO6ySrukjEaMrTJplVdaKzrWtwFwDUQVKO4GwPpthBCbnnfwwtZfcHavR1DYi9jvff8A1xeqzKwkLZ4S4OxLWO6gj3CPlwuUpjTaykDzG2OL7alw1Na9KtJ0qB3SRuPrjknVCkqguXLKla2VHbbw9f664NvFpoOPPAaB8KVfeOMhEOsvWseH0iKloEO7Wv8AD/hSjUanEqdfNRjuFRqDDUt0aSAh/QEvJv1OpOr97CZLpzEhwuKUtu4ssINtYG9j/MYlyi8LKVW+D9Ikqq9SFTXF7eK8p+7EcrF9CWuWk3AJ58zfpiH58txiA6y/rZmgqZU2E3KVpNlDy64gu/8Aj9FzMDi6bsMaWIE5RPqPrePitYMJiRS2FOBW6AFhKiAsA7BQ645w4DL7kl1a17vKSpsfCoA3AOC7DqER0NonVBKUiwQln4fIeOO1OfDM9xlTj3Zum7Zcb0kq+96YY4OAcQUyk6i40mvaNjprHb2+PdKri+xbQdSW0FaUlaklSWwSAVEDcgc9vDDtlZjplNyhTck5dzo01Ffdcn1OsLhvIDbxcQtCEN2uR3U9fuqvhguf36pOpW8pEVjmUqtc+v5/ljKa7aoyG25KnIwGxWrkfD9fpgNAY2euqpjW/rKrWzDSSB6iZMbdJlTXmHi7FjJoX7M1Vquus62p7MqO60iWlaBqUVFNkEG+2+x674i6rTWpsp16LSItHgstKaiwYyisMpJK1aln4iVKPysABjnuRYKv0tgtUXAimOkcynQLeZthQdPKAtVLwylhAazjJbJ+SV8jSaqvLb0KNFqL0Zb8lgrYeQEoW9GS2k6FOo5HvFVwBcb3NivVjNcqfkKrJpeXprVPehmNIfW604EhtPu7a0kKuR9mAqwOyeZG+I5oeZV0WAWmICFuqmIlmQl9xlwhAIDepBHd7yj5E3wekZ6qEqBVYLlPgobqaEtL7NJSGgFqWdIvY3UtSt72O4x0HMJdMLxAdAVp/Zrv/sNYJvvPlEeX2n+mJiBPl+eIr9nqEuFwBoanB3pHbSvULdUR9LYlT6emMb/MVrZ5QsX8JG+KW+0jQ10vjIqpIbszVIiHgoDYuNdxY9baD88XSULg4hH2j8orrnDM1mIyXJdGc97AAuVNEWdH+XvfuYtSdleFWo2WqnyEKddS20kuLWQEpQCVKPSwG5OFaXS6zlesxkVmlyoDz7SXkMyEaFKbJIBt0vZQsQDy2w6+GGYpdHqwjQpmXaKEOCY/WaizqeLKSLstnc7i+ybE774cOa8ojOzD9YyXl2WEzJjkpup1ieGn6he57KKys3UgcweZta+NT33yu0SaRcwiow3F0w6m37zTg4ylS3EELRpFyR1t15fpgu2lc1Zm1FCm46N0MqFgfM3/AE+mOdJqBUkxJACFJJACtrG/L/8AfTBiqyWm4uhbiQ7qCkoKQvVY3sUnmPEHGOHMdw/mvZ8WjXpHGTaLtOkiYn3/ANKxvDpbjXCTL0V9elxUO9ldEklSb/ulPyOIw4tZepDbyc4Q54jvvOFmTE16HHHR3SU2BsvaygQAbBQO5GGivivndyGGPfYqFaSntUMALuSCSOg2SlNrWsALDDZVWZz9YdqdVUuoS3LBUh46l7C23yGLMwz2vL15enXpktaTA3iY+CV004KQD73NTcbjteX0wXlRW4jfbmXJW4k3Qlawd/Hl0xydrzC4iw3rbd07bYLf2xFXuqDJe7ukKcdBPyuNsXpUnky4wF2cb4jhKbIoNzOOh2+66yEiPTIzSlEdsvW6AbEi230x3VR3HHIzIcDbrjCpCkKOltlHTcb36/P1wiKcK3+0KbgEBKFm+3gbYUXa3IcmqfdQ4tKmVMKBcF9JNyAbCw6Y1MZAuuDicWaruQQ0R8vyfUpagOK907JeoONHs16vEYTK/KGlEVKgb7qt0Nv5E/THSNU46Y0h91aQ+4tTimwCAPIeQFsdcowKPX84pazDmRNDYUkqZlKb1XdFikb7J33urawAxlZSioXnQLt43xGcEyiCC5wE9h9T9UhSIkmG92EuM/GdCQrs3my2rSeRsQDbzxzS04+8lphJW8shtsDqtR0pH5nFi+JFcj0jLMMZtRCzLIsG+xlwHGm5abbPsPpuG1jYq0LKVfhScR7wMyo5mfi9CccZ/udKIqD5tca72aR/m33/AAnD21ZaXELzhp82VXMylSG6DkymUZkJCIUVuOLDbuJAP1BOFwWtjkwnS0Bfa2O4JtsMYVsQHY4JT4zcqG5HdQlaFpKVJULhQIsQfK2DpJvjQ97fBQCoHxLyLJyDn2TRg2owXSZFOcUDZbRO7Z80nY/Lxw+qbX6JmviNBzFQY9SqGZ+wT7pBn2ap1H7NsBTxcG6m0bqCQBud7m2LAcV+HMPiBkt2ApSWZzBL0KTa5ZdA6/4TyI8PMDFN4M6v8P8AOcyLJgttT2kLizoEpGtqQ0od4G1tSFDcEeo8MaWniN7hZ3NyHslTNOVI4psjM2Xpz86mxXEx5NVmqS2mpS1rOsxW7XKBfxPK/jhi6gtwqSStR3UCdR/1H9HE75Hn1fNdbpuZUe5xYEMSKTHp8BoBuhJLF25Y1E2Gq4KiPn0w35eW4Occspz1mienLrsxxEKNLYiqcjSXW0kOSnygDsw4oABQtuk88XbUizlUtkWUU7EdMCFJHxJv4b4P1Gh1elLaTOgugPR0zELSL6mVE6XDa9km2xUEnCb2iCn47eagd/mLj64fMpS6KDSh3VFJ8Fcv6/PGtwOqVDlsb411JJ2caB6faAfxxgKdW7zd/JRUfpiKLb9eR2xnQ2IFuZOwHrjZlt6VKbjRIzj7zighDaRupRNgAkbkk+mFys5QreU5tPczXTFtxn3LhpqQ2dQQR2iLoJ0LANt9xfAJAsjC2yflKTm2qPspkpgU2GyqVOnOJKuyaSLkhA3WfBA9TbEocPpkWRltGR8xURkKiIXUY8GXTQpVWiqSV/Z3IUh/YFKwd07G9tk6pZkkT8m0nNuQGf7Gays+tuRR2QFdghw9yQo83ErA0OXvv+eGxnjOlDzEtU6kUR2FUJbiZlRnyXlOuNOBOnsY6r3Q1zNuZvbYDCDmqW/AmCGpFrtdj1HRTcvQ6pT6MXEOoo70wykiSbp+zuB+KwBud/PFuOCHDteR8ip9/SDVZ6hJmq56VEWDYPgkbeZueuIp4A8JHps6LnjMEYtsNd+nRHBuT/zledvhHz8MWqZaDbYAAA5YVWeDyt0TaTI5iuqbjbG/1xqOeBCT5/XCE5CbEY1I/ljY2/0wA8bWwUFzUBa2Iu4qcIaRxBpyXwRCq7CSI89CbqT10rH3kX6dOlsSoRtboccykHYjEBIuFCARBXnfmXLeYcm116jVyMuDJUClLiFEMy0eKFdR5fmBh1nOdPzOKJQqi5Jy2zZmnVBTEtSYC4SDexZsSFXHMEgk74uJmjJtBzbR3KbXaaxMYWL6XE7pPQpPMHzG+K1Z19m2v0px2Xk+Ympw7kiBMVpdT5Jc5H52PmcaBVa7z2KQ6mR5UYr9bXnX9lY+WU/2ZT8xVZ2HOaZNnH22FoDYcUN9AaBIRyHngjJcyxnHjWmA7BoUmlsomy3QinrpzjYQhQS0+u41AGytQt4+WInkQMw5RqyHJcOq0OYyq6HXEKQEm1rpcG3I25nnhVh8Q82t5jFfcqceqSzDVBLk9CHwtkm5SoG17+d9tsW4RA5Cq578yeFHyjl6t1nMi42TUzVU2NDLFNpFbU62644shakvnmNJBseWk44T8t5Mon7RSYsdFRZoWYIKFLedLiVxHE2caVYgKsu41WvthnO5qqTsSvsMUumxGq0lhL7cNoMoa7JQUOzSFWTcjfn1wnwavUKdl6rURkx0xKolpMgO2uOzVqSU77G99/DFgx2/5ZVzDZTxXKTQ8u0DMNVyqhm9BrUOrmmhICo5TYK0HmWnGlpWnwOodMMrMi8gjK2YXWqrRX01N8zqWqO24uoMPKJcU0/fZDY3Rtz1AnliPpWY61VKk6pyrSHpMmK3CdahJJU+0hISlC0p+LYDmDh2ZW4MZ7zMtC26YaRFV/5moD7S3+Fsbj52xXIGXc5Wku8oTBadlMocZbeeaEgBpTTROp8XBCNI+LcDYjE7cJeA8ypS4+YM6ROxjNqC49LXuVHop3x8dP5+GJU4e8Css5NU3UHWjUapbeZJAKgeukckD038ziW2WG2WwhtASBsLDC6lcus1MZSi7lxiQ2ozAbaSEpSLADBsDywIAtYcsbYQnLNr3wIOAuL2NxgRe3w4ii1N7fyxl74C5uB44wjY4KiHfwxqbWwN9rdMBe/MDngKID4nc40UgK5i+NxuPngT8VsRRJs2j0+eypqXEaebUN0rQCD6jDDqvAzhvVHlPPZXgpWo3KmUdmf+0jEm2+mM28BzxBbRTVQs57NPDdaypNMfQD0TJct8u9g5C9nXhnDN1UBt+3V9anP1OJeAG+AHw4tmduUMo2TXouQsr0BoN0qiw4oH/KZCb/lhwtRGWkgNthIHgMGSAOnPGWFzisIytQkAbYEb+RwI5AYzEUWD9OWNuWAF+d8YOgwUEOM2HO2AHLGaQeYwEV//2Q==" alt="HK Team"/>
+  <div class="hdr-text">
+    <div class="hdr-title">
+      <h1>Paychex Labor Tracker</h1>
+      <span class="hdr-badge">&#128293; We Are Firemen!! <span style="font-size:9px;opacity:.6;">v3.1</span></span>
+    </div>
+    <div class="hdr-sub">We Live in the Heat <span>&middot;</span> Housekeeping Team <span>&middot;</span> 25/8 <span>&middot;</span> #328</div>
+  </div>
+  <div style="text-align:right;flex-shrink:0;">
+  <div class="hdr-date" id="hdrDate"></div>
+  <div id="syncStatus" style="font-size:10px;margin-top:2px;color:rgba(255,255,255,.5);">&#9729; Connecting...</div>
+</div>
+</header>
+<main>
+  <div class="upload-card" id="zone">
+    <input type="file" id="filePick" accept=".pdf"/>
+    <div class="upload-icon">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M13 3v14M7 9l6-6 6 6M4 20h18" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h2>Upload Paychex Labor Distribution PDF</h2>
+    <p>Tap to select your daily labor report</p>
+    <button class="btn btn-navy btn-lg" onclick="document.getElementById('filePick').click()">Choose PDF File</button>
+  </div>
+  <div id="progWrap" style="display:none;margin-bottom:16px">
+    <div class="prog-wrap"><div class="prog-bar" id="pbar" style="width:0%"></div></div>
+    <div class="prog-msg" id="pmsg">Loading...</div>
+  </div>
+  <!-- MONTHLY DASHBOARD -->
+  <div class="month-section" id="monthSection">
+    <div class="month-header">
+      <h2>&#128197; Monthly Labor Dashboard <span style="font-weight:400;font-size:11px;opacity:.7;">(P&amp;L: calendar month · Weeks: Sat–Fri)</span></h2>
+      <div class="month-nav">
+        <button onclick="changeMonth(-1)">&#8592;</button>
+        <span id="monthLabel"></span>
+        <button onclick="changeMonth(1)">&#8594;</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;min-height:34px" onclick="clearMonth()">&#8635; Reset Month</button>
+        <button class="btn btn-sm" style="background:var(--gold2);color:#fff;min-height:34px" onclick="exportMonthExcel()">&#8659; Export Month</button>
+        <button class="btn btn-sm" id="jumpDailyBtn" style="background:rgba(255,255,255,.15);color:#fff;min-height:34px;display:none" onclick="document.getElementById('results').scrollIntoView({behavior:'smooth'})">&#128203; Daily Report &#8595;</button>
+      </div>
+    </div>
+    <div class="month-body">
+      <div id="monthAlerts"></div>
+      <div class="month-kpis" id="monthKpis"></div>
+      <div id="monthWeeks"></div>
+    </div>
+  </div>
+
+
+  <div id="results" style="display:none">
+    <!-- Scroll back button -->
+    <div style="text-align:center;margin-bottom:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('monthSection').scrollIntoView({behavior:'smooth'})" style="border-color:var(--navy);color:var(--navy);">
+        &#8593; Back to Monthly Dashboard
+      </button>
+    </div>
+    <div class="section">
+      <div class="sec-header">
+        <h2>&#128202; Daily Report &mdash; <span id="reportDateLabel" style="font-weight:400;font-size:13px;opacity:.8"></span></h2>
+        <button class="btn btn-gold btn-sm" onclick="doExport()">&#8659; Export Excel</button>
+      </div>
+      <div class="sec-body"><div class="metrics-grid" id="metrics"></div></div>
+    </div>
+    <!-- Labor Totals Summary above tabs -->
+    <div class="section" id="laborSummarySection" style="display:none">
+      <div class="sec-header" style="padding:10px 16px;">
+        <h2 style="font-size:13px;">&#128203; Labor Totals &mdash; <span id="laborSummaryDate" style="font-weight:400;opacity:.8;font-size:12px;"></span></h2>
+      </div>
+      <div style="padding:10px 14px 14px;">
+        <div id="laborSummaryCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="tabs">
+        <div class="tab active" data-t="breaks">&#9749; Breaks</div>
+        <div class="tab" data-t="breaks">&#9749; Breaks</div>
+        <div class="tab" data-t="overtime">&#9201; Overtime</div>
+        <div class="tab" data-t="position">&#128260; Position Check</div>
+        <div class="tab" data-t="other">&#9888; Other Depts</div>
+        <div class="tab" data-t="roster">&#128101; Roster</div>
+        <div class="tab" data-t="all">&#128196; All Employees</div>
+      </div>
+      <div class="tab-body active" id="tb-breaks">
+        <div class="info-box info-amber">&#9888;&#65039; All employees must take 30 min (0.50) unpaid break. No Break = 0 min recorded &middot; Short Break = under 28 min. <b>Upload a PDF report above to see today's data.</b></div>
+        <div class="filter-bar">
+          <label>Filter:</label>
+          <button class="fbtn on" data-bf="all">All Exceptions</button>
+          <button class="fbtn" data-bf="none">No Break Only</button>
+          <button class="fbtn" data-bf="short">Short Break Only</button>
+        </div>
+        <div id="breaksContent"></div>
+      </div>
+      
+      <div class="tab-body" id="tb-overtime">
+        <div class="info-box info-amber">&#9201; Employees with more than 1 hour of overtime, grouped by position.</div>
+        <div id="overtimeContent"></div>
+      </div>
+      <div class="tab-body" id="tb-position">
+        <div class="info-box info-amber">&#128260; Detects employees clocked under a different position than their primary assignment.</div>
+        <div class="filter-bar">
+          <label>Filter:</label>
+          <button class="fbtn on" data-pf="all">Show All</button>
+          <button class="fbtn" data-pf="mismatch">Mismatches Only</button>
+          <button class="fbtn" data-pf="unknown">Unknown Only</button>
+        </div>
+        <div class="tbl-wrap">
+          <table id="tPosition">
+            <thead><tr><th>Emp ID</th><th>Name</th><th>Clocked As</th><th>Primary Position</th><th>Status</th><th>Paid Hrs</th><th>Decision</th><th>Note</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tab-body" id="tb-other">
+        <div id="otherBanner" class="info-box info-red" style="display:none">&#9888; <span id="otherBannerText"></span></div>
+        <div class="filter-bar">
+          <label>Filter:</label>
+          <button class="fbtn on" data-of="all">Show All</button>
+          <button class="fbtn" data-of="pending">Pending</button>
+          <button class="fbtn" data-of="resolved">Resolved</button>
+        </div>
+        <div class="tbl-wrap">
+          <table id="tOther">
+            <thead><tr><th>Emp ID</th><th>Name</th><th>Dept in PDF</th><th>Paid Hrs</th><th>HK Primary</th><th>Status</th><th>Action</th><th>Note</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tab-body" id="tb-roster">
+        <div class="info-box info-navy">&#128101; Manage your employee roster. Tap any employee to edit their position or remove them. Changes save automatically.</div>
+        <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <button class="btn btn-navy" onclick="showAddModal()">+ Add Employee</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportRoster()">&#8659; Export Excel</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red)" onclick="resetRoster()">&#8635; Reset</button>
+        </div>
+        <input type="text" class="roster-search" id="rosterSearch" placeholder="&#128269; Search employee by name or ID..." oninput="renderRoster()"/>
+        <div class="roster-stats" id="rosterStats"></div>
+        <div class="roster-grid" id="rosterGrid"></div>
+      </div>
+      <div class="tab-body" id="tb-all">
+        <div class="tbl-wrap">
+          <table id="tAll">
+            <thead><tr><th>Emp ID</th><th>Name</th><th>Position</th><th>Work</th><th>Meal</th><th>Regular</th><th>OT1</th><th>Paid</th><th>Unpaid</th><th>Break</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+<div class="modal-overlay" id="modalOverlay" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h3>Add New Employee</h3>
+    <div class="form-group"><label>Full Name (as appears in Paychex)</label><input type="text" id="newEmpName" placeholder="e.g. Garcia, Maria"/></div>
+    <div class="form-group"><label>Primary Position</label>
+      <select id="newEmpPos"><option value="">Select position...</option>
+        <option>Room Attendant</option><option>House Attendant</option>
+        <option>Laundry Attendant</option><option>Turndown Attendant</option>
+        <option>Housekeeping Supervisor</option><option>Public Area Attendant</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Employee ID (optional)</label><input type="text" id="newEmpId" placeholder="e.g. 26100999"/></div>
+    <div class="form-group"><label>Notes (optional)</label><input type="text" id="newEmpNote" placeholder="e.g. Start date, part-time, etc."/></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-navy" onclick="saveNewEmp()">Save Employee</button>
+    </div>
+  </div>
+</div>
+<!-- EDIT EMPLOYEE MODAL -->
+<div class="modal-overlay" id="editModalOverlay" style="display:none" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal">
+    <h3>Edit Employee</h3>
+    <div style="background:var(--blue3);border-radius:var(--radius-xs);padding:10px 14px;font-size:12px;color:var(--navy);margin-bottom:16px;">
+      Editing employees from the official roster. Changes are saved in this browser.
+    </div>
+    <input type="hidden" id="editEmpId"/>
+    <input type="hidden" id="editOrigPos"/>
+    <div class="form-group">
+      <label>Employee Name</label>
+      <input type="text" id="editEmpName" placeholder="Full name as in Paychex"/>
+    </div>
+    <div class="form-group">
+      <label>Primary Position</label>
+      <select id="editEmpPos">
+        <option value="">Select position...</option>
+        <option>Room Attendant</option>
+        <option>House Attendant</option>
+        <option>Laundry Attendant</option>
+        <option>Turndown Attendant</option>
+        <option>Housekeeping Supervisor</option>
+        <option>Public Area Attendant</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Status</label>
+      <select id="editEmpStatus">
+        <option value="active">Active</option>
+        <option value="inactive">Inactive (hide from checks)</option>
+        <option value="terminated">Terminated (remove)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <input type="text" id="editEmpNote" placeholder="Position change reason, date, etc."/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-red btn-sm" onclick="deleteEmpFromEdit()" style="margin-right:auto">&#128465; Remove</button>
+      <button class="btn btn-navy" onclick="saveEditEmp()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7l3.5 3.5 6.5-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span id="toastMsg"></span>
+</div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+(function(){
+  var d=new Date(),days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"],
+  months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  document.getElementById("hdrDate").innerHTML=days[d.getDay()]+"<br>"+months[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear();
+})();
+
+/* ========================================================
+   ROSTER
+   ======================================================== */
+var DEFAULT_ROSTER={
+  "Room Attendant":["Claudia V","Evangelina F","Thelma R","Karla V","Rubia T","Aletis T","Sandra T","Maria N","Hermelinda N","Gabriela C","Santa Elena D","Heidy A","Debora T","Jazmy B","Sandy B","Luisa Y","Julia S","Rosario P","Candy","Olga B","Sandra Silva"],
+  "House Attendant":["Jorge G","Elmer G","David M","Vanessa B","Mauricia"],
+  "Laundry Attendant":["Isabel D","Olga A","Petronila Q","Victoriano C","Olga Yac","Adamary","Gady Gonzalez"],
+  "Turndown Attendant":["Yorlin A","Aura B","Guadalupe C","Paty C","Yesenia P","Jazmin"],
+  "Housekeeping Supervisor":["Rolando","Jose Luis","Rubidia G","Maria T","Susan A","Yanira S"],
+  "Public Area Attendant":["Maria M","Fabiola G","Andrea","Melvin","Luis"]
+};
+
+var ROSTER_BY_ID={
+  "26100002":{"name":"Susan Karina Aguilar Ambrocio","pos":"Housekeeping Supervisor","code":"2550"},
+  "26100005":{"name":"Olga Ajpacaja","pos":"Laundry Attendant","code":"2655"},
+  "26100006":{"name":"Heidy Ajsoc","pos":"Room Attendant","code":"2560"},
+  "26100015":{"name":"Yorlin Arias Hurtado","pos":"Turndown Attendant","code":"2580"},
+  "26100017":{"name":"Jose Baiza","pos":"Housekeeping Supervisor","code":"2550"},
+  "26100018":{"name":"Jazmy Balux Ixcol","pos":"Room Attendant","code":"2560"},
+  "26100019":{"name":"Yolanda Bamaca Lopez","pos":"Room Attendant","code":"2560"},
+  "26100020":{"name":"Sandy Baran Canil","pos":"Room Attendant","code":"2560"},
+  "26100024":{"name":"Aura Berrios","pos":"Turndown Attendant","code":"2580"},
+  "26100034":{"name":"Yohana Paty Cano","pos":"Turndown Attendant","code":"2580"},
+  "26100036":{"name":"Mauricia Chavarria Hernandez","pos":"House Attendant","code":"2565"},
+  "26100038":{"name":"Victoriano Chuquiej","pos":"Laundry Attendant","code":"2655"},
+  "26100039":{"name":"Guadalupe Cruz","pos":"Turndown Attendant","code":"2580"},
+  "26100040":{"name":"Gabriela Cuevas Ibarra","pos":"Room Attendant","code":"2560"},
+  "26100046":{"name":"Isabel Diaz","pos":"Laundry Attendant","code":"2655"},
+  "26100050":{"name":"Jecelyn Escoto Aguilar","pos":"Laundry Attendant","code":"2655"},
+  "26100053":{"name":"Marina Flores","pos":"Laundry Attendant","code":"2655"},
+  "26100055":{"name":"Evangelina Frias","pos":"Room Attendant","code":"2560"},
+  "26100056":{"name":"Elmer Galindo Melendez","pos":"House Attendant","code":"2565"},
+  "26100057":{"name":"Fabiola Garcia Martinez","pos":"Turndown Attendant","code":"2580"},
+  "26100059":{"name":"Hilda Garcia","pos":"Room Attendant","code":"2560"},
+  "26100063":{"name":"Rubidia Giron","pos":"Housekeeping Supervisor","code":"2550"},
+  "26100064":{"name":"Jorge Gonzalez","pos":"House Attendant","code":"2565"},
+  "26100072":{"name":"Wendy Hernandez","pos":"Public Area Attendant","code":"2575"},
+  "26100077":{"name":"Ana Jaimes Uriostegui","pos":"Housekeeping Supervisor","code":"2550"},
+  "26100090":{"name":"Maria Marroquin","pos":"Public Area Attendant","code":"2575"},
+  "26100091":{"name":"Florencia Martin","pos":"Room Attendant","code":"2560"},
+  "26100092":{"name":"Jordana Martinez Aristigueta","pos":"Laundry Attendant","code":"2655"},
+  "26100097":{"name":"David Matheo","pos":"House Attendant","code":"2565"},
+  "26100105":{"name":"Manuel Morales Hernandez","pos":"Laundry Attendant","code":"2655"},
+  "26100109":{"name":"Hermelinda De Jesus Noriega","pos":"Room Attendant","code":"2560"},
+  "26100111":{"name":"Maria Rosalma Noriega","pos":"Room Attendant","code":"2560"},
+  "26100119":{"name":"Yesenia Pineda","pos":"House Attendant","code":"2565"},
+  "26100126":{"name":"Julian Puac","pos":"Housekeeping Supervisor","code":"2550"},
+  "26100127":{"name":"Petronila Quiacain","pos":"Laundry Attendant","code":"2655"},
+  "26100132":{"name":"Thelma Raymundo","pos":"Room Attendant","code":"2560"},
+  "26100133":{"name":"Meybel Reyes Urquilla","pos":"Turndown Attendant","code":"2580"},
+  "26100146":{"name":"Julia Say Tzep","pos":"Room Attendant","code":"2560"},
+  "26100156":{"name":"Rubia Toro Munoz","pos":"Room Attendant","code":"2560"},
+  "26100158":{"name":"Maria Torres","pos":"Housekeeping Supervisor","code":"2550"},
+  "26100159":{"name":"Debora Tzaj Ajsoc","pos":"Room Attendant","code":"2560"},
+  "26100160":{"name":"Aletis Tzunun","pos":"Room Attendant","code":"2560"},
+  "26100161":{"name":"Sandra Tzunun De Leon","pos":"Room Attendant","code":"2560"},
+  "26100163":{"name":"Karla Varela","pos":"Room Attendant","code":"2560"},
+  "26100164":{"name":"Claudia Villanueva","pos":"Room Attendant","code":"2560"},
+  "26100171":{"name":"Olga Yac De Leon","pos":"Room Attendant","code":"2560"},
+  "26100172":{"name":"Luisa Yac","pos":"Room Attendant","code":"2560"},
+  "26100213":{"name":"Santa Elena Deleon Lopez","pos":"Room Attendant","code":"2560"},
+  "26100219":{"name":"Carlos Mejia","pos":"Housekeeping Supervisor","code":"2550"},
+  "26100220":{"name":"Katherine Tabora","pos":"Public Area Attendant","code":"2575"},
+  "26100222":{"name":"Rosario Puac","pos":"Room Attendant","code":"2560"},
+  "26100223":{"name":"Jazmin Hernandez","pos":"Turndown Attendant","code":"2580"},
+  "26100232":{"name":"Vanessa Barragan","pos":"House Attendant","code":"2565"},
+  "26100239":{"name":"Andrea Vega","pos":"Public Area Attendant","code":"2575"},
+  "26100241":{"name":"Melvin Luna","pos":"House Attendant","code":"2565"},
+  "26100254":{"name":"Yanira Santos","pos":"Room Attendant","code":"2560"},
+  "26100302":{"name":"Luis Ordonez","pos":"Public Area Attendant","code":"2575"},
+  "26100308":{"name":"Maria C Coreas","pos":"Room Attendant","code":"2560"},
+  "26100322":{"name":"Gady Gonzalez","pos":"Laundry Attendant","code":"2655"},
+  "26100323":{"name":"Olga Batz","pos":"Room Attendant","code":"2560"},
+  "26100324":{"name":"Candy Say Toc","pos":"Room Attendant","code":"2560"},
+  "26100327":{"name":"Adamary Tzic","pos":"Laundry Attendant","code":"2655"}
+};
+var HK_POS={"2550":"Housekeeping Supervisor","2560":"Room Attendant","2565":"House Attendant","2575":"Public Area Attendant","2580":"Turndown Attendant","2655":"Laundry Attendant"};
+var HK_CODES=Object.keys(HK_POS);
+var POS_LIST=Object.keys(DEFAULT_ROSTER);
+var POS_NOTES=["Worked different position today - approved","Should be corrected in Paychex","Approved for operation needs","Needs manager review","Cross-training - documented"];
+var OTHER_NOTES=["Approved - working different dept today","Not an HK employee - ignore","Transferred temporarily from HK","Error in Paychex - needs correction","Needs manager review"];
+function loadRoster(){try{var s=localStorage.getItem("hk_roster");if(s)return JSON.parse(s);}catch(e){}return JSON.parse(JSON.stringify(DEFAULT_ROSTER));}
+function saveRoster(){try{localStorage.setItem("hk_roster",JSON.stringify(ROSTER));}catch(e){}}
+function loadEmpMeta(){try{var s=localStorage.getItem("hk_emp_meta");if(s)return JSON.parse(s);}catch(e){}return {};}
+function saveEmpMeta(){try{localStorage.setItem("hk_emp_meta",JSON.stringify(EMP_META));}catch(e){}}
+var ROSTER=loadRoster(),EMP_META=loadEmpMeta();
+var DATA={depts:[],emps:[],otherEmps:[]};
+var PREV={},PNOTE={},OREV={},ORNOTE={};
+var BF="all",PF="all",OF="all";
+
+/* ========================================================
+   UPLOAD
+   ======================================================== */
+var zone=document.getElementById("zone"),pick=document.getElementById("filePick");
+zone.addEventListener("dragover",function(e){e.preventDefault();zone.classList.add("drag")});
+zone.addEventListener("dragleave",function(){zone.classList.remove("drag")});
+zone.addEventListener("drop",function(e){e.preventDefault();zone.classList.remove("drag");var f=e.dataTransfer.files[0];if(f)go(f)});
+pick.addEventListener("change",function(){if(pick.files[0])go(pick.files[0])});
+zone.addEventListener("click",function(e){if(e.target.tagName!=="BUTTON")pick.click()});
+function prog(p,m){document.getElementById("pbar").style.width=p+"%";document.getElementById("pmsg").textContent=m}
+
+/* ========================================================
+   PDF PROCESSOR
+   Key insight: Paychex PDF has text items at exact X positions.
+   We read ALL items with their X,Y coordinates and process
+   them page by page in visual row order.
+   ======================================================== */
+async function go(file){
+  document.getElementById("progWrap").style.display="block";
+  document.getElementById("results").style.display="none";
+  PREV={};PNOTE={};OREV={};ORNOTE={};
+  prog(5,"Loading PDF...");
+  try{
+    var ab=await file.arrayBuffer();
+    var pdf=await pdfjsLib.getDocument({data:ab}).promise;
+    var N=pdf.numPages;
+    /* Collect all text items across all pages with global Y offset */
+    var allItems=[];
+    var yOffset=0;
+    for(var p=1;p<=N;p++){
+      prog(5+Math.round((p/N)*60),"Page "+p+"/"+N+"...");
+      var pg=await pdf.getPage(p);
+      var vp=pg.getViewport({scale:1});
+      var tc=await pg.getTextContent();
+      for(var i=0;i<tc.items.length;i++){
+        var it=tc.items[i];
+        if(!it.str||!it.str.trim())continue;
+        allItems.push({
+          str:it.str.trim(),
+          x:Math.round(it.transform[4]*10)/10,
+          /* Convert PDF Y (bottom-up) to screen Y (top-down) within page, then add page offset */
+          y:Math.round((yOffset + vp.height - it.transform[5])*10)/10,
+          page:p
+        });
+      }
+      yOffset+=vp.height+50; /* 50pt gap between pages */
+    }
+    prog(70,"Parsing labor data...");
+    DATA=parsePaychex(allItems);
+    prog(92,"Building reports...");
+    render();
+    prog(100,"Done - "+DATA.emps.length+" HK employees - "+DATA.otherEmps.length+" other");
+    document.getElementById("results").style.display="block";
+    updateTabCounts();
+    /* Scroll to daily report section after upload */
+    var jb=document.getElementById("jumpDailyBtn");
+    if(jb)jb.style.display="flex";
+    setTimeout(function(){
+      var el=document.getElementById("results");
+      if(el)el.scrollIntoView({behavior:"smooth",block:"start"});
+    },200);
+    setTimeout(function(){document.getElementById("progWrap").style.display="none"},1500);
+  }catch(err){
+    prog(0,"Error: "+err.message);
+    console.error(err);
+  }
+}
+
+/* ========================================================
+   PAYCHEX PARSER - X-POSITION COLUMN BINNING
+   
+   The Paychex Labor Distribution PDF has 6 numeric columns:
+   Work | Meal | Regular | OT1 | Paid | Unpaid
+   
+   Each column has a fixed X range. We detect the column
+   header row first to calibrate exact X positions, then
+   assign every decimal number to the correct column.
+   
+   Employee rows may span 1-3 lines:
+   - Line 1: sometimes just name (no ID) when name wraps
+   - Line 2: ID + (rest of name) + numbers
+   - Sometimes numbers are on a continuation line
+   ======================================================== */
+function parsePaychex(items){
+  var depts=[], emps=[], otherEmps=[];
+  
+  /* Step 1: Group items into visual rows (Y tolerance = 3pt) */
+  items.sort(function(a,b){return a.y-b.y||a.x-b.x});
+  var rows=[];
+  var curRow=null, curY=null;
+  for(var i=0;i<items.length;i++){
+    var it=items[i];
+    if(curY===null||Math.abs(it.y-curY)>3){
+      curRow={y:it.y,items:[],text:"",page:it.page};
+      rows.push(curRow);
+      curY=it.y;
+    }
+    curRow.items.push(it);
+    curRow.text+=(curRow.text?" ":"")+it.str;
+  }
+  
+  /* Step 2: Find column header row to calibrate X positions */
+  /* Default X positions for Paychex landscape (792pt wide) */
+  var COL={work:278,meal:326,regular:372,ot1:429,paid:479,unpaid:530};
+  var HALF=28; /* half-bin width for column assignment */
+  
+  for(var ri=0;ri<rows.length;ri++){
+    var rt=rows[ri].text.toLowerCase();
+    if(rt.indexOf("work")!==-1&&rt.indexOf("regular")!==-1&&rt.indexOf("unpaid")!==-1){
+      /* Found the header row - calibrate */
+      rows[ri].items.forEach(function(it){
+        var s=it.str.toLowerCase().trim();
+        if(s==="work")COL.work=it.x;
+        else if(s==="meal")COL.meal=it.x;
+        else if(s==="regular")COL.regular=it.x;
+        else if(s==="ot1"||s==="ot 1")COL.ot1=it.x;
+        else if(s==="paid"&&it.x>COL.regular)COL.paid=it.x;
+        else if(s==="unpaid")COL.unpaid=it.x;
+      });
+      break;
+    }
+  }
+  
+  /* Step 3: Helper to extract numbers from a row using column bins */
+  function extractNums(row){
+    var decItems=row.items.filter(function(it){
+      return /^\d{1,3}\.\d{2}$/.test(it.str);
+    });
+    if(!decItems.length)return null;
+    
+    var R={work:0,meal:0,regular:0,ot1:0,paid:0,unpaid:0,found:false};
+    var colDefs=[
+      {name:"work",x:COL.work},{name:"meal",x:COL.meal},
+      {name:"regular",x:COL.regular},{name:"ot1",x:COL.ot1},
+      {name:"paid",x:COL.paid},{name:"unpaid",x:COL.unpaid}
+    ];
+    
+    decItems.forEach(function(it){
+      var best=null,bestDist=9999;
+      colDefs.forEach(function(col){
+        var d=Math.abs(it.x-col.x);
+        if(d<bestDist){bestDist=d;best=col.name;}
+      });
+      if(best&&bestDist<HALF+20){
+        R[best]=parseFloat(it.str);
+        R.found=true;
+      }
+    });
+    
+    /* Fallback: if X-assign failed (e.g. columns not calibrated yet),
+       use positional order */
+    if(!R.found&&decItems.length>=2){
+      var vals=decItems.map(function(it){return parseFloat(it.str)});
+      if(vals.length>=6){R={work:vals[0],meal:vals[1],regular:vals[2],ot1:vals[3],paid:vals[4],unpaid:vals[5],found:true}}
+      else if(vals.length===5){R={work:vals[0],meal:vals[1],regular:vals[2],ot1:vals[3],paid:vals[4],unpaid:0,found:true}}
+      else if(vals.length===4){R={work:vals[0],meal:0,regular:vals[1],ot1:vals[2],paid:vals[3],unpaid:0,found:true}}
+      else if(vals.length===3){R={work:vals[0],meal:0,regular:vals[0],ot1:0,paid:vals[1],unpaid:vals[2],found:true}}
+      else if(vals.length===2){R={work:vals[0],meal:0,regular:vals[0],ot1:0,paid:vals[0],unpaid:vals[1],found:true}}
+    }
+    return R.found?R:null;
+  }
+  
+  /* Step 4: Classify each row */
+  var isGrand=function(t){return/grand\s*total/i.test(t)};
+  var isTotal=function(t){return/\btotals?\b/i.test(t)&&!isGrand(t)};
+  var isHeader=function(t){return/work.*meal.*regular|work.*paid.*unpaid/i.test(t)};
+  var EID=/\b(\d{6,8})\b/;
+  
+  /* Step 5: Find HK dept code in a row */
+  function getHKCode(txt){
+    for(var i=0;i<HK_CODES.length;i++){
+      var c=HK_CODES[i];
+      if(txt.indexOf(c)===-1)continue;
+      var ws=HK_POS[c].toLowerCase().split(" ");
+      for(var j=0;j<ws.length;j++){
+        if(ws[j].length>3&&txt.toLowerCase().indexOf(ws[j])!==-1)return c;
+      }
+    }
+    return null;
+  }
+  
+  /* Step 6: Find non-HK dept */
+  function getOtherDept(txt){
+    var m=txt.match(/\b(\d{4})-([A-Za-z][\w\s\-\/]+)/);
+    if(!m)return null;
+    if(HK_CODES.indexOf(m[1])!==-1)return null;
+    return{code:m[1],label:m[0].replace(/\s+/g," ").trim()};
+  }
+  
+  /* Step 7: Find all dept block boundaries
+     Skip duplicate headers within 20pt of the previous detection */
+  var bounds=[];
+  var lastBoundY=-999;
+  var lastBoundCode="";
+  for(var ri=0;ri<rows.length;ri++){
+    var txt=rows[ri].text;
+    var rowY=rows[ri].y;
+    if(isGrand(txt)||isTotal(txt)||isHeader(txt))continue;
+    var hk=getHKCode(txt);
+    if(hk){
+      /* Skip if same code detected within 30pt (continuation line) */
+      if(hk===lastBoundCode&&Math.abs(rowY-lastBoundY)<30)continue;
+      bounds.push({ri:ri,code:hk,name:HK_POS[hk],isHK:true});
+      lastBoundY=rowY;lastBoundCode=hk;
+      continue;
+    }
+    var oth=getOtherDept(txt);
+    if(oth){
+      if(oth.code===lastBoundCode&&Math.abs(rowY-lastBoundY)<30)continue;
+      bounds.push({ri:ri,code:oth.code,name:oth.label,isHK:false});
+      lastBoundY=rowY;lastBoundCode=oth.code;
+    }
+  }
+  
+  /* Step 8: Process each dept block */
+  for(var bi=0;bi<bounds.length;bi++){
+    var db=bounds[bi];
+    var blockStart=db.ri+1;
+    var blockEnd=(bi+1<bounds.length)?bounds[bi+1].ri:rows.length;
+    var block=rows.slice(blockStart,blockEnd);
+    
+    /* Find dept totals - last "Totals:" line */
+    var dtot=null;
+    for(var tl=block.length-1;tl>=0;tl--){
+      var tlTxt=block[tl].text;
+      if(isGrand(tlTxt))continue;
+      if(isTotal(tlTxt)){
+        var tn=extractNums(block[tl]);
+        if(tn){
+          /* For totals, also try raw positional if paid=0 */
+          if(!tn||tn.paid===0){
+            var rawNums=block[tl].items
+              .filter(function(it){return /^\d{1,3}\.\d{2}$/.test(it.str)})
+              .sort(function(a,b){return a.x-b.x})
+              .map(function(it){return parseFloat(it.str)});
+            if(rawNums.length>=5){
+              tn={work:rawNums[0],meal:rawNums[1],regular:rawNums[2],ot1:rawNums[3],paid:rawNums[4],unpaid:rawNums[5]||0};
+            }
+          }
+          dtot=tn;break;
+        }
+      }
+    }
+    
+    /* Add dept (avoid duplicates) */
+    if(db.isHK){
+      var dup=false;
+      for(var dd=0;dd<depts.length;dd++){if(depts[dd].code===db.code){dup=true;break;}}
+      if(!dup)depts.push({code:db.code,name:db.name,totals:dtot||{work:0,meal:0,regular:0,ot1:0,paid:0,unpaid:0}});
+    }
+    
+    /* Parse employees in this block */
+    var pendingName="";
+    var pendingY=-999;
+    var li=0;
+    while(li<block.length){
+      var row=block[li];
+      var rowTxt=row.text;
+      if(isGrand(rowTxt)||isTotal(rowTxt)||isHeader(rowTxt)){pendingName="";pendingY=-999;li++;continue;}
+      
+      var idMatch=rowTxt.match(EID);
+      if(idMatch){
+        var eid=idMatch[1];
+        
+        /* Strip ALL numbers (including single-decimal like 8.1, 7.5) from name */
+        function cleanName(s){
+          return s.replace(EID,"")
+            .replace(/\b\d{1,3}\.\d{1,2}\b/g,"")
+            .replace(/[^\w\s',.\-]/g," ")
+            .replace(/\s+/g," ")
+            .replace(/^[\s,]+|[\s,]+$/g,"")
+            .trim();
+        }
+        var nameOnRow=cleanName(rowTxt);
+        
+        /* Only use pendingName if it came from the row IMMEDIATELY before (within 25pt Y) */
+        var rowY=row.y;
+        var usePending=pendingName.length>0&&Math.abs(rowY-pendingY)<25;
+        
+        var fullName="";
+        if(usePending&&nameOnRow.length<2){
+          fullName=pendingName;
+        }else if(usePending&&nameOnRow.length>=2){
+          /* Only prepend pending if it looks like a name fragment (no dept code) */
+          var hasDeptCode=/\b\d{4}-/.test(pendingName);
+          fullName=hasDeptCode?nameOnRow:(pendingName+" "+nameOnRow).trim();
+        }else{
+          fullName=nameOnRow;
+        }
+        fullName=fullName.replace(/\s+/g," ").trim();
+        pendingName=""; pendingY=-999;
+        
+        /* Get numbers from this row */
+        var h=extractNums(row);
+        
+        /* If no numbers on this row, check next 1-2 rows */
+        if(!h){
+          for(var look=li+1;look<=li+2&&look<block.length;look++){
+            var nr=block[look];
+            var nrTxt=nr.text;
+            if(isGrand(nrTxt)||isTotal(nrTxt)||nrTxt.match(EID))break;
+            var nh=extractNums(nr);
+            if(nh){
+              h=nh;
+              /* Only add continuation name if fullName is still empty */
+              var nrName=cleanName(nrTxt);
+              if(nrName.length>1&&fullName.length<2)fullName=nrName;
+              li=look;
+              break;
+            }
+          }
+        }
+        
+        /* Validate */
+        if(!h){li++;continue;}
+        if(h.paid>18||h.paid<0){li++;continue;}
+        if(isTotal(rowTxt)){li++;continue;}
+        if(fullName.length<2){li++;continue;}
+        
+        /* Deduplicate */
+        var target=db.isHK?emps:otherEmps;
+        var isDup=false;
+        for(var dd=0;dd<target.length;dd++){
+          if(target[dd].id===eid&&target[dd].code===db.code){isDup=true;break;}
+        }
+        if(!isDup){
+          target.push({
+            id:eid,name:fullName,pos:db.name,code:db.code,isHK:db.isHK,
+            work:h.work,meal:h.meal,regular:h.regular,
+            ot1:h.ot1,paid:h.paid,unpaid:h.unpaid
+          });
+        }
+      }else{
+        /* No ID on this row - might be a wrapped name for the next row */
+        /* Strip numbers, dept codes, and dept keywords to avoid leaking into names */
+        var pn=rowTxt
+          .replace(/\b\d{4}-[\w\s\-]+/g,"")
+          .replace(/\b\d{1,3}\.\d{1,2}\b/g,"")
+          .replace(/[^\w\s',.\-]/g," ").trim();
+        /* Skip rows that are clearly dept continuation lines */
+        var isDeptCont=/\b(housekeeping|supervisor|attendant|laundry|turndown|banquet)\b/i.test(pn)
+          &&pn.split(/\s+/).length<=3;
+        if(pn.length>1&&!isGrand(rowTxt)&&!isTotal(rowTxt)&&!isHeader(rowTxt)&&!isDeptCont){
+          pendingName=pn;
+          pendingY=row.y;
+        }else{
+          pendingName="";pendingY=-999;
+        }
+      }
+      li++;
+    }
+  }
+  
+  /* ── Cross-position break merging ──
+     Some employees clock hours in one dept and their break time is recorded
+     in another dept (e.g. Olga Yac works Laundry but break shows in Room Attendant).
+     If the same employee ID appears in multiple depts and one instance has
+     paid>0 but unpaid=0, check if another instance of same ID has ONLY unpaid.
+     If so, transfer that unpaid to the instance with paid hours. */
+  var empById={};
+  emps.forEach(function(e){
+    if(!empById[e.id])empById[e.id]=[];
+    empById[e.id].push(e);
+  });
+  Object.keys(empById).forEach(function(id){
+    var list=empById[id];
+    if(list.length<2)return;
+    /* Find entries with only unpaid (break-only rows: paid=0 or very small paid) */
+    var breakOnlyRows=list.filter(function(e){return e.paid===0&&e.unpaid>0;});
+    var workRows=list.filter(function(e){return e.paid>0;});
+    if(breakOnlyRows.length>0&&workRows.length>0){
+      var totalUnpaid=breakOnlyRows.reduce(function(s,e){return s+e.unpaid},0);
+      /* Give the unpaid to the work row with the most paid hours */
+      workRows.sort(function(a,b){return b.paid-a.paid});
+      if(workRows[0].unpaid===0){
+        workRows[0].unpaid=totalUnpaid;
+      }
+      /* Remove the break-only rows from the final emps list */
+      breakOnlyRows.forEach(function(br){
+        var idx=emps.indexOf(br);
+        if(idx>=0)emps.splice(idx,1);
+      });
+    }
+  });
+
+  return{depts:depts,emps:emps,otherEmps:otherEmps};
+}
+
+/* ========================================================
+   HELPERS
+   ======================================================== */
+function nn(s){return s.toLowerCase().replace(/[^a-z\s]/g,"").replace(/\s+/g," ").trim()}
+function primaryPos(name,empId){
+  /* Primary lookup: use Employee ID (most reliable) */
+  if(empId&&ROSTER_BY_ID[empId]){
+    return ROSTER_BY_ID[empId].pos;
+  }
+  /* Fallback: name-based fuzzy match */
+  var n=nn(name);
+  for(var pos in ROSTER){
+    var list=ROSTER[pos];
+    for(var i=0;i<list.length;i++){
+      var r=nn(list[i]);
+      if(n===r)return pos;
+      if(r.length>3&&(n.indexOf(r)===0||r.indexOf(n)===0))return pos;
+      if(r.length>4&&n.indexOf(r)!==-1)return pos;
+      if(n.length>4&&r.indexOf(n)!==-1)return pos;
+    }
+  }
+  return null;
+}
+function primaryName(empId){
+  if(empId&&ROSTER_BY_ID[empId])return ROSTER_BY_ID[empId].name;
+  return null;
+}
+function toMins(dec){return Math.round(dec*60)}
+function minsBar(m){
+  var pct=Math.min(100,Math.round((m/30)*100));
+  var color=m===0?"#9b1c1c":m<20?"#92400e":m<28?"#856404":"#1a6e3e";
+  return'<div class="mins-wrap"><div class="mins-bar"><div class="mins-fill" style="width:'+pct+'%;background:'+color+'"></div></div><span class="mins-lbl" style="color:'+color+'">'+m+' min</span></div>';
+}
+function breakBadge(m){
+  if(m===0)return'<span class="badge b-red">&#128683; No Break</span>';
+  if(m<28)return'<span class="badge b-amber">&#9889; Short Break</span>';
+  return'<span class="badge b-green">&#10003; OK</span>';
+}
+
+/* ========================================================
+   RENDER
+   ======================================================== */
+function render(){
+  renderMetrics();renderBreaks();
+  renderOvertime();renderPosition();renderOther();renderRoster();renderAll();
+  renderLaborSummary();
+  setupTabs();setupFilters();
+}
+function renderLaborSummary(){
+  var sec=document.getElementById("laborSummarySection");
+  var cards=document.getElementById("laborSummaryCards");
+  var lbl=document.getElementById("laborSummaryDate");
+  if(!sec||!cards)return;
+  if(!DATA.depts.length){sec.style.display="none";return;}
+  sec.style.display="block";
+  var dateEl=document.getElementById("reportDateLabel");
+  if(lbl&&dateEl)lbl.textContent=dateEl.textContent;
+  var totalPaid=DATA.depts.reduce(function(s,d){return s+d.totals.paid;},0);
+  var totalOT=DATA.depts.reduce(function(s,d){return s+d.totals.ot1;},0);
+  var html="";
+  DATA.depts.forEach(function(d){
+    var t=d.totals;
+    var breakEx=DATA.emps.filter(function(e){return e.pos===d.name&&toMins(e.unpaid)<28;}).length;
+    html+='<div style="background:var(--offwhite);border:1px solid var(--border);border-radius:var(--radius-xs);padding:10px 12px;border-left:4px solid var(--navy2);">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:6px;">'+d.name+'</div>'
+      +'<div style="display:flex;gap:12px;flex-wrap:wrap;">'
+      +'<span><strong style="font-size:18px;font-weight:800;color:var(--navy);">'+t.paid.toFixed(2)+'</strong><br><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">Paid Hrs</span></span>'
+      +'<span><strong style="font-size:18px;font-weight:800;color:'+(t.ot1>0?"var(--amber)":"var(--navy)")+';">'+t.ot1.toFixed(2)+'</strong><br><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">OT</span></span>'
+      +'<span><strong style="font-size:18px;font-weight:800;color:'+(breakEx>0?"var(--red)":"var(--green)")+';">'+breakEx+'</strong><br><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">Break Exc.</span></span>'
+      +'</div>'
+      +'</div>';
+  });
+  /* Add grand total card */
+  html='<div style="background:var(--navy);border-radius:var(--radius-xs);padding:10px 14px;color:#fff;display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">'
+    +'<span style="font-size:12px;font-weight:700;opacity:.8;">All Positions</span>'
+    +'<span><strong style="font-size:20px;font-weight:800;">'+totalPaid.toFixed(2)+'</strong> <small style="opacity:.7;font-size:10px;">Total Paid Hrs</small></span>'
+    +'<span><strong style="font-size:20px;font-weight:800;color:'+(totalOT>0?"#fde68a":"#fff")+';">'+totalOT.toFixed(2)+'</strong> <small style="opacity:.7;font-size:10px;">Total OT</small></span>'
+    +'</div>'+html;
+  cards.innerHTML=html;
+}
+function renderMetrics(){
+  var e=DATA.emps;
+  var totalPaid=e.reduce(function(s,x){return s+x.paid},0);
+  var totalOT=e.reduce(function(s,x){return s+x.ot1},0);
+  var noBreak=e.filter(function(x){return toMins(x.unpaid)===0}).length;
+  var shortB=e.filter(function(x){var m=toMins(x.unpaid);return m>0&&m<28}).length;
+  var otEmp=e.filter(function(x){return x.ot1>1}).length;
+  var mismatch=0,unk=0;
+  e.forEach(function(x){var p=primaryPos(x.name,x.id);if(!p)unk++;else if(p!==x.pos)mismatch++});
+  var oP=DATA.otherEmps.filter(function(x){return!OREV[x.id+"_"+x.name]}).length;
+  var cards=[
+    {v:totalPaid.toFixed(2),l:"Total Paid Hours",c:""},
+    {v:totalOT.toFixed(2),l:"Total OT Hours",c:"m-amber"},
+    {v:noBreak,l:"No Break Taken",c:"m-red"},
+    {v:shortB,l:"Short Break <28min",c:"m-red"},
+    
+    {v:otEmp,l:"Employees OT>1h",c:"m-amber"},
+    {v:mismatch,l:"Position Mismatches",c:"m-red"},
+    {v:unk,l:"Unknown Primary",c:"m-amber"},
+    {v:DATA.otherEmps.length,l:"Other Dept Employees",c:"m-blue"},
+    {v:oP,l:"Pending Review",c:"m-red"},
+    {v:DATA.emps.length,l:"Total HK Employees",c:"m-green"},
+    {v:DATA.depts.length,l:"Active Positions",c:"m-gold"}
+  ];
+  document.getElementById("metrics").innerHTML=cards.map(function(c){
+    return'<div class="metric '+c.c+'"><div class="val">'+c.v+'</div><div class="lbl">'+c.l+'</div></div>';
+  }).join("");
+}
+function renderLabor(){
+  var html="";
+  var grandPaid=DATA.depts.reduce(function(s,d){return s+d.totals.paid},0);
+  var grandOT=DATA.depts.reduce(function(s,d){return s+d.totals.ot1},0);
+  html+='<div style="background:linear-gradient(135deg,var(--navy),var(--navy2));border-radius:var(--radius-xs);padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#fff">'
+    +'<span style="font-size:13px;font-weight:700;">All HK Positions &mdash; Daily Total</span>'
+    +'<div style="display:flex;gap:24px;flex-wrap:wrap;">'
+    +'<span style="text-align:center"><strong style="font-size:22px;font-weight:800;display:block;color:#f5e6a3">'+grandPaid.toFixed(2)+'</strong><small style="font-size:9px;opacity:.7;text-transform:uppercase;letter-spacing:.5px">Total Paid</small></span>'
+    +'<span style="text-align:center"><strong style="font-size:22px;font-weight:800;display:block;color:'+(grandOT>0?"#fde68a":"rgba(255,255,255,.9)")+'">'+grandOT.toFixed(2)+'</strong><small style="font-size:9px;opacity:.7;text-transform:uppercase;letter-spacing:.5px">Total OT</small></span>'
+    +'<span style="text-align:center"><strong style="font-size:22px;font-weight:800;display:block">'+DATA.emps.length+'</strong><small style="font-size:9px;opacity:.7;text-transform:uppercase;letter-spacing:.5px">Employees</small></span>'
+    +'</div></div>';
+  DATA.depts.forEach(function(d){
+    var t=d.totals,cnt=DATA.emps.filter(function(e){return e.pos===d.name}).length;
+    var breakEx=DATA.emps.filter(function(e){return e.pos===d.name&&toMins(e.unpaid)<28}).length;
+    html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-xs);margin-bottom:10px;overflow:hidden;">'
+      +'<div style="background:var(--navy2);color:#fff;padding:9px 14px;display:flex;align-items:center;justify-content:space-between;">'
+      +'<span style="font-size:13px;font-weight:700;">'+d.name+'</span>'
+      +'<span style="font-size:11px;opacity:.65;">'+cnt+' employee'+(cnt===1?'':'s')+'</span>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);">'
+      +'<div style="padding:14px 10px;border-right:1px solid var(--border);text-align:center;"><div style="font-size:22px;font-weight:800;color:var(--navy);">'+t.paid.toFixed(2)+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">Total Paid Hrs</div></div>'
+      +'<div style="padding:14px 10px;border-right:1px solid var(--border);text-align:center;"><div style="font-size:22px;font-weight:800;color:'+(t.ot1>0?'var(--amber)':'var(--navy)')+';">'+t.ot1.toFixed(2)+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">OT Hours</div></div>'
+      +'<div style="padding:14px 10px;text-align:center;"><div style="font-size:22px;font-weight:800;color:'+(breakEx>0?'var(--red)':'var(--green)')+';">'+breakEx+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">Break Exc.</div></div>'
+      +'</div></div>';
+  });
+  document.getElementById("laborContent").innerHTML=html||'<div class="empty">No department data found.</div>';
+}
+
+function renderBreaks(f){
+  f=f||BF;BF=f;
+  var html="";
+  DATA.depts.forEach(function(d){
+    var list=DATA.emps.filter(function(e){
+      if(e.pos!==d.name)return false;
+      var m=toMins(e.unpaid);
+      if(f==="none")return m===0;
+      if(f==="short")return m>0&&m<28;
+      return m<28;
+    });
+    if(!list.length)return;
+    html+='<div class="pos-group"><div class="pos-group-hdr"><h3>'+d.name+'</h3><div class="pos-tots"><span><strong>'+list.length+'</strong><small>Exceptions</small></span></div></div><div class="tbl-wrap"><table><thead><tr><th>Emp ID</th><th>Name</th><th>Paid Hrs</th><th>Unpaid</th><th>Break Time</th><th>Status</th></tr></thead><tbody>';
+    list.forEach(function(e){
+      var m=toMins(e.unpaid);
+      html+='<tr class="'+( m===0?"row-no-break":"row-short")+'"><td>'+e.id+'</td><td><b>'+e.name+'</b></td><td>'+e.paid.toFixed(2)+'</td><td>'+e.unpaid.toFixed(2)+'</td><td>'+minsBar(m)+'</td><td>'+breakBadge(m)+'</td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+  });
+  document.getElementById("breaksContent").innerHTML=html||'<div class="empty">&#10003; No break exceptions found</div>';
+}
+function renderOvertime(){
+  var html="";
+  DATA.depts.forEach(function(d){
+    var list=DATA.emps.filter(function(e){return e.pos===d.name&&e.ot1>1});
+    if(!list.length)return;
+    list.sort(function(a,b){return b.ot1-a.ot1});
+    var tot=list.reduce(function(s,x){return s+x.ot1},0);
+    html+='<div class="pos-group"><div class="pos-group-hdr"><h3>'+d.name+'</h3><div class="pos-tots"><span><strong>'+list.length+'</strong><small>OT Employees</small></span><span><strong>'+tot.toFixed(2)+'</strong><small>Total OT Hrs</small></span></div></div><div class="tbl-wrap"><table><thead><tr><th>Emp ID</th><th>Name</th><th>Regular</th><th>OT Hours</th><th>Total Paid</th><th>Alert</th></tr></thead><tbody>';
+    list.forEach(function(e){
+      var lv=e.ot1>=3?"b-red":e.ot1>=2?"b-amber":"b-yellow";
+      var ic=e.ot1>=3?"&#128308;":e.ot1>=2?"&#128992;":"&#128993;";
+      html+='<tr class="row-ot"><td>'+e.id+'</td><td><b>'+e.name+'</b></td><td>'+e.regular.toFixed(2)+'</td><td><span class="badge '+lv+'">'+ic+" "+e.ot1.toFixed(2)+'h OT</span></td><td><b>'+e.paid.toFixed(2)+'</b></td><td>'+(e.ot1>=2?'<span class="badge b-red">High OT</span>':'<span class="badge b-amber">Review</span>')+'</td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+  });
+  document.getElementById("overtimeContent").innerHTML=html||'<div class="empty">&#10003; No employees with OT over 1 hour today</div>';
+}
+function renderPosition(f){
+  f=f||PF;PF=f;
+  var tb=document.querySelector("#tPosition tbody");
+  var rows=DATA.emps.map(function(e){var pp=primaryPos(e.name,e.id);var ppName=primaryName(e.id);return{e:e,pp:pp,st:!pp?"unknown":pp===e.pos?"match":"mismatch"};});
+  var filtered=f==="mismatch"?rows.filter(function(r){return r.st==="mismatch"}):f==="unknown"?rows.filter(function(r){return r.st==="unknown"}):rows;
+  if(!filtered.length){tb.innerHTML='<tr><td colspan="8" class="empty">No records match filter</td></tr>';return}
+  tb.innerHTML=filtered.map(function(r){
+    var e=r.e,pp=r.pp,st=r.st,key=e.id+"_"+e.name,rev=PREV[key]||"",nk="pn_"+key,curN=PNOTE[nk]||"";
+    var badge=st==="match"?'<span class="badge b-green">&#10003; Match</span>':st==="unknown"?'<span class="badge b-gray">? Unknown</span>':'<span class="badge b-red">&#9888; Mismatch</span>';
+    var ek=key.replace(/'/g,"\\'"),enkn=nk.replace(/'/g,"\\'");
+    var revH=st==="mismatch"?'<div class="rev-wrap"><button class="btn btn-green btn-sm" onclick="setPRev(\''+ ek +'\',\'correct\')">&#10003; Correct</button><button class="btn btn-red btn-sm" onclick="setPRev(\''+ ek +'\',\'incorrect\')">&#10007; Wrong</button><button class="btn btn-ghost btn-sm" onclick="setPRev(\''+ ek +'\',\'approved\')">Approved</button></div>'+(rev?'<span class="badge '+(rev==="correct"?"b-green":rev==="incorrect"?"b-red":"b-navy")+'" style="margin-top:4px;display:inline-block">'+rev+"</span>":""):"&#8212;";
+    var noteH=st==="mismatch"?'<select class="note-sel" onchange="setPNote(\''+ enkn +'\',this.value)"><option value="">Note...</option>'+POS_NOTES.map(function(n){return'<option'+(curN===n?' selected':'')+'>'+n+'</option>'}).join("")+'</select>':"&#8212;";
+    return'<tr><td>'+e.id+'</td><td><b>'+e.name+'</b></td><td><span class="badge b-navy">'+e.pos+'</span></td><td>'+(pp?'<span class="badge b-gold">'+pp+"</span>":'<i style="color:var(--text3)">Not in roster</i>')+'</td><td>'+badge+'</td><td>'+e.paid.toFixed(2)+'</td><td>'+revH+'</td><td>'+noteH+'</td></tr>';
+  }).join("");
+}
+function renderOther(f){
+  f=f||OF;OF=f;
+  var tb=document.querySelector("#tOther tbody"),banner=document.getElementById("otherBanner");
+  if(!DATA.otherEmps.length){banner.style.display="none";tb.innerHTML='<tr><td colspan="8" class="empty">&#10003; No employees in non-HK departments today</td></tr>';return;}
+  var pending=DATA.otherEmps.filter(function(x){return!OREV[x.id+"_"+x.name]}).length;
+  banner.style.display="flex";
+  document.getElementById("otherBannerText").textContent=DATA.otherEmps.length+" employee(s) in non-HK positions. "+pending+" pending.";
+  var filtered=f==="pending"?DATA.otherEmps.filter(function(x){return!OREV[x.id+"_"+x.name]}):f==="resolved"?DATA.otherEmps.filter(function(x){return!!OREV[x.id+"_"+x.name]}):DATA.otherEmps;
+  if(!filtered.length){tb.innerHTML='<tr><td colspan="8" class="empty">No records match filter</td></tr>';return}
+  tb.innerHTML=filtered.map(function(e){
+    var key=e.id+"_"+e.name,rev=OREV[key]||"",nk="on_"+key,curN=ORNOTE[nk]||"",pp=primaryPos(e.name);
+    var sb=!rev?'<span class="badge b-red">&#9203; Pending</span>':rev==="approved"?'<span class="badge b-green">&#10003; Approved</span>':'<span class="badge b-gray">Not HK</span>';
+    var ek=key.replace(/'/g,"\\'"),enkn=nk.replace(/'/g,"\\'");
+    var noteH='<select class="note-sel" onchange="setONote(\''+ enkn +'\',this.value)"><option value="">Note...</option>'+OTHER_NOTES.map(function(n){return'<option'+(curN===n?' selected':'')+'>'+n+'</option>'}).join("")+'</select>';
+    return'<tr><td>'+e.id+'</td><td><b>'+e.name+'</b></td><td><span class="badge b-purple">'+e.pos+'</span></td><td>'+e.paid.toFixed(2)+'</td><td>'+(pp?'<span class="badge b-gold">'+pp+"</span>":'<i style="color:var(--text3)">Not in HK roster</i>')+'</td><td>'+sb+'</td><td><div class="rev-wrap"><button class="btn btn-green btn-sm" onclick="setORev(\''+ ek +'\',\'approved\')">&#10003; Approve</button><button class="btn btn-ghost btn-sm" onclick="setORev(\''+ ek +'\',\'ignore\')">Not HK</button></div></td><td>'+noteH+'</td></tr>';
+  }).join("");
+}
+function renderRoster(){
+  /* Load overrides: position changes and inactive flags */
+  var overrides=loadOverrides();
+  var search=(document.getElementById("rosterSearch")||{value:""}).value.toLowerCase().trim();
+
+  /* Build merged list from ROSTER_BY_ID + manually added */
+  var byPos={};
+  Object.keys(ROSTER_BY_ID).forEach(function(id){
+    var r=ROSTER_BY_ID[id];
+    var ov=overrides[id]||{};
+    var pos=ov.pos||r.pos; /* use override position if set */
+    var status=ov.status||"active";
+    if(status==="terminated")return; /* skip terminated */
+    if(!byPos[pos])byPos[pos]=[];
+    byPos[pos].push({
+      id:id,name:ov.name||r.name,origPos:r.pos,
+      pos:pos,posChanged:ov.pos&&ov.pos!==r.pos,
+      status:status,note:ov.note||"",isManual:false
+    });
+  });
+  POS_LIST.forEach(function(pos){
+    (ROSTER[pos]||[]).forEach(function(name){
+      if(EMP_META[pos+"|"+name]){
+        var key="manual_"+pos+"_"+name;
+        var ov=overrides[key]||{};
+        var fpos=ov.pos||pos;
+        var status=ov.status||"active";
+        if(status==="terminated")return;
+        var already=Object.keys(ROSTER_BY_ID).some(function(id){
+          return ROSTER_BY_ID[id].name===name&&ROSTER_BY_ID[id].pos===pos;
+        });
+        if(!already){
+          if(!byPos[fpos])byPos[fpos]=[];
+          byPos[fpos].push({id:key,name:ov.name||name,origPos:pos,pos:fpos,posChanged:ov.pos&&ov.pos!==pos,status:status,note:ov.note||"",isManual:true});
+        }
+      }
+    });
+  });
+
+  /* Stats bar */
+  var total=0,inactive=0,changed=0;
+  Object.values(byPos).forEach(function(list){
+    total+=list.length;
+    list.forEach(function(e){if(e.status==="inactive")inactive++;if(e.posChanged)changed++;});
+  });
+  var statsEl=document.getElementById("rosterStats");
+  if(statsEl)statsEl.innerHTML=
+    '<div class="roster-stat"><strong>'+total+'</strong>Active Employees</div>'
+    +'<div class="roster-stat"><strong style="color:var(--amber)">'+inactive+'</strong>Inactive</div>'
+    +'<div class="roster-stat"><strong style="color:var(--blue)">'+changed+'</strong>Position Changes</div>'
+    +'<div class="roster-stat"><strong>'+Object.keys(byPos).length+'</strong>Positions</div>';
+
+  var posOrder=["Housekeeping Supervisor","Room Attendant","House Attendant","Public Area Attendant","Turndown Attendant","Laundry Attendant"];
+  var html="";
+  posOrder.forEach(function(pos){
+    var list=(byPos[pos]||[]).sort(function(a,b){return a.name.localeCompare(b.name);});
+    /* Apply search filter */
+    if(search){
+      list=list.filter(function(e){
+        return e.name.toLowerCase().indexOf(search)!==-1||e.id.indexOf(search)!==-1;
+      });
+    }
+    if(!list.length)return;
+    html+='<div class="roster-pos-card">'
+      +'<div class="roster-pos-hdr"><span>'+pos+'</span><span class="cnt">'+list.length+'</span></div>'
+      +'<div class="roster-emp-list">';
+    list.forEach(function(emp){
+      var isInactive=emp.status==="inactive";
+      var rowClass="roster-emp-row"+(emp.isManual&&!emp.posChanged?" new-emp":"")+(isInactive?" inactive-emp":"");
+      var safeId=emp.id.replace(/"/g,"&quot;");
+      var safeName=emp.name.replace(/"/g,"&quot;");
+      var safePos=emp.pos.replace(/"/g,"&quot;");
+      var safeOrig=emp.origPos.replace(/"/g,"&quot;");
+      html+='<div class="'+rowClass+'">'
+        +'<div style="line-height:1.5;min-width:0;flex:1;">'
+        +'<span style="font-weight:600;">'+(isInactive?"<s>":"")+emp.name+(isInactive?"</s>":"")+''
+        +(emp.posChanged?'<span class="pos-change-badge">Position Changed</span>':'')
+        +'</span>'
+        +(!emp.isManual?'<br><span style="font-size:10px;color:var(--text3);">ID: '+emp.id+'</span>':'')
+        +(emp.note?'<br><span style="font-size:10px;color:var(--amber);">&#128221; '+emp.note+'</span>':'')
+        +'</div>'
+        +'<div class="roster-emp-actions">'
+        +'<button class="edit-btn" data-eid="'+safeId+'" data-ename="'+safeName+'" data-epos="'+safePos+'" data-eorig="'+safeOrig+'" data-estatus="'+(emp.status||"active")+'" data-enote="'+(emp.note||"").replace(/"/g,"&quot;")+'" onclick="showEditModal(this)">&#9998; Edit</button>'
+        +'</div>'
+        +'</div>';
+    });
+    var posId=pos.replace(/\s/g,"_");
+    html+='</div>'
+      +'<div class="add-emp-form">'
+      +'<input type="text" placeholder="Quick add name..." id="quick_'+posId+'"/>'
+      +'<button class="btn btn-navy btn-sm" data-pos="'+pos.replace(/"/g,"&quot;")+'" onclick="quickAdd(this.dataset.pos)">Add</button>'
+      +'</div>'
+      +'</div>';
+  });
+  document.getElementById("rosterGrid").innerHTML=html||'<div class="empty">No employees match search</div>';
+}
+
+function renderAll(){
+  var tb=document.querySelector("#tAll tbody");
+  var all=DATA.emps.concat(DATA.otherEmps);
+  tb.innerHTML=all.length?all.map(function(e){
+    var m=toMins(e.unpaid);
+    var otag=!e.isHK?'<span class="badge b-purple" style="font-size:9px;margin-left:3px">Other</span>':''  ;
+    return'<tr><td>'+e.id+'</td><td>'+e.name+otag+'</td><td>'+e.pos+'</td><td>'+e.work.toFixed(2)+'</td><td>'+e.meal.toFixed(2)+'</td><td>'+e.regular.toFixed(2)+'</td><td>'+(e.ot1>1?'<b style="color:var(--amber)">'+e.ot1.toFixed(2)+'</b>':e.ot1.toFixed(2))+'</td><td><b>'+e.paid.toFixed(2)+'</b></td><td>'+e.unpaid.toFixed(2)+'</td><td>'+minsBar(m)+'</td></tr>';
+  }).join(""):'<tr><td colspan="10" class="empty">No data</td></tr>';
+}
+function setPRev(k,v){PREV[k]=v;renderPosition();renderMetrics();updateTabCounts()}
+function setPNote(k,v){PNOTE[k]=v}
+function setORev(k,v){OREV[k]=v;renderOther();renderMetrics();updateTabCounts()}
+function setONote(k,v){ORNOTE[k]=v}
+function quickAdd(pos){
+  var qid="quick_"+pos.replace(/\s/g,"_");
+  var inp=document.getElementById(qid);if(!inp)return;
+  var name=inp.value.trim();if(!name){showToast("Enter a name first");return}
+  if(!ROSTER[pos])ROSTER[pos]=[];
+  if(ROSTER[pos].indexOf(name)!==-1){showToast(name+" already in roster");return}
+  ROSTER[pos].push(name);
+  EMP_META[pos+"|"+name]={added:new Date().toISOString(),id:"",note:"Quick add"};
+  saveRoster();saveEmpMeta();renderRoster();showToast(name+" added to "+pos);
+}
+function removeEmp(key){
+  var parts=key.split("|"),pos=parts[0],name=parts.slice(1).join("|");
+  if(!confirm("Remove "+name+" from "+pos+"?"))return;
+  if(ROSTER[pos]){ROSTER[pos]=ROSTER[pos].filter(function(n){return n!==name});delete EMP_META[pos+"|"+name];saveRoster();saveEmpMeta();renderRoster();showToast(name+" removed");}
+}
+function showAddModal(){
+  document.getElementById("newEmpName").value="";document.getElementById("newEmpPos").value="";
+  document.getElementById("newEmpId").value="";document.getElementById("newEmpNote").value="";
+  document.getElementById("modalOverlay").style.display="flex";
+}
+function closeModal(){document.getElementById("modalOverlay").style.display="none"}
+function saveNewEmp(){
+  var name=document.getElementById("newEmpName").value.trim();
+  var pos=document.getElementById("newEmpPos").value;
+  var id=document.getElementById("newEmpId").value.trim();
+  var note=document.getElementById("newEmpNote").value.trim();
+  if(!name){showToast("Enter employee name");return}
+  if(!pos){showToast("Select a position");return}
+  if(!ROSTER[pos])ROSTER[pos]=[];
+  if(ROSTER[pos].indexOf(name)!==-1){showToast(name+" already exists in "+pos);return}
+  ROSTER[pos].push(name);
+  EMP_META[pos+"|"+name]={added:new Date().toISOString(),id:id,note:note};
+  saveRoster();saveEmpMeta();closeModal();renderRoster();showToast("&#10003; "+name+" added to "+pos);
+}
+function exportRoster(){
+  var wb=XLSX.utils.book_new();
+  var rows=[["Position","Name","Employee ID","Date Added","Notes"]];
+  POS_LIST.forEach(function(pos){(ROSTER[pos]||[]).forEach(function(name){var meta=EMP_META[pos+"|"+name]||{};rows.push([pos,name,meta.id||"",meta.added?meta.added.slice(0,10):"Original",meta.note||""])})});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Roster");
+  XLSX.writeFile(wb,"HK_Roster_"+new Date().toISOString().slice(0,10)+".xlsx");
+  showToast("Roster exported");
+}
+function resetRoster(){
+  if(!confirm("Reset roster to default? All manually added employees will be removed."))return;
+  ROSTER=JSON.parse(JSON.stringify(DEFAULT_ROSTER));EMP_META={};
+  saveRoster();saveEmpMeta();renderRoster();showToast("Roster reset to default");
+}
+function updateTabCounts(){
+  var nb=DATA.emps.filter(function(x){return toMins(x.unpaid)<28}).length;
+  var ot=DATA.emps.filter(function(x){return x.ot1>1}).length;
+  var mm=DATA.emps.filter(function(e){var p=primaryPos(e.name);return p&&p!==e.pos}).length;
+  var op=DATA.otherEmps.filter(function(x){return!OREV[x.id+"_"+x.name]}).length;
+  function sc(t,n){var el=document.querySelector('[data-t="'+t+'"]');if(!el)return;var ex=el.querySelector(".tcnt");if(ex)ex.remove();if(n>0){var s=document.createElement("span");s.className="tcnt";s.textContent=n;el.appendChild(s)}}
+  sc("breaks",nb);sc("overtime",ot);sc("position",mm);sc("other",op);
+}
+function setupTabs(){
+  document.querySelectorAll(".tab").forEach(function(t){
+    t.onclick=function(){
+      document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active")});
+      document.querySelectorAll(".tab-body").forEach(function(x){x.classList.remove("active")});
+      t.classList.add("active");document.getElementById("tb-"+t.dataset.t).classList.add("active");
+    };
+  });
+}
+function setupFilters(){
+  [["#tb-breaks .fbtn","bf",renderBreaks],["#tb-position .fbtn","pf",renderPosition],["#tb-other .fbtn","of",renderOther]].forEach(function(arr){
+    document.querySelectorAll(arr[0]).forEach(function(b){
+      b.onclick=function(){
+        document.querySelectorAll(arr[0]).forEach(function(x){x.classList.remove("on")});
+        b.classList.add("on");arr[2](b.dataset[arr[1]]);
+      };
+    });
+  });
+}
+function doExport(){
+  var wb=XLSX.utils.book_new();
+  var lt=[["Position","Work","Meal","Regular","OT1","Paid Hrs","Unpaid","# Employees"]];
+  DATA.depts.forEach(function(d){var t=d.totals,cnt=DATA.emps.filter(function(e){return e.pos===d.name}).length;lt.push([d.name,t.work,t.meal,t.regular,t.ot1,t.paid,t.unpaid,cnt])});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(lt),"Labor Totals");
+  var ba=[["Emp ID","Name","Position","Paid Hrs","Unpaid","Break Minutes","Status"]];
+  DATA.emps.forEach(function(e){var m=toMins(e.unpaid);ba.push([e.id,e.name,e.pos,e.paid,e.unpaid,m,m===0?"No Break":m<20?"Short Break":m<28?"Short Break":"OK"])});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ba),"Break Analysis");
+  var ot=[["Emp ID","Name","Position","Regular","OT Hours","Total Paid","Alert"]];
+  DATA.emps.filter(function(e){return e.ot1>1}).forEach(function(e){ot.push([e.id,e.name,e.pos,e.regular,e.ot1,e.paid,e.ot1>=2?"High OT":"Review"])});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ot),"Overtime");
+  var pc=[["Emp ID","Name","Clocked As","Primary Position","Status","Paid Hrs","Decision","Note"]];
+  DATA.emps.forEach(function(e){var pp=primaryPos(e.name,e.id)||"Not in roster";var st=pp==="Not in roster"?"Unknown":pp===e.pos?"Match":"Mismatch";var k=e.id+"_"+e.name;pc.push([e.id,e.name,e.pos,pp,st,e.paid,PREV[k]||"",PNOTE["pn_"+k]||""])});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(pc),"Position Check");
+  var od=[["Emp ID","Name","Dept in PDF","Paid Hrs","HK Primary","Status","Note"]];
+  DATA.otherEmps.forEach(function(e){var k=e.id+"_"+e.name;od.push([e.id,e.name,e.pos,e.paid,primaryPos(e.name)||"Not in HK roster",OREV[k]||"Pending",ORNOTE["on_"+k]||""])});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(od),"Other Departments");
+  var ae=[["Emp ID","Name","Position","HK?","Work","Meal","Regular","OT1","Paid","Unpaid","Break Min","Break Status"]];
+  DATA.emps.concat(DATA.otherEmps).forEach(function(e){var m=toMins(e.unpaid);ae.push([e.id,e.name,e.pos,e.isHK?"Yes":"No",e.work,e.meal,e.regular,e.ot1,e.paid,e.unpaid,m,m===0?"No Break":m<20?"Short":m<28?"Short Break":"OK"])});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ae),"All Employees");
+  XLSX.writeFile(wb,"PaychexLabor_"+new Date().toISOString().slice(0,10)+".xlsx");
+  showToast("Excel exported successfully");
+}
+function showToast(m){
+  document.getElementById("toastMsg").textContent=m;
+  var t=document.getElementById("toast");t.classList.add("show");
+  setTimeout(function(){t.classList.remove("show")},2800);
+}
+
+
+/* ══════════════════════════════════════════════════════
+   ROSTER EDIT FUNCTIONS
+   Overrides stored in localStorage — never modifies ROSTER_BY_ID
+   ══════════════════════════════════════════════════════ */
+function loadOverrides(){
+  try{var r=localStorage.getItem("hk_roster_overrides");return r?JSON.parse(r):{};} catch(e){return {};}
+}
+function saveOverrides(ov){
+  try{localStorage.setItem("hk_roster_overrides",JSON.stringify(ov));}catch(e){}
+}
+
+function showEditModal(btn){
+  var eid=btn.dataset.eid,ename=btn.dataset.ename,epos=btn.dataset.epos;
+  var eorig=btn.dataset.eorig,estatus=btn.dataset.estatus,enote=btn.dataset.enote;
+  document.getElementById("editEmpId").value=eid;
+  document.getElementById("editOrigPos").value=eorig;
+  document.getElementById("editEmpName").value=ename;
+  document.getElementById("editEmpPos").value=epos;
+  document.getElementById("editEmpStatus").value=estatus||"active";
+  document.getElementById("editEmpNote").value=enote||"";
+  document.getElementById("editModalOverlay").style.display="flex";
+}
+function closeEditModal(){
+  document.getElementById("editModalOverlay").style.display="none";
+}
+function saveEditEmp(){
+  var eid=document.getElementById("editEmpId").value;
+  var newName=document.getElementById("editEmpName").value.trim();
+  var newPos=document.getElementById("editEmpPos").value;
+  var newStatus=document.getElementById("editEmpStatus").value;
+  var newNote=document.getElementById("editEmpNote").value.trim();
+  if(!newName){showToast("Enter a name");return;}
+  if(!newPos){showToast("Select a position");return;}
+  if(newStatus==="terminated"){
+    if(!confirm("This will remove "+newName+" from all reports. Continue?"))return;
+  }
+  var ov=loadOverrides();
+  ov[eid]={name:newName,pos:newPos,status:newStatus,note:newNote,updated:new Date().toISOString()};
+  saveOverrides(ov);
+  closeEditModal();
+  renderRoster();
+  /* Also update ROSTER_BY_ID live so position check reflects change immediately */
+  if(ROSTER_BY_ID[eid]){
+    ROSTER_BY_ID[eid].pos=newPos;
+    ROSTER_BY_ID[eid].name=newName;
+  }
+  showToast(newStatus==="terminated"
+    ? newName+" removed from roster"
+    : "Changes saved for "+newName);
+}
+function deleteEmpFromEdit(){
+  var eid=document.getElementById("editEmpId").value;
+  var ename=document.getElementById("editEmpName").value;
+  if(!confirm("Remove "+ename+" from the roster?"))return;
+  var ov=loadOverrides();
+  ov[eid]={status:"terminated",updated:new Date().toISOString()};
+  saveOverrides(ov);
+  if(ROSTER_BY_ID[eid])delete ROSTER_BY_ID[eid];
+  closeEditModal();
+  renderRoster();
+  showToast(ename+" removed");
+}
+
+/* Override-aware primaryPos — checks overrides first */
+var _origPrimaryPos=primaryPos;
+primaryPos=function(name,empId){
+  if(empId){
+    var ov=loadOverrides();
+    if(ov[empId]&&ov[empId].pos&&ov[empId].status!=="terminated")return ov[empId].pos;
+    if(ov[empId]&&ov[empId].status==="terminated")return null;
+  }
+  return _origPrimaryPos(name,empId);
+};
+
+/* ══════════════════════════════════════════════════════
+   WEEKLY DASHBOARD
+   ══════════════════════════════════════════════════════ */
+var DAYS_W=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+var DAYS_WF=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+var HK_POS_LIST=["Housekeeping Supervisor","Room Attendant","House Attendant","Public Area Attendant","Turndown Attendant","Laundry Attendant"];
+
+function getWeekKey(){
+  var d=new Date(),day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1);
+  var mon=new Date(d);mon.setDate(diff);
+  return mon.toISOString().slice(0,10);
+}
+function loadWeekData(){
+  try{var r=localStorage.getItem("hk_week_"+getWeekKey());return r?JSON.parse(r):{};}catch(e){return {};}
+}
+function saveWeekData(wd){
+  try{localStorage.setItem("hk_week_"+getWeekKey(),JSON.stringify(wd));}catch(e){}
+}
+function clearWeek(){
+  if(!confirm("Clear all data for this week?"))return;
+  try{localStorage.removeItem("hk_week_"+getWeekKey());localStorage.removeItem("hk_rooms_"+getWeekKey());}catch(e){}
+  renderWeekDashboard();
+  showToast("Week data cleared");
+}
+function detectReportDate(fname){
+  var m=fname.match(/(\d{2})[_\-](\d{2})[_\-](\d{4})/);
+  if(m){var d=new Date(parseInt(m[3]),parseInt(m[1])-1,parseInt(m[2]));if(!isNaN(d.getTime()))return d;}
+  return new Date();
+}
+function saveCurrentDayToWeek(fname){
+  if(!DATA.emps.length)return;
+  var rd=detectReportDate(fname||""),di=rd.getDay();
+  var wd=loadWeekData();
+  var snap={
+    date:rd.toISOString().slice(0,10),dayIdx:di,dayName:DAYS_W[di],
+    totalPaid:DATA.emps.reduce(function(s,e){return s+e.paid;},0),
+    totalOT:DATA.emps.reduce(function(s,e){return s+e.ot1;},0),
+    totalEmps:DATA.emps.length,
+    noBreak:DATA.emps.filter(function(e){return toMins(e.unpaid)===0;}).length,
+    shortBreak:DATA.emps.filter(function(e){var m=toMins(e.unpaid);return m>0&&m<28;}).length,
+    mismatch:DATA.emps.filter(function(e){var p=primaryPos(e.name,e.id);return p&&p!==e.pos;}).length,
+    byPosition:{}
+  };
+  HK_POS_LIST.forEach(function(pos){
+    var emps=DATA.emps.filter(function(e){return e.pos===pos;});
+    var dept=null;
+    for(var i=0;i<DATA.depts.length;i++){if(DATA.depts[i].name===pos){dept=DATA.depts[i];break;}}
+    snap.byPosition[pos]={
+      paid:dept?dept.totals.paid:0,
+      ot1:dept?dept.totals.ot1:0,
+      emps:emps.length,
+      breakEx:emps.filter(function(e){return toMins(e.unpaid)<28;}).length
+    };
+  });
+  wd[di]=snap;
+  saveWeekData(wd);
+  var lbl=document.getElementById("reportDateLabel");
+  if(lbl)lbl.textContent="Labor: "+d.toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric",year:"numeric"});
+  renderWeekDashboard();
+  showToast("Day saved to weekly dashboard");
+}
+
+/* ══════════════════════════════════════════════════════
+   MONTHLY DASHBOARD
+   Hotel week: Saturday → Friday
+   Date auto-detected from PDF header (MM/DD/YYYY)
+   ══════════════════════════════════════════════════════ */
+
+/* ══ GOOGLE SHEETS SYNC ══════════════════════════════
+   All data saved locally first (instant) then synced
+   to Google Sheets so all managers share the same data.
+   ═══════════════════════════════════════════════════ */
+var SHEETS_URL="https://script.google.com/macros/s/AKfycbz7bwG-NThA54HXn1Wy6Z5rk8K5CTi4ITGauafhe4N5hS8SdwOLa0l-Yp2LuhAN2X5s/exec";
+var SYNC_USER=(function(){
+  var u=localStorage.getItem("hk_manager_name");
+  if(!u){u=prompt("Enter your name (e.g. Manager1):")||"Manager";localStorage.setItem("hk_manager_name",u);}
+  return u;
+})();
+
+function sheetsGet(key,cb){
+  fetch(SHEETS_URL,{
+    method:"POST",
+    body:JSON.stringify({action:"load",key:key})
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){cb(null,d.value);})
+  .catch(function(e){cb(e,null);});
+}
+function sheetsPut(key,value){
+  fetch(SHEETS_URL,{
+    method:"POST",
+    body:JSON.stringify({action:"save",key:key,value:value,user:SYNC_USER})
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){
+    setSyncStatus(d.status==="ok"?"synced":"error");
+  })
+  .catch(function(){setSyncStatus("error");});
+}
+function sheetsGetAll(cb){
+  fetch(SHEETS_URL,{
+    method:"POST",
+    body:JSON.stringify({action:"loadAll"})
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){cb(null,d.value||{});})
+  .catch(function(e){cb(e,{});});
+}
+function setSyncStatus(s){
+  var el=document.getElementById("syncStatus");
+  if(!el)return;
+  if(s==="syncing"){el.textContent="&#9729; Syncing...";el.style.color="rgba(255,255,255,.6)";}
+  else if(s==="synced"){el.textContent="&#10003; Synced";el.style.color="#86efac";}
+  else if(s==="offline"){el.textContent="&#9888; Offline";el.style.color="#fde68a";}
+  else{el.textContent="&#9888; Sync error";el.style.color="#fca5a5";}
+}
+
+/* Override save functions to also push to Sheets */
+var _origSaveMonthData=saveMonthData;
+saveMonthData=function(data,mk){
+  _origSaveMonthData(data,mk);
+  setSyncStatus("syncing");
+  sheetsPut("month_"+(mk||monthKey()), data);
+};
+
+/* Pull latest data from Sheets on load */
+function syncFromSheets(){
+  setSyncStatus("syncing");
+  sheetsGetAll(function(err,all){
+    if(err){setSyncStatus("offline");return;}
+    var updated=false;
+    Object.keys(all).forEach(function(key){
+      if(key.indexOf("month_")===0){
+        var mk=key.replace("month_","");
+        var remote=all[key];
+        /* Merge: remote wins for days, local wins for rooms if both exist */
+        var local=_origLoadMonthData(mk);
+        var merged={
+          days:Object.assign({},local.days||{},remote.days||{}),
+          rooms:Object.assign({},remote.rooms||{},local.rooms||{})
+        };
+        _origSaveMonthData(merged,mk);
+        updated=true;
+      }
+    });
+    setSyncStatus("synced");
+    if(updated)renderMonthDashboard();
+  });
+}
+
+var _origLoadMonthData=loadMonthData;
+loadMonthData=function(mk){
+  return _origLoadMonthData(mk);
+};
+
+var MONTH_NAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
+var DAY_NAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+var HK_POS_LIST=["Housekeeping Supervisor","Room Attendant","House Attendant","Public Area Attendant","Turndown Attendant","Laundry Attendant"];
+var LABOR_STD={
+  "Housekeeping Supervisor":{type:"por",factor:0.155},
+  "Room Attendant":          {type:"por",factor:0.562},
+  "House Attendant":         {type:"por",factor:0.175},
+  "Laundry Attendant":       {type:"por",factor:0.180},
+  "Turndown Attendant":      {type:"fixed",daily:21},
+  "Public Area Attendant":   {type:"fixed",daily:32}
+};
+
+/* Current viewing month */
+var viewMonth=new Date();viewMonth.setDate(1);
+
+/* ── Storage keys ── */
+function monthKey(d){return(d||viewMonth).getFullYear()+"-"+String((d||viewMonth).getMonth()+1).padStart(2,"0");}
+function loadMonthData(mk){try{var r=localStorage.getItem("hk_month_"+(mk||monthKey()));return r?JSON.parse(r):{days:{},rooms:{}};}catch(e){return{days:{},rooms:{}}}}
+function saveMonthData(data,mk){try{localStorage.setItem("hk_month_"+(mk||monthKey()),JSON.stringify(data));}catch(e){}}
+
+/* ── Date string helpers ── */
+function dateStr(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function prevDateStr(ds){var p=ds.split("-");var d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));d.setDate(d.getDate()-1);return dateStr(d);}
+function parseLocalDate(s){var p=s.split("-");return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));}
+
+/* ── Extract date from PDF ── */
+/* PDF header contains "MM/DD/YYYY" at x>600 near top of page */
+var detectedPDFDate=null;
+function extractDateFromItems(pageItems){
+  var DATE_RE=/^(\d{2})\/(\d{2})\/(\d{4})$/;
+  for(var i=0;i<pageItems.length;i++){
+    var it=pageItems[i];
+    /* Look for date pattern in header area (x > 600 in PDF coords) */
+    if(it.x>600&&DATE_RE.test(it.str)){
+      var m=it.str.match(DATE_RE);
+      var d=new Date(parseInt(m[3]),parseInt(m[1])-1,parseInt(m[2]));
+      if(!isNaN(d.getTime()))return d;
+    }
+  }
+  return null;
+}
+
+/* ── Hotel week: Sat=start, Fri=end ── */
+/* Returns the Saturday on or before a given date */
+function getHotelWeekStart(d){
+  var day=d.getDay(); /* 0=Sun..6=Sat */
+  var diff=day===6?0:day+1; /* days back to Saturday */
+  var sat=new Date(d);sat.setDate(d.getDate()-diff);
+  return sat;
+}
+/* Build array of hotel weeks covering the month */
+function getHotelWeeksForMonth(year,month){
+  /* month is 0-indexed */
+  var firstDay=new Date(year,month,1);
+  var lastDay=new Date(year,month+1,0);
+  /* Start from the Saturday of the first hotel week touching this month */
+  var weekStart=getHotelWeekStart(firstDay);
+  var weeks=[];
+  while(weekStart<=lastDay){
+    var weekEnd=new Date(weekStart);weekEnd.setDate(weekStart.getDate()+6);
+    weeks.push({start:new Date(weekStart),end:new Date(weekEnd)});
+    weekStart.setDate(weekStart.getDate()+7);
+  }
+  return weeks;
+}
+
+/* ── Day budget calculation ── */
+function dayBudget(rooms){
+  var total=0;
+  HK_POS_LIST.forEach(function(pos){
+    var std=LABOR_STD[pos];
+    if(std.type==="fixed")total+=std.daily;
+    else if(rooms>0)total+=rooms*std.factor;
+  });
+  return total;
+}
+function posBudget(pos,rooms){
+  var std=LABOR_STD[pos];
+  if(!std)return 0;
+  if(std.type==="fixed")return std.daily;
+  return rooms>0?rooms*std.factor:0;
+}
+
+/* ── Save current PDF data to month ── */
+function saveDayToMonth(pdfDate){
+  if(!DATA.emps.length)return;
+  /* PDF report date is the day AFTER the labor was worked.
+     e.g. PDF dated 05/09/2026 contains labor from 05/08/2026.
+     Shift back 1 day to get the actual labor date. */
+  var reportDate=pdfDate||detectedPDFDate||new Date();
+  var d=new Date(reportDate);
+  d.setDate(d.getDate()-1); /* labor date = report date - 1 */
+  var mk=monthKey(d);
+  var ds=dateStr(d);
+  var mData=loadMonthData(mk);
+  if(!mData.days)mData.days={};
+  if(!mData.rooms)mData.rooms={};
+
+  var snap={
+    date:ds,
+    dayOfWeek:d.getDay(),
+    totalPaid:DATA.emps.reduce(function(s,e){return s+e.paid;},0),
+    totalOT:DATA.emps.reduce(function(s,e){return s+e.ot1;},0),
+    totalEmps:DATA.emps.length,
+    noBreak:DATA.emps.filter(function(e){return toMins(e.unpaid)===0;}).length,
+    shortBreak:DATA.emps.filter(function(e){var m=toMins(e.unpaid);return m>0&&m<28;}).length,
+    mismatch:DATA.emps.filter(function(e){var p=primaryPos(e.name,e.id);return p&&p!==e.pos;}).length,
+    byPosition:{}
+  };
+  HK_POS_LIST.forEach(function(pos){
+    var emps=DATA.emps.filter(function(e){return e.pos===pos;});
+    var dept=null;for(var i=0;i<DATA.depts.length;i++){if(DATA.depts[i].name===pos){dept=DATA.depts[i];break;}}
+    snap.byPosition[pos]={paid:dept?dept.totals.paid:0,ot1:dept?dept.totals.ot1:0,emps:emps.length,breakEx:emps.filter(function(e){return toMins(e.unpaid)<28;}).length};
+  });
+
+  mData.days[ds]=snap;
+  saveMonthData(mData,mk);
+
+  /* Switch view to the month of the uploaded PDF */
+  viewMonth=new Date(d.getFullYear(),d.getMonth(),1);
+  renderMonthDashboard();
+
+  /* Show confirmation with both report date and labor date */
+  var dayName=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
+  showToast("&#128197; Labor for "+dayName+" "+d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" saved");
+}
+
+/* ── Navigation ── */
+function changeMonth(dir){
+  viewMonth.setMonth(viewMonth.getMonth()+dir);
+  renderMonthDashboard();
+}
+function clearMonth(){
+  if(!confirm("Clear all data for "+MONTH_NAMES[viewMonth.getMonth()]+" "+viewMonth.getFullYear()+"?"))return;
+  try{localStorage.removeItem("hk_month_"+monthKey());}catch(e){}
+  renderMonthDashboard();
+  showToast("Month data cleared");
+}
+
+/* ── Rooms input handler ── */
+function saveRoomsForDate(ds,val){
+  var d=parseLocalDate(ds);
+  var mk=monthKey(d);
+  var mData=loadMonthData(mk);
+  if(!mData.rooms)mData.rooms={};
+  var n=parseInt(val)||0;
+  if(n>0)mData.rooms[ds]=n;else delete mData.rooms[ds];
+  saveMonthData(mData,mk); /* also syncs to Sheets */
+  renderMonthDashboard();
+}
+
+/* ── Toggle week accordion ── */
+function toggleWeek(id){
+  var body=document.getElementById("wb_"+id);
+  var arrow=document.getElementById("wt_"+id);
+  if(!body)return;
+  var isOpen=body.classList.contains("open");
+  body.classList.toggle("open",!isOpen);
+  if(arrow)arrow.classList.toggle("open",!isOpen);
+}
+
+/* ── MAIN RENDER ── */
+function renderMonthDashboard(){
+  var yr=viewMonth.getFullYear(),mo=viewMonth.getMonth();
+  var mk=monthKey();/* current view */
+  var mData=loadMonthData(monthKey(viewMonth));
+  var days=mData.days||{},rooms=mData.rooms||{};
+
+  /* Month label */
+  var ml=document.getElementById("monthLabel");
+  if(ml)ml.textContent=MONTH_NAMES[mo]+" "+yr;
+
+  var today=new Date();today.setHours(0,0,0,0);
+  var yesterday=new Date(today);yesterday.setDate(today.getDate()-1);
+  var todayStr=dateStr(today);
+  var yesterdayStr=dateStr(yesterday);
+
+  /* ── Month KPI summary — calendar month only (1st to last day) ── */
+  var mPaid=0,mBudget=0,mOT=0,mNB=0,mSB=0,mMM=0,mDays=0;
+  Object.keys(days).forEach(function(ds){
+    var s=days[ds];
+    /* Only include days within the calendar month (P&L month) */
+    var d=parseLocalDate(ds);
+    if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
+    var prevDs=prevDateStr(ds);
+    var r=parseInt(rooms[prevDs])||0;
+    mPaid+=s.totalPaid;mOT+=s.totalOT;mNB+=s.noBreak;mSB+=s.shortBreak;mMM+=s.mismatch;mDays++;
+    mBudget+=dayBudget(r);
+  });
+  var mVar=mPaid-mBudget,mPct=mBudget>0?Math.round((mPaid/mBudget)*100):0;
+  var kpis=[
+    {v:mPaid.toFixed(1),l:"Total Paid Hrs",c:""},
+    {v:mBudget>0?mBudget.toFixed(1)+" h":"—",l:"Total Budget Hours",c:""},
+    {v:mBudget>0?(mVar>0?"+":"")+mVar.toFixed(1):"—",l:"Variance",c:mBudget>0?(mVar>0?"color:var(--red)":"color:var(--green)"):""},
+    {v:mBudget>0?mPct+"%":"—",l:"% vs Budget",c:mBudget>0?(mPct>105?"color:var(--red)":mPct>98?"color:var(--amber)":"color:var(--green)"):""},
+    {v:mOT.toFixed(1),l:"OT Hours",c:mOT>0?"color:var(--amber)":""},
+    {v:mNB,l:"No Break",c:mNB>0?"color:var(--red)":"color:var(--green)"},
+    {v:mSB,l:"Short Break",c:mSB>0?"color:var(--amber)":"color:var(--green)"},
+    {v:mDays,l:"Days Loaded",c:""}
+  ];
+  var kEl=document.getElementById("monthKpis");
+  if(kEl)kEl.innerHTML=kpis.map(function(k){
+    return'<div class="month-kpi"><div class="mkval" style="'+k.c+'">'+k.v+'</div><div class="mklbl">'+k.l+'</div></div>';
+  }).join("");
+
+  /* ── Month alerts ── */
+  var ae=document.getElementById("monthAlerts");
+  if(ae){
+    var al=[];
+    if(mBudget>0&&mVar>20)al.push("&#128308; Over budget "+mVar.toFixed(1)+"h this month (calendar month)");
+    if(mBudget>0&&mVar<-20)al.push("&#128994; Under budget "+Math.abs(mVar).toFixed(1)+"h this month (calendar month)");
+    if(mNB>10)al.push("&#128683; "+mNB+" missing breaks this month");
+    ae.innerHTML=al.map(function(a){return'<div class="week-alert-bar">'+a+'</div>';}).join("");
+  }
+
+  /* ── Build hotel weeks ── */
+  var weeks=getHotelWeeksForMonth(yr,mo);
+  var wEl=document.getElementById("monthWeeks");
+  if(!wEl)return;
+  var wHtml="";
+
+  weeks.forEach(function(wk,wi){
+    /* Build 7 days Sat→Fri */
+    var wkDays=[];
+    for(var d=0;d<7;d++){
+      var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
+      wkDays.push(dd);
+    }
+
+    /* Week totals */
+    var wPaid=0,wBud=0,wOT=0,wNB=0,wSB=0,wLoaded=0;
+    wkDays.forEach(function(dd){
+      var ds2=dateStr(dd);
+      var prevDs2=prevDateStr(ds2);
+      var s=days[ds2];var r=parseInt(rooms[prevDs2])||0;
+      if(s){wPaid+=s.totalPaid;wOT+=s.totalOT;wNB+=s.noBreak;wSB+=s.shortBreak;wLoaded++;wBud+=dayBudget(r);}
+    });
+    var wVar=wPaid-wBud;
+
+    /* Week date range label */
+    var wkLabel="Week "+(wi+1)+": "
+      +wk.start.toLocaleDateString("en-US",{month:"short",day:"numeric"})
+      +" – "+wk.end.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+
+    /* Auto-open current week */
+    var isCurrentWeek=wkDays.some(function(dd){return dateStr(dd)===todayStr||dateStr(dd)===yesterdayStr;});
+
+    wHtml+='<div class="week-block">'
+      +'<div class="week-block-hdr" onclick="toggleWeek(\''+wi+'\')"> '
+      +'<h3>Week '+(wi+1)+'<span class="wk-dates">'+wk.start.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" – "+wk.end.toLocaleDateString("en-US",{month:"short",day:"numeric"})+'</span></h3>'
+      +'<div style="display:flex;align-items:center;gap:16px;">'
+      +'<div class="week-kpis">'
+      +'<div class="week-kpi"><div class="wkval">'+wPaid.toFixed(1)+'</div><div class="wklbl">Paid</div></div>'
+      +(wBud>0?'<div class="week-kpi"><div class="wkval '+(wVar>2?"variance-neg":wVar<-2?"variance-pos":"")+'">'+(wVar>0?"+":"")+wVar.toFixed(1)+'</div><div class="wklbl">Var</div></div>':"")
+      +'<div class="week-kpi"><div class="wkval '+(wNB>0?"b-alert":"")+'">'+wNB+'</div><div class="wklbl">No Brk</div></div>'
+      +'<div class="week-kpi"><div class="wkval">'+wLoaded+'/7</div><div class="wklbl">Days</div></div>'
+      +'</div>'
+      +'<span class="wk-toggle'+(isCurrentWeek?" open":"")+'" id="wt_'+wi+'">&#9660;</span>'
+      +'</div>'
+      +'</div>'
+
+      +'<div class="week-block-body'+(isCurrentWeek?" open":"")+'" id="wb_'+wi+'">'
+
+      /* Day header labels */
+      +'<div class="day-hdr">'
+      +wkDays.map(function(dd){
+        return'<div class="day-hdr-cell">'+DAY_NAMES[dd.getDay()]+'</div>';
+      }).join("")
+      +'</div>'
+
+      /* Day cards */
+      +'<div class="day-row">'
+      +wkDays.map(function(dd){
+        var ds3=dateStr(dd);
+        var s=days[ds3];
+        /* Rooms from previous night drive today's labor budget */
+        var prevDs3=prevDateStr(ds3);
+        var r=parseInt(rooms[prevDs3])||0;
+        var bud=r>0?dayBudget(r):0;
+        var inMonth=dd.getMonth()===mo;
+        var ddM=new Date(dd);ddM.setHours(0,0,0,0);var isFuture=ddM>today;
+        var isYesterday=ds3===yesterdayStr;
+        var isToday2=ds3===todayStr;
+
+        var cls="day-card";
+        if(isYesterday)cls+=" evaluating";
+        else if(isToday2)cls+=" today-card";
+        else if(isFuture)cls+=" future";
+        else if(!inMonth)cls+=" other-month";
+        if(s)cls+=" loaded";
+
+        var inner='<div class="dc-weekday">'+DAY_NAMES[dd.getDay()]+'</div>'
+          +'<div class="dc-date">'+dd.getDate()+'</div>';
+
+        if(s){
+          inner+='<div class="dc-dot"></div>';
+          inner+='<div class="dc-paid">'+s.totalPaid.toFixed(1)+'</div>';
+          if(bud>0){
+            var pct3=Math.round((s.totalPaid/bud)*100);
+            var barColor=pct3>105?"var(--red)":pct3>98?"var(--gold2)":"var(--green)";
+            inner+='<div class="dc-budget">/ '+bud.toFixed(1)+'</div>'
+              +'<div style="width:42px;height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin-top:3px;">'
+              +'<div style="width:'+Math.min(100,pct3)+'%;height:100%;background:'+barColor+';border-radius:99px;"></div>'
+              +'</div>';
+          }
+          if(isYesterday)inner+='<div class="dc-eval">&#11088; Evaluating</div>';
+        }else if(isYesterday){
+          inner+='<div class="dc-eval">Evaluate</div>';
+        }else if(isToday2){
+          inner+='<div style="font-size:10px;color:var(--blue2);">Today</div>';
+        }
+
+        return'<div class="'+cls+'">'+inner+'</div>';
+      }).join("")
+      +'</div>'
+
+      /* Rooms input row */
+      +'<div style="margin-bottom:12px;">'
+      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:6px;">&#127968; Rooms Occupied — Enter the PREVIOUS night <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(e.g. budget for Sat May 9 = rooms entered under Fri May 8)</span></div>'
+      +'<div class="rooms-row">'
+      +wkDays.map(function(dd){
+        var ds4=dateStr(dd);
+        /* Night key = previous day (night of May 8 drives budget for May 9) */
+        var prevDs4=prevDateStr(ds4);
+        var r4=rooms[prevDs4]||"";
+        var ddMid=new Date(dd);ddMid.setHours(0,0,0,0);var isFut=ddMid>today;
+        var inMo=dd.getMonth()===mo;
+        var hasR=!!rooms[prevDs4];
+        var hasD=!!days[ds4];
+        return'<div class="rooms-cell">'
+          +'<label style="font-size:9px;line-height:1.3;text-align:center;">Night of<br>'+(function(){var prev=new Date(dd);prev.setDate(dd.getDate()-1);return prev.toLocaleDateString("en-US",{month:"short",day:"numeric"});})()+'</label>'
+          +'<input type="number" min="0" max="999" placeholder="—" value="'+r4+'"'
+          +' class="'+(hasR?"has-rooms":"")+(isFut||!inMo?" locked":"")+'"'
+          +(isFut||!inMo?' readonly':'')
+          +' onchange="saveRoomsForDate(\''+prevDs4+'\',this.value)"'
+          +' oninput="saveRoomsForDate(\''+prevDs4+'\',this.value)"/>'
+          +'</div>';
+      }).join("")
+      +'</div>'
+      +'<div style="font-size:10px;color:var(--text3);margin-top:4px;">&#8505; Enter rooms occupied each night — these numbers calculate the budget for the <b>following day</b></div>'
+      +'</div>'
+
+      /* Position table */
+      +'<div style="overflow-x:auto;">'
+      +'<table class="pos-week-table">'
+      +'<thead><tr>'
+      +'<th style="text-align:left;min-width:140px;">Position</th>'
+      +wkDays.map(function(dd){
+        var ds5=dateStr(dd);
+        var isYd=ds5===yesterdayStr;
+        return'<th class="'+(isYd?"yd-col":"")+'" style="min-width:68px;">'+DAY_NAMES[dd.getDay()]+'<br><span style="font-weight:400;opacity:.8;font-size:9px;">'+dd.toLocaleDateString("en-US",{month:"short",day:"numeric"})+'</span></th>';
+      }).join("")
+      +'<th style="min-width:72px;">Actual</th>'
+      +'<th style="min-width:72px;">Budget<br><span style="font-weight:400;font-size:9px;opacity:.8;">Std Hrs</span></th>'
+      +'<th style="min-width:68px;">Var</th>'
+      +'<th style="min-width:50px;">OT</th>'
+      +'<th style="min-width:50px;">Breaks</th>'
+      +'</tr></thead>'
+      +'<tbody>'
+      +HK_POS_LIST.map(function(pos){
+        var std=LABOR_STD[pos];
+        var stdLbl=std?(std.type==="fixed"?std.daily+"h/d fixed":Math.round(std.factor*100)+"% POR"):"";
+        var wA=0,wB=0,wO=0,wBr=0;
+        var cells=wkDays.map(function(dd){
+          var ds6=dateStr(dd);
+          var s=days[ds6];var p=s&&s.byPosition?s.byPosition[pos]:null;
+          /* Rooms from previous night → budget for this day */
+          var prevDs6=prevDateStr(ds6);
+          var r6=parseInt(rooms[prevDs6])||0;
+          var bud6=posBudget(pos,r6);
+          var isYd=ds6===yesterdayStr;
+          var cellCls=isYd?"yd-col":"";
+          if(p&&p.paid>0){
+            wA+=p.paid;wO+=p.ot1;wBr+=p.breakEx;
+            if(bud6>0){
+              wB+=bud6;
+              var pct4=Math.round((p.paid/bud6)*100);
+              var bc=pct4>105?"var(--red)":pct4>98?"var(--gold2)":"var(--green)";
+              return'<td class="'+cellCls+'" style="text-align:center;">'
+                +'<span class="day-cell-val" style="color:'+bc+';">'+p.paid.toFixed(1)+'</span>'
+                +'<span class="day-cell-bud">/ '+bud6.toFixed(1)+'</span>'
+                +'</td>';
+            }else{
+              return'<td class="'+cellCls+'" style="text-align:center;"><span class="day-cell-val">'+p.paid.toFixed(1)+'</span></td>';
+            }
+          }else if(s){
+            if(bud6>0){wB+=bud6;return'<td class="'+cellCls+'" style="text-align:center;"><span style="color:var(--border2);">—</span><span class="day-cell-bud">/ '+bud6.toFixed(1)+'</span></td>';}
+            return'<td class="'+cellCls+'" style="text-align:center;color:var(--border2);">—</td>';
+          }else{
+            return'<td class="'+cellCls+'" style="text-align:center;color:var(--border);">·</td>';
+          }
+        }).join("");
+        var vr=wA-wB;
+        var vrStr=wB>0?'<span class="'+(vr>0?"variance-neg":"variance-pos")+'">'+(vr>0?"+":"")+vr.toFixed(1)+'</span>':'<span style="color:var(--text3)">—</span>';
+        return'<tr>'
+          +'<td><b>'+pos+'</b><br><span style="font-size:10px;color:var(--text3);">'+stdLbl+'</span></td>'
+          +cells
+          +'<td style="text-align:center;"><span class="day-cell-val">'+wA.toFixed(1)+'</span></td>'
+          +'<td style="text-align:center;color:var(--text2);">'+(wB>0?wB.toFixed(1):"—")+'</td>'
+          +'<td style="text-align:center;">'+vrStr+'</td>'
+          +'<td style="text-align:center;font-weight:700;color:'+(wO>0?"var(--amber)":"var(--text3)")+';">'+wO.toFixed(1)+'</td>'
+          +'<td style="text-align:center;font-weight:700;color:'+(wBr>0?"var(--red)":"var(--green)")+';">'+wBr+'</td>'
+          +'</tr>';
+      }).join("")
+      +'</tbody></table></div>'
+      +'</div>'/* /week-block-body */
+      +'</div>'/* /week-block */;
+  });
+
+  wEl.innerHTML=wHtml||'<div class="empty">No data for this month yet — upload daily PDFs</div>';
+}
+
+/* ── Export Month Excel ── */
+function exportMonthExcel(){
+  var mData=loadMonthData(monthKey(viewMonth));
+  var days2=mData.days||{},rooms2=mData.rooms||{};
+  var wb3=XLSX.utils.book_new();
+  var yr=viewMonth.getFullYear(),mo=viewMonth.getMonth();
+  var weeks2=getHotelWeeksForMonth(yr,mo);
+
+  /* ── Sheet 1: Daily Summary ── */
+  var ds2=[["Date","Week","Weekday","Rooms (prev night)","Total Paid Hrs","Std Budget Hrs","Variance","Variance %","OT Hrs","Employees","No Break","Short Break","Mismatches"]];
+  weeks2.forEach(function(wk,wi){
+    for(var d=0;d<7;d++){
+      var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
+      /* P&L export: only calendar month days */
+      if(dd.getMonth()!==mo||dd.getFullYear()!==yr)continue;
+      var ds3=dateStr(dd);
+      var s=days2[ds3];if(!s)continue;
+      var prevDs=prevDateStr(ds3);
+      var r=parseInt(rooms2[prevDs])||0;
+      var bud=r>0?+dayBudget(r).toFixed(2):0;
+      var variance=bud>0?+(s.totalPaid-bud).toFixed(2):"";
+      var variancePct=bud>0?Math.round((s.totalPaid/bud)*100)+"%":"";
+      ds2.push([
+        ds3,"Week "+(wi+1),DAY_NAMES[dd.getDay()],
+        r||"",
+        +s.totalPaid.toFixed(2),
+        bud||"",variance,variancePct,
+        +s.totalOT.toFixed(2),s.totalEmps,
+        s.noBreak,s.shortBreak,s.mismatch
+      ]);
+    }
+  });
+  XLSX.utils.book_append_sheet(wb3,XLSX.utils.aoa_to_sheet(ds2),"Daily Summary");
+
+  /* ── Sheet 2: By Position (daily) ── */
+  var sorted2=Object.keys(days2).sort();
+  var posHdr=["Position","Standard"].concat(sorted2.map(function(ds){
+    var d=parseLocalDate(ds);
+    return DAY_NAMES[d.getDay()]+" "+d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+  })).concat(["Month Total Actual","Month Budget","Variance","Variance %"]);
+  var posRows=[posHdr];
+  HK_POS_LIST.forEach(function(pos){
+    var std=LABOR_STD[pos];
+    var stdLbl=std?(std.type==="fixed"?std.daily+"h/day fixed":Math.round(std.factor*100)+"% POR"):"";
+    var row=[pos,stdLbl];
+    var wA=0,wB=0;
+    sorted2.forEach(function(ds3){
+      /* P&L: only calendar month days */
+      var d3=parseLocalDate(ds3);
+      if(d3.getMonth()!==mo||d3.getFullYear()!==yr)return;
+      var s=days2[ds3];var p=s&&s.byPosition?s.byPosition[pos]:null;
+      var prevDs=prevDateStr(ds3);
+      var r=parseInt(rooms2[prevDs])||0;
+      var bud=posBudget(pos,r);
+      row.push(p&&p.paid>0?+p.paid.toFixed(2):"");
+      if(p)wA+=p.paid;
+      if(s&&bud>0)wB+=bud;
+    });
+    var variance=wB>0?+(wA-wB).toFixed(2):"";
+    var variancePct=wB>0?Math.round((wA/wB)*100)+"%":"";
+    row.push(+wA.toFixed(2),wB>0?+wB.toFixed(2):"",variance,variancePct);
+    posRows.push(row);
+  });
+  XLSX.utils.book_append_sheet(wb3,XLSX.utils.aoa_to_sheet(posRows),"By Position");
+
+  /* ── Sheet 3: Weekly Summary ── */
+  var wkSum=[["Week","Date Range","Days Loaded","Total Paid Hrs","Std Budget Hrs","Variance","OT Hrs","No Break","Short Break"]];
+  weeks2.forEach(function(wk,wi){
+    var wPaid=0,wBud=0,wOT=0,wNB=0,wSB=0,wLoaded=0;
+    for(var d=0;d<7;d++){
+      var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
+      var ds3=dateStr(dd);
+      var s=days2[ds3];if(!s)continue;
+      var prevDs=prevDateStr(ds3);
+      var r=parseInt(rooms2[prevDs])||0;
+      wPaid+=s.totalPaid;wOT+=s.totalOT;wNB+=s.noBreak;wSB+=s.shortBreak;wLoaded++;
+      wBud+=dayBudget(r);
+    }
+    var wkRange=wk.start.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" - "+wk.end.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+    /* Note: first/last week of month may be partial (hotel week = Sat-Fri) */
+    wkSum.push(["Week "+(wi+1),wkRange,wLoaded,+wPaid.toFixed(2),wBud>0?+wBud.toFixed(2):"",wBud>0?+(wPaid-wBud).toFixed(2):"",+wOT.toFixed(2),wNB,wSB]);
+  });
+  XLSX.utils.book_append_sheet(wb3,XLSX.utils.aoa_to_sheet(wkSum),"Weekly Summary");
+
+  /* ── Sheet 4: Rooms Occupied Log ── */
+  var roomsLog=[["Date","Weekday","Rooms Occupied (night)","Drives Budget For"]];
+  Object.keys(rooms2).sort().forEach(function(ds3){
+    var d=parseLocalDate(ds3);
+    var nextDs=dateStr(new Date(d.getFullYear(),d.getMonth(),d.getDate()+1));
+    roomsLog.push([ds3,DAY_NAMES[d.getDay()],rooms2[ds3],nextDs]);
+  });
+  XLSX.utils.book_append_sheet(wb3,XLSX.utils.aoa_to_sheet(roomsLog),"Rooms Log");
+
+  var filename="HK_Monthly_"+MONTH_NAMES[mo]+"_"+yr+".xlsx";
+  XLSX.writeFile(wb3,filename);
+  showToast("✓ Exported: "+filename);
+}
+
+/* ── Hook into PDF upload ── */
+var _origGo=go;
+go=async function(file){
+  /* Extract date from first page items BEFORE parsing */
+  detectedPDFDate=null;
+  try{
+    var ab2=await file.arrayBuffer();
+    var pdf2=await pdfjsLib.getDocument({data:ab2}).promise;
+    var pg2=await pdf2.getPage(1);
+    var vp2=pg2.getViewport({scale:1});
+    var pageH=vp2.height; /* typically 612pt for landscape */
+    var tc2=await pg2.getTextContent();
+    var DATE_RE2=/^(\d{2})\/(\d{2})\/(\d{4})$/;
+    for(var ii=0;ii<tc2.items.length;ii++){
+      var it2=tc2.items[ii];
+      var ix=it2.transform[4]; /* x position */
+      var iy=it2.transform[5]; /* y position (bottom-up in PDF.js) */
+      /* Header date: x>600 AND near TOP of page (y > pageH*0.7) */
+      /* Footer "Created" date: x>600 AND near BOTTOM (y < pageH*0.2) -- SKIP */
+      if(ix>600 && iy>(pageH*0.7) && DATE_RE2.test(it2.str.trim())){
+        var mm2=it2.str.trim().match(DATE_RE2);
+        detectedPDFDate=new Date(parseInt(mm2[3]),parseInt(mm2[1])-1,parseInt(mm2[2]));
+        break; /* first match in header area = correct report date */
+      }
+    }
+  }catch(ex){console.warn("Date extraction failed:",ex);}
+
+  await _origGo(file);
+  if(DATA&&DATA.emps&&DATA.emps.length>0){
+    saveDayToMonth(detectedPDFDate);
+  }
+};
+
+window.addEventListener("load",function(){
+  migrateRoomsData();
+  renderRoster();
+  renderMonthDashboard();
+  /* Pull latest data from all managers */
+  setTimeout(syncFromSheets, 800);
+});
+
+/* One-time migration: shift rooms data from work-day keys to night-before keys */
+function migrateRoomsData(){
+  try{
+    var migrated=localStorage.getItem("hk_rooms_migrated_v2");
+    if(migrated)return;
+    /* Find all month data and migrate rooms */
+    var keysToMigrate=[];
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k&&k.indexOf("hk_month_")===0)keysToMigrate.push(k);
+    }
+    keysToMigrate.forEach(function(storageKey){
+      try{
+        var raw=localStorage.getItem(storageKey);
+        if(!raw)return;
+        var mData=JSON.parse(raw);
+        if(!mData.rooms||Object.keys(mData.rooms).length===0)return;
+        var newRooms={};
+        Object.keys(mData.rooms).forEach(function(ds){
+          /* Old data: rooms["2026-05-09"] meant "enter under May 9 column"
+             New data: should be stored as rooms["2026-05-08"] (night before May 9) */
+          /* Check if this date has labor data -- if so, the rooms were entered
+             for the NEXT day's budget, so shift back one day */
+          if(mData.days&&mData.days[ds]){
+            /* This rooms entry was the budget driver for the NEXT day */
+            /* In new system: rooms[prevDateStr(nextDay)] = value */
+            /* prevDateStr(nextDay) = ds (same), so already correct? No... */
+            /* Old: save ds4=May9, budget uses prevDateStr(May9)=May8 */
+            /* User entered 177 under May9 column -> saved as rooms["2026-05-09"] */
+            /* Budget looked for rooms["2026-05-08"] -> found nothing */
+            /* New: save prevDs4=May8 -> rooms["2026-05-08"] = 177 */
+            /* So we need to SHIFT the key back by one day */
+            var d=parseLocalDate(ds);
+            d.setDate(d.getDate()-1);
+            var newKey=dateStr(d);
+            newRooms[newKey]=mData.rooms[ds];
+          } else {
+            /* No labor data for this date - keep as-is (might already be correct) */
+            newRooms[ds]=mData.rooms[ds];
+          }
+        });
+        mData.rooms=newRooms;
+        localStorage.setItem(storageKey,JSON.stringify(mData));
+      }catch(e){console.warn("Migration error for "+storageKey,e);}
+    });
+    localStorage.setItem("hk_rooms_migrated_v2","1");
+    console.log("Rooms data migration complete");
+  }catch(e){console.warn("Migration failed",e);}
+}
+
+</script>
+</body>
+</html>
