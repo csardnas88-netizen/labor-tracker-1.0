@@ -614,7 +614,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.2.3';
+  var APP_VERSION = '5.2.4';
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
     var banner = document.getElementById('versionBanner');
@@ -4507,7 +4507,7 @@ function renderRecap(){
     var p=byPos[pos];
     if(!p||(!p.paid&&!p.budget))return;
     var std=LABOR_STD[pos];
-    var sub=std?(std.type==='fixed'?std.daily+'h fixed · daily':Math.round(std.factor*100)+'% of rooms'):'';
+    var sub=std?(std.type==='fixed'?std.daily+'h fixed · daily':(std.factor*100)+'% of rooms'):'';
     var variance=p.paid-p.budget;
     var isOver=variance>0.5;
     var isUnder=variance<-0.5;
