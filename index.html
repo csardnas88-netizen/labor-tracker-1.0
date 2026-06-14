@@ -614,7 +614,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.3.1';
+  var APP_VERSION = '5.4.0';
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
     var banner = document.getElementById('versionBanner');
@@ -915,6 +915,17 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
           <button class="btn btn-ghost" onclick="resetAllData()" style="justify-content:flex-start;color:var(--red);">
             &#128465; Reset ALL Data — permanently deletes everything (double confirmation)
           </button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-head"><div class="card-title">&#129529; Duplicate / Mismatched Day Cleanup</div></div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="font-size:12px;color:var(--text3);">Scans all stored days for duplicate or mis-keyed date entries (e.g. old data saved under a different date format). Shows what it found before deleting anything.</div>
+          <button class="btn btn-ghost" onclick="scanDuplicateDays()" style="justify-content:flex-start;color:var(--navy);">
+            &#128269; Scan for Duplicate Days
+          </button>
+          <div id="dupScanResults"></div>
         </div>
       </div>
 
@@ -2765,6 +2776,121 @@ function resetOccupancy(){
   renderDashboard();
   if(currentPage==='occupancy')renderOccupancy();
   showToast("✓ Occupancy reset — now re-upload the R106");
+}
+
+/* ═══════════════════════════════════════════
+   DUPLICATE / MIS-KEYED DAY CLEANUP
+   ═══════════════════════════════════════════ */
+var _dupScanReport=null;
+function scanDuplicateDays(){
+  var byDate={}; /* canonicalDs -> [{mkKey, dsKey}] */
+  for(var i=0;i<localStorage.length;i++){
+    var lsKey=localStorage.key(i);
+    if(!lsKey||lsKey.indexOf('hk_month_')!==0)continue;
+    var mData;
+    try{mData=JSON.parse(localStorage.getItem(lsKey));}catch(e){continue;}
+    if(!mData||!mData.days)continue;
+    Object.keys(mData.days).forEach(function(dsKey){
+      var d;
+      try{d=parseLocalDate(dsKey);}catch(e){return;}
+      if(!d||isNaN(d.getTime()))return;
+      var canon=dateStr(d);
+      if(!byDate[canon])byDate[canon]=[];
+      byDate[canon].push({mkKey:lsKey,dsKey:dsKey,snap:mData.days[dsKey]});
+    });
+  }
+
+  var report=[];
+  Object.keys(byDate).sort().forEach(function(canon){
+    var entries=byDate[canon];
+    var canonicalMk='hk_month_'+canon.substring(0,7);
+    var isClean=entries.length===1&&entries[0].dsKey===canon&&entries[0].mkKey===canonicalMk;
+    if(isClean)return;
+    entries.forEach(function(e){
+      var emps=e.snap.emps||[];
+      e.unpaidSum=emps.reduce(function(s,x){return s+(parseFloat(x.unpaid)||0);},0);
+      e.empCount=emps.length;
+      e.avgUnpaid=e.empCount?e.unpaidSum/e.empCount:0;
+      e.totalPaid=e.snap.totalPaid||0;
+      e.isCanonical=(e.dsKey===canon&&e.mkKey===canonicalMk);
+    });
+    /* Prefer the entry with the most realistic average unpaid (closer to ~0.5h); tiebreak by canonical key */
+    entries.sort(function(a,b){
+      var aBad=Math.abs(a.avgUnpaid-0.5);
+      var bBad=Math.abs(b.avgUnpaid-0.5);
+      if(Math.abs(aBad-bBad)>0.05)return aBad-bBad;
+      return (a.isCanonical?0:1)-(b.isCanonical?0:1);
+    });
+    report.push({canon:canon,canonicalMk:canonicalMk,entries:entries});
+  });
+
+  _dupScanReport=report;
+  renderDupScanResults(report);
+  return report;
+}
+
+function renderDupScanResults(report){
+  var el=document.getElementById('dupScanResults');
+  if(!el)return;
+  if(!report.length){
+    el.innerHTML='<div style="padding:12px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:8px;font-size:12px;color:var(--green);font-weight:700;margin-top:6px;">✓ No duplicate or mis-keyed days found</div>';
+    return;
+  }
+  var MNAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var html='<div style="margin-top:6px;display:flex;flex-direction:column;gap:10px;">';
+  report.forEach(function(item,idx){
+    var d=parseLocalDate(item.canon);
+    var dLabel=MNAMES[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+    html+='<div style="border:1.5px solid #fde68a;background:#fffbeb;border-radius:8px;padding:10px 12px;">';
+    html+='<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px;">📅 '+dLabel+' — '+item.entries.length+' version'+(item.entries.length>1?'s':'')+' found</div>';
+    item.entries.forEach(function(e,i){
+      var keep=i===0;
+      html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 8px;border-radius:6px;margin-bottom:3px;background:'+(keep?'#dcfce7':'#fee2e2')+';">';
+      html+='<div style="font-size:11px;">'
+        +'<b>'+(keep?'✓ KEEP':'✗ REMOVE')+'</b> · key: <code>'+e.mkKey.replace('hk_month_','')+' / '+e.dsKey+'</code> · '
+        +e.empCount+' emp · '+e.totalPaid.toFixed(1)+'h paid · avg unpaid '+(e.avgUnpaid*60).toFixed(0)+' min'
+        +'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+  html+='<button class="btn btn-navy" onclick="confirmCleanupDuplicates()">🧹 Apply Cleanup ('+report.length+' day'+(report.length>1?'s':'')+')</button>';
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function confirmCleanupDuplicates(){
+  if(!_dupScanReport||!_dupScanReport.length)return;
+  if(!confirm('This will keep the most realistic version of each flagged day and remove the other(s). This cannot be undone. Continue?'))return;
+
+  _dupScanReport.forEach(function(item){
+    var keep=item.entries[0];
+    /* Write the kept snapshot under its canonical month/date key */
+    var canonMonth=item.canonicalMk.replace('hk_month_','');
+    var canonData=loadMonthData(canonMonth);
+    if(!canonData.days)canonData.days={};
+    canonData.days[item.canon]=keep.snap;
+    saveMonthData(canonData,canonMonth);
+
+    /* Remove every entry that is not the canonical (month,date) we just wrote */
+    item.entries.forEach(function(e){
+      if(e.mkKey===item.canonicalMk&&e.dsKey===item.canon)return;
+      var mk2=e.mkKey.replace('hk_month_','');
+      var mData2=loadMonthData(mk2);
+      if(mData2.days&&mData2.days.hasOwnProperty(e.dsKey)){
+        delete mData2.days[e.dsKey];
+        saveMonthData(mData2,mk2);
+      }
+    });
+  });
+
+  showToast('✓ Cleanup applied — '+_dupScanReport.length+' day(s) fixed');
+  _dupScanReport=null;
+  document.getElementById('dupScanResults').innerHTML='';
+  renderMonthDashboard();
+  renderDashboard();
+  if(currentPage==='breaks')renderBreaksPage();
+  if(currentPage==='recap')renderRecap();
 }
 
 /* ── Rooms input handler ── */
