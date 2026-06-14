@@ -614,7 +614,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.2.2';
+  var APP_VERSION = '5.2.3';
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
     var banner = document.getElementById('versionBanner');
@@ -5214,6 +5214,7 @@ function handleR106Upload(input){
         /* R106 se guarda como referencia, y AUTO-LLENA los cuartos */
         /* salvo en días que Carlos haya editado manualmente (protegidos) */
         var today=new Date();today.setHours(0,0,0,0);
+        var cutoff=new Date(today);cutoff.setDate(cutoff.getDate()-1); /* la noche de "ayer" alimenta el presupuesto de "hoy", que aún no se evalúa */
         var autoFilled=0,kept=0;
         var byMonth={};
         Object.keys(parsed).forEach(function(ds){
@@ -5230,7 +5231,7 @@ function handleR106Upload(input){
         Object.keys(parsed).forEach(function(ds){
           var d=parseLocalDate(ds);
           d.setHours(0,0,0,0);
-          if(d>=today)return; /* no autollenar fechas futuras del forecast */
+          if(d>=cutoff)return; /* no autollenar la noche de ayer (alimenta hoy) ni futuros */
           var mk=monthKey(d);
           var mData=loadMonthData(mk);
           if(!mData.rooms)mData.rooms={};
