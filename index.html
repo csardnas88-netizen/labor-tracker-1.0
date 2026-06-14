@@ -614,7 +614,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.2.0';
+  var APP_VERSION = '5.2.1';
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
     var banner = document.getElementById('versionBanner');
@@ -2747,8 +2747,10 @@ function saveRoomsForDate(ds,val){
   var mk=monthKey(d);
   var mData=loadMonthData(mk);
   if(!mData.rooms)mData.rooms={};
+  if(!mData.roomsSource)mData.roomsSource={};
   var n=parseInt(val)||0;
   if(n>0)mData.rooms[ds]=n;else delete mData.rooms[ds];
+  mData.roomsSource[ds]='manual'; /* protege este día de futuras importaciones R106 */
   saveMonthData(mData,mk); /* also syncs to Sheets */
   renderMonthDashboard();
 }
@@ -5192,8 +5194,10 @@ function handleR106Upload(input){
         var count=Object.keys(parsed).length;
         if(count===0){showToast('❌ No occupancy data found in R106');return;}
 
-        /* R106 guardado como referencia — NO escribe a mData.rooms */
-        /* Los cuartos se ingresan manualmente. R106 solo para comparar. */
+        /* R106 se guarda como referencia, y AUTO-LLENA los cuartos */
+        /* salvo en días que Carlos haya editado manualmente (protegidos) */
+        var today=new Date();today.setHours(0,0,0,0);
+        var autoFilled=0,kept=0;
         var byMonth={};
         Object.keys(parsed).forEach(function(ds){
           var d=parseLocalDate(ds);
@@ -5206,7 +5210,22 @@ function handleR106Upload(input){
           syncR106ToSheets(mk,byMonth[mk]);
         });
 
-        showToast('✓ R106 cargado como referencia — '+count+' días · Compara con tu entrada manual');
+        Object.keys(parsed).forEach(function(ds){
+          var d=parseLocalDate(ds);
+          d.setHours(0,0,0,0);
+          if(d>=today)return; /* no autollenar fechas futuras del forecast */
+          var mk=monthKey(d);
+          var mData=loadMonthData(mk);
+          if(!mData.rooms)mData.rooms={};
+          if(!mData.roomsSource)mData.roomsSource={};
+          if(mData.roomsSource[ds]==='manual'){kept++;return;} /* protegido — no sobreescribir */
+          mData.rooms[ds]=parsed[ds].net;
+          mData.roomsSource[ds]='r106';
+          saveMonthData(mData,mk);
+          autoFilled++;
+        });
+
+        showToast('✓ R106 cargado — '+autoFilled+' días autollenados'+(kept>0?' · '+kept+' protegidos (manual)':''));
         renderDashboard();
         if(currentPage==='occupancy')renderOccupancy();
       });
