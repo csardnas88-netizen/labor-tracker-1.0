@@ -614,7 +614,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.1.9';
+  var APP_VERSION = '5.2.0';
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
     var banner = document.getElementById('versionBanner');
@@ -5192,10 +5192,8 @@ function handleR106Upload(input){
         var count=Object.keys(parsed).length;
         if(count===0){showToast('❌ No occupancy data found in R106');return;}
 
-        var today=new Date();today.setHours(0,0,0,0);
-        var imported=0;var skipped=0;var skippedFuture=0;
-
-        /* Save R106 data to localStorage for comparison — store full object */
+        /* R106 guardado como referencia — NO escribe a mData.rooms */
+        /* Los cuartos se ingresan manualmente. R106 solo para comparar. */
         var byMonth={};
         Object.keys(parsed).forEach(function(ds){
           var d=parseLocalDate(ds);
@@ -5208,21 +5206,7 @@ function handleR106Upload(input){
           syncR106ToSheets(mk,byMonth[mk]);
         });
 
-        /* Write net (occ - comp) to mData.rooms — only past days */
-        Object.keys(parsed).forEach(function(ds){
-          var d=parseLocalDate(ds);
-          d.setHours(0,0,0,0);
-          if(d>=today){skippedFuture++;return;}
-          var mk=monthKey(d);
-          var mData=loadMonthData(mk);
-          if(!mData.rooms)mData.rooms={};
-          /* Always write R106 net value — R106 is source of truth */
-          mData.rooms[ds]=parsed[ds].net;
-          saveMonthData(mData,mk);
-          imported++;
-        });
-
-        showToast('✓ R106 loaded — '+imported+' days imported'+(skipped>0?' · '+skipped+' kept manual':'')+(skippedFuture>0?' · '+skippedFuture+' future skipped':''));
+        showToast('✓ R106 cargado como referencia — '+count+' días · Compara con tu entrada manual');
         renderDashboard();
         if(currentPage==='occupancy')renderOccupancy();
       });
