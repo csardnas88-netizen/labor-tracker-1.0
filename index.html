@@ -614,7 +614,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.3.0';
+  var APP_VERSION = '5.3.1';
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
     var banner = document.getElementById('versionBanner');
@@ -1601,9 +1601,15 @@ function toMins(dec){return Math.round(dec*60)}
 function isTurndown(pos){
   return (pos||'').toLowerCase().indexOf('turndown')!==-1;
 }
-function breakStatus(mins,pos){
+/* Empleados de medio tiempo con tope de break de 15 min (igual que Turndown),
+   independientemente de su posición: Yesenia Pineda, Fabiola Garcia Martinez, Andrea Vega */
+var PART_TIME_15MIN_IDS=['26100119','26100057','26100239'];
+function uses15MinBreak(pos,empId){
+  return isTurndown(pos)||(empId&&PART_TIME_15MIN_IDS.indexOf(String(empId))!==-1);
+}
+function breakStatus(mins,pos,empId){
   /* returns: 'none' | 'short' | 'ok' | 'over' | 'long' */
-  if(isTurndown(pos)){
+  if(uses15MinBreak(pos,empId)){
     if(mins===0)return'none';
     if(mins<15)return'short';
     if(mins<=20)return'ok';
@@ -1619,12 +1625,12 @@ function breakStatus(mins,pos){
 }
 function isBreakException(e){
   var m=toMins(parseFloat(e.unpaid||0));
-  var st=breakStatus(m,e.pos||'');
+  var st=breakStatus(m,e.pos||'',e.id);
   return st==='none'||st==='short'||st==='over'||st==='long';
 }
-function breakLabel(mins,pos){
-  var st=breakStatus(mins,pos);
-  var td=isTurndown(pos);
+function breakLabel(mins,pos,empId){
+  var st=breakStatus(mins,pos,empId);
+  var td=uses15MinBreak(pos,empId);
   if(st==='none')return'No Break — 0 min';
   if(st==='short')return'Short Break — '+mins+' min';
   if(st==='long')return'Long Break — '+mins+' min (over 40)';
@@ -1636,8 +1642,8 @@ function minsBar(m){
   var color=m===0?"#9b1c1c":m<20?"#92400e":m<28?"#856404":"#1a6e3e";
   return'<div class="mins-wrap"><div class="mins-bar"><div class="mins-fill" style="width:'+pct+'%;background:'+color+'"></div></div><span class="mins-lbl" style="color:'+color+'">'+m+' min</span></div>';
 }
-function breakBadge(m,pos){
-  var st=breakStatus(m,pos||'');
+function breakBadge(m,pos,empId){
+  var st=breakStatus(m,pos||'',empId);
   if(st==='none')return'<span class="badge b-red">&#128683; No Break</span>';
   if(st==='short')return'<span class="badge b-amber">&#9889; Short Break</span>';
   if(st==='long')return'<span class="badge b-purple">&#128364; Long Break</span>';
@@ -1752,8 +1758,8 @@ function renderMetrics(){
   var e=DATA.emps;
   var totalPaid=e.reduce(function(s,x){return s+x.paid},0);
   var totalOT=e.reduce(function(s,x){return s+x.ot1},0);
-  var noBreak=e.filter(function(x){return breakStatus(toMins(x.unpaid),x.pos)==='none';}).length;
-  var shortB=e.filter(function(x){var st=breakStatus(toMins(x.unpaid),x.pos);return st==='short'||st==='over'||st==='long';}).length;
+  var noBreak=e.filter(function(x){return breakStatus(toMins(x.unpaid),x.pos,x.id)==='none';}).length;
+  var shortB=e.filter(function(x){var st=breakStatus(toMins(x.unpaid),x.pos,x.id);return st==='short'||st==='over'||st==='long';}).length;
   var otEmp=e.filter(function(x){return x.ot1>1}).length;
   var mismatch=0,unk=0;
   e.forEach(function(x){var p=primaryPos(x.name,x.id);if(!p)unk++;else if(p!==x.pos)mismatch++});
@@ -1817,7 +1823,7 @@ function renderBreaks(f){
     var list=DATA.emps.filter(function(e){
       if(e.pos!==d.name)return false;
       var m=toMins(e.unpaid);
-      var st=breakStatus(m,e.pos);
+      var st=breakStatus(m,e.pos,e.id);
       if(f==="none")return st==='none';
       if(f==="short")return st==='short'||st==='over'||st==='long';
       return isBreakException(e);
@@ -1826,9 +1832,9 @@ function renderBreaks(f){
     html+='<div class="pos-group"><div class="pos-group-hdr"><h3>'+d.name+'</h3><div class="pos-tots"><span><strong>'+list.length+'</strong><small>Exceptions</small></span></div></div><div class="tbl-wrap"><table><thead><tr><th>Emp ID</th><th>Name</th><th>Paid Hrs</th><th>Unpaid</th><th>Break Time</th><th>Status</th></tr></thead><tbody>';
     list.forEach(function(e){
       var m=toMins(e.unpaid);
-      var st=breakStatus(m,e.pos);
+      var st=breakStatus(m,e.pos,e.id);
       var rowCls=st==='none'?'row-no-break':'row-short';
-      html+='<tr class="'+rowCls+'"><td>'+e.id+'</td><td><b>'+e.name+'</b></td><td>'+e.paid.toFixed(2)+'</td><td>'+e.unpaid.toFixed(2)+'</td><td>'+minsBar(m)+'</td><td>'+breakBadge(m,e.pos)+'</td></tr>';
+      html+='<tr class="'+rowCls+'"><td>'+e.id+'</td><td><b>'+e.name+'</b></td><td>'+e.paid.toFixed(2)+'</td><td>'+e.unpaid.toFixed(2)+'</td><td>'+minsBar(m)+'</td><td>'+breakBadge(m,e.pos,e.id)+'</td></tr>';
     });
     html+='</tbody></table></div></div>';
   });
@@ -2203,7 +2209,7 @@ function doExport(){
   DATA.depts.forEach(function(d){var t=d.totals,cnt=DATA.emps.filter(function(e){return e.pos===d.name}).length;lt.push([d.name,t.work,t.meal,t.regular,t.ot1,t.paid,t.unpaid,cnt])});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(lt),"Labor Totals");
   var ba=[["Emp ID","Name","Position","Paid Hrs","Unpaid","Break Minutes","Status"]];
-  DATA.emps.forEach(function(e){var m=toMins(e.unpaid);var st=breakStatus(m,e.pos);ba.push([e.id,e.name,e.pos,e.paid,e.unpaid,m,st==='none'?'No Break':st==='short'?'Short Break':st==='over'?'Over Limit':'OK'])});
+  DATA.emps.forEach(function(e){var m=toMins(e.unpaid);var st=breakStatus(m,e.pos,e.id);ba.push([e.id,e.name,e.pos,e.paid,e.unpaid,m,st==='none'?'No Break':st==='short'?'Short Break':st==='over'?'Over Limit':'OK'])});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ba),"Break Analysis");
   var ot=[["Emp ID","Name","Position","Regular","OT Hours","Total Paid","Alert"]];
   DATA.emps.filter(function(e){return e.ot1>1}).forEach(function(e){ot.push([e.id,e.name,e.pos,e.regular,e.ot1,e.paid,e.ot1>=2?"High OT":"Review"])});
@@ -2215,7 +2221,7 @@ function doExport(){
   DATA.otherEmps.forEach(function(e){var k=e.id+"_"+e.name;od.push([e.id,e.name,e.pos,e.paid,primaryPos(e.name)||"Not in HK roster",OREV[k]||"Pending",ORNOTE["on_"+k]||""])});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(od),"Other Departments");
   var ae=[["Emp ID","Name","Position","HK?","Work","Meal","Regular","OT1","Paid","Unpaid","Break Min","Break Status"]];
-  DATA.emps.concat(DATA.otherEmps).forEach(function(e){var m=toMins(e.unpaid);var st=breakStatus(m,e.pos);ae.push([e.id,e.name,e.pos,e.isHK?"Yes":"No",e.work,e.meal,e.regular,e.ot1,e.paid,e.unpaid,m,st==='none'?'No Break':st==='short'?'Short Break':st==='over'?'Over Limit':'OK'])});
+  DATA.emps.concat(DATA.otherEmps).forEach(function(e){var m=toMins(e.unpaid);var st=breakStatus(m,e.pos,e.id);ae.push([e.id,e.name,e.pos,e.isHK?"Yes":"No",e.work,e.meal,e.regular,e.ot1,e.paid,e.unpaid,m,st==='none'?'No Break':st==='short'?'Short Break':st==='over'?'Over Limit':'OK'])});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ae),"All Employees");
   XLSX.writeFile(wb,"PaychexLabor_"+new Date().toISOString().slice(0,10)+".xlsx");
   showToast("Excel exported successfully");
@@ -2382,8 +2388,8 @@ function saveCurrentDayToWeek(fname){
     totalPaid:DATA.emps.reduce(function(s,e){return s+e.paid;},0),
     totalOT:DATA.emps.reduce(function(s,e){return s+e.ot1;},0),
     totalEmps:DATA.emps.length,
-    noBreak:DATA.emps.filter(function(e){return breakStatus(toMins(e.unpaid),e.pos)==='none';}).length,
-    shortBreak:DATA.emps.filter(function(e){var st=breakStatus(toMins(e.unpaid),e.pos);return st==='short'||st==='over'||st==='long';}).length,
+    noBreak:DATA.emps.filter(function(e){return breakStatus(toMins(e.unpaid),e.pos,e.id)==='none';}).length,
+    shortBreak:DATA.emps.filter(function(e){var st=breakStatus(toMins(e.unpaid),e.pos,e.id);return st==='short'||st==='over'||st==='long';}).length,
     mismatch:DATA.emps.filter(function(e){var p=primaryPos(e.name,e.id);return p&&p!==e.pos;}).length,
     byPosition:{}
   };
@@ -2704,8 +2710,8 @@ function saveDayToMonth(pdfDate){
     totalPaid:DATA.emps.reduce(function(s,e){return s+e.paid;},0),
     totalOT:DATA.emps.reduce(function(s,e){return s+e.ot1;},0),
     totalEmps:DATA.emps.length,
-    noBreak:DATA.emps.filter(function(e){return breakStatus(toMins(e.unpaid),e.pos)==='none';}).length,
-    shortBreak:DATA.emps.filter(function(e){var st=breakStatus(toMins(e.unpaid),e.pos);return st==='short'||st==='over'||st==='long';}).length,
+    noBreak:DATA.emps.filter(function(e){return breakStatus(toMins(e.unpaid),e.pos,e.id)==='none';}).length,
+    shortBreak:DATA.emps.filter(function(e){var st=breakStatus(toMins(e.unpaid),e.pos,e.id);return st==='short'||st==='over'||st==='long';}).length,
     mismatch:DATA.emps.filter(function(e){var p=primaryPos(e.name,e.id);return p&&p!==e.pos;}).length,
     byPosition:{},
     emps:DATA.emps /* ← GUARDAR lista completa de empleados */
@@ -3613,8 +3619,8 @@ function renderDashboard(){
         html+='<div class="dpc-var '+(v>0?'red':'green')+'">'+(v>0?'+':'')+v.toFixed(1)+'h</div>';
       }
       var snapE=snap.emps||[];
-      var nb=snapE.length?snapE.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos)==='none';}).length:(snap.noBreak||0);
-      var sb=snapE.length?snapE.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos);return st==='short'||st==='over'||st==='long';}).length:(snap.shortBreak||0);
+      var nb=snapE.length?snapE.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='none';}).length:(snap.noBreak||0);
+      var sb=snapE.length?snapE.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos,e.id);return st==='short'||st==='over'||st==='long';}).length:(snap.shortBreak||0);
       if(nb>0||sb>0){
         html+='<div class="dpc-breaks">';
         if(nb>0)html+='<span class="dpc-brk nb">🔴 '+nb+' No Brk</span>';
@@ -3997,7 +4003,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       /* Exception rows */
       breakEmps.forEach(function(e){
         var mins=toMins(parseFloat(e.unpaid||0));
-        var st=breakStatus(mins,e.pos||'');
+        var st=breakStatus(mins,e.pos||'',e.id);
         var pos=(e.pos||'').replace(/^\d+-/,'')||'Unknown Position';
         var isNone=(st==='none');
         var isOver=(st==='over');
@@ -4007,7 +4013,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         var badgeBg=isNone?'#fee2e2':'#fef3c7';
         var badgeColor=isNone?'#b91c1c':'#92400e';
         var icon=isNone?'🔴':'🟠';
-        var label=breakLabel(mins,e.pos||'');
+        var label=breakLabel(mins,e.pos||'',e.id);
         var tdBadge=isTurndown(e.pos)?'<span style="background:#e0e7ff;color:#3730a3;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:5px;">Part-time</span>':'';
 
         html+='<div style="margin:8px 0;border-radius:8px;background:'+rowBg+';'
@@ -4167,7 +4173,7 @@ function renderBreaksPage(){
     var snap=allDays[ds];
     (snap.emps||[]).forEach(function(e){
       var m=toMins(e.unpaid||0);
-      var st=breakStatus(m,e.pos||'');
+      var st=breakStatus(m,e.pos||'',e.id);
       if(st==='none'||st==='short'||st==='over'||st==='long'){
         var key=(e.id||'')+'|'+e.name;
         if(!offenders[key])offenders[key]={name:e.name,pos:e.pos,none:0,short:0,long:0};
@@ -4199,9 +4205,9 @@ function renderBreaksPage(){
     }
     var snap=allDays[ds];
     var snapE=snap.emps||[];
-    var dayNB=snapE.length?snapE.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos)==='none';}).length:(snap.noBreak||0);
-    var daySB=snapE.length?snapE.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos);return st==='short'||st==='over';}).length:(snap.shortBreak||0);
-    var dayLB=snapE.length?snapE.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos)==='long';}).length:0;
+    var dayNB=snapE.length?snapE.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='none';}).length:(snap.noBreak||0);
+    var daySB=snapE.length?snapE.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos,e.id);return st==='short'||st==='over';}).length:(snap.shortBreak||0);
+    var dayLB=snapE.length?snapE.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='long';}).length:0;
     weekMap[wKey].days.push({ds:ds,snap:snap,d:d});
     weekMap[wKey].totalNB+=dayNB;
     weekMap[wKey].totalSB+=daySB;
@@ -4286,9 +4292,9 @@ function renderBreaksPage(){
       var dayNB,daySB,dayLB;
       var nbEmps=[],sbEmps=[],lbEmps=[];
       if(hasEmpData){
-        nbEmps=emps.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos)==='none';});
-        sbEmps=emps.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos);return st==='short'||st==='over';});
-        lbEmps=emps.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos)==='long';});
+        nbEmps=emps.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='none';});
+        sbEmps=emps.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos,e.id);return st==='short'||st==='over';});
+        lbEmps=emps.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='long';});
         dayNB=nbEmps.length;daySB=sbEmps.length;dayLB=lbEmps.length;
       }else{
         dayNB=snap.noBreak||0;daySB=snap.shortBreak||0;dayLB=0;
@@ -4330,7 +4336,7 @@ function renderBreaksPage(){
         allEx.sort(function(a,b){return toMins(a.unpaid||0)-toMins(b.unpaid||0);});
         allEx.forEach(function(emp){
           var mins=toMins(emp.unpaid||0);
-          var st=breakStatus(mins,emp.pos||'');
+          var st=breakStatus(mins,emp.pos||'',emp.id);
           var isNB=st==='none';
           var isLong=st==='long';
           var isOver=st==='over';
