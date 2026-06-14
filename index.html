@@ -614,7 +614,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.2.1';
+  var APP_VERSION = '5.2.2';
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
     var banner = document.getElementById('versionBanner');
@@ -909,6 +909,9 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
           </button>
           <button class="btn btn-ghost" onclick="clearMonth()" style="justify-content:flex-start;color:var(--amber);">
             &#8635; Reset Current Month — clears labor data for this month only
+          </button>
+          <button class="btn btn-ghost" onclick="resetOccupancy()" style="justify-content:flex-start;color:var(--amber);">
+            &#127963; Reset Occupancy — clears rooms/R106 data only, keeps your PDF labor reports
           </button>
           <button class="btn btn-ghost" onclick="resetAllData()" style="justify-content:flex-start;color:var(--red);">
             &#128465; Reset ALL Data — permanently deletes everything (double confirmation)
@@ -2739,6 +2742,20 @@ function clearMonth(){
   try{localStorage.removeItem("hk_month_"+monthKey());}catch(e){}
   renderMonthDashboard();
   showToast("Month data cleared");
+}
+
+function resetOccupancy(){
+  var mk=monthKey();
+  if(!confirm("Reset occupancy/rooms data for "+MONTH_NAMES[viewMonth.getMonth()]+" "+viewMonth.getFullYear()+"? Your uploaded PDF labor reports will NOT be affected — you can re-upload the R106 right after."))return;
+  var mData=loadMonthData(mk);
+  mData.rooms={};
+  mData.roomsSource={};
+  saveMonthData(mData,mk); /* keeps mData.days intact, also syncs to Sheets */
+  try{localStorage.removeItem("hk_r106_"+mk);}catch(e){}
+  renderMonthDashboard();
+  renderDashboard();
+  if(currentPage==='occupancy')renderOccupancy();
+  showToast("✓ Occupancy reset — now re-upload the R106");
 }
 
 /* ── Rooms input handler ── */
