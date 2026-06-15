@@ -623,7 +623,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.8.1';
+  var APP_VERSION = '5.9.0';
   window.APP_VERSION = APP_VERSION;
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
@@ -4065,9 +4065,9 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     {key:'Laundry Attendant',  label:'Laundry',         sub:'18% of rooms'}
   ];
 
-  var weekActual={};var weekBudget={};
+  var weekActual={};var weekBudget={};var dailyActual={};var dayLabels=[];var dayHasData=[];
   var daysLoaded=0;var daysTotal=0;
-  positions.forEach(function(p){weekActual[p.key]=0;weekBudget[p.key]=0;});
+  positions.forEach(function(p){weekActual[p.key]=0;weekBudget[p.key]=0;dailyActual[p.key]=[];});
 
   for(var d=0;d<7;d++){
     var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
@@ -4075,7 +4075,12 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     var snap=days[ds];
     var r=getRoomsForDay(ds);
     daysTotal++;
-    if(!snap)continue;
+    dayLabels.push(dd.toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric'}));
+    dayHasData.push(!!snap);
+    if(!snap){
+      positions.forEach(function(p){dailyActual[p.key].push(0);});
+      continue;
+    }
     daysLoaded++;
     positions.forEach(function(p){
       /* Try byPosition first, fallback to snap.emps */
@@ -4087,6 +4092,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
           .reduce(function(s,e){return s+(e.paid||0);},0);
       }
       weekActual[p.key]+=posActual;
+      dailyActual[p.key].push(posActual);
       /* Budget using LABOR_STD */
       var std=LABOR_STD[p.key];
       if(!std)return;
@@ -4165,6 +4171,37 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       +(variance>=0?'+':'')+variance.toFixed(1)+'h</span></div>';
     html+='</div>';
   });
+
+  /* Daily Hours by Position — same card, below the pace rows */
+  var activeDayIdx=[];
+  for(var di=0;di<7;di++){if(dayHasData[di])activeDayIdx.push(di);}
+  if(activeDayIdx.length>0){
+    html+='<div style="padding:14px;border-top:1px solid var(--border);">';
+    html+='<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Daily Hours by Position</div>';
+    html+='<div class="tbl-wrap"><table style="font-size:11px;"><thead><tr><th>Position</th>';
+    activeDayIdx.forEach(function(di){html+='<th style="text-align:right;">'+dayLabels[di]+'</th>';});
+    html+='<th style="text-align:right;">Total</th></tr></thead><tbody>';
+
+    var dayTotals=activeDayIdx.map(function(){return 0;});
+    var grandTotal=0;
+    positions.forEach(function(p){
+      var actual=weekActual[p.key],budget=weekBudget[p.key];
+      if(actual===0&&budget===0)return;
+      html+='<tr><td><b>'+p.label+'</b></td>';
+      activeDayIdx.forEach(function(di,ci){
+        var v=dailyActual[p.key][di]||0;
+        dayTotals[ci]+=v;
+        html+='<td style="text-align:right;">'+(v>0?v.toFixed(2):'—')+'</td>';
+      });
+      grandTotal+=actual;
+      html+='<td style="text-align:right;font-weight:800;">'+actual.toFixed(2)+'</td></tr>';
+    });
+    html+='<tr style="background:var(--surface);font-weight:800;"><td>Total</td>';
+    activeDayIdx.forEach(function(di,ci){html+='<td style="text-align:right;">'+dayTotals[ci].toFixed(2)+'</td>';});
+    html+='<td style="text-align:right;">'+grandTotal.toFixed(2)+'</td></tr>';
+    html+='</tbody></table></div>';
+    html+='</div>';
+  }
 
   html+='</div>';
   return html;
