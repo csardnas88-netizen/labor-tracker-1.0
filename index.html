@@ -623,7 +623,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.6.0';
+  var APP_VERSION = '5.7.0';
   window.APP_VERSION = APP_VERSION;
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
@@ -689,6 +689,10 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   <div class="nav-item" id="nav-projects" onclick="showPage('projects')">
     <span class="nav-icon">&#128193;</span> Projects
     <span class="nav-badge" id="navProjectsBadge" style="display:none;">0</span>
+  </div>
+  <div class="nav-item" id="nav-calloffs" onclick="showPage('calloffs')">
+    <span class="nav-icon">&#128222;</span> Call-Offs
+    <span class="nav-badge" id="navCallOffsBadge" style="display:none;">0</span>
   </div>
 
   <div class="nav-section-label">System</div>
@@ -882,6 +886,14 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div class="page-sub">Track special assignments and extra work hours</div>
       </div>
       <div id="projectsContent"></div>
+    </div>
+
+    <div id="page-calloffs" style="display:none;">
+      <div class="page-header">
+        <div class="page-title">&#128222; Call-Offs</div>
+        <div class="page-sub">Track employee call-offs and absences</div>
+      </div>
+      <div id="calloffsContent"></div>
     </div>
 
     <div id="page-tutorial" style="display:none;">
@@ -2599,6 +2611,19 @@ function syncFromSheets(){
             updated=true;
           }
         }
+        if(key==="calloffs_data"){
+          var remoteCallOffs=all[key];
+          if(Array.isArray(remoteCallOffs)&&remoteCallOffs.length>0){
+            var localCallOffs=[];
+            try{var lc=localStorage.getItem('calloffs_data');if(lc)localCallOffs=JSON.parse(lc);}catch(e){}
+            var mergedC={};
+            localCallOffs.forEach(function(c){if(c.id)mergedC[c.id]=c;});
+            remoteCallOffs.forEach(function(c){if(c.id)mergedC[c.id]=c;});
+            var mergedCArr=Object.values(mergedC).sort(function(a,b){return b.id-a.id;});
+            try{localStorage.setItem('calloffs_data',JSON.stringify(mergedCArr));}catch(e){}
+            updated=true;
+          }
+        }
         if(key==="hk_roster_overrides"){
           var remoteOverrides=all[key];
           if(remoteOverrides&&typeof remoteOverrides==='object'){
@@ -2619,6 +2644,7 @@ function syncFromSheets(){
       try{renderDashboard();}catch(e){try{renderMonthDashboard();}catch(e2){}}
       if(typeof currentPage!=='undefined'&&currentPage==='occupancy'){try{renderOccupancy();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='projects'){try{renderProjects();}catch(e){}}
+      if(typeof currentPage!=='undefined'&&currentPage==='calloffs'){try{renderCallOffs();}catch(e){}}
     }
   });
 }
@@ -2639,6 +2665,9 @@ function forceSyncToSupabase(){
     if(k==="projects_data"){
       try{ supaPut("projects_data", JSON.parse(localStorage[k])); pushed++; }catch(e){}
     }
+    if(k==="calloffs_data"){
+      try{ supaPut("calloffs_data", JSON.parse(localStorage[k])); pushed++; }catch(e){}
+    }
     if(k==="hk_roster_overrides"){
       try{ supaPut("hk_roster_overrides", JSON.parse(localStorage[k])); pushed++; }catch(e){}
     }
@@ -2652,13 +2681,14 @@ function forceSyncToSupabase(){
 var SNAPSHOT_RETAIN_DAYS=14;
 
 function gatherAllData(){
-  var data={months:{},r106:{},roster_overrides:null,projects:null,manager_name:null,savedAt:new Date().toISOString()};
+  var data={months:{},r106:{},roster_overrides:null,projects:null,calloffs:null,manager_name:null,savedAt:new Date().toISOString()};
   Object.keys(localStorage).forEach(function(k){
     try{
       if(k.indexOf("hk_month_")===0)data.months[k.replace("hk_month_","")]=JSON.parse(localStorage[k]);
       else if(k.indexOf("hk_r106_")===0)data.r106[k.replace("hk_r106_","")]=JSON.parse(localStorage[k]);
       else if(k==="hk_roster_overrides")data.roster_overrides=JSON.parse(localStorage[k]);
       else if(k==="projects_data")data.projects=JSON.parse(localStorage[k]);
+      else if(k==="calloffs_data")data.calloffs=JSON.parse(localStorage[k]);
       else if(k==="hk_manager_name")data.manager_name=localStorage[k];
     }catch(e){}
   });
@@ -2762,6 +2792,7 @@ function restoreSnapshot(key){
       });
       if(data.roster_overrides)try{localStorage.setItem("hk_roster_overrides",JSON.stringify(data.roster_overrides));}catch(e){}
       if(data.projects)try{localStorage.setItem("projects_data",JSON.stringify(data.projects));}catch(e){}
+      if(data.calloffs)try{localStorage.setItem("calloffs_data",JSON.stringify(data.calloffs));}catch(e){}
       if(data.manager_name)try{localStorage.setItem("hk_manager_name",data.manager_name);}catch(e){}
       showToast("&#10003; Restored backup from "+ds+" — reloading…");
       setTimeout(function(){location.reload();},800);
@@ -3760,7 +3791,7 @@ function closeSidebar(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','daily','breaks','overtime','position','roster','recap','occupancy','projects','tutorial','settings'];
+var PAGES=['dashboard','daily','breaks','overtime','position','roster','recap','occupancy','projects','calloffs','tutorial','settings'];
 function showPage(page){
   PAGES.forEach(function(p){
     var el=document.getElementById('page-'+p);
@@ -3778,6 +3809,7 @@ function showPage(page){
   if(page==='recap')renderRecap();
   if(page==='occupancy')renderOccupancy();
   if(page==='projects')renderProjects();
+  if(page==='calloffs')renderCallOffs();
   if(page==='tutorial')renderTutContent();
   if(page==='settings'){
     var mn=document.getElementById('managerNameInput');
@@ -6106,6 +6138,182 @@ function exportProjectPDF(projIdx){
   setTimeout(function(){win.print();},500);
 }
 
+/* ══════════════════════════════════════════════════════
+   CALL-OFFS TRACKER
+   Storage key: calloffs_data (isolated, no impact on existing)
+   ══════════════════════════════════════════════════════ */
+function loadCallOffs(){
+  try{var s=localStorage.getItem('calloffs_data');if(s)return JSON.parse(s);}catch(e){}
+  return [];
+}
+function saveCallOffs(list){
+  try{localStorage.setItem('calloffs_data',JSON.stringify(list));}catch(e){}
+  try{supaPut('calloffs_data',list);}catch(e){}
+}
+function updateCallOffsBadge(){
+  var list=loadCallOffs();
+  var mk=monthKey();
+  var count=list.filter(function(c){return c.date&&c.date.substring(0,7)===mk;}).length;
+  var badge=document.getElementById('navCallOffsBadge');
+  if(!badge)return;
+  if(count>0){badge.textContent=count;badge.style.display='inline-flex';}
+  else{badge.style.display='none';}
+}
+
+function renderCallOffs(){
+  var el=document.getElementById('calloffsContent');
+  if(!el)return;
+  var list=loadCallOffs();
+  updateCallOffsBadge();
+
+  var html='';
+  html+='<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
+    +'<button onclick="showNewCallOffModal()" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Call-Off</button>'
+    +'</div>';
+
+  if(list.length===0){
+    html+='<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
+      +'<div style="font-size:40px;margin-bottom:12px;">&#128222;</div>'
+      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No call-offs logged</div>'
+      +'<div style="font-size:13px;">Tap "+ New Call-Off" to log one.</div>'
+      +'</div>';
+    el.innerHTML=html;
+    return;
+  }
+
+  var mk=monthKey();
+  var mtdCount=list.filter(function(c){return c.date&&c.date.substring(0,7)===mk;}).length;
+
+  /* Top employees by call-off count (all time) */
+  var byEmp={};
+  list.forEach(function(c){
+    var key=(c.empId||'')+'|'+c.empName;
+    if(!byEmp[key])byEmp[key]={empName:c.empName,pos:c.pos,count:0};
+    byEmp[key].count++;
+  });
+  var topEmps=Object.keys(byEmp).map(function(k){return byEmp[k];})
+    .sort(function(a,b){return b.count-a.count;}).slice(0,8);
+
+  /* Summary */
+  html+='<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">';
+  html+='<div style="flex:1;min-width:120px;background:var(--red-bg);border-radius:10px;padding:12px 16px;text-align:center;">'
+    +'<div style="font-size:26px;font-weight:800;color:var(--red);">'+mtdCount+'</div>'
+    +'<div style="font-size:11px;font-weight:700;color:var(--red);">&#128222; This Month</div></div>';
+  html+='<div style="flex:1;min-width:120px;background:var(--surface);border-radius:10px;padding:12px 16px;text-align:center;">'
+    +'<div style="font-size:26px;font-weight:800;color:var(--text2);">'+list.length+'</div>'
+    +'<div style="font-size:11px;font-weight:700;color:var(--text2);">&#128222; All Time</div></div>';
+  html+='</div>';
+
+  /* Top employees table */
+  if(topEmps.length>0){
+    html+='<div class="card" style="margin-bottom:14px;">';
+    html+='<div class="card-head"><div class="card-title">&#128202; Most Call-Offs — All Time</div></div>';
+    html+='<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Position</th><th style="text-align:center;">Call-Offs</th></tr></thead><tbody>';
+    topEmps.forEach(function(e){
+      html+='<tr><td><b>'+escHtml(e.empName)+'</b></td><td>'+escHtml(e.pos||'')+'</td>'
+        +'<td style="text-align:center;font-weight:800;">'+e.count+'</td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+  }
+
+  /* List grouped by month, newest first */
+  var sorted=list.slice().sort(function(a,b){
+    if(a.date!==b.date)return a.date<b.date?1:-1;
+    return (b.id||0)-(a.id||0);
+  });
+  var byMonth={},monthOrder=[];
+  sorted.forEach(function(c){
+    var mkc=(c.date||'').substring(0,7)||'—';
+    if(!byMonth[mkc]){byMonth[mkc]=[];monthOrder.push(mkc);}
+    byMonth[mkc].push(c);
+  });
+  var MNAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  monthOrder.forEach(function(mkc){
+    var label=mkc;
+    var parts=mkc.split('-');
+    if(parts.length===2&&parts[1])label=MNAMES[parseInt(parts[1],10)-1]+' '+parts[0];
+    html+='<div class="card" style="margin-bottom:14px;">';
+    html+='<div class="card-head"><div class="card-title">'+label+'</div><div class="card-sub">'+byMonth[mkc].length+' call-off'+(byMonth[mkc].length===1?'':'s')+'</div></div>';
+    byMonth[mkc].forEach(function(c){
+      html+='<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);">';
+      html+='<div style="flex-shrink:0;width:74px;font-size:12px;font-weight:700;color:var(--text2);padding-top:1px;">'+(c.date||'—')+'</div>';
+      html+='<div style="flex:1;min-width:0;">';
+      html+='<div style="font-size:13px;font-weight:700;color:var(--text1);">'+escHtml(c.empName)+'</div>';
+      if(c.pos)html+='<div style="font-size:11px;color:var(--text3);margin-bottom:2px;">'+escHtml(c.pos)+'</div>';
+      html+='<div style="font-size:12.5px;color:var(--text2);margin-top:2px;">'+escHtml(c.reason)+'</div>';
+      html+='</div>';
+      html+='<button onclick="deleteCallOff('+c.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px;flex-shrink:0;" title="Delete">&#128465;</button>';
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+
+  el.innerHTML=html;
+}
+
+/* ── New Call-Off Modal ── */
+function showNewCallOffModal(){
+  var emps=getKnownEmployees();
+  var empOptions=emps.length>0
+    ? emps.map(function(e){return '<option value="'+e.id+'|'+escHtml(e.name)+'|'+escHtml(e.pos||'')+'">'+escHtml(e.name)+' ('+escHtml(e.pos||'')+')</option>';}).join('')
+    : '<option value="">No employees found — upload a PDF first</option>';
+
+  var today=dateStr(new Date());
+
+  var overlay=document.createElement('div');
+  overlay.id='callOffModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#128222; New Call-Off</div>'
+    +'<div style="display:flex;flex-direction:column;gap:13px;">'
+    +'<div>'
+    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date *</label>'
+    +'<input id="coDate" type="date" value="'+today+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
+    +'</div>'
+    +'<div>'
+    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee *</label>'
+    +'<select id="coEmp" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;">'
+    +'<option value="">— Select employee —</option>'+empOptions
+    +'</select>'
+    +'</div>'
+    +'<div>'
+    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Reason *</label>'
+    +'<input id="coReason" placeholder="e.g. Sick, family emergency..." style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
+    +'</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:20px;">'
+    +'<button onclick="document.getElementById(\'callOffModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveNewCallOff()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Call-Off</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+
+function saveNewCallOff(){
+  var date=(document.getElementById('coDate').value||'').trim();
+  var empVal=document.getElementById('coEmp').value||'';
+  var reason=(document.getElementById('coReason').value||'').trim();
+  if(!date||!empVal||!reason){showToast('Please fill in all fields.');return;}
+  var parts=empVal.split('|');
+  var empId=parts[0],empName=parts[1]||'',pos=parts[2]||'';
+  var list=loadCallOffs();
+  list.unshift({id:Date.now(),date:date,empId:empId,empName:empName,pos:pos,reason:reason,created:new Date().toISOString()});
+  saveCallOffs(list);
+  document.getElementById('callOffModal').remove();
+  renderCallOffs();
+  showToast('&#10003; Call-off logged');
+}
+
+function deleteCallOff(id){
+  if(!confirm('Delete this call-off record?'))return;
+  var list=loadCallOffs().filter(function(c){return c.id!==id;});
+  saveCallOffs(list);
+  renderCallOffs();
+  showToast('&#128465; Call-off deleted');
+}
+
+
 /* ── New Employee Detection Modal ── */
 function showNewEmployeeModal(newEmps){
   var existing=document.getElementById('newEmpModal');
@@ -6210,6 +6418,7 @@ window.addEventListener('load',function(){
   updateDashboardKPIs();
   try{renderDashboard();}catch(ex){console.warn('dashboard:',ex);}
   updateProjectsBadge();
+  updateCallOffsBadge();
   setTimeout(syncFromSheets,1000);
   setTimeout(maybeAutoSnapshot,3000);
 
