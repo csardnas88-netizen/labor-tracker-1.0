@@ -24,6 +24,7 @@
   --red:#dc2626;--red-bg:#fef2f2;--red-border:#fca5a5;
   --green:#16a34a;--green-bg:#f0fdf4;--green-border:#86efac;
   --yellow:#d97706;--yellow-bg:#fffbeb;--yellow-border:#fcd34d;
+  --gold:#c9a227;--gold-soft:rgba(201,162,39,.14);--gold-text:#e3c869;
   --sidebar-w:230px;
   --radius:12px;--radius-sm:8px;--radius-xs:6px;
   --shadow:0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.05);
@@ -408,7 +409,7 @@ tbody tr:hover td{background:var(--surface);}
 }
 
 .main-wrap{margin-left:260px;min-height:100vh;}
-.pages-wrap{padding:20px 22px;max-width:1100px;}
+.pages-wrap{padding:20px 22px;max-width:1100px;margin:0 auto;}
 .sidebar{position:fixed;top:0;left:0;width:260px;height:100vh;background:var(--navy);color:#fff;display:flex;flex-direction:column;z-index:200;overflow-y:auto;transition:transform .25s;}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:199;}
 .sidebar-header{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:12px;}
@@ -418,7 +419,7 @@ tbody tr:hover td{background:var(--surface);}
 .nav-section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.3);padding:12px 18px 4px;}
 .nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;font-weight:500;color:rgba(255,255,255,.65);cursor:pointer;transition:.15s;position:relative;}
 .nav-item:hover{background:rgba(255,255,255,.08);color:#fff;}
-.nav-item.active{background:rgba(255,255,255,.12);color:#fff;font-weight:700;}
+.nav-item.active{background:var(--gold-soft);color:var(--gold-text);font-weight:700;border-left:3px solid var(--gold);padding-left:15px;}
 .nav-icon{font-size:14px;flex-shrink:0;}
 .nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;padding:1px 7px;border-radius:99px;font-weight:700;}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:pulse 2s infinite;}
@@ -435,7 +436,7 @@ tbody tr:hover td{background:var(--surface);}
 @media(max-width:480px){.notif-btn{padding:8px 12px;font-size:13px;min-height:36px;}.upload-text{display:none;}}
 .notif-wrap{position:relative;}
 .notif-badge-dot{position:absolute;top:-3px;right:-3px;width:10px;height:10px;background:var(--red);border-radius:50%;border:2px solid #fff;}
-.card{background:var(--white);border-radius:12px;border:1px solid var(--border);margin-bottom:14px;overflow:hidden;}
+.card{background:var(--white);border-radius:12px;border:1px solid var(--border);margin-bottom:14px;overflow:hidden;box-shadow:var(--shadow-sm);}
 .card-head{background:#fff;border-bottom:1px solid var(--border);padding:13px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 .card-title{font-size:14px;font-weight:700;color:var(--text1);}
 .card-sub{font-size:11px;color:var(--text3);margin-top:1px;}
@@ -622,7 +623,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.5.1';
+  var APP_VERSION = '5.6.0';
   window.APP_VERSION = APP_VERSION;
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
@@ -2036,15 +2037,14 @@ function renderOvertime(){
       otEmps.forEach(function(emp){
         var posShort=(emp.pos||'').replace(/^\d+-/,'');
         var otLevel=emp.ot1>=4?'#dc2626':emp.ot1>=2?'#d97706':'#92400e';
-        var otBg=emp.ot1>=4?'#fef2f2':emp.ot1>=2?'#fffbeb':'#fff7ed';
-        html+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border);">';
+        html+='<div style="display:flex;align-items:center;gap:10px;background:var(--white);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow-sm);margin-bottom:6px;">';
         html+='<div style="width:8px;height:8px;border-radius:50%;background:'+otLevel+';flex-shrink:0;"></div>';
         html+='<div style="flex:1;min-width:0;">';
-        html+='<div style="font-size:12px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+emp.name+'</div>';
+        html+='<div style="font-size:12.5px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+emp.name+'</div>';
         html+='<div style="font-size:10px;color:var(--text3);">'+posShort+'</div>';
         html+='</div>';
         html+='<div style="text-align:right;flex-shrink:0;">';
-        html+='<div style="font-size:12px;font-weight:800;color:'+otLevel+';">+'+emp.ot1.toFixed(2)+'h OT</div>';
+        html+='<div style="font-size:14px;font-weight:800;color:'+otLevel+';">+'+emp.ot1.toFixed(2)+'h</div>';
         html+='</div>';
         html+='</div>';
       });
