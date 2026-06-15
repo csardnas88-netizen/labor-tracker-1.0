@@ -623,7 +623,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.8.0';
+  var APP_VERSION = '5.8.1';
   window.APP_VERSION = APP_VERSION;
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
@@ -6142,6 +6142,10 @@ function exportProjectPDF(projIdx){
    CALL-OFFS TRACKER
    Storage key: calloffs_data (isolated, no impact on existing)
    ══════════════════════════════════════════════════════ */
+var DOW_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function dowName(ds){
+  try{var d=parseLocalDate(ds);return DOW_NAMES[d.getDay()];}catch(e){return'';}
+}
 function loadCallOffs(){
   try{var s=localStorage.getItem('calloffs_data');if(s)return JSON.parse(s);}catch(e){}
   return [];
@@ -6206,6 +6210,25 @@ function renderCallOffs(){
   /* Apply filter */
   var filtered=COF_FILTER==='all'?list:list.filter(function(c){return((c.empId||'')+'|'+c.empName)===COF_FILTER;});
 
+  /* Day-of-week pattern breakdown */
+  var dowCounts=[0,0,0,0,0,0,0];
+  filtered.forEach(function(c){
+    if(c.date){try{dowCounts[parseLocalDate(c.date).getDay()]++;}catch(e){}}
+  });
+  var maxDow=Math.max.apply(null,dowCounts.concat([1]));
+  html+='<div class="card" style="margin-bottom:14px;"><div class="card-head"><div class="card-title">&#128197; Call-Offs by Day of Week</div></div>';
+  html+='<div class="card-body" style="display:flex;gap:6px;align-items:flex-end;height:96px;">';
+  DOW_NAMES.forEach(function(dn,i){
+    var barH=Math.round((dowCounts[i]/maxDow)*56)+6;
+    var isPeak=dowCounts[i]>0&&dowCounts[i]===maxDow;
+    html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'
+      +'<div style="font-size:11px;font-weight:800;color:'+(isPeak?'var(--red)':'var(--navy)')+';">'+dowCounts[i]+'</div>'
+      +'<div style="width:100%;background:'+(isPeak?'var(--red)':'var(--navy)')+';opacity:'+(isPeak?'1':'.55')+';border-radius:4px;height:'+barH+'px;"></div>'
+      +'<div style="font-size:9px;color:var(--text3);font-weight:700;">'+dn.substring(0,3)+'</div>'
+      +'</div>';
+  });
+  html+='</div></div>';
+
   if(COF_FILTER==='all'){
     var mk=monthKey();
     var mtdCount=list.filter(function(c){return c.date&&c.date.substring(0,7)===mk;}).length;
@@ -6259,7 +6282,8 @@ function renderCallOffs(){
     html+='<div class="card-head"><div class="card-title">'+label+'</div><div class="card-sub">'+byMonth[mkc].length+' call-off'+(byMonth[mkc].length===1?'':'s')+'</div></div>';
     byMonth[mkc].forEach(function(c){
       html+='<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);">';
-      html+='<div style="flex-shrink:0;width:74px;font-size:12px;font-weight:700;color:var(--text2);padding-top:1px;">'+(c.date||'—')+'</div>';
+      html+='<div style="flex-shrink:0;width:80px;font-size:12px;font-weight:700;color:var(--text2);padding-top:1px;">'+(c.date||'—')
+        +(c.date?'<div style="font-size:10px;font-weight:600;color:var(--text3);">'+dowName(c.date)+'</div>':'')+'</div>';
       html+='<div style="flex:1;min-width:0;">';
       html+='<div style="font-size:13px;font-weight:700;color:var(--text1);">'+escHtml(c.empName)+'</div>';
       if(c.pos)html+='<div style="font-size:11px;color:var(--text3);margin-bottom:2px;">'+escHtml(c.pos)+'</div>';
@@ -6298,6 +6322,7 @@ function exportCallOffsPDF(){
   var rows=sorted.map(function(c){
     return '<tr>'
       +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;">'+c.date+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:11px;color:#6b7280;">'+dowName(c.date)+'</td>'
       +(isSingleEmp?'':'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:600;">'+escHtml(c.empName)+'</td>'
         +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:11px;color:#6b7280;">'+escHtml(c.pos||'')+'</td>')
       +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#1a1a2e;">'+escHtml(c.reason)+'</td>'
@@ -6305,8 +6330,8 @@ function exportCallOffsPDF(){
   }).join('');
 
   var headCols=isSingleEmp
-    ?'<th>Date</th><th>Reason</th>'
-    :'<th>Date</th><th>Employee</th><th>Position</th><th>Reason</th>';
+    ?'<th>Date</th><th>Day</th><th>Reason</th>'
+    :'<th>Date</th><th>Day</th><th>Employee</th><th>Position</th><th>Reason</th>';
 
   var title=isSingleEmp?escHtml(empName):'All Employees';
 
