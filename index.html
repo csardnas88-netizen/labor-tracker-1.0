@@ -564,11 +564,12 @@ tbody tr:hover td{background:var(--offwhite);}
 .rev-wrap{display:flex;flex-wrap:wrap;gap:5px;align-items:center;}
 select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6px;padding:4px 7px;max-width:180px;background:#fff;color:var(--text1);}
 @media(max-width:768px){
-  .sidebar{transform:translateX(-100%);}
+  .sidebar{transform:translateX(-100%);padding-top:env(safe-area-inset-top);}
   .sidebar.mobile-open{transform:translateX(0);}
   .sidebar-overlay.show{display:block;}
   .main-wrap{margin-left:0;}
-  .hamburger{display:block;}
+  .topbar{padding-top:max(14px,env(safe-area-inset-top));}
+  .hamburger{display:block;font-size:28px;padding:6px 12px;}
   .analysis-2col{grid-template-columns:1fr;}
   .rooms-modal-grid{grid-template-columns:repeat(2,1fr);}
   .month-kpi-strip{min-width:80px;}
@@ -581,7 +582,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   /* iPhone specific improvements */
   .content{padding:10px 12px;}
   .pages-wrap{padding:10px 12px;}
-  .topbar{padding:10px 14px;min-height:54px;}
+  .topbar{padding:10px 14px;min-height:54px;padding-top:max(14px,env(safe-area-inset-top));}
   .topbar-greeting{font-size:13px;}
   .card{border-radius:10px;margin-bottom:10px;}
   .kpi-val{font-size:18px;}
@@ -600,9 +601,6 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   .pace-row{font-size:11px;}
   .break-item{padding:10px 12px;}
   .ot-emp-row{padding:8px 12px;}
-  /* Safe area for iPhone notch */
-  .sidebar{padding-top:env(safe-area-inset-top);}
-  .topbar{padding-top:max(10px,env(safe-area-inset-top));}
 }
 
 </style>
@@ -614,7 +612,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.4.0';
+  var APP_VERSION = '5.4.1';
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
     var banner = document.getElementById('versionBanner');
