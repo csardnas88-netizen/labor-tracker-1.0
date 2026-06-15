@@ -623,7 +623,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.7.0';
+  var APP_VERSION = '5.8.0';
   window.APP_VERSION = APP_VERSION;
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
@@ -1233,7 +1233,7 @@ function saveEmpMeta(){try{localStorage.setItem("hk_emp_meta",JSON.stringify(EMP
 var ROSTER=loadRoster(),EMP_META=loadEmpMeta();
 var DATA={depts:[],emps:[],otherEmps:[]};
 var PREV={},PNOTE={},OREV={},ORNOTE={};
-var BF="all",PF="all",OF="all",BPF="all";
+var BF="all",PF="all",OF="all",BPF="all",COF_FILTER="all";
 
 /* ========================================================
    UPLOAD
@@ -6181,43 +6181,66 @@ function renderCallOffs(){
     return;
   }
 
-  var mk=monthKey();
-  var mtdCount=list.filter(function(c){return c.date&&c.date.substring(0,7)===mk;}).length;
-
-  /* Top employees by call-off count (all time) */
+  /* Build employee map (all-time, for filter dropdown + Top Offenders) */
   var byEmp={};
   list.forEach(function(c){
     var key=(c.empId||'')+'|'+c.empName;
     if(!byEmp[key])byEmp[key]={empName:c.empName,pos:c.pos,count:0};
     byEmp[key].count++;
   });
-  var topEmps=Object.keys(byEmp).map(function(k){return byEmp[k];})
-    .sort(function(a,b){return b.count-a.count;}).slice(0,8);
+  var empKeys=Object.keys(byEmp).sort(function(a,b){return byEmp[a].empName.localeCompare(byEmp[b].empName);});
 
-  /* Summary */
-  html+='<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">';
-  html+='<div style="flex:1;min-width:120px;background:var(--red-bg);border-radius:10px;padding:12px 16px;text-align:center;">'
-    +'<div style="font-size:26px;font-weight:800;color:var(--red);">'+mtdCount+'</div>'
-    +'<div style="font-size:11px;font-weight:700;color:var(--red);">&#128222; This Month</div></div>';
-  html+='<div style="flex:1;min-width:120px;background:var(--surface);border-radius:10px;padding:12px 16px;text-align:center;">'
-    +'<div style="font-size:26px;font-weight:800;color:var(--text2);">'+list.length+'</div>'
-    +'<div style="font-size:11px;font-weight:700;color:var(--text2);">&#128222; All Time</div></div>';
-  html+='</div>';
+  /* Filter bar */
+  html+='<div class="card" style="margin-bottom:14px;"><div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">';
+  html+='<div style="flex:1;min-width:180px;">';
+  html+='<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Filter by employee</label>';
+  html+='<select id="coFilterEmp" onchange="setCallOffFilter(this.value)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;">';
+  html+='<option value="all"'+(COF_FILTER==='all'?' selected':'')+'>— All employees —</option>';
+  empKeys.forEach(function(k){
+    html+='<option value="'+escHtml(k)+'"'+(COF_FILTER===k?' selected':'')+'>'+escHtml(byEmp[k].empName)+' ('+byEmp[k].count+')</option>';
+  });
+  html+='</select></div>';
+  html+='<button onclick="exportCallOffsPDF()" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">&#128196; Export PDF</button>';
+  html+='</div></div>';
 
-  /* Top employees table */
-  if(topEmps.length>0){
-    html+='<div class="card" style="margin-bottom:14px;">';
-    html+='<div class="card-head"><div class="card-title">&#128202; Most Call-Offs — All Time</div></div>';
-    html+='<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Position</th><th style="text-align:center;">Call-Offs</th></tr></thead><tbody>';
-    topEmps.forEach(function(e){
-      html+='<tr><td><b>'+escHtml(e.empName)+'</b></td><td>'+escHtml(e.pos||'')+'</td>'
-        +'<td style="text-align:center;font-weight:800;">'+e.count+'</td></tr>';
-    });
-    html+='</tbody></table></div></div>';
+  /* Apply filter */
+  var filtered=COF_FILTER==='all'?list:list.filter(function(c){return((c.empId||'')+'|'+c.empName)===COF_FILTER;});
+
+  if(COF_FILTER==='all'){
+    var mk=monthKey();
+    var mtdCount=list.filter(function(c){return c.date&&c.date.substring(0,7)===mk;}).length;
+    html+='<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">';
+    html+='<div style="flex:1;min-width:120px;background:var(--red-bg);border-radius:10px;padding:12px 16px;text-align:center;">'
+      +'<div style="font-size:26px;font-weight:800;color:var(--red);">'+mtdCount+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--red);">&#128222; This Month</div></div>';
+    html+='<div style="flex:1;min-width:120px;background:var(--surface);border-radius:10px;padding:12px 16px;text-align:center;">'
+      +'<div style="font-size:26px;font-weight:800;color:var(--text2);">'+list.length+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--text2);">&#128222; All Time</div></div>';
+    html+='</div>';
+
+    var topEmps=empKeys.map(function(k){return byEmp[k];}).sort(function(a,b){return b.count-a.count;}).slice(0,8);
+    if(topEmps.length>0){
+      html+='<div class="card" style="margin-bottom:14px;">';
+      html+='<div class="card-head"><div class="card-title">&#128202; Most Call-Offs — All Time</div></div>';
+      html+='<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Position</th><th style="text-align:center;">Call-Offs</th></tr></thead><tbody>';
+      topEmps.forEach(function(e){
+        html+='<tr><td><b>'+escHtml(e.empName)+'</b></td><td>'+escHtml(e.pos||'')+'</td>'
+          +'<td style="text-align:center;font-weight:800;">'+e.count+'</td></tr>';
+      });
+      html+='</tbody></table></div></div>';
+    }
+  }else{
+    var emp=byEmp[COF_FILTER]||{empName:'',pos:'',count:filtered.length};
+    html+='<div style="background:var(--red-bg);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+      +'<div><div style="font-size:14px;font-weight:800;color:var(--text1);">'+escHtml(emp.empName)+'</div>'
+      +(emp.pos?'<div style="font-size:11px;color:var(--text3);">'+escHtml(emp.pos)+'</div>':'')+'</div>'
+      +'<div style="text-align:right;"><div style="font-size:26px;font-weight:800;color:var(--red);">'+filtered.length+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--red);">&#128222; Total Call-Offs</div></div>'
+      +'</div>';
   }
 
   /* List grouped by month, newest first */
-  var sorted=list.slice().sort(function(a,b){
+  var sorted=filtered.slice().sort(function(a,b){
     if(a.date!==b.date)return a.date<b.date?1:-1;
     return (b.id||0)-(a.id||0);
   });
@@ -6248,10 +6271,82 @@ function renderCallOffs(){
     html+='</div>';
   });
 
+  if(filtered.length===0){
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;">No call-offs match this filter.</div>';
+  }
+
   el.innerHTML=html;
 }
 
-/* ── New Call-Off Modal ── */
+function setCallOffFilter(val){
+  COF_FILTER=val;
+  renderCallOffs();
+}
+
+/* ── Export Call-Offs PDF (respects current filter) ── */
+function exportCallOffsPDF(){
+  var list=loadCallOffs();
+  var filtered=COF_FILTER==='all'?list:list.filter(function(c){return((c.empId||'')+'|'+c.empName)===COF_FILTER;});
+  if(filtered.length===0){showToast('No call-offs to export for this selection.');return;}
+
+  var sorted=filtered.slice().sort(function(a,b){return a.date<b.date?-1:(a.date>b.date?1:0);});
+
+  var isSingleEmp=COF_FILTER!=='all';
+  var empName=isSingleEmp?(sorted[0].empName||''):'';
+  var empPos=isSingleEmp?(sorted[0].pos||''):'';
+
+  var rows=sorted.map(function(c){
+    return '<tr>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;">'+c.date+'</td>'
+      +(isSingleEmp?'':'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:600;">'+escHtml(c.empName)+'</td>'
+        +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:11px;color:#6b7280;">'+escHtml(c.pos||'')+'</td>')
+      +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#1a1a2e;">'+escHtml(c.reason)+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var headCols=isSingleEmp
+    ?'<th>Date</th><th>Reason</th>'
+    :'<th>Date</th><th>Employee</th><th>Position</th><th>Reason</th>';
+
+  var title=isSingleEmp?escHtml(empName):'All Employees';
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
+    +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:#1a1a2e;}'
+    +'.header{background:#0f2544;color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
+    +'.hotel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px;}'
+    +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}'
+    +'.sub{font-size:12px;color:rgba(255,255,255,.55);}'
+    +'.meta{display:grid;grid-template-columns:repeat('+(isSingleEmp?'2':'1')+',1fr);gap:16px;margin-bottom:28px;}'
+    +'.meta-box{background:#f4f4f5;border-radius:8px;padding:14px 16px;}'
+    +'.meta-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:4px;}'
+    +'.meta-val{font-size:16px;font-weight:700;color:#0f2544;}'
+    +'.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin:0 0 10px;}'
+    +'table{width:100%;border-collapse:collapse;}'
+    +'th{background:#0f2544;color:#fff;padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:left;}'
+    +'.total-row{background:#f4f4f5;font-weight:700;}'
+    +'.footer{margin-top:32px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:16px;}'
+    +'</style></head><body>'
+    +'<div class="header">'
+    +'<div class="hotel">JW Marriott Houston Downtown · Housekeeping Management</div>'
+    +'<div class="title">Call-Off Report — '+title+'</div>'
+    +'<div class="sub">'+(isSingleEmp&&empPos?escHtml(empPos)+' · ':'')+'Generated '+dateStr(new Date())+'</div>'
+    +'</div>'
+    +'<div class="meta">'
+    +(isSingleEmp?'<div class="meta-box"><div class="meta-label">Employee</div><div class="meta-val">'+escHtml(empName)+'</div></div>':'')
+    +'<div class="meta-box"><div class="meta-label">Total Call-Offs</div><div class="meta-val">'+filtered.length+'</div></div>'
+    +'</div>'
+    +'<p class="section-title">Call-off history</p>'
+    +'<table><thead><tr>'+headCols+'</tr></thead>'
+    +'<tbody>'+rows+'</tbody></table>'
+    +'<div class="footer">JW Marriott Houston Downtown &middot; Housekeeping Management &middot; Generated '+dateStr(new Date())+' &middot; Confidential</div>'
+    +'</body></html>';
+
+  var win=window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(function(){win.print();},500);
+}
+
 function showNewCallOffModal(){
   var emps=getKnownEmployees();
   var empOptions=emps.length>0
@@ -6309,6 +6404,9 @@ function deleteCallOff(id){
   if(!confirm('Delete this call-off record?'))return;
   var list=loadCallOffs().filter(function(c){return c.id!==id;});
   saveCallOffs(list);
+  if(COF_FILTER!=='all'&&!list.some(function(c){return((c.empId||'')+'|'+c.empName)===COF_FILTER;})){
+    COF_FILTER='all';
+  }
   renderCallOffs();
   showToast('&#128465; Call-off deleted');
 }
