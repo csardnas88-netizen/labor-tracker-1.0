@@ -622,7 +622,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.4.3';
+  var APP_VERSION = '5.5.0';
   window.APP_VERSION = APP_VERSION;
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
@@ -962,6 +962,28 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
           <button class="btn btn-ghost" style="min-height:32px;padding:6px 12px;font-size:12px;flex-shrink:0;" onclick="scanDuplicateDays()">Scan</button>
         </div>
         <div id="dupScanResults" style="padding:0 16px 16px;"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-head"><div class="card-title">Backups</div></div>
+        <div class="settings-info-row"><span class="settings-info-label">Last automatic backup</span><span class="settings-info-value" id="settingsLastBackup">—</span></div>
+        <div class="settings-row" onclick="createSnapshot()">
+          <div class="settings-row-icon" style="background:var(--green-bg);color:var(--green);">&#128190;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">Back Up Now</div>
+            <div class="settings-row-desc">Saves a dated copy of all your data to the cloud — runs automatically once a day, last 14 days are kept</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
+        <div class="settings-row" onclick="listSnapshots()">
+          <div class="settings-row-icon" style="background:var(--surface);color:var(--text2);">&#128193;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">View / Restore Backups</div>
+            <div class="settings-row-desc">Browse past daily backups and restore everything to a previous day</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
+        <div id="snapshotResults" style="padding:0 16px 16px;"></div>
       </div>
 
       <div class="card">
@@ -2612,6 +2634,129 @@ function forceSyncToSupabase(){
   showToast("&#9729; Pushing "+pushed+" keys to Supabase...");
 }
 
+/* ═══════════════════════════════════════════
+   AUTOMATIC DAILY SNAPSHOTS (Backups)
+   ═══════════════════════════════════════════ */
+var SNAPSHOT_RETAIN_DAYS=14;
+
+function gatherAllData(){
+  var data={months:{},r106:{},roster_overrides:null,projects:null,manager_name:null,savedAt:new Date().toISOString()};
+  Object.keys(localStorage).forEach(function(k){
+    try{
+      if(k.indexOf("hk_month_")===0)data.months[k.replace("hk_month_","")]=JSON.parse(localStorage[k]);
+      else if(k.indexOf("hk_r106_")===0)data.r106[k.replace("hk_r106_","")]=JSON.parse(localStorage[k]);
+      else if(k==="hk_roster_overrides")data.roster_overrides=JSON.parse(localStorage[k]);
+      else if(k==="projects_data")data.projects=JSON.parse(localStorage[k]);
+      else if(k==="hk_manager_name")data.manager_name=localStorage[k];
+    }catch(e){}
+  });
+  return data;
+}
+
+function createSnapshot(silent){
+  var today=dateStr(new Date());
+  var data=gatherAllData();
+  fetch(SUPA_URL+"/rest/v1/labor_data",{
+    method:"POST",
+    headers:Object.assign({},SUPA_HEADERS,{"Prefer":"resolution=merge-duplicates"}),
+    body:JSON.stringify({key:"snapshot_"+today,value:JSON.stringify(data)})
+  }).then(function(r){
+    if(r.ok){
+      try{localStorage.setItem("hk_last_snapshot_date",today);}catch(e){}
+      updateLastBackupLabel();
+      if(!silent)showToast("&#128190; Backup saved for "+today);
+      cleanupOldSnapshots();
+    }else if(!silent){
+      showToast("&#9888; Backup failed");
+    }
+  }).catch(function(){ if(!silent)showToast("&#9888; Backup failed — offline?"); });
+}
+
+function maybeAutoSnapshot(){
+  var today=dateStr(new Date());
+  var last=localStorage.getItem("hk_last_snapshot_date");
+  if(last!==today)createSnapshot(true);
+}
+
+function cleanupOldSnapshots(){
+  fetch(SUPA_URL+"/rest/v1/labor_data?select=key&key=like.snapshot_*",{method:"GET",headers:SUPA_HEADERS})
+    .then(function(r){return r.json();})
+    .then(function(rows){
+      var cutoff=new Date();cutoff.setDate(cutoff.getDate()-SNAPSHOT_RETAIN_DAYS);
+      (rows||[]).forEach(function(row){
+        var ds=row.key.replace("snapshot_","");
+        var d;
+        try{d=parseLocalDate(ds);}catch(e){return;}
+        if(d&&!isNaN(d.getTime())&&d<cutoff){
+          fetch(SUPA_URL+"/rest/v1/labor_data?key=eq."+encodeURIComponent(row.key),{method:"DELETE",headers:SUPA_HEADERS}).catch(function(){});
+        }
+      });
+    }).catch(function(){});
+}
+
+function updateLastBackupLabel(){
+  var el=document.getElementById("settingsLastBackup");
+  if(!el)return;
+  var last=localStorage.getItem("hk_last_snapshot_date");
+  el.textContent=last?last:"Never";
+}
+
+function listSnapshots(){
+  var el=document.getElementById("snapshotResults");
+  if(!el)return;
+  el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--text3);">Looking for backups…</div>';
+  fetch(SUPA_URL+"/rest/v1/labor_data?select=key&key=like.snapshot_*&order=key.desc",{method:"GET",headers:SUPA_HEADERS})
+    .then(function(r){return r.json();})
+    .then(function(rows){renderSnapshotList(rows||[]);})
+    .catch(function(){el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--red);">Could not load backups — check your connection</div>';});
+}
+
+function renderSnapshotList(rows){
+  var el=document.getElementById("snapshotResults");
+  if(!el)return;
+  if(!rows.length){
+    el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--text3);">No backups found yet</div>';
+    return;
+  }
+  var MNAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var DNAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var html='<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">';
+  rows.forEach(function(row){
+    var ds=row.key.replace("snapshot_","");
+    var d=parseLocalDate(ds);
+    var label=(isNaN(d.getTime()))?ds:(DNAMES[d.getDay()]+", "+MNAMES[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear());
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--surface);border-radius:8px;">'
+      +'<div style="font-size:12.5px;font-weight:600;color:var(--text1);">'+label+'</div>'
+      +'<button class="btn btn-ghost" style="min-height:30px;padding:5px 12px;font-size:11.5px;flex-shrink:0;" onclick="restoreSnapshot(\''+row.key+'\')">Restore</button>'
+      +'</div>';
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function restoreSnapshot(key){
+  var ds=key.replace("snapshot_","");
+  if(!confirm("This will REPLACE all your current data (this month, R106, roster, projects) with the backup from "+ds+". This cannot be undone. Continue?"))return;
+  fetch(SUPA_URL+"/rest/v1/labor_data?select=value&key=eq."+encodeURIComponent(key),{method:"GET",headers:SUPA_HEADERS})
+    .then(function(r){return r.json();})
+    .then(function(rows){
+      if(!rows||!rows[0])throw new Error("not found");
+      var data=JSON.parse(rows[0].value);
+      Object.keys(data.months||{}).forEach(function(mk){
+        try{localStorage.setItem("hk_month_"+mk,JSON.stringify(data.months[mk]));}catch(e){}
+      });
+      Object.keys(data.r106||{}).forEach(function(mk){
+        try{localStorage.setItem("hk_r106_"+mk,JSON.stringify(data.r106[mk]));}catch(e){}
+      });
+      if(data.roster_overrides)try{localStorage.setItem("hk_roster_overrides",JSON.stringify(data.roster_overrides));}catch(e){}
+      if(data.projects)try{localStorage.setItem("projects_data",JSON.stringify(data.projects));}catch(e){}
+      if(data.manager_name)try{localStorage.setItem("hk_manager_name",data.manager_name);}catch(e){}
+      showToast("&#10003; Restored backup from "+ds+" — reloading…");
+      setTimeout(function(){location.reload();},800);
+    })
+    .catch(function(){showToast("&#9888; Could not restore backup");});
+}
+
 var _origLoadMonthData=loadMonthData;
 loadMonthData=function(mk){
   return _origLoadMonthData(mk);
@@ -3627,6 +3772,7 @@ function showPage(page){
     if(mn)mn.value=localStorage.getItem('hk_manager_name')||'';
     var av=document.getElementById('settingsAppVersion');
     if(av)av.textContent='v'+APP_VERSION;
+    updateLastBackupLabel();
   }
 }
 
@@ -6053,6 +6199,7 @@ window.addEventListener('load',function(){
   try{renderDashboard();}catch(ex){console.warn('dashboard:',ex);}
   updateProjectsBadge();
   setTimeout(syncFromSheets,1000);
+  setTimeout(maybeAutoSnapshot,3000);
 
   /* Date picker defaults to yesterday */
   var yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
