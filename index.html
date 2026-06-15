@@ -230,6 +230,20 @@ tbody tr:hover td{background:var(--surface);}
 .btn-red{background:var(--red-bg);color:var(--red);border:1.5px solid var(--red-border);}
 .btn-yellow{background:var(--yellow-bg);color:var(--yellow);border:1.5px solid var(--yellow-border);}
 .btn-green{background:var(--green-bg);color:var(--green);border:1.5px solid var(--green-border);}
+
+/* ── SETTINGS ROWS ── */
+.settings-row{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;transition:.15s;border-bottom:1px solid var(--border);}
+.settings-row:last-child{border-bottom:none;}
+.settings-row:hover{background:var(--surface);}
+.settings-row-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.settings-row-text{flex:1;min-width:0;}
+.settings-row-title{font-size:13px;font-weight:600;color:var(--text1);}
+.settings-row-desc{font-size:11.5px;color:var(--text3);margin-top:2px;line-height:1.4;}
+.settings-row-arrow{color:var(--border2);font-size:20px;flex-shrink:0;}
+.settings-info-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;font-size:12.5px;border-bottom:1px solid var(--border);}
+.settings-info-row:last-child{border-bottom:none;}
+.settings-info-label{color:var(--text3);}
+.settings-info-value{color:var(--text1);font-weight:600;text-align:right;}
 .btn-sm{padding:5px 12px;font-size:11.5px;min-height:32px;}
 
 /* ── FORMS ── */
@@ -612,7 +626,8 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.4.1';
+  var APP_VERSION = '5.4.2';
+  window.APP_VERSION = APP_VERSION;
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
     var banner = document.getElementById('versionBanner');
@@ -890,51 +905,75 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
             style="flex:1;min-width:180px;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:14px;"/>
           <button class="btn btn-navy" onclick="saveManagerName()">Save Name</button>
         </div>
-        <div style="padding:0 16px 14px;font-size:12px;color:var(--text3);">
-          Sync user: <span id="settingsSyncStatus" style="font-weight:600;color:var(--text2);"></span>
+        <div class="settings-info-row">
+          <span class="settings-info-label">Sync user</span>
+          <span class="settings-info-value" id="settingsSyncStatus">—</span>
         </div>
       </div>
 
       <div class="card" style="margin-bottom:14px;">
-        <div class="card-head"><div class="card-title" style="color:var(--red);">&#9888;&#65039; Data Management</div></div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
-          <button class="btn btn-ghost" onclick="forceSyncToSupabase()" style="justify-content:flex-start;color:#86efac;">
-            &#9729; Force Sync — push all local data to Supabase (use when switching devices)
-          </button>
-          <button class="btn btn-ghost" onclick="syncFromSheets()" style="justify-content:flex-start;color:#7dd3fc;">
-            &#8595; Pull from Supabase — refresh data from cloud to this device
-          </button>
-          <button class="btn btn-ghost" onclick="clearMonth()" style="justify-content:flex-start;color:var(--amber);">
-            &#8635; Reset Current Month — clears labor data for this month only
-          </button>
-          <button class="btn btn-ghost" onclick="resetOccupancy()" style="justify-content:flex-start;color:var(--amber);">
-            &#127963; Reset Occupancy — clears rooms/R106 data only, keeps your PDF labor reports
-          </button>
-          <button class="btn btn-ghost" onclick="resetAllData()" style="justify-content:flex-start;color:var(--red);">
-            &#128465; Reset ALL Data — permanently deletes everything (double confirmation)
-          </button>
+        <div class="card-head"><div class="card-title">Data Management</div></div>
+        <div class="settings-row" onclick="forceSyncToSupabase()">
+          <div class="settings-row-icon" style="background:var(--green-bg);color:var(--green);">&#9729;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">Force Sync to Cloud</div>
+            <div class="settings-row-desc">Push all local data to Supabase — use when switching devices</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
+        <div class="settings-row" onclick="syncFromSheets()">
+          <div class="settings-row-icon" style="background:var(--green-bg);color:var(--green);">&#8595;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">Pull from Cloud</div>
+            <div class="settings-row-desc">Refresh this device with the latest data from Supabase</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
+        <div class="settings-row" onclick="clearMonth()">
+          <div class="settings-row-icon" style="background:var(--yellow-bg);color:var(--yellow);">&#8635;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">Reset Current Month</div>
+            <div class="settings-row-desc">Clears labor data for this month only</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
+        <div class="settings-row" onclick="resetOccupancy()">
+          <div class="settings-row-icon" style="background:var(--yellow-bg);color:var(--yellow);">&#127963;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">Reset Occupancy</div>
+            <div class="settings-row-desc">Clears rooms/R106 data only — PDF labor reports stay intact</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
+        <div class="settings-row" onclick="resetAllData()">
+          <div class="settings-row-icon" style="background:var(--red-bg);color:var(--red);">&#128465;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title" style="color:var(--red);">Reset ALL Data</div>
+            <div class="settings-row-desc">Permanently deletes everything — requires double confirmation</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
         </div>
       </div>
 
       <div class="card" style="margin-bottom:14px;">
-        <div class="card-head"><div class="card-title">&#129529; Duplicate / Mismatched Day Cleanup</div></div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
-          <div style="font-size:12px;color:var(--text3);">Scans all stored days for duplicate or mis-keyed date entries (e.g. old data saved under a different date format). Shows what it found before deleting anything.</div>
-          <button class="btn btn-ghost" onclick="scanDuplicateDays()" style="justify-content:flex-start;color:var(--navy);">
-            &#128269; Scan for Duplicate Days
-          </button>
-          <div id="dupScanResults"></div>
+        <div class="card-head"><div class="card-title">Maintenance</div></div>
+        <div class="settings-row" style="cursor:default;">
+          <div class="settings-row-icon" style="background:var(--surface);color:var(--text2);">&#129529;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">Duplicate / Mismatched Day Cleanup</div>
+            <div class="settings-row-desc">Scans for old data saved under a different date format — shows what it found before deleting anything</div>
+          </div>
+          <button class="btn btn-ghost" style="min-height:32px;padding:6px 12px;font-size:12px;flex-shrink:0;" onclick="scanDuplicateDays()">Scan</button>
         </div>
+        <div id="dupScanResults" style="padding:0 16px 16px;"></div>
       </div>
 
       <div class="card">
         <div class="card-head"><div class="card-title">App Info</div></div>
-        <div style="padding:14px 16px;font-size:12px;color:var(--text3);display:flex;flex-direction:column;gap:6px;">
-          <div>Version: <strong>v4.1</strong></div>
-          <div>Property: <strong>JW Marriott Houston Downtown</strong></div>
-          <div>Department: <strong>Housekeeping</strong></div>
-          <div>Sync endpoint: <strong>Google Sheets</strong></div>
-        </div>
+        <div class="settings-info-row"><span class="settings-info-label">Version</span><span class="settings-info-value" id="settingsAppVersion">—</span></div>
+        <div class="settings-info-row"><span class="settings-info-label">Property</span><span class="settings-info-value">JW Marriott Houston Downtown</span></div>
+        <div class="settings-info-row"><span class="settings-info-label">Department</span><span class="settings-info-value">Housekeeping</span></div>
+        <div class="settings-info-row"><span class="settings-info-label">Sync endpoint</span><span class="settings-info-value">Supabase</span></div>
       </div>
     </div>
 
@@ -3590,6 +3629,8 @@ function showPage(page){
   if(page==='settings'){
     var mn=document.getElementById('managerNameInput');
     if(mn)mn.value=localStorage.getItem('hk_manager_name')||'';
+    var av=document.getElementById('settingsAppVersion');
+    if(av)av.textContent='v'+APP_VERSION;
   }
 }
 
