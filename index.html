@@ -622,7 +622,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '5.5.0';
+  var APP_VERSION = '5.5.1';
   window.APP_VERSION = APP_VERSION;
   var stored = localStorage.getItem('hk_app_version');
   if(stored && stored !== APP_VERSION){
@@ -1969,17 +1969,29 @@ function renderOvertime(){
     });
   });
 
-  /* Grand total */
-  var grandOT=0;
-  weeks.forEach(function(w){grandOT+=w.totalOT;});
+  /* Grand total (all loaded weeks) + current-month MTD */
+  var grandOT=0,mtdOT=0;
+  var curMK=monthKey();
+  weeks.forEach(function(w){
+    grandOT+=w.totalOT;
+    w.days.forEach(function(dayObj){
+      if(dayObj.ds.substring(0,7)===curMK){
+        var emps=dayObj.snap.emps||[];
+        emps.forEach(function(e){if(e.ot1>0)mtdOT+=e.ot1;});
+      }
+    });
+  });
 
   var html='';
 
-  /* MTD total */
-  html+='<div style="display:flex;gap:10px;margin-bottom:18px;">';
-  html+='<div style="flex:1;background:#fef2f2;border-radius:10px;padding:12px 16px;text-align:center;">'
-    +'<div style="font-size:26px;font-weight:800;color:#b91c1c;">'+grandOT.toFixed(1)+'h</div>'
-    +'<div style="font-size:11px;font-weight:700;color:#b91c1c;">⏱ Total OT MTD</div></div>';
+  /* MTD + All-Time totals */
+  html+='<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">';
+  html+='<div style="flex:1;min-width:130px;background:#fef2f2;border-radius:10px;padding:12px 16px;text-align:center;">'
+    +'<div style="font-size:26px;font-weight:800;color:#b91c1c;">'+mtdOT.toFixed(1)+'h</div>'
+    +'<div style="font-size:11px;font-weight:700;color:#b91c1c;">⏱ OT — '+MONTH_NAMES[viewMonth.getMonth()]+' (MTD)</div></div>';
+  html+='<div style="flex:1;min-width:130px;background:var(--surface);border-radius:10px;padding:12px 16px;text-align:center;">'
+    +'<div style="font-size:26px;font-weight:800;color:var(--text2);">'+grandOT.toFixed(1)+'h</div>'
+    +'<div style="font-size:11px;font-weight:700;color:var(--text2);">⏱ OT — All Loaded Weeks</div></div>';
   html+='</div>';
 
   /* One card per week */
