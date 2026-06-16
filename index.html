@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="HK Labor"/>
-<meta name="app-version" content="5.2.1"/>
+<meta name="app-version" content="5.2.2"/>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <meta http-equiv="Pragma" content="no-cache"/>
 <meta http-equiv="Expires" content="0"/>
@@ -1700,33 +1700,30 @@ function breakStatus(mins,pos,empId){
     if(mins===0)return'none';
     if(mins<15)return'short';
     if(mins<=20)return'ok';
-    if(mins<=40)return'over';
-    return'long';
+    return'over';
   }else{
     if(mins===0)return'none';
-    if(mins<25)return'short';
-    if(mins<=30)return'ok';
-    if(mins<=40)return'over';
-    return'long';
+    if(mins<28)return'short';
+    if(mins<=35)return'ok';
+    return'over';
   }
 }
 function isBreakException(e){
   var m=toMins(parseFloat(e.unpaid||0));
   var st=breakStatus(m,e.pos||'',e.id);
-  return st==='none'||st==='short'||st==='over'||st==='long';
+  return st==='none'||st==='short'||st==='over';
 }
 function breakLabel(mins,pos,empId){
   var st=breakStatus(mins,pos,empId);
   var td=uses15MinBreak(pos,empId);
   if(st==='none')return'No Break — 0 min';
   if(st==='short')return'Short Break — '+mins+' min';
-  if(st==='long')return'Long Break — '+mins+' min (over 40)';
-  if(st==='over')return td?'Over Limit — '+mins+' min (max 20)':'Over Limit — '+mins+' min (max 30)';
+  if(st==='over')return td?'Over Limit — '+mins+' min (max 20)':'Over Limit — '+mins+' min (max 35)';
   return'OK — '+mins+' min';
 }
 function minsBar(m){
   var pct=Math.min(100,Math.round((m/30)*100));
-  var color=m===0?"#9b1c1c":m<20?"#92400e":m<28?"#856404":"#1a6e3e";
+  var color=m===0?"#9b1c1c":m<28?"#92400e":m<=35?"#1a6e3e":"#92400e";
   return'<div class="mins-wrap"><div class="mins-bar"><div class="mins-fill" style="width:'+pct+'%;background:'+color+'"></div></div><span class="mins-lbl" style="color:'+color+'">'+m+' min</span></div>';
 }
 function breakBadge(m,pos,empId){
