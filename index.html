@@ -5279,7 +5279,9 @@ function updateDashboardKPIs(){
   Object.keys(days).forEach(function(ds){
     var d=parseLocalDate(ds);
     if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
-    var s=days[ds];mNB+=s.noBreak;mSB+=s.shortBreak;mOT+=s.totalOT;
+    var s=days[ds];mNB+=s.noBreak;mSB+=s.shortBreak;
+    var emps=s.emps||[];
+    emps.forEach(function(e){if(e.ot1>0)mOT+=e.ot1;});
   });
   var nb=document.getElementById('navBreakBadge');
   if(nb){var tot=mNB+mSB;nb.style.display=tot>0?'block':'none';nb.textContent=tot;}
