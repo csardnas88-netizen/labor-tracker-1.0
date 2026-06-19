@@ -483,6 +483,12 @@ tbody tr:hover td{background:var(--offwhite);}
 .roster-emp-list{padding:10px 14px;}
 .roster-emp-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;}
 .roster-emp-row:last-child{border-bottom:none;}
+/* New Hire highlight (gold) */
+.roster-emp-row.newhire{background:linear-gradient(90deg,rgba(212,175,55,.10),rgba(212,175,55,0));border-left:3px solid #d4af37;margin-left:-14px;margin-right:-14px;padding-left:11px;padding-right:14px;}
+.newhire-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;background:linear-gradient(135deg,#d4af37,#b8941f);color:#fff;padding:2px 7px;border-radius:99px;margin-left:7px;box-shadow:0 1px 2px rgba(184,148,31,.4);vertical-align:middle;white-space:nowrap;}
+.days-pill{display:inline-block;font-size:10px;font-weight:700;color:#b8941f;background:#fff8e1;border:1px solid #f0e0a0;border-radius:99px;padding:1px 8px;margin-left:6px;white-space:nowrap;vertical-align:middle;}
+tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent);}
+tr.newhire-row td:first-child{border-left:3px solid #d4af37;}
 .add-emp-form{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border);}
 .add-emp-form input{flex:1;padding:7px 10px;border:1.5px solid var(--border2);border-radius:6px;font-size:12px;}
 .tut-card{background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden;}
@@ -854,6 +860,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <button class="btn btn-ghost btn-sm" onclick="exportRoster()">&#8659; Export Roster</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);" onclick="resetRoster()">&#8635; Reset Default</button>
       </div>
+      <div id="inactivePanel" style="margin-bottom:16px;"></div>
       <div class="roster-grid" id="rosterGrid"></div>
     </div>
 
@@ -1230,6 +1237,129 @@ function loadRoster(){try{var s=localStorage.getItem("hk_roster");if(s)return JS
 function saveRoster(){try{localStorage.setItem("hk_roster",JSON.stringify(ROSTER));}catch(e){}}
 function loadEmpMeta(){try{var s=localStorage.getItem("hk_emp_meta");if(s)return JSON.parse(s);}catch(e){}return {};}
 function saveEmpMeta(){try{localStorage.setItem("hk_emp_meta",JSON.stringify(EMP_META));}catch(e){}}
+
+/* ── Employee dates store (hire date + last seen). Separate key, no impact on existing stores. ── */
+/* Shape: { "<empId>": { hire:"YYYY-MM-DD", lastSeen:"YYYY-MM-DD" } } */
+function loadEmpDates(){try{var s=localStorage.getItem("hk_emp_dates");if(s)return JSON.parse(s);}catch(e){}return {};}
+function saveEmpDates(d){
+  try{localStorage.setItem("hk_emp_dates",JSON.stringify(d));}catch(e){}
+  if(typeof supaPut==='function'){try{supaPut('hk_emp_dates',d);}catch(_){}}
+}
+var NEW_HIRE_DAYS=90;
+var INACTIVE_DAYS=90;
+/* Returns whole days between a YYYY-MM-DD string and today (today - date). Null if invalid. */
+function daysSince(ymd){
+  if(!ymd)return null;
+  var parts=String(ymd).slice(0,10).split('-');
+  if(parts.length!==3)return null;
+  var d=new Date(+parts[0],+parts[1]-1,+parts[2]);
+  if(isNaN(d.getTime()))return null;
+  var now=new Date();
+  var t0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  return Math.floor((t0-d)/86400000);
+}
+/* New-hire status for an employee id. Returns {isNew, days}. */
+function newHireStatus(empId){
+  var dates=loadEmpDates();
+  var rec=dates[empId];
+  if(!rec||!rec.hire)return {isNew:false,days:null};
+  var dn=daysSince(rec.hire);
+  if(dn===null||dn<0)return {isNew:false,days:null};
+  return {isNew:dn<NEW_HIRE_DAYS,days:dn};
+}
+/* Build the gold New Hire badge + days pill HTML. Returns '' if not a new hire. */
+function newHireBadgeHTML(empId){
+  var st=newHireStatus(empId);
+  if(!st.isNew)return '';
+  return '<span class="newhire-badge">&#9733; New</span>'
+    +'<span class="days-pill">'+st.days+' '+(st.days===1?'d\u00eda':'d\u00edas')+'</span>';
+}
+/* Returns list of {id,name,pos,days} for employees inactive >= INACTIVE_DAYS, excluding already-terminated. */
+function getInactiveEmployees(){
+  var dates=loadEmpDates();
+  var overrides=loadOverrides();
+  var out=[];
+  Object.keys(ROSTER_BY_ID).forEach(function(id){
+    var ov=overrides[id]||{};
+    if(ov.status==="terminated")return;
+    var rec=dates[id];
+    if(!rec||!rec.lastSeen)return;
+    var dn=daysSince(rec.lastSeen);
+    if(dn!==null&&dn>=INACTIVE_DAYS){
+      out.push({id:id,name:(ov.name||ROSTER_BY_ID[id].name),pos:(ov.pos||ROSTER_BY_ID[id].pos),days:dn,lastSeen:rec.lastSeen});
+    }
+  });
+  out.sort(function(a,b){return b.days-a.days;});
+  return out;
+}
+/* Mark an inactive employee as terminated (removes from roster). */
+function terminateInactive(empId,empName){
+  var ov=loadOverrides();
+  ov[empId]=ov[empId]||{};
+  ov[empId].status="terminated";
+  ov[empId].updated=new Date().toISOString();
+  saveOverrides(ov);
+  if(ROSTER_BY_ID[empId])delete ROSTER_BY_ID[empId];
+  try{renderRoster();}catch(e){}
+  showToast((empName||"Employee")+" terminated &amp; removed");
+}
+/* Keep an inactive employee: reset their last-seen to today so they stop being flagged. */
+function keepInactive(empId,empName){
+  var dates=loadEmpDates();
+  dates[empId]=dates[empId]||{};
+  dates[empId].lastSeen=dateStr(new Date());
+  saveEmpDates(dates);
+  try{renderRoster();}catch(e){}
+  showToast((empName||"Employee")+" kept active");
+}
+/* Option A: popup prompting review of 90+ day inactive employees after a PDF load. */
+function maybePromptInactive(){
+  var list=getInactiveEmployees();
+  if(!list.length)return;
+  var existing=document.getElementById('inactivePromptModal');
+  if(existing)existing.remove();
+
+  var rows=list.map(function(e){
+    var sid=e.id.replace(/"/g,"&quot;");
+    var sname=(e.name||'').replace(/"/g,"&quot;");
+    return '<div style="background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;" id="inactRow_'+sid+'">'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+      +'<div style="background:#f59e0b;color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">&#9888;</div>'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div style="font-size:14px;font-weight:700;color:var(--text1);">'+escHtml(e.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--text3);">'+escHtml(e.pos)+' &nbsp;\u00b7&nbsp; <strong style="color:#b45309;">'+e.days+' d\u00edas sin actividad</strong> &nbsp;\u00b7&nbsp; \u00daltimo: '+e.lastSeen+'</div>'
+      +'</div></div>'
+      +'<div style="display:flex;gap:8px;">'
+      +'<button onclick="keepInactive(\''+sid+'\',\''+sname+'\');document.getElementById(\'inactRow_'+sid+'\').remove();inactCheckEmpty();" style="flex:1;padding:8px;border:1.5px solid var(--border);background:#fff;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text2);">Mantener</button>'
+      +'<button onclick="terminateInactive(\''+sid+'\',\''+sname+'\');document.getElementById(\'inactRow_'+sid+'\').remove();inactCheckEmpty();" style="flex:1;padding:8px;border:none;background:#dc2626;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;color:#fff;">Terminado</button>'
+      +'</div></div>';
+  }).join('');
+
+  var overlay=document.createElement('div');
+  overlay.id='inactivePromptModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
+    +'<span style="font-size:22px;">&#9888;&#65039;</span>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);">Empleados inactivos</div>'
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+list.length+' empleado'+(list.length>1?'s llevan':' lleva')+' 90+ d\u00edas sin actividad. \u00bfFueron terminados?</div>'
+    +'<div id="inactRowsWrap">'+rows+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:8px;">'
+    +'<button onclick="document.getElementById(\'inactivePromptModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Revisar despu\u00e9s</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(overlay);
+}
+/* Close the inactive prompt automatically once all rows are handled. */
+function inactCheckEmpty(){
+  var wrap=document.getElementById('inactRowsWrap');
+  if(wrap&&wrap.children.length===0){
+    var m=document.getElementById('inactivePromptModal');
+    if(m)m.remove();
+  }
+}
+
 var ROSTER=loadRoster(),EMP_META=loadEmpMeta();
 var DATA={depts:[],emps:[],otherEmps:[]};
 var PREV={},PNOTE={},OREV={},ORNOTE={};
@@ -2089,7 +2219,7 @@ function renderPosition(f){
     var ek=key.replace(/'/g,"\\'"),enkn=nk.replace(/'/g,"\\'");
     var revH=st==="mismatch"?'<div class="rev-wrap"><button class="btn btn-green btn-sm" onclick="setPRev(\''+ ek +'\',\'correct\')">&#10003; Correct</button><button class="btn btn-red btn-sm" onclick="setPRev(\''+ ek +'\',\'incorrect\')">&#10007; Wrong</button><button class="btn btn-ghost btn-sm" onclick="setPRev(\''+ ek +'\',\'approved\')">Approved</button></div>'+(rev?'<span class="badge '+(rev==="correct"?"b-green":rev==="incorrect"?"b-red":"b-navy")+'" style="margin-top:4px;display:inline-block">'+rev+"</span>":""):"&#8212;";
     var noteH=st==="mismatch"?'<select class="note-sel" onchange="setPNote(\''+ enkn +'\',this.value)"><option value="">Note...</option>'+POS_NOTES.map(function(n){return'<option'+(curN===n?' selected':'')+'>'+n+'</option>'}).join("")+'</select>':"&#8212;";
-    return'<tr><td>'+e.id+'</td><td><b>'+e.name+'</b></td><td><span class="badge b-navy">'+e.pos+'</span></td><td>'+(pp?'<span class="badge b-gold">'+pp+"</span>":'<i style="color:var(--text3)">Not in roster</i>')+'</td><td>'+badge+'</td><td>'+e.paid.toFixed(2)+'</td><td>'+revH+'</td><td>'+noteH+'</td></tr>';
+    return'<tr'+(newHireStatus(e.id).isNew?' class="newhire-row"':'')+'><td>'+e.id+'</td><td><b>'+e.name+'</b>'+newHireBadgeHTML(e.id)+'</td><td><span class="badge b-navy">'+e.pos+'</span></td><td>'+(pp?'<span class="badge b-gold">'+pp+"</span>":'<i style="color:var(--text3)">Not in roster</i>')+'</td><td>'+badge+'</td><td>'+e.paid.toFixed(2)+'</td><td>'+revH+'</td><td>'+noteH+'</td></tr>';
   }).join("");
 }
 function renderOther(f){
@@ -2177,7 +2307,8 @@ function renderRoster(){
       +'<div class="roster-emp-list">';
     list.forEach(function(emp){
       var isInactive=emp.status==="inactive";
-      var rowClass="roster-emp-row"+(emp.isManual&&!emp.posChanged?" new-emp":"")+(isInactive?" inactive-emp":"");
+      var nhStatus=newHireStatus(emp.id);
+      var rowClass="roster-emp-row"+(emp.isManual&&!emp.posChanged?" new-emp":"")+(isInactive?" inactive-emp":"")+(nhStatus.isNew?" newhire":"");
       var safeId=emp.id.replace(/"/g,"&quot;");
       var safeName=emp.name.replace(/"/g,"&quot;");
       var safePos=emp.pos.replace(/"/g,"&quot;");
@@ -2185,6 +2316,7 @@ function renderRoster(){
       html+='<div class="'+rowClass+'">'
         +'<div style="line-height:1.5;min-width:0;flex:1;">'
         +'<span style="font-weight:600;">'+(isInactive?"<s>":"")+emp.name+(isInactive?"</s>":"")+''
+        +newHireBadgeHTML(emp.id)
         +(emp.posChanged?'<span class="pos-change-badge">Position Changed</span>':'')
         +'</span>'
         +(!emp.isManual?'<br><span style="font-size:10px;color:var(--text3);">ID: '+emp.id+'</span>':'')
@@ -2204,6 +2336,34 @@ function renderRoster(){
       +'</div>';
   });
   document.getElementById("rosterGrid").innerHTML=html||'<div class="empty">No employees match search</div>';
+
+  /* Option B: Inactive employees review panel */
+  var inactPanel=document.getElementById("inactivePanel");
+  if(inactPanel){
+    var inactList=getInactiveEmployees();
+    if(!inactList.length){
+      inactPanel.innerHTML="";
+    } else {
+      var ih='<div style="background:#fff8ec;border:1.5px solid #f0d28a;border-radius:10px;overflow:hidden;">'
+        +'<div style="background:#f59e0b;color:#fff;padding:10px 14px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;">&#9888;&#65039; Inactivos \u2014 revisar <span style="background:rgba(255,255,255,.25);padding:1px 8px;border-radius:99px;font-size:11px;">'+inactList.length+'</span></div>'
+        +'<div style="padding:10px 14px;">'
+        +'<div style="font-size:11px;color:var(--text2);margin-bottom:10px;">Estos empleados llevan 90+ d\u00edas sin actividad en el Labor Distribution.</div>';
+      inactList.forEach(function(e){
+        var sid=e.id.replace(/"/g,"&quot;");
+        var sname=(e.name||'').replace(/"/g,"&quot;");
+        ih+='<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0e0bf;">'
+          +'<div style="flex:1;min-width:0;">'
+          +'<div style="font-size:13px;font-weight:700;color:var(--text1);">'+escHtml(e.name)+'</div>'
+          +'<div style="font-size:10px;color:var(--text3);">'+escHtml(e.pos)+' \u00b7 <strong style="color:#b45309;">'+e.days+' d\u00edas</strong> \u00b7 \u00daltimo: '+e.lastSeen+'</div>'
+          +'</div>'
+          +'<button onclick="keepInactive(\''+sid+'\',\''+sname+'\')" style="padding:6px 10px;border:1.5px solid var(--border);background:#fff;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;color:var(--text2);">Mantener</button>'
+          +'<button onclick="terminateInactive(\''+sid+'\',\''+sname+'\')" style="padding:6px 10px;border:none;background:#dc2626;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;color:#fff;">Terminado</button>'
+          +'</div>';
+      });
+      ih+='</div></div>';
+      inactPanel.innerHTML=ih;
+    }
+  }
 }
 
 function renderAll(){
@@ -2337,16 +2497,56 @@ function saveOverrides(ov){
 function showEditModal(btn){
   var eid=btn.dataset.eid,ename=btn.dataset.ename,epos=btn.dataset.epos;
   var eorig=btn.dataset.eorig,estatus=btn.dataset.estatus,enote=btn.dataset.enote;
-  document.getElementById("editEmpId").value=eid;
-  document.getElementById("editOrigPos").value=eorig;
-  document.getElementById("editEmpName").value=ename;
-  document.getElementById("editEmpPos").value=epos;
-  document.getElementById("editEmpStatus").value=estatus||"active";
-  document.getElementById("editEmpNote").value=enote||"";
-  document.getElementById("editModalOverlay").style.display="flex";
+  var existing=document.getElementById("editModalOverlay");
+  if(existing)existing.remove();
+
+  /* Current hire date (if any) for this employee */
+  var dates=loadEmpDates();
+  var hireVal=(dates[eid]&&dates[eid].hire)?dates[eid].hire.slice(0,10):"";
+  var nh=newHireStatus(eid);
+  var hireHint=hireVal
+    ? (nh.isNew?('<span style="color:#b8941f;font-weight:700;">'+nh.days+' d\u00edas en el equipo \u00b7 New Hire</span>'):('<span style="color:var(--text3);">'+(nh.days!==null?nh.days+' d\u00edas en el equipo':'')+'</span>'))
+    : '<span style="color:var(--text3);">Sin fecha \u2014 agr\u00e9gala para activar el badge New Hire</span>';
+
+  var posOpts=POS_LIST.map(function(p){
+    return '<option value="'+p.replace(/"/g,"&quot;")+'"'+(p===epos?' selected':'')+'>'+p+'</option>';
+  }).join('');
+  var statusOpts=['active','inactive','terminated'].map(function(s){
+    var lbl=s==='active'?'Active':s==='inactive'?'Inactive':'Terminated (remove)';
+    return '<option value="'+s+'"'+((estatus||'active')===s?' selected':'')+'>'+lbl+'</option>';
+  }).join('');
+
+  var ov=document.createElement('div');
+  ov.id='editModalOverlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:16px;">&#9998; Edit Employee</div>'
+    +'<input type="hidden" id="editEmpId" value="'+eid.replace(/"/g,"&quot;")+'">'
+    +'<input type="hidden" id="editOrigPos" value="'+(eorig||'').replace(/"/g,"&quot;")+'">'
+    +'<div style="display:flex;flex-direction:column;gap:13px;">'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Name</label>'
+    +'<input id="editEmpName" value="'+ename.replace(/"/g,"&quot;")+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Position</label>'
+    +'<select id="editEmpPos" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:#fff;">'+posOpts+'</select></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Hire Date / Fecha de contrataci\u00f3n</label>'
+    +'<input id="editEmpHire" type="date" value="'+hireVal+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/>'
+    +'<div style="font-size:10px;margin-top:4px;">'+hireHint+'</div></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Status</label>'
+    +'<select id="editEmpStatus" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:#fff;">'+statusOpts+'</select></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'
+    +'<input id="editEmpNote" value="'+(enote||'').replace(/"/g,"&quot;")+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:20px;">'
+    +'<button onclick="closeEditModal()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveEditEmp()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)closeEditModal();});
 }
 function closeEditModal(){
-  document.getElementById("editModalOverlay").style.display="none";
+  var m=document.getElementById("editModalOverlay");
+  if(m)m.remove();
 }
 function saveEditEmp(){
   var eid=document.getElementById("editEmpId").value;
@@ -2354,17 +2554,27 @@ function saveEditEmp(){
   var newPos=document.getElementById("editEmpPos").value;
   var newStatus=document.getElementById("editEmpStatus").value;
   var newNote=document.getElementById("editEmpNote").value.trim();
+  var newHire=document.getElementById("editEmpHire").value;
   if(!newName){showToast("Enter a name");return;}
   if(!newPos){showToast("Select a position");return;}
   if(newStatus==="terminated"){
     if(!confirm("This will remove "+newName+" from all reports. Continue?"))return;
+  }
+  /* Save hire date to the separate dates store */
+  var dates=loadEmpDates();
+  if(newHire){
+    dates[eid]=dates[eid]||{};
+    dates[eid].hire=newHire;
+    saveEmpDates(dates);
+  } else if(dates[eid]&&dates[eid].hire){
+    delete dates[eid].hire;
+    saveEmpDates(dates);
   }
   var ov=loadOverrides();
   ov[eid]={name:newName,pos:newPos,status:newStatus,note:newNote,updated:new Date().toISOString()};
   saveOverrides(ov);
   closeEditModal();
   renderRoster();
-  /* Also update ROSTER_BY_ID live so position check reflects change immediately */
   if(ROSTER_BY_ID[eid]){
     ROSTER_BY_ID[eid].pos=newPos;
     ROSTER_BY_ID[eid].name=newName;
@@ -2975,6 +3185,19 @@ function saveDayToMonth(pdfDate){
 
   /* Auto-fill pending project entries for this date */
   try{autofillPendingProjectEntries(ds,mData);}catch(e){}
+
+  /* Update last-seen date for every employee with hours in this PDF (advance only) */
+  try{
+    var _ed=loadEmpDates();
+    var _changed=false;
+    DATA.emps.forEach(function(e){
+      if(!e.id||!(e.paid>0))return;
+      _ed[e.id]=_ed[e.id]||{};
+      var prev=_ed[e.id].lastSeen;
+      if(!prev||ds>prev){_ed[e.id].lastSeen=ds;_changed=true;}
+    });
+    if(_changed)saveEmpDates(_ed);
+  }catch(e){}
 
   /* Guardar la fecha del último PDF cargado */
   localStorage.setItem('hk_last_pdf_date', ds);
@@ -5343,7 +5566,12 @@ go=async function(file){
       try{showPage('dashboard');}catch(ex){}
       showToast('✓ Report loaded for '+finalDate.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
       /* Show new employee modal after save if any */
-      if(newEmps.length>0) showNewEmployeeModal(newEmps);
+      if(newEmps.length>0){
+        showNewEmployeeModal(newEmps, dateStr(finalDate));
+      } else {
+        /* Only auto-prompt for inactive employees if no new-emp modal is open */
+        try{maybePromptInactive();}catch(e){}
+      }
     }
 
     if(existingSnap){
@@ -6566,7 +6794,8 @@ function deleteCallOff(id){
 
 
 /* ── New Employee Detection Modal ── */
-function showNewEmployeeModal(newEmps){
+function showNewEmployeeModal(newEmps, pdfDate){
+  window._newEmpHireDate=pdfDate||dateStr(new Date());
   var existing=document.getElementById('newEmpModal');
   if(existing)existing.remove();
 
@@ -6636,6 +6865,16 @@ function confirmNewEmployees(count){
     if(!id||!name||!pos)continue;
     /* Add to ROSTER_BY_ID */
     ROSTER_BY_ID[id]={name:name,pos:pos,code:code};
+    /* Record hire date = date of the PDF that first detected them */
+    try{
+      var _d=loadEmpDates();
+      if(!_d[id]||!_d[id].hire){
+        _d[id]=_d[id]||{};
+        _d[id].hire=window._newEmpHireDate||dateStr(new Date());
+        _d[id].lastSeen=window._newEmpHireDate||dateStr(new Date());
+        saveEmpDates(_d);
+      }
+    }catch(e){}
     added++;
   }
   if(added>0){
@@ -6661,6 +6900,21 @@ window.addEventListener('load',function(){
     Object.keys(overrides).forEach(function(id){
       if(!ROSTER_BY_ID[id]) ROSTER_BY_ID[id]=overrides[id];
     });
+  }catch(e){}
+
+  /* Day-1 init: give every known employee a last-seen baseline of today so nobody is
+     falsely flagged inactive before any new PDFs have been loaded. Runs once. */
+  try{
+    if(!localStorage.getItem('hk_emp_dates_init')){
+      var _ed=loadEmpDates();
+      var _today=dateStr(new Date());
+      Object.keys(ROSTER_BY_ID).forEach(function(id){
+        _ed[id]=_ed[id]||{};
+        if(!_ed[id].lastSeen)_ed[id].lastSeen=_today;
+      });
+      saveEmpDates(_ed);
+      localStorage.setItem('hk_emp_dates_init','1');
+    }
   }catch(e){}
   try{migrateRoomsData();}catch(ex){console.warn('migrate:',ex);}
   try{renderRoster();}catch(ex){console.warn('roster:',ex);}
