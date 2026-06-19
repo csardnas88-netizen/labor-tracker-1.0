@@ -2972,7 +2972,10 @@ function saveDayToMonth(pdfDate){
 
   mData.days[ds]=snap;
   saveMonthData(mData,mk);
-  
+
+  /* Auto-fill pending project entries for this date */
+  try{autofillPendingProjectEntries(ds,mData);}catch(e){}
+
   /* Guardar la fecha del último PDF cargado */
   localStorage.setItem('hk_last_pdf_date', ds);
   console.log('[saveDayToMonth] Fecha del último PDF guardada:', ds);
@@ -5717,6 +5720,57 @@ function handleR106Upload(input){
   input.value='';
 }
 
+/* ── Auto-fill pending project entries when a PDF is loaded ── */
+function autofillPendingProjectEntries(ds, mData){
+  var projects=loadProjects();
+  var changed=false;
+  var day=mData&&mData.days?mData.days[ds]:null;
+  if(!day||!day.emps)return;
+
+  projects.forEach(function(proj){
+    (proj.log||[]).forEach(function(entry){
+      if(!entry.pending||entry.date!==ds)return;
+      // Find this employee in the PDF data
+      var entries=day.emps.filter(function(e){return e.id===entry.empId&&e.paid>0;});
+      if(entries.length===0)return;
+      // Single position — fill directly
+      if(entries.length===1){
+        entry.hours=entries[0].paid;
+        entry.pos=entries[0].pos;
+        entry.pending=false;
+        entry.autoFilled=true;
+        entry.autoFilledAt=new Date().toISOString();
+        changed=true;
+      } else {
+        // Multiple positions — pick the one matching pos if stored, else take total
+        var match=entries.filter(function(e){return e.pos===entry.pos;})[0];
+        if(match){
+          entry.hours=match.paid;
+          entry.pending=false;
+          entry.autoFilled=true;
+          entry.autoFilledAt=new Date().toISOString();
+          changed=true;
+        } else {
+          // Take total across all positions
+          var total=entries.reduce(function(s,e){return s+e.paid;},0);
+          entry.hours=total;
+          entry.pos='Multiple positions';
+          entry.pending=false;
+          entry.autoFilled=true;
+          entry.autoFilledAt=new Date().toISOString();
+          changed=true;
+        }
+      }
+    });
+  });
+
+  if(changed){
+    saveProjects(projects);
+    var filled=projects.reduce(function(n,p){return n+(p.log||[]).filter(function(e){return e.autoFilledAt&&e.date===ds;}).length;},0);
+    showToast('&#10003; '+filled+' project entr'+(filled===1?'y':'ies')+' auto-filled from PDF');
+  }
+}
+
 /* ══════════════════════════════════════════════════════
    PROJECTS MODULE
    Storage key: projects_data (isolated, no impact on existing)
@@ -5799,7 +5853,8 @@ function renderProjects(){
   } else {
     projects.forEach(function(proj,idx){
       var totalHours=0;
-      (proj.log||[]).forEach(function(entry){totalHours+=entry.hours||0;});
+      (proj.log||[]).forEach(function(entry){if(!entry.pending)totalHours+=(entry.hours||0);});
+      var pendingCount=(proj.log||[]).filter(function(e){return e.pending;}).length;
       var now=new Date();
       var end=new Date(proj.endDate+'T23:59:59');
       var isActive=end>=now;
@@ -5827,6 +5882,7 @@ function renderProjects(){
       // Total hours
       html+='<div style="padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">';
       html+='<span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Total Hours</span>';
+      if(pendingCount>0){html+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:#fff8e1;color:#b45309;margin-left:6px;">⏳ '+pendingCount+' pending</span>';}
       html+='<span style="font-size:18px;font-weight:800;color:var(--navy);margin-left:auto;">'+totalHours.toFixed(2)+'h</span>';
       html+='</div>';
 
@@ -5869,8 +5925,12 @@ function renderProjects(){
           html+='<div style="font-size:11px;color:var(--text3);">'+escHtml(entry.pos||'')+'</div>';
           if(entry.note){html+='<div style="font-size:12px;color:var(--text2);margin-top:2px;">'+escHtml(entry.note)+'</div>';}
           html+='</div>';
-          html+='<div style="font-size:13px;font-weight:700;color:var(--navy);text-align:right;">'+entry.hours.toFixed(2)+'h</div>';
-          html+='<div><button onclick="deleteLogEntry('+idx+','+realIdx+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 4px;" title="Remove">&#215;</button></div>';
+          if(entry.pending){
+            html+='<div style="font-size:12px;font-weight:700;color:#b45309;text-align:right;background:#fff8e1;padding:2px 6px;border-radius:5px;">⏳ Pending</div>';
+          }else{
+            html+='<div style="font-size:13px;font-weight:700;color:var(--navy);text-align:right;">'+entry.hours.toFixed(2)+'h</div>';
+          }
+          html+='<div style="display:flex;gap:2px;">'            +'<button onclick="showEditEntryModal('+idx+','+realIdx+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 4px;" title="Edit">&#9998;</button>'            +'<button onclick="deleteLogEntry('+idx+','+realIdx+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 4px;" title="Remove">&#215;</button>'            +'</div>';
           html+='</div>';
         });
         html+='</div>';
@@ -6042,20 +6102,23 @@ function selectPositionHours(hours, pos, labelEl){
 function saveLogEntry(projIdx){
   var ds=(document.getElementById('entryDate').value||'').trim();
   var empVal=(document.getElementById('entryEmp').value||'').trim();
-  var hours=parseFloat(document.getElementById('entryHours').value);
+  var hoursRaw=document.getElementById('entryHours').value;
+  var hours=hoursRaw===''?null:parseFloat(hoursRaw);
   var note=(document.getElementById('entryNote').value||'').trim();
-  if(!ds||!empVal||isNaN(hours)||hours<=0){showToast('Please fill in date, employee and hours.');return;}
+  if(!ds||!empVal){showToast('Please fill in date and employee.');return;}
+  if(hours!==null&&(isNaN(hours)||hours<=0)){showToast('Hours must be a positive number.');return;}
   var parts=empVal.split('|');
   var empId=parts[0],empName=parts[1]||'',empPos=parts[2]||'';
   var projects=loadProjects();
   var proj=projects[projIdx];
   if(!proj)return;
   proj.log=proj.log||[];
-  proj.log.push({date:ds,empId:empId,empName:empName,pos:empPos,hours:hours,note:note,added:new Date().toISOString()});
+  var isPending=hours===null;
+  proj.log.push({date:ds,empId:empId,empName:empName,pos:empPos,hours:hours,note:note,pending:isPending,added:new Date().toISOString()});
   saveProjects(projects);
   document.getElementById('entryModal').remove();
   renderProjects();
-  showToast('&#10003; Entry saved');
+  showToast(isPending?'&#9203; Entry saved — hours pending':'&#10003; Entry saved');
 }
 
 function deleteLogEntry(projIdx,entryIdx){
@@ -6065,6 +6128,43 @@ function deleteLogEntry(projIdx,entryIdx){
   projects[projIdx].log.splice(entryIdx,1);
   saveProjects(projects);
   renderProjects();
+}
+
+function showEditEntryModal(projIdx, entryIdx){
+  var projects=loadProjects();
+  var proj=projects[projIdx];
+  if(!proj)return;
+  var entry=proj.log[entryIdx];
+  if(!entry)return;
+
+  var overlay=document.createElement('div');
+  overlay.id='editEntryModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#9998; Edit Entry</div>'    +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(proj.name)+'</div>'    +'<div style="display:flex;flex-direction:column;gap:13px;">'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date</label>'    +'<input id="editEntryDate" type="date" value="'+entry.date+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee</label>'    +'<input id="editEntryEmp" value="'+escHtml(entry.empName)+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#f8f8f8;" readonly />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Hours '+(entry.pending?'<span style="color:#b45309;">⏳ Pending</span>':'')+' </label>'    +'<input id="editEntryHours" type="number" step="0.01" min="0" max="24" value="'+(entry.hours!==null&&entry.hours!==undefined?entry.hours:'')+'" placeholder="Leave empty to keep as pending" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'    +'<input id="editEntryNote" value="'+escHtml(entry.note||'')+'" placeholder="e.g. Deep cleaned floors 3-5" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'</div>'    +'<div style="display:flex;gap:8px;margin-top:20px;">'    +'<button onclick="document.getElementById('editEntryModal').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'    +'<button onclick="saveEditEntry('+projIdx+','+entryIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'    +'</div>'    +'</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+
+function saveEditEntry(projIdx, entryIdx){
+  var ds=(document.getElementById('editEntryDate').value||'').trim();
+  var hoursRaw=document.getElementById('editEntryHours').value;
+  var hours=hoursRaw===''?null:parseFloat(hoursRaw);
+  var note=(document.getElementById('editEntryNote').value||'').trim();
+  if(!ds){showToast('Date is required.');return;}
+  if(hours!==null&&(isNaN(hours)||hours<=0)){showToast('Hours must be a positive number.');return;}
+  var projects=loadProjects();
+  var proj=projects[projIdx];
+  if(!proj||!proj.log[entryIdx])return;
+  var entry=proj.log[entryIdx];
+  entry.date=ds;
+  entry.hours=hours;
+  entry.note=note;
+  entry.pending=hours===null;
+  entry.editedAt=new Date().toISOString();
+  saveProjects(projects);
+  document.getElementById('editEntryModal').remove();
+  renderProjects();
+  showToast(hours===null?'&#9203; Entry updated — hours still pending':'&#10003; Entry updated');
 }
 
 function deleteProject(projIdx){
