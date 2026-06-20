@@ -488,6 +488,33 @@ tbody tr:hover td{background:var(--offwhite);}
 .newhire-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;background:linear-gradient(135deg,#d4af37,#b8941f);color:#fff;padding:2px 7px;border-radius:99px;margin-left:7px;box-shadow:0 1px 2px rgba(184,148,31,.4);vertical-align:middle;white-space:nowrap;}
 .days-pill{display:inline-block;font-size:10px;font-weight:700;color:#b8941f;background:#fff8e1;border:1px solid #f0e0a0;border-radius:99px;padding:1px 8px;margin-left:6px;white-space:nowrap;vertical-align:middle;}
 tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent);}
+/* Policy Training Tracker */
+.tr-card{background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow-sm);}
+.tr-card-hdr{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;}
+.tr-title{font-size:15px;font-weight:800;color:var(--text1);line-height:1.3;}
+.tr-meta{font-size:11px;color:var(--text3);margin-top:2px;}
+.scope-badge{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 8px;border-radius:99px;background:#e8edf5;color:#0f2544;white-space:nowrap;}
+.scope-badge.sup{background:#fef3c7;color:#92400e;}
+.prog-wrap{margin:4px 0 6px;}
+.prog-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;margin-bottom:5px;}
+.prog-pct{color:#16a34a;}
+.prog-bar{height:9px;background:#eef0f3;border-radius:99px;overflow:hidden;}
+.prog-fill{height:100%;background:linear-gradient(90deg,#16a34a,#22c55e);border-radius:99px;}
+.prog-fill.low{background:linear-gradient(90deg,#f59e0b,#fbbf24);}
+.detail-box{background:var(--white);border:1.5px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-sm);}
+.detail-hdr{background:#0f2544;color:#fff;padding:14px 16px;}
+.detail-hdr .t{font-size:15px;font-weight:800;}
+.detail-hdr .s{font-size:11px;opacity:.85;margin-top:3px;}
+.detail-toolbar{display:flex;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--offwhite);flex-wrap:wrap;align-items:center;}
+.detail-box .section-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:12px 16px 6px;}
+.emp-row{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);}
+.emp-row:last-child{border-bottom:none;}
+.emp-check{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--border2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;}
+.emp-check.done{background:#16a34a;border-color:#16a34a;color:#fff;}
+.emp-name{font-size:13px;font-weight:600;flex:1;min-width:0;}
+.emp-date{font-size:11px;color:#16a34a;font-weight:700;white-space:nowrap;}
+.emp-pending{font-size:11px;color:#f59e0b;font-weight:700;white-space:nowrap;}
+.faltan-row{background:linear-gradient(90deg,rgba(245,158,11,.06),transparent);}
 tr.newhire-row td:first-child{border-left:3px solid #d4af37;}
 .add-emp-form{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border);}
 .add-emp-form input{flex:1;padding:7px 10px;border:1.5px solid var(--border2);border-radius:6px;font-size:12px;}
@@ -696,6 +723,10 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <span class="nav-icon">&#128193;</span> Projects
     <span class="nav-badge" id="navProjectsBadge" style="display:none;">0</span>
   </div>
+  <div class="nav-item" id="nav-training" onclick="showPage('training')">
+    <span class="nav-icon">&#128218;</span> Training
+    <span class="nav-badge" id="navTrainingBadge" style="display:none;">0</span>
+  </div>
   <div class="nav-item" id="nav-calloffs" onclick="showPage('calloffs')">
     <span class="nav-icon">&#128222;</span> Call-Offs
     <span class="nav-badge" id="navCallOffsBadge" style="display:none;">0</span>
@@ -893,6 +924,14 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div class="page-sub">Track special assignments and extra work hours</div>
       </div>
       <div id="projectsContent"></div>
+    </div>
+
+    <div id="page-training" style="display:none;">
+      <div class="page-header">
+        <div class="page-title">&#128218; Policy Training Tracker</div>
+        <div class="page-sub">Trainings y pólizas asignadas al equipo</div>
+      </div>
+      <div id="trainingContent"></div>
     </div>
 
     <div id="page-calloffs" style="display:none;">
@@ -4030,7 +4069,7 @@ function closeSidebar(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','daily','breaks','overtime','position','roster','recap','occupancy','projects','calloffs','tutorial','settings'];
+var PAGES=['dashboard','daily','breaks','overtime','position','roster','recap','occupancy','projects','training','calloffs','tutorial','settings'];
 function showPage(page){
   PAGES.forEach(function(p){
     var el=document.getElementById('page-'+p);
@@ -4048,6 +4087,7 @@ function showPage(page){
   if(page==='recap')renderRecap();
   if(page==='occupancy')renderOccupancy();
   if(page==='projects')renderProjects();
+  if(page==='training')renderTraining();
   if(page==='calloffs')renderCallOffs();
   if(page==='tutorial')renderTutContent();
   if(page==='settings'){
@@ -6000,6 +6040,413 @@ function autofillPendingProjectEntries(ds, mData){
 }
 
 /* ══════════════════════════════════════════════════════
+   POLICY TRAINING TRACKER MODULE
+   Storage key: hk_trainings (isolated, no impact on existing)
+   Record shape: { id, title, scope:"all"|"<position>", created:"YYYY-MM-DD",
+                   done: { "<empId>": "YYYY-MM-DD" } }
+   Employee lists are DYNAMIC: computed from the active roster at render time,
+   filtered by scope. "done" stores Paychex empId -> completion date.
+   ══════════════════════════════════════════════════════ */
+
+function loadTrainings(){
+  try{var s=localStorage.getItem('hk_trainings');if(s)return JSON.parse(s);}catch(e){}
+  return [];
+}
+function saveTrainings(list){
+  try{localStorage.setItem('hk_trainings',JSON.stringify(list));}catch(e){}
+  try{supaPut('hk_trainings',list);}catch(e){}
+}
+
+/* Returns the current active roster as [{id,name,pos}], optionally filtered by position.
+   Uses ROSTER_BY_ID + overrides (same source as renderRoster), excluding terminated. */
+function getActiveRoster(posFilter){
+  var overrides=(typeof loadOverrides==='function')?loadOverrides():{};
+  var out=[];
+  Object.keys(ROSTER_BY_ID).forEach(function(id){
+    var r=ROSTER_BY_ID[id];
+    var ov=overrides[id]||{};
+    if(ov.status==="terminated")return;
+    var pos=ov.pos||r.pos;
+    if(posFilter&&posFilter!=="all"&&pos!==posFilter)return;
+    out.push({id:id,name:(ov.name||r.name),pos:pos});
+  });
+  out.sort(function(a,b){return a.name.localeCompare(b.name);});
+  return out;
+}
+
+/* Count of employees with at least one pending training (for sidebar badge). */
+function countPendingTrainees(){
+  var trainings=loadTrainings();
+  var pendingIds={};
+  trainings.forEach(function(t){
+    var roster=getActiveRoster(t.scope);
+    var done=t.done||{};
+    roster.forEach(function(e){
+      if(!done[e.id])pendingIds[e.id]=true;
+    });
+  });
+  return Object.keys(pendingIds).length;
+}
+
+function updateTrainingBadge(){
+  var badge=document.getElementById('navTrainingBadge');
+  if(!badge)return;
+  var n=countPendingTrainees();
+  if(n>0){badge.textContent=n;badge.style.display='inline-flex';}
+  else{badge.style.display='none';}
+}
+
+/* View state: null = list, otherwise training id for detail view */
+var _trainingDetailId=null;
+
+function trScopeLabel(scope){
+  return (!scope||scope==="all")?"Todo el roster":scope;
+}
+
+/* Compute progress for a training against the current active roster. */
+function trProgress(t){
+  var roster=getActiveRoster(t.scope);
+  var done=t.done||{};
+  var total=roster.length;
+  var completed=0;
+  roster.forEach(function(e){if(done[e.id])completed++;});
+  var pct=total>0?Math.round((completed/total)*100):0;
+  return {total:total,completed:completed,pending:total-completed,pct:pct};
+}
+
+function renderTraining(){
+  var c=document.getElementById('trainingContent');
+  if(!c)return;
+  if(_trainingDetailId){renderTrainingDetail(c);return;}
+
+  var trainings=loadTrainings();
+  var html='<button class="btn btn-navy" style="margin-bottom:14px;" onclick="showNewTrainingModal()">+ Nuevo Training</button>';
+
+  if(!trainings.length){
+    html+='<div class="empty" style="padding:40px 20px;text-align:center;color:var(--text3);">'
+      +'<div style="font-size:32px;margin-bottom:8px;">&#128218;</div>'
+      +'<div style="font-size:14px;font-weight:600;margin-bottom:4px;">No hay trainings todavía</div>'
+      +'<div style="font-size:12px;">Crea uno con el botón de arriba para empezar a trackear.</div>'
+      +'</div>';
+    c.innerHTML=html;
+    return;
+  }
+
+  trainings.forEach(function(t){
+    var p=trProgress(t);
+    var lowCls=p.pct<100?' low':'';
+    var scope=trScopeLabel(t.scope);
+    var scopeCls=(t.scope&&t.scope!=="all")?' sup':'';
+    html+='<div class="tr-card">'
+      +'<div class="tr-card-hdr">'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div class="tr-title">'+escHtml(t.title)+'</div>'
+      +'<div class="tr-meta">Creado: '+fmtShortDate(t.created)+' · '+p.total+' empleado'+(p.total===1?'':'s')+'</div>'
+      +'</div>'
+      +'<span class="scope-badge'+scopeCls+'">'+escHtml(scope)+'</span>'
+      +'</div>'
+      +'<div class="prog-wrap">'
+      +'<div class="prog-row"><span>'+p.completed+' de '+p.total+' completado</span><span class="prog-pct">'+p.pct+'%</span></div>'
+      +'<div class="prog-bar"><div class="prog-fill'+lowCls+'" style="width:'+p.pct+'%;"></div></div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:10px;">'
+      +'<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openTrainingDetail(\''+t.id+'\')">Ver detalle</button>'
+      +'<button class="btn btn-ghost btn-sm" onclick="exportTrainingPDF(\''+t.id+'\')">&#8659; PDF</button>'
+      +'<button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteTraining(\''+t.id+'\')" title="Eliminar">&#128465;</button>'
+      +'</div>'
+      +'</div>';
+  });
+  c.innerHTML=html;
+}
+
+/* Short date formatter for "YYYY-MM-DD" -> "Jun 19". Falls back gracefully. */
+function fmtShortDate(ymd){
+  if(!ymd)return '';
+  var p=String(ymd).slice(0,10).split('-');
+  if(p.length!==3)return ymd;
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var mi=parseInt(p[1],10)-1;
+  if(mi<0||mi>11)return ymd;
+  return months[mi]+' '+parseInt(p[2],10);
+}
+
+function showNewTrainingModal(){
+  var existing=document.getElementById('newTrainingModal');
+  if(existing)existing.remove();
+
+  var scopeOpts='<option value="all">Todo el roster</option>'
+    +POS_LIST.map(function(p){return '<option value="'+p.replace(/"/g,"&quot;")+'">'+p+'</option>';}).join('');
+
+  var ov=document.createElement('div');
+  ov.id='newTrainingModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:16px;">&#128218; Nuevo Training</div>'
+    +'<div style="display:flex;flex-direction:column;gap:13px;">'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Título del training / póliza</label>'
+    +'<input id="newTrainingTitle" placeholder="ej. Bloodborne Pathogens 2026" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Aplica a</label>'
+    +'<select id="newTrainingScope" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:#fff;">'+scopeOpts+'</select>'
+    +'<div style="font-size:10px;color:var(--text3);margin-top:4px;">La lista es dinámica: empleados nuevos que apliquen aparecerán como pendientes automáticamente.</div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:20px;">'
+    +'<button onclick="document.getElementById(\'newTrainingModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveNewTraining()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Crear Training</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+  setTimeout(function(){var i=document.getElementById('newTrainingTitle');if(i)i.focus();},50);
+}
+
+function saveNewTraining(){
+  var title=(document.getElementById('newTrainingTitle').value||'').trim();
+  var scope=document.getElementById('newTrainingScope').value||'all';
+  if(!title){showToast('Escribe un título');return;}
+  var list=loadTrainings();
+  list.unshift({
+    id:'tr_'+Date.now()+'_'+Math.floor(Math.random()*1000),
+    title:title,
+    scope:scope,
+    created:dateStr(new Date()),
+    done:{}
+  });
+  saveTrainings(list);
+  document.getElementById('newTrainingModal').remove();
+  renderTraining();
+  updateTrainingBadge();
+  showToast('&#10003; Training creado');
+}
+
+function deleteTraining(tid){
+  var list=loadTrainings();
+  var t=list.filter(function(x){return x.id===tid;})[0];
+  if(!t)return;
+  if(!confirm('Eliminar "'+t.title+'"? Esto borra todos sus registros.'))return;
+  list=list.filter(function(x){return x.id!==tid;});
+  saveTrainings(list);
+  if(_trainingDetailId===tid)_trainingDetailId=null;
+  renderTraining();
+  updateTrainingBadge();
+  showToast('Training eliminado');
+}
+
+function openTrainingDetail(tid){
+  _trainingDetailId=tid;
+  renderTraining();
+}
+function backToTrainingList(){
+  _trainingDetailId=null;
+  renderTraining();
+}
+
+/* Toggle completion for one employee. If completing, uses today's date. */
+function toggleTrainingDone(tid, empId){
+  var list=loadTrainings();
+  var t=list.filter(function(x){return x.id===tid;})[0];
+  if(!t)return;
+  t.done=t.done||{};
+  if(t.done[empId]){delete t.done[empId];}
+  else{t.done[empId]=dateStr(new Date());}
+  saveTrainings(list);
+  renderTraining();
+  updateTrainingBadge();
+}
+
+function showBulkMarkModal(tid){
+  var list=loadTrainings();
+  var t=list.filter(function(x){return x.id===tid;})[0];
+  if(!t)return;
+  var roster=getActiveRoster(t.scope);
+  var done=t.done||{};
+  var pending=roster.filter(function(e){return !done[e.id];});
+
+  var existing=document.getElementById('bulkMarkModal');
+  if(existing)existing.remove();
+
+  if(!pending.length){showToast('No hay pendientes para marcar');return;}
+
+  var rows=pending.map(function(e){
+    var sid=e.id.replace(/"/g,"&quot;");
+    return '<label style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border);cursor:pointer;">'
+      +'<input type="checkbox" class="bulkChk" value="'+sid+'" style="width:18px;height:18px;flex-shrink:0;cursor:pointer;"/>'
+      +'<span style="font-size:13px;font-weight:600;flex:1;">'+escHtml(e.name)+'</span>'
+      +'</label>';
+  }).join('');
+
+  var ov=document.createElement('div');
+  ov.id='bulkMarkModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#10003; Marcar varios completados</div>'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:14px;">'+escHtml(t.title)+'</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
+    +'<label style="font-size:11px;font-weight:700;color:var(--text2);">Fecha:</label>'
+    +'<input id="bulkDate" type="date" value="'+dateStr(new Date())+'" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;"/>'
+    +'<button onclick="bulkToggleAll(true)" style="font-size:11px;font-weight:700;padding:6px 10px;border:1.5px solid var(--border);background:#fff;border-radius:6px;cursor:pointer;color:var(--text2);">Todos</button>'
+    +'<button onclick="bulkToggleAll(false)" style="font-size:11px;font-weight:700;padding:6px 10px;border:1.5px solid var(--border);background:#fff;border-radius:6px;cursor:pointer;color:var(--text2);">Ninguno</button>'
+    +'</div>'
+    +'<div style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 12px;margin-bottom:16px;">'+rows+'</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button onclick="document.getElementById(\'bulkMarkModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="applyBulkMark(\''+t.id+'\')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Aplicar fecha</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+}
+
+function bulkToggleAll(state){
+  var chks=document.querySelectorAll('.bulkChk');
+  for(var i=0;i<chks.length;i++)chks[i].checked=state;
+}
+
+function applyBulkMark(tid){
+  var date=document.getElementById('bulkDate').value||dateStr(new Date());
+  var chks=document.querySelectorAll('.bulkChk:checked');
+  if(!chks.length){showToast('Selecciona al menos un empleado');return;}
+  var list=loadTrainings();
+  var t=list.filter(function(x){return x.id===tid;})[0];
+  if(!t){return;}
+  t.done=t.done||{};
+  var n=0;
+  for(var i=0;i<chks.length;i++){t.done[chks[i].value]=date;n++;}
+  saveTrainings(list);
+  document.getElementById('bulkMarkModal').remove();
+  renderTraining();
+  updateTrainingBadge();
+  showToast('&#10003; '+n+' marcado'+(n===1?'':'s')+' completado'+(n===1?'':'s'));
+}
+
+function exportTrainingPDF(tid){
+  var list=loadTrainings();
+  var t=list.filter(function(x){return x.id===tid;})[0];
+  if(!t){showToast('Training no encontrado');return;}
+  var roster=getActiveRoster(t.scope);
+  var done=t.done||{};
+  var p=trProgress(t);
+
+  var completed=roster.filter(function(e){return done[e.id];})
+    .sort(function(a,b){return a.name.localeCompare(b.name);});
+  var pending=roster.filter(function(e){return !done[e.id];})
+    .sort(function(a,b){return a.name.localeCompare(b.name);});
+
+  var compRows=completed.map(function(e){
+    return '<tr>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:600;">'+escHtml(e.name)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:11px;color:#6b7280;">'+escHtml(e.pos||'')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:700;text-align:right;color:#16a34a;">'+fmtShortDate(done[e.id])+'</td>'
+      +'</tr>';
+  }).join('')||'<tr><td colspan="3" style="padding:10px 12px;font-size:12px;color:#9ca3af;">Ninguno todavía</td></tr>';
+
+  var pendRows=pending.map(function(e){
+    return '<tr>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:600;">'+escHtml(e.name)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:11px;color:#6b7280;">'+escHtml(e.pos||'')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:700;text-align:right;color:#b45309;">Pendiente</td>'
+      +'</tr>';
+  }).join('')||'<tr><td colspan="3" style="padding:10px 12px;font-size:12px;color:#16a34a;">Todos completaron</td></tr>';
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
+    +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:#1a1a2e;}'
+    +'.header{background:#0f2544;color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
+    +'.hotel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px;}'
+    +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}'
+    +'.sub{font-size:12px;color:rgba(255,255,255,.55);}'
+    +'.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;}'
+    +'.meta-box{background:#f4f4f5;border-radius:8px;padding:14px 16px;}'
+    +'.meta-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:4px;}'
+    +'.meta-val{font-size:16px;font-weight:700;color:#0f2544;}'
+    +'.progwrap{background:#eef0f3;border-radius:99px;height:14px;overflow:hidden;margin-bottom:28px;}'
+    +'.progfill{height:100%;background:#16a34a;border-radius:99px;}'
+    +'.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin:0 0 10px;}'
+    +'table{width:100%;border-collapse:collapse;margin-bottom:28px;}'
+    +'th{background:#0f2544;color:#fff;padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:left;}'
+    +'.footer{margin-top:12px;text-align:center;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:16px;}'
+    +'</style></head><body>'
+    +'<div class="header">'
+    +'<div class="hotel">JW Marriott Houston Downtown · Housekeeping Management</div>'
+    +'<div class="title">'+escHtml(t.title)+'</div>'
+    +'<div class="sub">Policy Training Report</div>'
+    +'</div>'
+    +'<div class="meta">'
+    +'<div class="meta-box"><div class="meta-label">Aplica a</div><div class="meta-val" style="font-size:13px;">'+escHtml(trScopeLabel(t.scope))+'</div></div>'
+    +'<div class="meta-box"><div class="meta-label">Completado</div><div class="meta-val">'+p.completed+'/'+p.total+'</div></div>'
+    +'<div class="meta-box"><div class="meta-label">Progreso</div><div class="meta-val">'+p.pct+'%</div></div>'
+    +'</div>'
+    +'<div class="progwrap"><div class="progfill" style="width:'+p.pct+'%;"></div></div>'
+    +'<p class="section-title">&#10003; Completado ('+completed.length+')</p>'
+    +'<table><thead><tr><th>Empleado</th><th>Posición</th><th style="text-align:right;">Fecha</th></tr></thead><tbody>'+compRows+'</tbody></table>'
+    +'<p class="section-title">&#9888; Faltan ('+pending.length+')</p>'
+    +'<table><thead><tr><th>Empleado</th><th>Posición</th><th style="text-align:right;">Estado</th></tr></thead><tbody>'+pendRows+'</tbody></table>'
+    +'<div class="footer">JW Marriott Houston Downtown &middot; Housekeeping Management &middot; Generated '+dateStr(new Date())+' &middot; Confidential</div>'
+    +'</body></html>';
+
+  var win=window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(function(){win.print();},500);
+}
+
+function renderTrainingDetail(c){
+  var list=loadTrainings();
+  var t=list.filter(function(x){return x.id===_trainingDetailId;})[0];
+  if(!t){_trainingDetailId=null;renderTraining();return;}
+  var roster=getActiveRoster(t.scope);
+  var done=t.done||{};
+  var p=trProgress(t);
+  var lowCls=p.pct<100?' low':'';
+
+  var pending=roster.filter(function(e){return !done[e.id];});
+  var completed=roster.filter(function(e){return done[e.id];})
+    .sort(function(a,b){return (done[b.id]||'').localeCompare(done[a.id]||'');});
+
+  var html=''
+    +'<button class="btn btn-ghost btn-sm" style="margin-bottom:12px;" onclick="backToTrainingList()">&#8592; Volver a la lista</button>'
+    +'<div class="detail-box">'
+    +'<div class="detail-hdr">'
+    +'<div class="t">'+escHtml(t.title)+'</div>'
+    +'<div class="s">'+escHtml(trScopeLabel(t.scope))+' · '+p.completed+'/'+p.total+' completado · '+p.pending+' faltan</div>'
+    +'<div class="prog-bar" style="margin-top:10px;background:rgba(255,255,255,.25);"><div class="prog-fill'+lowCls+'" style="width:'+p.pct+'%;"></div></div>'
+    +'</div>'
+    +'<div class="detail-toolbar">'
+    +'<button class="btn btn-navy btn-sm" onclick="showBulkMarkModal(\''+t.id+'\')">&#10003; Marcar varios</button>'
+    +'<span style="font-size:11px;color:var(--text3);">Selecciona empleados y aplica una fecha a todos</span>'
+    +'</div>';
+
+  /* Pending section */
+  html+='<div class="section-label" style="color:var(--amber);">&#9888; Faltan ('+pending.length+')</div>';
+  if(!pending.length){
+    html+='<div style="padding:10px 16px;font-size:12px;color:var(--green);font-weight:600;">&#10003; Todos completaron este training</div>';
+  } else {
+    pending.forEach(function(e){
+      html+='<div class="emp-row faltan-row">'
+        +'<div class="emp-check" onclick="toggleTrainingDone(\''+t.id+'\',\''+e.id.replace(/"/g,"&quot;")+'\')" style="cursor:pointer;"></div>'
+        +'<div class="emp-name">'+escHtml(e.name)+newHireBadgeHTML(e.id)+'</div>'
+        +'<div class="emp-pending">Pendiente</div>'
+        +'</div>';
+    });
+  }
+
+  /* Completed section */
+  html+='<div class="section-label" style="color:var(--green);">&#10003; Completado ('+completed.length+')</div>';
+  if(!completed.length){
+    html+='<div style="padding:10px 16px;font-size:12px;color:var(--text3);">Nadie ha completado todavía.</div>';
+  } else {
+    completed.forEach(function(e){
+      html+='<div class="emp-row">'
+        +'<div class="emp-check done" onclick="toggleTrainingDone(\''+t.id+'\',\''+e.id.replace(/"/g,"&quot;")+'\')" style="cursor:pointer;">&#10003;</div>'
+        +'<div class="emp-name">'+escHtml(e.name)+'</div>'
+        +'<div class="emp-date">'+fmtShortDate(done[e.id])+'</div>'
+        +'</div>';
+    });
+  }
+
+  html+='</div>';
+  c.innerHTML=html;
+}
+
+/* ══════════════════════════════════════════════════════
    PROJECTS MODULE
    Storage key: projects_data (isolated, no impact on existing)
    ══════════════════════════════════════════════════════ */
@@ -6923,6 +7370,7 @@ window.addEventListener('load',function(){
   updateDashboardKPIs();
   try{renderDashboard();}catch(ex){console.warn('dashboard:',ex);}
   updateProjectsBadge();
+  updateTrainingBadge();
   updateCallOffsBadge();
   setTimeout(syncFromSheets,1000);
   setTimeout(maybeAutoSnapshot,3000);
