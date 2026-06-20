@@ -504,6 +504,16 @@ tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent
 .tr-track{height:10px;background:#eef0f3;border-radius:99px;overflow:hidden;}
 .tr-fill{height:100%;background:linear-gradient(90deg,#c9a227,#b8941f);border-radius:99px;transition:width .4s ease;}
 .tr-sub{font-size:11px;color:#f59e0b;font-weight:700;margin-top:9px;}
+.dl-row{display:flex;gap:8px;margin-top:12px;}
+.dl-chip{flex:1;border-radius:9px;padding:9px 11px;border:1.5px solid var(--border);background:var(--offwhite);}
+.dl-chip .dl-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:3px;}
+.dl-chip .dl-date{font-size:12px;font-weight:700;color:var(--text1);}
+.dl-chip .dl-days{font-size:10px;font-weight:700;margin-top:2px;}
+.dl-chip.hk{border-color:rgba(201,162,39,.4);background:#fffdf5;}
+.dl-chip.hk .dl-label{color:#b8941f;}
+.dl-days.ok{color:#16a34a;}
+.dl-days.warn{color:#f59e0b;}
+.dl-days.over{color:#dc2626;}
 .tr-sub.done{color:#16a34a;}
 .tr-foot{display:flex;gap:8px;padding:0 18px 16px;}
 .tr-btn{padding:10px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:none;display:flex;align-items:center;justify-content:center;gap:6px;}
@@ -529,6 +539,13 @@ tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent
 .emp-date{font-size:11px;color:#16a34a;font-weight:700;white-space:nowrap;}
 .emp-pending{font-size:11px;color:#f59e0b;font-weight:700;white-space:nowrap;}
 .faltan-row{background:linear-gradient(90deg,rgba(245,158,11,.06),transparent);}
+.rh-row{background:linear-gradient(90deg,rgba(201,162,39,.12),transparent);}
+.disc-row{background:linear-gradient(90deg,rgba(220,38,38,.06),transparent);}
+.rh-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;background:linear-gradient(135deg,#c9a227,#b8941f);color:#fff;padding:2px 7px;border-radius:99px;margin-left:7px;box-shadow:0 1px 2px rgba(184,148,31,.4);}
+.emp-disc{font-size:11px;color:#dc2626;font-weight:700;white-space:nowrap;}
+.tr-import-btn{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:7px 12px;border-radius:7px;border:1.5px solid #b8941f;background:#fffdf5;color:#b8941f;cursor:pointer;}
+.tr-import-btn:hover{background:#fff8e1;}
+.tr-import-clear{font-size:11px;font-weight:700;padding:7px 10px;border-radius:7px;border:1.5px solid var(--border);background:#fff;color:var(--text3);cursor:pointer;}
 tr.newhire-row td:first-child{border-left:3px solid #d4af37;}
 .add-emp-form{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border);}
 .add-emp-form input{flex:1;padding:7px 10px;border:1.5px solid var(--border2);border-radius:6px;font-size:12px;}
@@ -6168,9 +6185,11 @@ function renderTraining(){
       +'<span class="tr-pct" style="color:'+pctColor+';">'+p.pct+'%</span></div>'
       +'<div class="tr-track"><div class="tr-fill" style="width:'+p.pct+'%;"></div></div>'
       +'<div class="'+subCls+'">'+subText+'</div>'
+      +deadlineChipsHTML(t)
       +'</div>'
       +'<div class="tr-foot">'
       +'<button class="tr-btn tr-btn-primary" onclick="openTrainingDetail(\''+t.id+'\')">Ver detalle</button>'
+      +'<button class="tr-btn tr-btn-ghost" onclick="showNewTrainingModal(\''+t.id+'\')" title="Editar">&#9998;</button>'
       +'<button class="tr-btn tr-btn-ghost" onclick="exportTrainingPDF(\''+t.id+'\')">&#8659; PDF</button>'
       +'<button class="tr-btn tr-btn-icon" onclick="deleteTraining(\''+t.id+'\')" title="Eliminar">&#128465;</button>'
       +'</div>'
@@ -6189,29 +6208,94 @@ function fmtShortDate(ymd){
   if(mi<0||mi>11)return ymd;
   return months[mi]+' '+parseInt(p[2],10);
 }
+/* Like fmtShortDate but includes the year, e.g. "Jul 8, 2026". */
+function fmtLongDate(ymd){
+  if(!ymd)return '';
+  var p=String(ymd).slice(0,10).split('-');
+  if(p.length!==3)return ymd;
+  return fmtShortDate(ymd)+', '+p[0];
+}
 
-function showNewTrainingModal(){
+/* Days until a deadline (deadline - today). Positive = future, negative = past. Null if no date. */
+function daysUntil(ymd){
+  if(!ymd)return null;
+  var p=String(ymd).slice(0,10).split('-');
+  if(p.length!==3)return null;
+  var d=new Date(+p[0],+p[1]-1,+p[2]);
+  if(isNaN(d.getTime()))return null;
+  var now=new Date();
+  var t0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  return Math.round((d-t0)/86400000);
+}
+/* Returns {text, cls} describing a deadline countdown. */
+function deadlineCountdown(ymd){
+  var dn=daysUntil(ymd);
+  if(dn===null)return {text:'Sin fecha',cls:''};
+  if(dn<0)return {text:'Vencido hace '+Math.abs(dn)+'d',cls:'over'};
+  if(dn===0)return {text:'Vence hoy',cls:'over'};
+  var cls=dn<=7?'warn':'ok';
+  return {text:'Faltan '+dn+(dn===1?' día':' días'),cls:cls};
+}
+/* Build the side-by-side deadline chips HTML for a training. Returns '' if neither set. */
+function deadlineChipsHTML(t){
+  if(!t.dlHK&&!t.dlHR)return '';
+  function chip(label,emoji,date,extraCls){
+    var cd=deadlineCountdown(date);
+    return '<div class="dl-chip'+(extraCls||'')+'">'
+      +'<div class="dl-label">'+emoji+' '+label+'</div>'
+      +'<div class="dl-date">'+(date?fmtLongDate(date):'—')+'</div>'
+      +'<div class="dl-days '+cd.cls+'">'+(date?cd.text:'Sin fecha')+'</div>'
+      +'</div>';
+  }
+  return '<div class="dl-row">'
+    +chip('Housekeeping','&#128203;',t.dlHK,' hk')
+    +chip('Recursos Humanos','&#127970;',t.dlHR,'')
+    +'</div>';
+}
+
+function showNewTrainingModal(editId){
   var existing=document.getElementById('newTrainingModal');
   if(existing)existing.remove();
 
-  var scopeOpts='<option value="all">Todo el roster</option>'
-    +POS_LIST.map(function(p){return '<option value="'+p.replace(/"/g,"&quot;")+'">'+p+'</option>';}).join('');
+  var editing=null;
+  if(editId){
+    var all=loadTrainings();
+    editing=all.filter(function(x){return x.id===editId;})[0]||null;
+  }
+  var curTitle=editing?editing.title:'';
+  var curScope=editing?editing.scope:'all';
+  var curHK=editing&&editing.dlHK?editing.dlHK:'';
+  var curHR=editing&&editing.dlHR?editing.dlHR:'';
+
+  var scopeOpts='<option value="all"'+(curScope==='all'?' selected':'')+'>Todo el roster</option>'
+    +POS_LIST.map(function(p){
+      var v=p.replace(/"/g,"&quot;");
+      return '<option value="'+v+'"'+(curScope===p?' selected':'')+'>'+p+'</option>';
+    }).join('');
 
   var ov=document.createElement('div');
   ov.id='newTrainingModal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:16px;">&#128218; Nuevo Training</div>'
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:16px;">&#128218; '+(editing?'Editar Training':'Nuevo Training')+'</div>'
+    +'<input type="hidden" id="editingTrainingId" value="'+(editing?editing.id:'')+'">'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Título del training / póliza</label>'
-    +'<input id="newTrainingTitle" placeholder="ej. Bloodborne Pathogens 2026" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'<input id="newTrainingTitle" value="'+curTitle.replace(/"/g,"&quot;")+'" placeholder="ej. Bloodborne Pathogens 2026" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
     +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Aplica a</label>'
     +'<select id="newTrainingScope" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:#fff;">'+scopeOpts+'</select>'
     +'<div style="font-size:10px;color:var(--text3);margin-top:4px;">La lista es dinámica: empleados nuevos que apliquen aparecerán como pendientes automáticamente.</div></div>'
+    +'<div style="display:flex;gap:10px;">'
+    +'<div style="flex:1;"><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Deadline RH</label>'
+    +'<input id="newTrainingDlHR" type="date" value="'+curHR+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'<div style="flex:1;"><label style="font-size:11px;font-weight:700;color:var(--gold-dark);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Deadline Housekeeping</label>'
+    +'<input id="newTrainingDlHK" type="date" value="'+curHK+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/>'
+    +'<div style="font-size:10px;color:var(--text3);margin-top:4px;">Tu margen interno (opcional)</div></div>'
+    +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
     +'<button onclick="document.getElementById(\'newTrainingModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveNewTraining()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Crear Training</button>'
+    +'<button onclick="saveNewTraining()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">'+(editing?'Guardar cambios':'Crear Training')+'</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(ov);
@@ -6222,20 +6306,34 @@ function showNewTrainingModal(){
 function saveNewTraining(){
   var title=(document.getElementById('newTrainingTitle').value||'').trim();
   var scope=document.getElementById('newTrainingScope').value||'all';
+  var dlHR=document.getElementById('newTrainingDlHR').value||'';
+  var dlHK=document.getElementById('newTrainingDlHK').value||'';
+  var editId=document.getElementById('editingTrainingId').value||'';
   if(!title){showToast('Escribe un título');return;}
   var list=loadTrainings();
-  list.unshift({
-    id:'tr_'+Date.now()+'_'+Math.floor(Math.random()*1000),
-    title:title,
-    scope:scope,
-    created:dateStr(new Date()),
-    done:{}
-  });
+  if(editId){
+    var t=list.filter(function(x){return x.id===editId;})[0];
+    if(t){
+      t.title=title;t.scope=scope;t.dlHR=dlHR;t.dlHK=dlHK;
+      t.updated=new Date().toISOString();
+    }
+  } else {
+    list.unshift({
+      id:'tr_'+Date.now()+'_'+Math.floor(Math.random()*1000),
+      title:title,
+      scope:scope,
+      dlHR:dlHR,
+      dlHK:dlHK,
+      created:dateStr(new Date()),
+      done:{},
+      hrPending:{}
+    });
+  }
   saveTrainings(list);
   document.getElementById('newTrainingModal').remove();
   renderTraining();
   updateTrainingBadge();
-  showToast('&#10003; Training creado');
+  showToast(editId?'&#10003; Training actualizado':'&#10003; Training creado');
 }
 
 function deleteTraining(tid){
@@ -6414,12 +6512,27 @@ function renderTrainingDetail(c){
   if(!t){_trainingDetailId=null;renderTraining();return;}
   var roster=getActiveRoster(t.scope);
   var done=t.done||{};
+  var hrPending=t.hrPending||{};
   var p=trProgress(t);
   var lowCls=p.pct<100?' low':'';
 
-  var pending=roster.filter(function(e){return !done[e.id];});
-  var completed=roster.filter(function(e){return done[e.id];})
-    .sort(function(a,b){return (done[b.id]||'').localeCompare(done[a.id]||'');});
+  /* Partition roster into HR-flagged groups */
+  var rhPendingList=[];   // HR pending AND not done in our app
+  var rhDiscrepancy=[];   // HR pending BUT done in our app
+  var pendingOnly=[];     // pending in our app, not flagged by HR
+  var completed=[];
+  roster.forEach(function(e){
+    var isDone=!!done[e.id];
+    var isHR=!!hrPending[e.id];
+    if(isDone){
+      if(isHR)rhDiscrepancy.push(e); else completed.push(e);
+    } else {
+      if(isHR)rhPendingList.push(e); else pendingOnly.push(e);
+    }
+  });
+  completed.sort(function(a,b){return (done[b.id]||'').localeCompare(done[a.id]||'');});
+
+  var hrCount=Object.keys(hrPending).length;
 
   var html=''
     +'<button class="btn btn-ghost btn-sm" style="margin-bottom:12px;" onclick="backToTrainingList()">&#8592; Volver a la lista</button>'
@@ -6431,15 +6544,41 @@ function renderTrainingDetail(c){
     +'</div>'
     +'<div class="detail-toolbar">'
     +'<button class="btn btn-navy btn-sm" onclick="showBulkMarkModal(\''+t.id+'\')">&#10003; Marcar varios</button>'
-    +'<span style="font-size:11px;color:var(--text3);">Selecciona empleados y aplica una fecha a todos</span>'
+    +'<button class="tr-import-btn" onclick="triggerHRImport(\''+t.id+'\')">&#8657; Importar lista de RH</button>'
+    +(hrCount>0?'<button class="tr-import-clear" onclick="clearHRImport(\''+t.id+'\')" title="Limpiar marcas de RH">Limpiar RH</button>':'')
+    +'<input type="file" id="hrImportFile" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleHRImport(event,\''+t.id+'\')"/>'
     +'</div>';
 
-  /* Pending section */
-  html+='<div class="section-label" style="color:var(--amber);">&#9888; Faltan ('+pending.length+')</div>';
-  if(!pending.length){
-    html+='<div style="padding:10px 16px;font-size:12px;color:var(--green);font-weight:600;">&#10003; Todos completaron este training</div>';
+  /* HR pending (matched, still pending in our app) */
+  if(rhPendingList.length){
+    html+='<div class="section-label" style="color:#b8941f;">&#9733; Pendientes marcados por RH ('+rhPendingList.length+')</div>';
+    rhPendingList.forEach(function(e){
+      html+='<div class="emp-row rh-row">'
+        +'<div class="emp-check" onclick="toggleTrainingDone(\''+t.id+'\',\''+e.id.replace(/"/g,"&quot;")+'\')" style="cursor:pointer;"></div>'
+        +'<div class="emp-name">'+escHtml(e.name)+'<span class="rh-badge">&#9733; RH</span>'+newHireBadgeHTML(e.id)+'</div>'
+        +'<div class="emp-pending">Pendiente</div>'
+        +'</div>';
+    });
+  }
+
+  /* Discrepancy: HR pending but we marked done */
+  if(rhDiscrepancy.length){
+    html+='<div class="section-label" style="color:#dc2626;">&#9888; Discrepancia: RH lo tiene pendiente, tú ya lo completaste ('+rhDiscrepancy.length+')</div>';
+    rhDiscrepancy.forEach(function(e){
+      html+='<div class="emp-row disc-row">'
+        +'<div class="emp-check done" onclick="toggleTrainingDone(\''+t.id+'\',\''+e.id.replace(/"/g,"&quot;")+'\')" style="cursor:pointer;">&#10003;</div>'
+        +'<div class="emp-name">'+escHtml(e.name)+'<span class="rh-badge">&#9733; RH</span></div>'
+        +'<div class="emp-disc">Revisar</div>'
+        +'</div>';
+    });
+  }
+
+  /* Pending only in our app */
+  html+='<div class="section-label" style="color:var(--amber);">&#9888; Faltan'+(hrCount>0?' (solo tu lista)':'')+' ('+pendingOnly.length+')</div>';
+  if(!pendingOnly.length){
+    html+='<div style="padding:10px 16px;font-size:12px;color:var(--green);font-weight:600;">&#10003; Sin pendientes adicionales</div>';
   } else {
-    pending.forEach(function(e){
+    pendingOnly.forEach(function(e){
       html+='<div class="emp-row faltan-row">'
         +'<div class="emp-check" onclick="toggleTrainingDone(\''+t.id+'\',\''+e.id.replace(/"/g,"&quot;")+'\')" style="cursor:pointer;"></div>'
         +'<div class="emp-name">'+escHtml(e.name)+newHireBadgeHTML(e.id)+'</div>'
@@ -6448,7 +6587,7 @@ function renderTrainingDetail(c){
     });
   }
 
-  /* Completed section */
+  /* Completed */
   html+='<div class="section-label" style="color:var(--green);">&#10003; Completado ('+completed.length+')</div>';
   if(!completed.length){
     html+='<div style="padding:10px 16px;font-size:12px;color:var(--text3);">Nadie ha completado todavía.</div>';
@@ -6464,6 +6603,161 @@ function renderTrainingDetail(c){
 
   html+='</div>';
   c.innerHTML=html;
+}
+
+/* Normalize a name for flexible matching: lowercase, strip accents, remove commas,
+   collapse spaces, and sort the word tokens so "Puac, Abby" == "Abby Puac". */
+function normalizeName(name){
+  if(!name)return '';
+  var s=String(name).toLowerCase();
+  s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); // strip accents
+  s=s.replace(/[.,]/g,' ').replace(/[^a-z0-9\s]/g,' ');
+  var tokens=s.split(/\s+/).filter(function(w){return w.length>0;});
+  tokens.sort();
+  return tokens.join(' ');
+}
+
+function triggerHRImport(tid){
+  var inp=document.getElementById('hrImportFile');
+  if(inp)inp.click();
+}
+
+function clearHRImport(tid){
+  if(!confirm('¿Limpiar todas las marcas de RH de este training?'))return;
+  var list=loadTrainings();
+  var t=list.filter(function(x){return x.id===tid;})[0];
+  if(!t)return;
+  t.hrPending={};
+  saveTrainings(list);
+  renderTraining();
+  showToast('Marcas de RH eliminadas');
+}
+
+function handleHRImport(event, tid){
+  var file=event.target.files&&event.target.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=new Uint8Array(e.target.result);
+      var wb=XLSX.read(data,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      processHRImport(rows, tid);
+    }catch(err){
+      showToast('Error al leer el Excel');
+      console.error('HR import error:',err);
+    }
+    event.target.value='';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* Extract names from parsed rows, match against roster, show review modal. */
+function processHRImport(rows, tid){
+  var list=loadTrainings();
+  var t=list.filter(function(x){return x.id===tid;})[0];
+  if(!t){return;}
+  var roster=getActiveRoster(t.scope);
+
+  /* Build a normalized-name -> employee map from roster */
+  var rosterMap={};
+  roster.forEach(function(e){ rosterMap[normalizeName(e.name)]=e; });
+
+  /* Find which column holds names: pick the column with most roster matches */
+  var maxCols=0;
+  rows.forEach(function(r){ if(r.length>maxCols)maxCols=r.length; });
+  var bestCol=0, bestHits=-1;
+  for(var col=0; col<maxCols; col++){
+    var hits=0;
+    rows.forEach(function(r){
+      var v=r[col];
+      if(v&&rosterMap[normalizeName(v)])hits++;
+    });
+    if(hits>bestHits){bestHits=hits;bestCol=col;}
+  }
+
+  /* Extract candidate names from the best column, skipping obvious headers/empties */
+  var matched=[], notFound=[];
+  var seen={};
+  rows.forEach(function(r){
+    var raw=(r[bestCol]||'').toString().trim();
+    if(!raw)return;
+    var norm=normalizeName(raw);
+    if(!norm||seen[norm])return;
+    seen[norm]=true;
+    var emp=rosterMap[norm];
+    if(emp){ matched.push(emp); }
+    else {
+      /* skip values that look like a header (e.g. "name","employee","nombre") */
+      if(/^(name|employee|nombre|empleado|associate|full name)$/i.test(raw))return;
+      notFound.push(raw);
+    }
+  });
+
+  showHRImportReview(tid, matched, notFound);
+}
+
+function showHRImportReview(tid, matched, notFound){
+  var existing=document.getElementById('hrReviewModal');
+  if(existing)existing.remove();
+
+  var matchedRows=matched.map(function(e){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">'
+      +'<span style="color:#16a34a;font-size:14px;">&#10003;</span>'
+      +'<span style="font-size:13px;font-weight:600;flex:1;">'+escHtml(e.name)+'</span>'
+      +'<span style="font-size:10px;color:var(--text3);">'+escHtml(e.pos||'')+'</span>'
+      +'</div>';
+  }).join('')||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">Ninguno emparejó con el roster.</div>';
+
+  var notFoundRows=notFound.map(function(n){
+    return '<div style="font-size:12px;color:#b45309;padding:5px 0;border-bottom:1px solid #f0e0bf;">'+escHtml(n)+'</div>';
+  }).join('');
+
+  var notFoundSection=notFound.length
+    ? '<div style="margin-top:16px;"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#b45309;margin-bottom:6px;">&#9888; No encontrados ('+notFound.length+')</div>'
+      +'<div style="font-size:10px;color:var(--text3);margin-bottom:8px;">Estos nombres del Excel no emparejaron con tu roster. Revísalos manualmente.</div>'
+      +'<div style="max-height:120px;overflow-y:auto;background:#fffdf5;border:1px solid #f0e0bf;border-radius:8px;padding:6px 12px;">'+notFoundRows+'</div></div>'
+    : '';
+
+  /* Store matched IDs on a temp global for apply */
+  window._hrImportMatched=matched.map(function(e){return e.id;});
+  window._hrImportTid=tid;
+
+  var ov=document.createElement('div');
+  ov.id='hrReviewModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#8657; Importar lista de RH</div>'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:16px;">'+matched.length+' empleado'+(matched.length===1?'':'s')+' emparejado'+(matched.length===1?'':'s')+' con tu roster.</div>'
+    +'<div style="flex:1;overflow-y:auto;">'
+    +'<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#16a34a;margin-bottom:6px;">&#10003; Emparejados ('+matched.length+')</div>'
+    +'<div style="background:var(--offwhite);border:1px solid var(--border);border-radius:8px;padding:6px 12px;max-height:200px;overflow-y:auto;">'+matchedRows+'</div>'
+    +notFoundSection
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-top:14px;margin-bottom:6px;">Esto marcará a los emparejados como "pendientes por RH" (&#9733;). No cambia tu registro de completados.</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button onclick="document.getElementById(\'hrReviewModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="applyHRImport()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;"'+(matched.length===0?' disabled':'')+'>Aplicar marcas RH</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+}
+
+function applyHRImport(){
+  var ids=window._hrImportMatched||[];
+  var tid=window._hrImportTid;
+  if(!tid||!ids.length){var m=document.getElementById('hrReviewModal');if(m)m.remove();return;}
+  var list=loadTrainings();
+  var t=list.filter(function(x){return x.id===tid;})[0];
+  if(!t){return;}
+  t.hrPending=t.hrPending||{};
+  ids.forEach(function(id){ t.hrPending[id]=true; });
+  saveTrainings(list);
+  var m=document.getElementById('hrReviewModal');if(m)m.remove();
+  renderTraining();
+  showToast('&#10003; '+ids.length+' marcado'+(ids.length===1?'':'s')+' por RH');
 }
 
 /* ══════════════════════════════════════════════════════
