@@ -58,7 +58,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 /* ── SIDEBAR ── */
 .sidebar{
   width:var(--sidebar-w);flex-shrink:0;
-  background:#111827;color:#fff;
+  background:var(--text1);color:#fff;
   display:flex;flex-direction:column;
   position:fixed;top:0;left:0;bottom:0;z-index:100;
   transition:transform .28s cubic-bezier(.4,0,.2,1);
@@ -285,7 +285,7 @@ tbody tr:hover td{background:var(--surface);}
 .modal-sub{font-size:12px;color:var(--text3);margin-bottom:18px;}
 .date-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:16px;}
 .upload-drop{border:2px dashed var(--border2);border-radius:var(--radius-sm);padding:28px 20px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:14px;}
-.upload-drop:hover,.upload-drop.drag{border-color:var(--navy);background:#f8faff;}
+.upload-drop:hover,.upload-drop.drag{border-color:var(--navy);background:var(--surface);}
 .upload-drop-icon{font-size:32px;margin-bottom:8px;}
 .upload-drop h3{font-size:14px;font-weight:700;color:var(--text1);margin-bottom:4px;}
 .upload-drop p{font-size:12px;color:var(--text3);}
@@ -318,7 +318,7 @@ tbody tr:hover td{background:var(--surface);}
 .info-box{border-radius:var(--radius-xs);padding:10px 14px;font-size:12.5px;margin-bottom:14px;}
 .info-yellow{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border);}
 .info-red{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);}
-.info-navy{background:#eef2f8;color:var(--navy);border:1px solid #c8d5ea;}
+.info-navy{background:var(--s3);color:var(--navy);border:1px solid var(--s3);}
 
 /* ── ROSTER CARDS ── */
 .roster-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;}
@@ -447,7 +447,7 @@ tbody tr:hover td{background:var(--surface);}
 .nav-item.active{background:var(--gold-soft);color:var(--gold-text);font-weight:700;border-left:3px solid var(--gold);padding-left:15px;}
 .nav-icon{font-size:14px;flex-shrink:0;}
 .nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;padding:1px 7px;border-radius:99px;font-weight:700;}
-.sync-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:pulse 2s infinite;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
 .topbar{position:sticky;top:0;z-index:100;background:var(--white);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 4px rgba(0,0,0,.05);min-height:65px;}
 .topbar.scrolled{box-shadow:0 2px 12px rgba(0,0,0,.1);}
@@ -481,7 +481,7 @@ tbody tr:hover td{background:var(--offwhite);}
 .b-yellow{background:var(--yellow-bg);color:var(--yellow);}
 .b-green{background:var(--green2);color:var(--green);}
 .b-navy{background:var(--s3);color:var(--navy);}
-.b-gold{background:var(--gt);color:#7a5f00;}
+.b-gold{background:var(--gt);color:var(--gd);}
 .b-gray{background:var(--s3);color:var(--text2);}
 .b-purple{background:var(--purple-bg);color:var(--purple);}
 .filter-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
@@ -511,7 +511,7 @@ tbody tr:hover td{background:var(--offwhite);}
 /* New Hire highlight (gold) */
 .roster-emp-row.newhire{background:linear-gradient(90deg,rgba(212,175,55,.10),rgba(212,175,55,0));border-left:3px solid var(--gl);margin-left:-14px;margin-right:-14px;padding-left:11px;padding-right:14px;}
 .newhire-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;background:linear-gradient(135deg,var(--gl),var(--gd));color:#fff;padding:2px 7px;border-radius:99px;margin-left:7px;box-shadow:0 1px 2px rgba(184,148,31,.4);vertical-align:middle;white-space:nowrap;}
-.days-pill{display:inline-block;font-size:10px;font-weight:700;color:var(--gd);background:var(--gt);border:1px solid #f0e0a0;border-radius:99px;padding:1px 8px;margin-left:6px;white-space:nowrap;vertical-align:middle;}
+.days-pill{display:inline-block;font-size:10px;font-weight:700;color:var(--gd);background:var(--gt);border:1px solid var(--yellow-border);border-radius:99px;padding:1px 8px;margin-left:6px;white-space:nowrap;vertical-align:middle;}
 tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent);}
 /* Policy Training Tracker — card (Option B: navy band) */
 .tr-card{background:var(--white);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,37,68,.06),0 8px 24px rgba(15,37,68,.04);margin-bottom:14px;}
@@ -587,7 +587,7 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .tut-step-desc{font-size:12px;color:var(--text2);line-height:1.5;}
 .tut-tip{display:flex;gap:8px;background:var(--yellow-bg);border:1px solid var(--yellow-border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--yellow);margin-top:10px;}
 .tut-warn{display:flex;gap:8px;background:var(--red2);border:1px solid var(--red-border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--red);margin-top:10px;}
-.tut-ok{display:flex;gap:8px;background:var(--green2);border:1px solid #c8ebd8;border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);margin-top:10px;}
+.tut-ok{display:flex;gap:8px;background:var(--green2);border:1px solid var(--green-border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);margin-top:10px;}
 .std-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px;}
 .std-table th{background:var(--navy);color:#fff;padding:8px 10px;text-align:left;}
 .std-table td{padding:7px 10px;border-bottom:1px solid var(--border);}
@@ -626,7 +626,7 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .day-prog-card.over{border-top:3px solid var(--red);}
 .day-prog-card.under{border-top:3px solid var(--green);}
 .day-prog-card.no-report{background:var(--yellow-bg);border-color:var(--yellow-border);}
-.day-prog-card.today-empty{background:var(--s2);border-color:#93c5fd;}
+.day-prog-card.today-empty{background:var(--s2);border-color:var(--navy3);}
 .day-prog-card.future{opacity:.3;pointer-events:none;}
 .dpc-badge{position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-size:8px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;}
 .dpc-badge.navy{background:var(--navy);color:#fff;}
@@ -1069,7 +1069,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <div class="card" style="margin-bottom:14px;">
         <div class="card-head"><div class="card-title">Maintenance</div></div>
         <div class="settings-row" style="cursor:default;">
-          <div class="settings-row-icon" style="background:var(--surface);color:var(--text2);">&#129529;</div>
+          <div class="settings-row-icon" style="background:var(--surface);color:var(--text2);">&var(--green);</div>
           <div class="settings-row-text">
             <div class="settings-row-title">Duplicate / Mismatched Day Cleanup</div>
             <div class="settings-row-desc">Scans for old data saved under a different date format — shows what it found before deleting anything</div>
@@ -1122,7 +1122,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     </div>
 
     <!-- Date section -->
-    <div style="background:var(--offwhite,#f8f9fc);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
+    <div style="background:var(--offwhite,var(--surface));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">&#128197; Report Date — verify before uploading</div>
       <div style="display:grid;grid-template-columns:2fr 1fr 1.2fr;gap:8px;">
         <div>
@@ -1157,7 +1157,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 
     <!-- Progress bar -->
     <div id="uploadProgWrap" style="display:none;margin-bottom:12px;">
-      <div style="background:#e0e7ef;border-radius:99px;height:6px;overflow:hidden;">
+      <div style="background:var(--s3);border-radius:99px;height:6px;overflow:hidden;">
         <div id="uploadPbar" style="background:var(--navy);height:100%;border-radius:99px;transition:width .3s;width:0%;"></div>
       </div>
       <div id="uploadPmsg" style="font-size:12px;color:var(--text3);text-align:center;margin-top:6px;"></div>
@@ -1943,7 +1943,7 @@ function breakLabel(mins,pos,empId){
 }
 function minsBar(m){
   var pct=Math.min(100,Math.round((m/30)*100));
-  var color=m===0?"#9b1c1c":m<20?"var(--yellow)":m<28?"var(--yellow)":"#1a6e3e";
+  var color=m===0?"var(--red)":m<20?"var(--yellow)":m<28?"var(--yellow)":"var(--green)";
   return'<div class="mins-wrap"><div class="mins-bar"><div class="mins-fill" style="width:'+pct+'%;background:'+color+'"></div></div><span class="mins-lbl" style="color:'+color+'">'+m+' min</span></div>';
 }
 function breakBadge(m,pos,empId){
@@ -2439,7 +2439,7 @@ function renderRoster(){
     if(!inactList.length){
       inactPanel.innerHTML="";
     } else {
-      var ih='<div style="background:#fff8ec;border:1.5px solid #f0d28a;border-radius:10px;overflow:hidden;">'
+      var ih='<div style="background:var(--gt);border:1.5px solid var(--yellow-border);border-radius:10px;overflow:hidden;">'
         +'<div style="background:var(--yellow);color:#fff;padding:10px 14px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;">&#9888;&#65039; Inactivos \u2014 revisar <span style="background:rgba(255,255,255,.25);padding:1px 8px;border-radius:99px;font-size:11px;">'+inactList.length+'</span></div>'
         +'<div style="padding:10px 14px;">'
         +'<div style="font-size:11px;color:var(--text2);margin-bottom:10px;">Estos empleados llevan 90+ d\u00edas sin actividad en el Labor Distribution.</div>';
@@ -3962,9 +3962,9 @@ var laborDonutChartObj=null;
 
 var POSITION_COLORS={
   "Room Attendant":"var(--navy)",
-  "House Attendant":"#2563eb",
-  "Laundry Attendant":"#0891b2",
-  "Turndown Attendant":"#7c3aed",
+  "House Attendant":"var(--navy)",
+  "Laundry Attendant":"var(--navy2)",
+  "Turndown Attendant":"var(--navy2)",
   "Housekeeping Supervisor":"var(--gl)",
   "Public Area Attendant":"var(--green)"
 };
@@ -4027,7 +4027,7 @@ function renderCharts(){
       var p=days[ds].byPosition&&days[ds].byPosition[pos];
       if(p)sum+=p.paid;
     });
-    if(sum>0){posLabels.push(pos);posData.push(+sum.toFixed(2));posColors.push(POSITION_COLORS[pos]||"#94a3b8");}
+    if(sum>0){posLabels.push(pos);posData.push(+sum.toFixed(2));posColors.push(POSITION_COLORS[pos]||"var(--text3)");}
     totalPaid+=sum;
   });
 
@@ -4545,7 +4545,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       +'No report for '+dayLabel+'</div>'
       +'<div style="font-size:12px;color:var(--text2);margin-bottom:14px;">'
       +'Upload the Paychex PDF to see hours, breaks, and overtime.</div>'
-      +'<button class="btn btn-navy" onclick="showUploadModal()">&#11014; Upload Report</button></div>';
+      +'<button class="btn btn-gold" onclick="showUploadModal()">&#11014; Upload Report</button></div>';
   }else{
     var varH=snap.totalPaid-bud;
     /* 2-column: summary + by position */
@@ -4705,7 +4705,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         var pos=(e.pos||'').replace(/^\d+-/,'')||'Unknown Position';
         var isNone=(st==='none');
         var isOver=(st==='over');
-        var rowBg=isNone?'#fff5f5':'var(--yellow-bg)';
+        var rowBg=isNone?'var(--red-bg)':'var(--yellow-bg)';
         var leftBar=isNone?'var(--red)':'var(--yellow)';
         var nameColor=isNone?'var(--red)':'var(--yellow)';
         var badgeBg=isNone?'var(--red-bg)':'var(--yellow-bg)';
@@ -4734,7 +4734,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         tdOkEmps.forEach(function(e){
           var mins=toMins(parseFloat(e.unpaid||0));
           var pos=(e.pos||'').replace(/^\d+-/,'')||'Unknown Position';
-          html+='<div style="margin:6px 0;border-radius:8px;background:#f0fdf4;'
+          html+='<div style="margin:6px 0;border-radius:8px;background:var(--green-bg);'
             +'border-left:4px solid var(--green);display:flex;align-items:center;'
             +'justify-content:space-between;padding:10px 12px;gap:10px;">';
           html+='<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">';
@@ -5203,7 +5203,7 @@ function renderRecap(){
       +'<div><div style="font-size:12px;font-weight:700;">Recap fills automatically</div>'
       +'<div style="font-size:11px;color:var(--text3);">All charts and summaries update in real time</div></div></div>'
       +'</div>'
-      +'<button class="btn btn-navy" onclick="showUploadModal()">&#11014; Upload First Report</button></div>';
+      +'<button class="btn btn-gold" onclick="showUploadModal()">&#11014; Upload First Report</button></div>';
     return;
   }
 
@@ -5877,7 +5877,7 @@ function renderOccupancy(){
     var bud=dayObj.rooms>0?dayBudget(dayObj.rooms):0;
     var roomPct=dayObj.rooms>0?Math.round((dayObj.rooms/384)*100):0;
     var barColor=dayObj.rooms>300?'var(--red)':dayObj.rooms>200?'var(--yellow)':'var(--green)';
-    var rowBg=dayObj.mismatch?'var(--ad)':isToday?'#eff6ff':'#fff';
+    var rowBg=dayObj.mismatch?'var(--ad)':isToday?'var(--s2)':'#fff';
     var borderColor=dayObj.mismatch?'var(--yellow-border)':'var(--border)';
 
     html+='<div style="display:grid;grid-template-columns:'+colGrid+';align-items:center;padding:9px 14px;border-top:1px solid '+borderColor+';background:'+rowBg+';">';
@@ -5959,7 +5959,7 @@ function showOccupancyFixModal(ds,manual,r106){
     +'style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-size:13px;font-weight:700;cursor:pointer;color:var(--text2);">Cancel</button>'
     +'</div>'
     +'<button onclick="(function(){saveOccupancyRoom(\''+ds+'\','+r106+');document.body.removeChild(document.getElementById(\'occFixModal\'));renderDashboard();})()" '
-    +'style="width:100%;padding:10px;background:#dbeafe;color:#1d4ed8;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📋 Use R106 value ('+r106+' rooms)</button>'
+    +'style="width:100%;padding:10px;background:var(--s3);color:var(--navy);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📋 Use R106 value ('+r106+' rooms)</button>'
     +'</div>';
   modal.id='occFixModal';
   document.body.appendChild(modal);
@@ -7156,7 +7156,7 @@ function showEditEntryModal(projIdx, entryIdx){
   var overlay=document.createElement('div');
   overlay.id='editEntryModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#9998; Edit Entry</div>'    +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(proj.name)+'</div>'    +'<div style="display:flex;flex-direction:column;gap:13px;">'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date</label>'    +'<input id="editEntryDate" type="date" value="'+entry.date+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee</label>'    +'<input id="editEntryEmp" value="'+escHtml(entry.empName)+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#f8f8f8;" readonly />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Hours '+(entry.pending?'<span style="color:var(--yellow);">⏳ Pending</span>':'')+' </label>'    +'<input id="editEntryHours" type="number" step="0.01" min="0" max="24" value="'+(entry.hours!==null&&entry.hours!==undefined?entry.hours:'')+'" placeholder="Leave empty to keep as pending" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'    +'<input id="editEntryNote" value="'+escHtml(entry.note||'')+'" placeholder="e.g. Deep cleaned floors 3-5" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'</div>'    +'<div style="display:flex;gap:8px;margin-top:20px;">'    +'<button onclick="closeEditEntryModal()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'    +'<button onclick="saveEditEntry('+projIdx+','+entryIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'    +'</div>'    +'</div>';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#9998; Edit Entry</div>'    +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(proj.name)+'</div>'    +'<div style="display:flex;flex-direction:column;gap:13px;">'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date</label>'    +'<input id="editEntryDate" type="date" value="'+entry.date+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee</label>'    +'<input id="editEntryEmp" value="'+escHtml(entry.empName)+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--surface);" readonly />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Hours '+(entry.pending?'<span style="color:var(--yellow);">⏳ Pending</span>':'')+' </label>'    +'<input id="editEntryHours" type="number" step="0.01" min="0" max="24" value="'+(entry.hours!==null&&entry.hours!==undefined?entry.hours:'')+'" placeholder="Leave empty to keep as pending" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'    +'<input id="editEntryNote" value="'+escHtml(entry.note||'')+'" placeholder="e.g. Deep cleaned floors 3-5" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'</div>'    +'<div style="display:flex;gap:8px;margin-top:20px;">'    +'<button onclick="closeEditEntryModal()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'    +'<button onclick="saveEditEntry('+projIdx+','+entryIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'    +'</div>'    +'</div>';
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
 }
@@ -7253,7 +7253,7 @@ function exportProjectPDF(projIdx){
     +'<div class="meta-box"><div class="meta-label">End Date</div><div class="meta-val">'+proj.endDate+'</div></div>'
     +'<div class="meta-box"><div class="meta-label">Total Hours</div><div class="meta-val">'+totalHours.toFixed(2)+'h</div></div>'
     +'</div>'
-    +(proj.notes?'<div style="background:var(--yellow-bg);border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:24px;font-size:13px;color:var(--yellow);">'+escHtml(proj.notes)+'</div>':'')
+    +(proj.notes?'<div style="background:var(--yellow-bg);border:1px solid var(--yellow-border);border-radius:8px;padding:12px 16px;margin-bottom:24px;font-size:13px;color:var(--yellow);">'+escHtml(proj.notes)+'</div>':'')
     // Hours by position section
     +(posList.length>0?
       '<div style="margin-bottom:28px;">'
