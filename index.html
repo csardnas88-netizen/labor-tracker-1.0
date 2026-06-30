@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.6.1"/>
+<meta name="app-version" content="6.6.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -808,16 +808,96 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .month-sel button{background:none;border:none;cursor:pointer;font-size:15px;color:var(--text2);padding:2px 6px;border-radius:6px;line-height:1;}
 .month-sel button:hover{background:var(--surface);color:var(--navy);}
 .month-sel .ms-label{min-width:104px;text-align:center;}
+
+/* ── PIN / Auth overlays ─────────────────────────────── */
+#pinOverlay,#authOverlay{position:fixed;inset:0;z-index:99999;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;}
+.ov-logo{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:700;color:var(--gl);letter-spacing:.5px;margin-bottom:4px;}
+.ov-sub{font-size:11px;color:rgba(255,255,255,.4);margin-bottom:36px;letter-spacing:.6px;text-transform:uppercase;}
+.pin-dots{display:flex;gap:16px;margin-bottom:28px;}
+.pin-dot{width:13px;height:13px;border-radius:50%;border:2px solid rgba(255,255,255,.25);background:transparent;transition:background .12s,border-color .12s;}
+.pin-dot.filled{background:var(--gl);border-color:var(--gl);}
+.pin-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;width:100%;max-width:274px;}
+.pin-key{background:rgba(255,255,255,.07);border:none;border-radius:14px;color:#fff;font-size:22px;font-weight:600;padding:17px 8px;cursor:pointer;text-align:center;transition:background .1s,transform .08s;-webkit-tap-highlight-color:transparent;user-select:none;}
+.pin-key:active{background:rgba(255,255,255,.18);transform:scale(.92);}
+.pin-key.del{font-size:15px;color:rgba(255,255,255,.55);}
+.pin-key.empty{background:transparent!important;pointer-events:none;}
+.pin-error{font-size:13px;color:#ef9a9a;min-height:18px;margin-bottom:10px;text-align:center;}
+#pinOverlay.shake{animation:pinShake .35s ease;}
+@keyframes pinShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+.auth-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:28px 24px;width:100%;max-width:340px;}
+.auth-field{margin-bottom:14px;}
+.auth-field label{display:block;font-size:10px;color:rgba(255,255,255,.45);margin-bottom:5px;letter-spacing:.5px;text-transform:uppercase;}
+.auth-field input{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:#fff;font-size:16px;padding:12px 14px;outline:none;-webkit-appearance:none;}
+.auth-field input:focus{border-color:var(--gl);}
+.auth-btn{width:100%;background:var(--gl);border:none;border-radius:12px;color:var(--navy);font-size:15px;font-weight:700;padding:14px;cursor:pointer;margin-top:6px;letter-spacing:.3px;-webkit-tap-highlight-color:transparent;}
+.auth-btn:active{opacity:.82;}
+.auth-btn:disabled{opacity:.5;cursor:default;}
+.auth-err{font-size:12px;color:#ef9a9a;min-height:16px;margin-top:10px;text-align:center;line-height:1.4;}
+.auth-note{font-size:10px;color:rgba(255,255,255,.28);text-align:center;margin-top:14px;line-height:1.5;}
 </style>
 </head>
 <body>
+
+<!-- ── PIN Gate ─────────────────────────────────────────── -->
+<div id="pinOverlay">
+  <div class="ov-logo">Labor</div>
+  <div class="ov-sub">Enter PIN to continue</div>
+  <div class="pin-dots">
+    <div class="pin-dot" id="pd0"></div>
+    <div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div>
+    <div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-error" id="pinError"></div>
+  <div class="pin-keypad">
+    <button class="pin-key" onclick="pinKey('1')">1</button>
+    <button class="pin-key" onclick="pinKey('2')">2</button>
+    <button class="pin-key" onclick="pinKey('3')">3</button>
+    <button class="pin-key" onclick="pinKey('4')">4</button>
+    <button class="pin-key" onclick="pinKey('5')">5</button>
+    <button class="pin-key" onclick="pinKey('6')">6</button>
+    <button class="pin-key" onclick="pinKey('7')">7</button>
+    <button class="pin-key" onclick="pinKey('8')">8</button>
+    <button class="pin-key" onclick="pinKey('9')">9</button>
+    <button class="pin-key empty"></button>
+    <button class="pin-key" onclick="pinKey('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">&#9003;</button>
+  </div>
+</div>
+
+<!-- ── Auth Gate (Supabase — shown after PIN if session expired) ── -->
+<div id="authOverlay" style="display:none;">
+  <div class="ov-logo">Labor</div>
+  <div class="ov-sub">Sign in to continue</div>
+  <div class="auth-card">
+    <div class="auth-field">
+      <label>Email</label>
+      <input type="email" id="authEmail" placeholder="your@email.com" autocomplete="email" autocapitalize="off"/>
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="authPassword" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')authSignIn()"/>
+    </div>
+    <button class="auth-btn" id="authSignInBtn" onclick="authSignIn()">Iniciar sesión</button>
+    <div class="auth-err" id="authError"></div>
+    <div style="text-align:center;margin-top:14px;">
+      <button onclick="_authToggleMode()" id="authToggleBtn"
+        style="background:none;border:none;color:rgba(255,255,255,.4);font-size:11px;cursor:pointer;text-decoration:underline;padding:4px;">
+        ¿Primera vez? Crear cuenta
+      </button>
+    </div>
+    <div class="auth-note">Tus datos están protegidos por reglas de acceso en el servidor.<br>Solo cuentas autorizadas pueden leer o escribir.</div>
+  </div>
+</div>
+
 <!-- ── Version banner ── -->
 <div id="versionBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:var(--gl);color:var(--navy);text-align:center;padding:14px 16px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.3px;box-shadow:0 -2px 8px rgba(0,0,0,.25);padding-bottom:max(14px,env(safe-area-inset-bottom));">
   🔄 New version available — tap to update
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.6.1';
+  var APP_VERSION = '6.6.2';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -923,7 +1003,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <div class="sync-dot" id="syncDot"></div>
       <span id="syncStatus" style="font-size:10px;color:rgba(255,255,255,.45);">Connecting...</span>
     </div>
-    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v6.6.1</span></div>
+    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v6.6.2</span></div>
   </div>
 </div>
 
@@ -1265,10 +1345,38 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div id="snapshotResults" style="padding:0 16px 16px;"></div>
       </div>
 
-      <div class="card">
+      <div class="card" style="margin-bottom:14px;">
         <div class="card-head"><div class="card-title">App Info</div></div>
         <div class="settings-info-row"><span class="settings-info-label">Version</span><span class="settings-info-value" id="settingsAppVersion">—</span></div>
         <div class="settings-info-row"><span class="settings-info-label">Sync endpoint</span><span class="settings-info-value">Supabase</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Seguridad</div></div>
+        <div class="settings-row" onclick="changePinFlow()">
+          <div class="settings-row-icon" style="background:var(--navy);color:#fff;">&#128290;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">Cambiar PIN</div>
+            <div class="settings-row-desc">Establece un nuevo PIN de 4 dígitos para desbloquear la app</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
+        <div class="settings-row" onclick="lockApp()">
+          <div class="settings-row-icon" style="background:var(--surface);color:var(--text2);">&#128274;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">Bloquear app</div>
+            <div class="settings-row-desc">Regresa a la pantalla de PIN de inmediato</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
+        <div class="settings-row" onclick="authSignOut()">
+          <div class="settings-row-icon" style="background:var(--red-bg);color:var(--red);">&#9099;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title" style="color:var(--red);">Cerrar sesión</div>
+            <div class="settings-row-desc">Termina tu sesión — requerirá inicio de sesión la próxima vez</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
       </div>
     </div>
 
@@ -3045,6 +3153,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.6.2', date:'2026-06-29',
+    features:['Added two-layer access control: a 4-digit PIN locks the app on every new session, and a cloud sign-in (Supabase Auth) protects data at the server level. Row Level Security is now enforced on the database — even if someone finds the API key in the page source, they cannot read or write any data without the authorized account. PIN can be changed anytime from Settings → Seguridad.']
+  },
+  {
     v:'6.6.1', date:'2026-06-29',
     changes:['Updated the app name and cleaned up branding throughout the interface and reports.']
   },
@@ -3430,6 +3542,191 @@ function saveCurrentDayToWeek(fname){
 var SUPA_URL="https://ixqjdqsmnvfkjuvzdtca.supabase.co";
 var SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml4cWpkcXNtbnZma2p1dnpkdGNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMzQxMjAsImV4cCI6MjA5NTYxMDEyMH0.M51bFeERAdCbNajS1CszZDmSJZ9zBzz0Y_V0kDylMgA";
 var SUPA_HEADERS={"Content-Type":"application/json","apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};
+
+/* ══ PIN LOCK ════════════════════════════════════════════
+   Layer 1 — blocks the UI until a 4-digit PIN is entered.
+   PIN is stored as SHA-256 hash in localStorage so it
+   survives app updates without being readable in plain text.
+   Default PIN: 1234  (change via Settings → Seguridad)
+   ════════════════════════════════════════════════════════ */
+var _PIN_LS_KEY='hk_pin_hash';
+var _PIN_DEFAULT='03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4';/* SHA-256("1234") */
+var _pinBuf='';
+function _pinGetHash(){return localStorage.getItem(_PIN_LS_KEY)||_PIN_DEFAULT;}
+async function _sha256(s){
+  var b=new TextEncoder().encode(s);
+  var h=await crypto.subtle.digest('SHA-256',b);
+  return Array.from(new Uint8Array(h)).map(function(x){return x.toString(16).padStart(2,'0');}).join('');
+}
+function _pinUpdateDots(){
+  for(var i=0;i<4;i++){var d=document.getElementById('pd'+i);if(d)d.className='pin-dot'+(i<_pinBuf.length?' filled':'');}
+}
+function pinKey(digit){
+  if(_pinBuf.length>=4)return;
+  _pinBuf+=digit;_pinUpdateDots();
+  if(_pinBuf.length===4)_pinSubmit();
+}
+function pinDel(){
+  if(_pinBuf.length){_pinBuf=_pinBuf.slice(0,-1);_pinUpdateDots();}
+  var e=document.getElementById('pinError');if(e)e.textContent='';
+}
+async function _pinSubmit(){
+  var h=await _sha256(_pinBuf);
+  if(h===_pinGetHash()){
+    document.getElementById('pinOverlay').style.display='none';
+    sessionStorage.setItem('_pu','1');
+    _authCheckAndProceed();
+  } else {
+    _pinBuf='';_pinUpdateDots();
+    var e=document.getElementById('pinError');if(e)e.textContent='PIN incorrecto. Intenta de nuevo.';
+    var ov=document.getElementById('pinOverlay');
+    if(ov){ov.classList.add('shake');setTimeout(function(){ov.classList.remove('shake');},400);}
+  }
+}
+async function changePinFlow(){
+  var np=prompt('Nuevo PIN (4 dígitos):');
+  if(!np||!/^\d{4}$/.test(np)){alert('El PIN debe ser exactamente 4 dígitos.');return;}
+  var c=prompt('Confirma el nuevo PIN:');
+  if(np!==c){alert('Los PINs no coinciden.');return;}
+  localStorage.setItem(_PIN_LS_KEY,await _sha256(np));
+  alert('PIN actualizado correctamente.');
+}
+function lockApp(){
+  sessionStorage.removeItem('_pu');_pinBuf='';_pinUpdateDots();
+  var e=document.getElementById('pinError');if(e)e.textContent='';
+  var po=document.getElementById('pinOverlay');if(po)po.style.display='flex';
+}
+
+/* ══ SUPABASE AUTH ═══════════════════════════════════════
+   Layer 2 — requires a valid Supabase session.
+   RLS policy on labor_data only allows the authorized email.
+   Even if someone finds the anon key in source, they get
+   zero data without signing in as the authorized account.
+   ════════════════════════════════════════════════════════ */
+var _SA_TOK='hk_sa_tok',_SA_REF='hk_sa_ref',_SA_EXP='hk_sa_exp';
+function _authToken(){return localStorage.getItem(_SA_TOK)||'';}
+function _authExpired(){return Date.now()>(parseInt(localStorage.getItem(_SA_EXP)||'0',10)-60000);}
+function _authStore(d){
+  localStorage.setItem(_SA_TOK,d.access_token);
+  localStorage.setItem(_SA_REF,d.refresh_token);
+  localStorage.setItem(_SA_EXP,String(Date.now()+d.expires_in*1000));
+  SUPA_HEADERS['Authorization']='Bearer '+d.access_token;
+}
+async function _authRefresh(){
+  var rt=localStorage.getItem(_SA_REF);if(!rt)return false;
+  try{
+    var r=await fetch(SUPA_URL+'/auth/v1/token?grant_type=refresh_token',{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
+      body:JSON.stringify({refresh_token:rt})
+    });
+    var d=await r.json();
+    if(d.access_token){_authStore(d);return true;}
+  }catch(e){}
+  return false;
+}
+async function _authCheckAndProceed(){
+  var tok=_authToken();
+  if(tok&&!_authExpired()){
+    SUPA_HEADERS['Authorization']='Bearer '+tok;
+    document.getElementById('authOverlay').style.display='none';
+    _authUpdateUI();return;
+  }
+  if(tok&&_authExpired()){
+    if(await _authRefresh()){
+      document.getElementById('authOverlay').style.display='none';
+      _authUpdateUI();return;
+    }
+  }
+  document.getElementById('authOverlay').style.display='flex';
+}
+async function authSignIn(){
+  var email=(document.getElementById('authEmail')||{}).value||'';
+  var pass=(document.getElementById('authPassword')||{}).value||'';
+  var errEl=document.getElementById('authError');
+  var btn=document.getElementById('authSignInBtn');
+  if(!email||!pass){errEl.textContent='Ingresa tu email y contraseña.';return;}
+  btn.textContent='Iniciando sesión…';btn.disabled=true;
+  try{
+    var r=await fetch(SUPA_URL+'/auth/v1/token?grant_type=password',{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
+      body:JSON.stringify({email:email,password:pass})
+    });
+    var d=await r.json();
+    if(d.access_token){
+      _authStore(d);
+      document.getElementById('authOverlay').style.display='none';
+      _authUpdateUI();
+      setTimeout(syncFromSheets,400);
+      errEl.textContent='';
+    } else {
+      errEl.textContent=d.error_description||d.msg||'Credenciales incorrectas.';
+    }
+  }catch(e){errEl.textContent='Error de red. Intenta de nuevo.';}
+  btn.textContent='Sign In';btn.disabled=false;
+}
+var _authMode='signin';
+function _authToggleMode(){
+  _authMode=(_authMode==='signin')?'signup':'signin';
+  var btn=document.getElementById('authSignInBtn');
+  var tog=document.getElementById('authToggleBtn');
+  var err=document.getElementById('authError');
+  if(err)err.textContent='';
+  if(_authMode==='signup'){
+    if(btn){btn.textContent='Crear cuenta';btn.onclick=authSignUp;}
+    if(tog)tog.textContent='¿Ya tienes cuenta? Iniciar sesión';
+  } else {
+    if(btn){btn.textContent='Iniciar sesión';btn.onclick=authSignIn;}
+    if(tog)tog.textContent='¿Primera vez? Crear cuenta';
+  }
+}
+async function authSignUp(){
+  var email=(document.getElementById('authEmail')||{}).value||'';
+  var pass=(document.getElementById('authPassword')||{}).value||'';
+  var errEl=document.getElementById('authError');
+  var btn=document.getElementById('authSignInBtn');
+  if(!email||!pass){errEl.textContent='Ingresa tu email y contraseña.';return;}
+  if(pass.length<6){errEl.textContent='La contraseña debe tener al menos 6 caracteres.';return;}
+  btn.textContent='Creando cuenta…';btn.disabled=true;
+  try{
+    var r=await fetch(SUPA_URL+'/auth/v1/signup',{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
+      body:JSON.stringify({email:email,password:pass})
+    });
+    var d=await r.json();
+    if(d.access_token){
+      _authStore(d);
+      document.getElementById('authOverlay').style.display='none';
+      _authUpdateUI();setTimeout(syncFromSheets,400);errEl.textContent='';
+    } else if(d.id||d.identities){
+      errEl.style.color='#a5d6a7';
+      errEl.textContent='Cuenta creada. Revisa tu email para confirmar, luego inicia sesión.';
+    } else {
+      errEl.textContent=d.error_description||d.msg||'Error al crear la cuenta.';
+    }
+  }catch(e){errEl.textContent='Error de red. Intenta de nuevo.';}
+  btn.textContent='Crear cuenta';btn.disabled=false;
+}
+function authSignOut(){
+  if(!confirm('¿Cerrar sesión? Deberás iniciar sesión la próxima vez.'))return;
+  localStorage.removeItem(_SA_TOK);localStorage.removeItem(_SA_REF);localStorage.removeItem(_SA_EXP);
+  SUPA_HEADERS['Authorization']='Bearer '+SUPA_KEY;
+  lockApp();
+}
+function _authUpdateUI(){
+  var el=document.getElementById('settingsSyncStatus');
+  if(el)el.textContent=_authToken()?'Sesión activa':'No autenticado';
+}
+/* On load: skip PIN if already unlocked this session; also restore auth header */
+window.addEventListener('load',function(){
+  if(sessionStorage.getItem('_pu')==='1'){
+    var po=document.getElementById('pinOverlay');if(po)po.style.display='none';
+    _authCheckAndProceed();
+  }
+  /* Restore auth header if token exists (app was just reloaded mid-session) */
+  var tok=_authToken();
+  if(tok&&!_authExpired())SUPA_HEADERS['Authorization']='Bearer '+tok;
+  _authUpdateUI();
+});
 
 function setSyncStatus(s){
   var el=document.getElementById("syncStatus");
