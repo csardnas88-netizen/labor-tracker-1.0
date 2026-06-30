@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.7.0"/>
+<meta name="app-version" content="6.7.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.7.0';
+  var APP_VERSION = '6.7.1';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -3159,7 +3159,7 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
-    v:'6.7.0', date:'2026-06-29',
+    v:'6.7.1', date:'2026-06-29',
     features:['Monthly Recap Excel sheet redesigned: removed the P&L position table; now shows only the period breakdown with 6 columns (Period / Rooms / Actual Hrs / OT Hrs / Budget Hrs / Variance). Budget per period is computed from actual days and rooms in that period. Variance cell is green when under budget, red when over. Total row shows cumulative actual + OT vs budget + variance. Colors match the P&L sheet exactly (alternating white/blue rows, gold total, navy header).']
   },
   {
@@ -4967,13 +4967,6 @@ function exportPnlExcel(){
   var m=loadLaborModel();
   var label=MONTH_NAMES[mo]+' '+yr;
 
-  /* total rooms — only days with data in this month */
-  var totRooms=0;
-  Object.keys(roomsData).forEach(function(ds){
-    var d=parseLocalDate(ds);
-    if(d.getMonth()===mo&&d.getFullYear()===yr) totRooms+=parseInt(roomsData[ds])||0;
-  });
-
   /* effective days: calendar days 1 → last day with any data loaded */
   var _latestDay=0;
   Object.keys(days).forEach(function(ds){
@@ -4981,6 +4974,12 @@ function exportPnlExcel(){
     if(d.getMonth()===mo&&d.getFullYear()===yr) _latestDay=Math.max(_latestDay,d.getDate());
   });
   var effectiveDays=_latestDay>0?_latestDay:dim;
+
+  /* total rooms — accounting method: rooms on same day as labor (day 1 → effectiveDays) */
+  var totRooms=0;
+  for(var _xdi=1;_xdi<=effectiveDays;_xdi++){
+    totRooms+=getRoomsForDay(dateStr(new Date(yr,mo,_xdi)))||0;
+  }
 
   /* ── Build per-position P&L data ── */
   var posData=[],tBud=0,tAct=0,tOT=0,tBudC=0,tActC=0;
@@ -5013,7 +5012,7 @@ function exportPnlExcel(){
     var pByPos={};LM_ORDER.forEach(function(pos){pByPos[pos]={act:0,ot:0};});
     inMo.forEach(function(dd){
       var ds=dateStr(dd);var sn=days[ds];
-      pR+=parseInt(roomsData[ds])||0;
+      pR+=getRoomsForDay(ds)||0;
       if(sn){pP+=sn.totalPaid||0;pO+=sn.totalOT||0;pL++;
         if(sn.byPosition)LM_ORDER.forEach(function(pos){
           if(sn.byPosition[pos]){pByPos[pos].act+=sn.byPosition[pos].paid||0;pByPos[pos].ot+=sn.byPosition[pos].ot1||0;}
@@ -5971,14 +5970,14 @@ function renderPnl(){
   var yr2=viewMonth.getFullYear(),mo2=viewMonth.getMonth();
   var daysInMonth=new Date(yr2,mo2+1,0).getDate();
   var roomsData=mData.rooms||{};
-  var totalMonthRooms=0;
-  Object.keys(roomsData).forEach(function(ds){
-    var d=parseLocalDate(ds);
-    if(d.getMonth()===mo2&&d.getFullYear()===yr2)totalMonthRooms+=parseInt(roomsData[ds])||0;
-  });
   var _pnlLast=0;
   dsList.forEach(function(ds){var d=parseLocalDate(ds);if(d.getMonth()===mo2&&d.getFullYear()===yr2)_pnlLast=Math.max(_pnlLast,d.getDate());});
   var pnlEffectiveDays=_pnlLast>0?_pnlLast:daysInMonth;
+  /* accounting method: count rooms on same day as labor (day 1 → last loaded day) */
+  var totalMonthRooms=0;
+  for(var _pdi=1;_pdi<=pnlEffectiveDays;_pdi++){
+    totalMonthRooms+=getRoomsForDay(dateStr(new Date(yr2,mo2,_pdi)))||0;
+  }
 
   /* Empty state */
   if(dsList.length===0){
@@ -6093,12 +6092,12 @@ function renderPnl(){
     if(inMo.length===7){
       /* Full hotel week */
       var wR=0,wP=0,wO=0,wL=0;
-      inMo.forEach(function(dd){var ds=dateStr(dd);wR+=parseInt(roomsData[ds])||0;var sn=days[ds];if(sn){wP+=sn.totalPaid;wO+=sn.totalOT;wL++;}});
+      inMo.forEach(function(dd){var ds=dateStr(dd);wR+=getRoomsForDay(ds)||0;var sn=days[ds];if(sn){wP+=sn.totalPaid;wO+=sn.totalOT;wL++;}});
       periods.push({type:'week',first:inMo[0],last:inMo[6],rooms:wR,paid:wP,ot:wO,loaded:wL,days:7});
     } else if(inMo.length>0){
       /* Partial period — one grouped row */
       var pR=0,pP=0,pO=0,pL=0;
-      inMo.forEach(function(dd){var ds=dateStr(dd);pR+=parseInt(roomsData[ds])||0;var sn=days[ds];if(sn){pP+=sn.totalPaid;pO+=sn.totalOT;pL++;}});
+      inMo.forEach(function(dd){var ds=dateStr(dd);pR+=getRoomsForDay(ds)||0;var sn=days[ds];if(sn){pP+=sn.totalPaid;pO+=sn.totalOT;pL++;}});
       periods.push({type:'partial',first:inMo[0],last:inMo[inMo.length-1],rooms:pR,paid:pP,ot:pO,loaded:pL,days:inMo.length});
     }
   });
@@ -7946,14 +7945,14 @@ function renderRecap(){
 
   /* ── Budget basis: day 1 → last loaded day (matches P&L) ── */
   var recapDaysInMonth=new Date(yr,mo+1,0).getDate();
-  var totalMonthRoomsRecap=0;
-  Object.keys(rooms).forEach(function(ds){
-    var d=parseLocalDate(ds);
-    if(d.getMonth()===mo&&d.getFullYear()===yr) totalMonthRoomsRecap+=parseInt(rooms[ds])||0;
-  });
   var _rcLast=0;
   Object.keys(days).forEach(function(ds){var d=parseLocalDate(ds);if(d.getMonth()===mo&&d.getFullYear()===yr)_rcLast=Math.max(_rcLast,d.getDate());});
   var rcEffectiveDays=_rcLast>0?_rcLast:recapDaysInMonth;
+  /* accounting method: count rooms on same day as labor (day 1 → last loaded day) */
+  var totalMonthRoomsRecap=0;
+  for(var _rdi=1;_rdi<=rcEffectiveDays;_rdi++){
+    totalMonthRoomsRecap+=getRoomsForDay(dateStr(new Date(yr,mo,_rdi)))||0;
+  }
   var recapMonthBudget=0;
   HK_POS_LIST.forEach(function(pos){
     var std=LABOR_STD[pos];
@@ -7969,7 +7968,7 @@ function renderRecap(){
     var d=parseLocalDate(ds);
     if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
     var s=days[ds];
-    var r=getRoomsForDayExec(ds); /* executive view: same-night occupancy */
+    var r=getRoomsForDay(ds);
     mPaid+=s.totalPaid;
     mNB+=s.noBreak;mSB+=s.shortBreak;mDays++;mOT+=s.totalOT;
     if(r>0)mRooms.push(r);
