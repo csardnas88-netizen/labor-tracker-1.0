@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.7.1"/>
+<meta name="app-version" content="6.7.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.7.1';
+  var APP_VERSION = '6.7.2';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -3159,7 +3159,7 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
-    v:'6.7.1', date:'2026-06-29',
+    v:'6.7.2', date:'2026-06-29',
     features:['Monthly Recap Excel sheet redesigned: removed the P&L position table; now shows only the period breakdown with 6 columns (Period / Rooms / Actual Hrs / OT Hrs / Budget Hrs / Variance). Budget per period is computed from actual days and rooms in that period. Variance cell is green when under budget, red when over. Total row shows cumulative actual + OT vs budget + variance. Colors match the P&L sheet exactly (alternating white/blue rows, gold total, navy header).']
   },
   {
@@ -5166,7 +5166,7 @@ function exportPnlExcel(){
   /* ══════════════════════
      SHEET 2 — MONTHLY RECAP  (period breakdown, P&L color scheme)
      ══════════════════════ */
-  var tHrsVar=tAct-tBud;
+  var tHrsVar=(tAct+tOT)-tBud;
   var tHrsVarS=tHrsVar<-0.005?'sXHG':tHrsVar>0.005?'sXHR':'sXR';
 
   var s3='';
@@ -5181,7 +5181,7 @@ function exportPnlExcel(){
   periods.forEach(function(p,i){
     var alt=i%2===1;
     var lS=alt?'sBL':'sAL',rS=alt?'sBR':'sAR',iS=alt?'sBI':'sAI';
-    var pVar=p.paid-(p.budHrs||0);
+    var pVar=(p.paid+p.ot)-(p.budHrs||0);
     var vS=pVar<-0.005?'sVG':pVar>0.005?'sVR':(alt?'sBR':'sAR');
     s3+=rw(cx(p.label,lS)+cx(p.rooms>0?p.rooms:'',iS)
           +cx(fmt2(p.paid),rS)+cx(p.ot>0?fmt2(p.ot):'',rS)
@@ -8028,7 +8028,8 @@ function renderRecap(){
   var prevVar=prevPaid-prevBudget;
 
   var mBudget=recapMonthBudget;
-  var mVar=mPaid-mBudget;
+  var mActual=mPaid+mOT;
+  var mVar=mActual-mBudget;
   var avgRooms=mRooms.length?Math.round(mRooms.reduce(function(a,b){return a+b;},0)/mRooms.length):0;
   var peakRooms=mRooms.length?Math.max.apply(null,mRooms):0;
   var lowRooms=mRooms.length?Math.min.apply(null,mRooms):0;
@@ -8072,9 +8073,9 @@ function renderRecap(){
   html+='<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;">';
   html+='<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px;">Total Variance &#8212; '+label+'</div>';
   html+='<div style="font-size:26px;font-weight:800;color:'+(mVar>0?'var(--red)':'var(--green)')+'">'+(mVar>=0?'+':'')+mVar.toFixed(2)+'h</div>';
-  html+='<div style="font-size:11px;color:var(--text3);margin:2px 0 8px;">'+(mBudget>0?Math.round((mPaid/mBudget)*100)+'% of budget':'&#8212;')+' &#183; '+mDays+' days loaded</div>';
+  html+='<div style="font-size:11px;color:var(--text3);margin:2px 0 8px;">'+(mBudget>0?Math.round((mActual/mBudget)*100)+'% of budget':'&#8212;')+' &#183; '+mDays+' days loaded</div>';
   html+='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;">';
-  html+='<div><strong style="display:block;font-size:13px;font-weight:800;">'+mPaid.toFixed(2)+'h</strong><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">Total Paid</span></div>';
+  html+='<div><strong style="display:block;font-size:13px;font-weight:800;">'+mActual.toFixed(2)+'h</strong><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">Total Actual</span></div>';
   html+='<div><strong style="display:block;font-size:13px;font-weight:800;">'+(mBudget>0?mBudget.toFixed(2)+'h':'&#8212;')+'</strong><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">Total Budget</span></div>';
   html+='<div><strong style="display:block;font-size:13px;font-weight:800;">'+(avgRooms||'&#8212;')+'</strong><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">Avg Rooms</span></div>';
   html+='</div>';
@@ -8115,7 +8116,7 @@ function renderRecap(){
   var totalOver=0,totalUnder=0,netVariance=0;
   HK_POS_LIST.forEach(function(pos){
     var p=byPos[pos];if(!p)return;
-    var v=p.paid-p.budget;
+    var v=(p.paid+p.ot)-p.budget;
     netVariance+=v;
     if(v>0.5)totalOver+=v;else if(v<-0.5)totalUnder+=Math.abs(v);
   });
@@ -8148,7 +8149,8 @@ function renderRecap(){
     if(!p||(!p.paid&&!p.budget))return;
     var std=LABOR_STD[pos];
     var sub=std?(std.type==='fixed'?std.daily+'h fixed · daily':(std.factor*100)+'% of rooms'):'';
-    var variance=p.paid-p.budget;
+    var pActual=p.paid+p.ot;
+    var variance=pActual-p.budget;
     var isOver=variance>0.5;
     var isUnder=variance<-0.5;
     var rowBg=isOver?'var(--red-bg)':isUnder?'var(--green-bg)':'var(--white)';
@@ -8158,7 +8160,7 @@ function renderRecap(){
     var paceColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
     var pillBg=isOver?'var(--red-border)':isUnder?'var(--green-border)':'var(--border)';
     var pillColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
-    var barPct=p.budget>0?Math.min(100,Math.round((p.paid/p.budget)*100)):0;
+    var barPct=p.budget>0?Math.min(100,Math.round((pActual/p.budget)*100)):0;
     var posLabel=pos.replace(' Attendant','').replace('Housekeeping ','Sup.');
 
     html+='<div style="display:grid;grid-template-columns:155px 1fr 75px 75px 85px;align-items:center;padding:11px 14px;border-top:1px solid var(--border);background:'+rowBg+';">';
@@ -8170,9 +8172,9 @@ function renderRecap(){
       +'<span style="color:'+paceColor+';font-weight:700;">'+paceLabel+'</span></div>';
     html+='<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;">'
       +'<div style="height:100%;width:'+barPct+'%;background:'+barColor+';border-radius:3px;"></div></div>';
-    html+='<div style="font-size:10px;color:var(--text3);margin-top:2px;">'+p.paid.toFixed(2)+'h worked vs '+p.budget.toFixed(2)+'h budget</div>';
+    html+='<div style="font-size:10px;color:var(--text3);margin-top:2px;">'+pActual.toFixed(2)+'h worked vs '+p.budget.toFixed(2)+'h budget</div>';
     html+='</div>';
-    html+='<div style="text-align:right;font-size:13px;font-weight:800;color:'+valColor+';">'+p.paid.toFixed(2)+'h</div>';
+    html+='<div style="text-align:right;font-size:13px;font-weight:800;color:'+valColor+';">'+pActual.toFixed(2)+'h</div>';
     html+='<div style="text-align:right;font-size:13px;color:var(--text2);">'+(p.budget>0?p.budget.toFixed(2)+'h':'—')+'</div>';
     html+='<div style="text-align:right;"><span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'
       +(variance>=0?'+':'')+variance.toFixed(2)+'h</span></div>';
