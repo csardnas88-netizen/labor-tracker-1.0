@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.6.3"/>
+<meta name="app-version" content="6.6.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.6.3';
+  var APP_VERSION = '6.6.4';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -3159,6 +3159,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.6.4', date:'2026-06-29',
+    fixes:['Fixed Excel export "HTML Import Errors: Style" — double-quote characters in number format strings were not XML-escaped, causing Excel to reject the style sheet. Currency format now renders correctly with no import warnings.']
+  },
+  {
     v:'6.6.3', date:'2026-06-29',
     features:[
       'P&L and Monthly Recap now use the accounting method for budgeted hours: variable positions use total monthly room-nights × factor; fixed positions (Turndown, Public Area) use daily hours × days in the month. Both sections now show the same budget total.',
@@ -5019,7 +5023,7 @@ function exportPnlExcel(){
     if(opts.ha)aa.push('ss:Horizontal="'+opts.ha+'"');
     if(opts.va)aa.push('ss:Vertical="Center"');
     if(aa.length)s+='<Alignment '+aa.join(' ')+'/>';
-    if(opts.fmt)s+='<NumberFormat ss:Format="'+opts.fmt+'"/>';
+    if(opts.fmt)s+='<NumberFormat ss:Format="'+opts.fmt.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"/>';
     if(opts.bTop)s+='<Borders><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="'+NA+'"/></Borders>';
     s+='</Style>';
     return s;
