@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.6.9"/>
+<meta name="app-version" content="6.7.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.6.9';
+  var APP_VERSION = '6.7.0';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -3159,6 +3159,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.7.0', date:'2026-06-29',
+    features:['Monthly Recap Excel sheet redesigned: removed the P&L position table; now shows only the period breakdown with 6 columns (Period / Rooms / Actual Hrs / OT Hrs / Budget Hrs / Variance). Budget per period is computed from actual days and rooms in that period. Variance cell is green when under budget, red when over. Total row shows cumulative actual + OT vs budget + variance. Colors match the P&L sheet exactly (alternating white/blue rows, gold total, navy header).']
+  },
+  {
     v:'6.6.9', date:'2026-06-29',
     features:['Budget now calculated from day 1 to the last day with data loaded — in the app P&L, Monthly Recap, and Excel export. Fixed positions (Turndown 21h/day, Public Area 32h/day) multiply by days loaded, not full month. Running the report on June 28 gives a 28-day fixed budget. P&L footer and rooms bar now show "X / Y días cargados". Excel shows "Days Loaded: X / Y" in both sheets.']
   },
@@ -5019,11 +5023,13 @@ function exportPnlExcel(){
     });
     var pace=tBud>0?tBud*(dayNum/dim):null;
     var diff=pace!==null?runTotal-pace:null;
+    var pBud=0;LM_ORDER.forEach(function(pos){var std=LABOR_STD[pos];if(std)pBud+=std.type==='fixed'?std.daily*inMo.length:pR*std.factor;});
     if(inMo.length===7){
-      periods.push({type:'week',label:'Sáb '+inMo[0].getDate()+' – Vie '+inMo[6].getDate(),rooms:pR,paid:pP,ot:pO,loaded:pL,outOf:7,run:runTotal,pace:pace,diff:diff,byPos:pByPos});
+      periods.push({type:'week',label:'Sat '+inMo[0].getDate()+' – Fri '+inMo[6].getDate(),rooms:pR,paid:pP,ot:pO,loaded:pL,outOf:7,run:runTotal,pace:pace,diff:diff,byPos:pByPos,budHrs:pBud});
     } else {
       var _f=inMo[0],_la=inMo[inMo.length-1];
-      periods.push({type:'partial',label:_DN[_f.getDay()]+' '+_f.getDate()+' – '+_DN[_la.getDay()]+' '+_la.getDate(),rooms:pR,paid:pP,ot:pO,loaded:pL,outOf:inMo.length,run:runTotal,pace:pace,diff:diff,byPos:pByPos});
+      var _DNe=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      periods.push({type:'partial',label:_DNe[_f.getDay()]+' '+_f.getDate()+' – '+_DNe[_la.getDay()]+' '+_la.getDate(),rooms:pR,paid:pP,ot:pO,loaded:pL,outOf:inMo.length,run:runTotal,pace:pace,diff:diff,byPos:pByPos,budHrs:pBud});
     }
   });
 
@@ -5159,69 +5165,42 @@ function exportPnlExcel(){
   s1+=rw(cm('Budget based on days loaded: '+totRooms.toLocaleString()+' rooms × factor | fixed hours × '+effectiveDays+' days (of '+dim+' in month)','sInf',9),16);
 
   /* ══════════════════════
-     SHEET 2 — MONTHLY RECAP
-     Same position table as P&L + period breakdown below
+     SHEET 2 — MONTHLY RECAP  (period breakdown, P&L color scheme)
      ══════════════════════ */
   var tHrsVar=tAct-tBud;
   var tHrsVarS=tHrsVar<-0.005?'sXHG':tHrsVar>0.005?'sXHR':'sXR';
-  var tVarS2=tBudC>0?(tVar<-0.005?'sXVG':tVar>0.005?'sXVR':'sXC'):'sXL';
 
   var s3='';
-  s3+=rw(cm('MONTHLY RECAP — '+label.toUpperCase(),'sTit',9),38);
-  s3+=rw(cx('Rooms Sold:','sInf')+cx(totRooms,'sInf')+cx('','sInf')
-        +cx('Days Loaded:','sInf')+cx(effectiveDays+' / '+dim,'sInf')+cx('','sInf')
-        +cx('Generated:','sInf')+cx(exportDate,'sInf')+cx('','sInf')+cx('','sInf'),22);
-  s3+=blank(10,8);
-  s3+=rw(cx('Position','sTHL')+cx('Budget Hrs','sTHR')+cx('Actual Hrs','sTHR')
-        +cx('OT Hrs','sTHR')+cx('Rate','sTHR')+cx('Budget $','sTHR')
-        +cx('Regular $','sTHR')+cx('OT $','sTHR')+cx('Actual $','sTHR')+cx('Variance $','sTHR'),22);
+  s3+=rw(cm('MONTHLY RECAP — '+label.toUpperCase(),'sTit',5),38);
+  s3+=rw(cx('Rooms Sold:','sInf')+cx(totRooms,'sInf')
+        +cx('Days Loaded:','sInf')+cx(effectiveDays+' / '+dim,'sInf')
+        +cx('Generated:','sInf')+cx(exportDate,'sInf'),22);
+  s3+=blank(6,8);
+  s3+=rw(cx('Period','sTHL')+cx('Rooms','sTHR')+cx('Actual Hrs','sTHR')
+        +cx('OT Hrs','sTHR')+cx('Budget Hrs','sTHR')+cx('Variance','sTHR'),22);
 
-  posData.forEach(function(p,i){
+  periods.forEach(function(p,i){
     var alt=i%2===1;
-    var lS=alt?'sBL':'sAL',rS=alt?'sBR':'sAR',cS=alt?'sBC':'sAC';
-    var vS=p.rate>0?(p.varC<-0.005?'sVGC':p.varC>0.005?'sVRC':cS):lS;
-    s3+=rw(cx(p.pos,lS)+cx(fmt2(p.bud),rS)+cx(fmt2(p.act),rS)+cx(fmt2(p.ot),rS)
-          +cx(p.rate>0?p.rate:'',p.rate>0?cS:lS)
-          +cx(p.rate>0?fmt2(p.budC):'',p.rate>0?cS:lS)
-          +cx(p.rate>0?fmt2(p.regC):'',p.rate>0?cS:lS)
-          +cx(p.rate>0&&p.ot>0?fmt2(p.otC):'',p.rate>0&&p.ot>0?cS:lS)
-          +cx(p.rate>0?fmt2(p.actC):'',p.rate>0?cS:lS)
-          +cx(p.rate>0?fmt2(p.varC):'',vS),20);
-  });
-  s3+=rw(cx('TOTAL','sXL')+cx(fmt2(tBud),'sXR')+cx(fmt2(tAct),'sXR')+cx(fmt2(tOT),'sXR')
-        +cx('','sXL')+cx(tBudC>0?fmt2(tBudC):'',(tBudC>0?'sXC':'sXL'))
-        +cx('','sXL')+cx('','sXL')
-        +cx(tActC>0?fmt2(tActC):'',(tActC>0?'sXC':'sXL'))
-        +cx(tBudC>0?fmt2(tVar):'',tVarS2),24);
-  s3+=blank(10,6);
-  s3+=rw(cm('Budget based on days loaded: '+totRooms.toLocaleString()+' rooms × factor | fixed hours × '+effectiveDays+' days (of '+dim+' in month)','sInf',9),16);
-
-  /* Period breakdown section */
-  s3+=blank(10,12);
-  s3+=rw(cm('PERIOD BREAKDOWN','sTit',9),28);
-  s3+=blank(10,6);
-  s3+=rw(cx('Period','sTHL')+cx('Rooms','sTHR')+cx('Actual Hrs','sTHR')+cx('OT Hrs','sTHR')
-        +cx('','sTHL')+cx('','sTHL')+cx('','sTHL')+cx('','sTHL')+cx('','sTHL')+cx('','sTHL'),22);
-
-  periods.forEach(function(p){
-    var isW=p.type==='week';
-    var lS3=isW?'sWL':'sDL',rS3=isW?'sWR':'sDR',iS3=isW?'sWI':'sDI';
-    s3+=rw(cx(p.label,lS3)+cx(p.rooms>0?p.rooms:'',iS3)
-          +cx(fmt2(p.paid),rS3)+cx(p.ot>0?fmt2(p.ot):'',rS3)
-          +cx('',lS3)+cx('',lS3)+cx('',lS3)+cx('',lS3)+cx('',lS3)+cx('',lS3),isW?22:18);
+    var lS=alt?'sBL':'sAL',rS=alt?'sBR':'sAR',iS=alt?'sBI':'sAI';
+    var pVar=p.paid-(p.budHrs||0);
+    var vS=pVar<-0.005?'sVG':pVar>0.005?'sVR':(alt?'sBR':'sAR');
+    s3+=rw(cx(p.label,lS)+cx(p.rooms>0?p.rooms:'',iS)
+          +cx(fmt2(p.paid),rS)+cx(p.ot>0?fmt2(p.ot):'',rS)
+          +cx(fmt2(p.budHrs||0),rS)+cx(pVar,vS),20);
     if(p.byPos){
-      var psL3=isW?'sPL':'sQL',psR3=isW?'sPR':'sQR';
       LM_ORDER.forEach(function(pos){
-        var pa=p.byPos[pos];if(!pa)return;
-        s3+=rw(cx('    '+LM_LABELS[pos],psL3)+cx('',psL3)
-              +cx(pa.act>0?fmt2(pa.act):'',pa.act>0?psR3:psL3)
-              +cx(pa.ot>0?fmt2(pa.ot):'',pa.ot>0?psR3:psL3)
-              +cx('',psL3)+cx('',psL3)+cx('',psL3)+cx('',psL3)+cx('',psL3)+cx('',psL3),15);
+        var pa=p.byPos[pos];if(!pa||(!pa.act&&!pa.ot))return;
+        s3+=rw(cx('    '+LM_LABELS[pos],lS)+cx('',lS)
+              +cx(pa.act>0?fmt2(pa.act):'',pa.act>0?rS:lS)
+              +cx(pa.ot>0?fmt2(pa.ot):'',pa.ot>0?rS:lS)
+              +cx('',lS)+cx('',lS),15);
       });
     }
   });
   s3+=rw(cx('TOTAL','sXL')+cx(totRooms,'sXI')+cx(fmt2(tAct),'sXR')+cx(fmt2(tOT),'sXR')
-        +cx('','sXL')+cx('','sXL')+cx('','sXL')+cx('','sXL')+cx('','sXL')+cx('','sXL'),24);
+        +cx(fmt2(tBud),'sXR')+cx(fmt2(tHrsVar),tHrsVarS),24);
+  s3+=blank(6,6);
+  s3+=rw(cm('Budget: '+totRooms.toLocaleString()+' rooms × factor | fixed hrs × days in period. Days loaded: '+effectiveDays+' of '+dim,'sInf',5),16);
 
   /* ── Assemble XML ── */
   function sheet(name,cols,content){
@@ -5239,7 +5218,7 @@ function exportPnlExcel(){
     +' xmlns:o="urn:schemas-microsoft-com:office:office">\n'
     +'<Styles>'+STY+'</Styles>\n'
     +sheet('P&amp;L',[155,78,78,60,62,88,88,78,88,88],s1)
-    +sheet('Monthly Recap',[155,78,78,60,62,88,88,78,88,88],s3)
+    +sheet('Monthly Recap',[185,72,88,72,88,88],s3)
     +'</Workbook>';
 
   var blob=new Blob(['﻿'+xml],{type:'application/vnd.ms-excel;charset=utf-8'});
