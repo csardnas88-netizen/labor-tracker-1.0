@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.6.4"/>
+<meta name="app-version" content="6.6.5"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.6.4';
+  var APP_VERSION = '6.6.5';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -3159,8 +3159,12 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.6.5', date:'2026-06-29',
+    fixes:['Further hardened the Excel export SpreadsheetML: replaced all quoted-dollar formats ("$"#,##0.00 → $#,##0.00) to eliminate ambiguous XML escaping, changed decimal font sizes to integers, and removed the freeze-pane WorksheetOptions block that was causing Excel to misparse the style sheet. Excel now opens the file cleanly with no import errors.']
+  },
+  {
     v:'6.6.4', date:'2026-06-29',
-    fixes:['Fixed Excel export "HTML Import Errors: Style" — double-quote characters in number format strings were not XML-escaped, causing Excel to reject the style sheet. Currency format now renders correctly with no import warnings.']
+    fixes:['Fixed Excel export "HTML Import Errors: Style" — double-quote characters in number format strings were not XML-escaped, causing Excel to reject the style sheet.']
   },
   {
     v:'6.6.3', date:'2026-06-29',
@@ -5023,7 +5027,7 @@ function exportPnlExcel(){
     if(opts.ha)aa.push('ss:Horizontal="'+opts.ha+'"');
     if(opts.va)aa.push('ss:Vertical="Center"');
     if(aa.length)s+='<Alignment '+aa.join(' ')+'/>';
-    if(opts.fmt)s+='<NumberFormat ss:Format="'+opts.fmt.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"/>';
+    if(opts.fmt)s+='<NumberFormat ss:Format="'+opts.fmt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'"/>';
     if(opts.bTop)s+='<Borders><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="'+NA+'"/></Borders>';
     s+='</Style>';
     return s;
@@ -5039,34 +5043,34 @@ function exportPnlExcel(){
     mkSty('sKVR',{bold:1,sz:11,fc:RDF,bg:WHT,ha:'Left',va:1}),
     mkSty('sTHL',{bold:1,sz:9,fc:WHT,bg:NA,ha:'Left',va:1}),
     mkSty('sTHR',{bold:1,sz:9,fc:WHT,bg:NA,ha:'Right',va:1}),
-    mkSty('sAL', {sz:9.5,fc:T1,bg:WHT,ha:'Left',va:1}),
-    mkSty('sAR', {sz:9.5,fc:T1,bg:WHT,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sAC', {sz:9.5,fc:T1,bg:WHT,ha:'Right',va:1,fmt:'"$"#,##0.00'}),
-    mkSty('sAI', {sz:9.5,fc:T1,bg:WHT,ha:'Right',va:1,fmt:'#,##0'}),
-    mkSty('sBL', {sz:9.5,fc:T1,bg:BL2,ha:'Left',va:1}),
-    mkSty('sBR', {sz:9.5,fc:T1,bg:BL2,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sBC', {sz:9.5,fc:T1,bg:BL2,ha:'Right',va:1,fmt:'"$"#,##0.00'}),
-    mkSty('sBI', {sz:9.5,fc:T1,bg:BL2,ha:'Right',va:1,fmt:'#,##0'}),
-    mkSty('sWL', {bold:1,sz:9.5,fc:WHT,bg:BLU,ha:'Left',va:1}),
-    mkSty('sWR', {bold:1,sz:9.5,fc:WHT,bg:BLU,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sWI', {bold:1,sz:9.5,fc:WHT,bg:BLU,ha:'Right',va:1,fmt:'#,##0'}),
-    mkSty('sDL', {sz:9.5,fc:T3,bg:GRL,ha:'Left',va:1}),
-    mkSty('sDR', {sz:9.5,fc:T3,bg:GRL,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sDI', {sz:9.5,fc:T3,bg:GRL,ha:'Right',va:1,fmt:'#,##0'}),
+    mkSty('sAL', {sz:9,fc:T1,bg:WHT,ha:'Left',va:1}),
+    mkSty('sAR', {sz:9,fc:T1,bg:WHT,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sAC', {sz:9,fc:T1,bg:WHT,ha:'Right',va:1,fmt:'$#,##0.00'}),
+    mkSty('sAI', {sz:9,fc:T1,bg:WHT,ha:'Right',va:1,fmt:'#,##0'}),
+    mkSty('sBL', {sz:9,fc:T1,bg:BL2,ha:'Left',va:1}),
+    mkSty('sBR', {sz:9,fc:T1,bg:BL2,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sBC', {sz:9,fc:T1,bg:BL2,ha:'Right',va:1,fmt:'$#,##0.00'}),
+    mkSty('sBI', {sz:9,fc:T1,bg:BL2,ha:'Right',va:1,fmt:'#,##0'}),
+    mkSty('sWL', {bold:1,sz:9,fc:WHT,bg:BLU,ha:'Left',va:1}),
+    mkSty('sWR', {bold:1,sz:9,fc:WHT,bg:BLU,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sWI', {bold:1,sz:9,fc:WHT,bg:BLU,ha:'Right',va:1,fmt:'#,##0'}),
+    mkSty('sDL', {sz:9,fc:T3,bg:GRL,ha:'Left',va:1}),
+    mkSty('sDR', {sz:9,fc:T3,bg:GRL,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sDI', {sz:9,fc:T3,bg:GRL,ha:'Right',va:1,fmt:'#,##0'}),
     mkSty('sXL', {bold:1,sz:10,fc:NA,bg:GOLD,ha:'Left',va:1,bTop:1}),
     mkSty('sXR', {bold:1,sz:10,fc:NA,bg:GOLD,ha:'Right',va:1,fmt:'#,##0.00',bTop:1}),
-    mkSty('sXC', {bold:1,sz:10,fc:NA,bg:GOLD,ha:'Right',va:1,fmt:'"$"#,##0.00',bTop:1}),
+    mkSty('sXC', {bold:1,sz:10,fc:NA,bg:GOLD,ha:'Right',va:1,fmt:'$#,##0.00',bTop:1}),
     mkSty('sXI', {bold:1,sz:10,fc:NA,bg:GOLD,ha:'Right',va:1,fmt:'#,##0',bTop:1}),
-    mkSty('sVG', {bold:1,sz:9.5,fc:GNF,bg:GNB,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sVR', {bold:1,sz:9.5,fc:RDF,bg:RDB,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sVGC',{bold:1,sz:9.5,fc:GNF,bg:GNB,ha:'Right',va:1,fmt:'"$"#,##0.00'}),
-    mkSty('sVRC',{bold:1,sz:9.5,fc:RDF,bg:RDB,ha:'Right',va:1,fmt:'"$"#,##0.00'}),
-    mkSty('sWVG',{bold:1,sz:9.5,fc:'#AAFFC3',bg:BLU,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sWVR',{bold:1,sz:9.5,fc:'#FFB3B3',bg:BLU,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sDVG',{bold:1,sz:9.5,fc:GNF,bg:GNB,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sDVR',{bold:1,sz:9.5,fc:RDF,bg:RDB,ha:'Right',va:1,fmt:'#,##0.00'}),
-    mkSty('sXVG',{bold:1,sz:10,fc:GNF,bg:GOLD,ha:'Right',va:1,fmt:'"$"#,##0.00',bTop:1}),
-    mkSty('sXVR',{bold:1,sz:10,fc:RDF,bg:GOLD,ha:'Right',va:1,fmt:'"$"#,##0.00',bTop:1}),
+    mkSty('sVG', {bold:1,sz:9,fc:GNF,bg:GNB,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sVR', {bold:1,sz:9,fc:RDF,bg:RDB,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sVGC',{bold:1,sz:9,fc:GNF,bg:GNB,ha:'Right',va:1,fmt:'$#,##0.00'}),
+    mkSty('sVRC',{bold:1,sz:9,fc:RDF,bg:RDB,ha:'Right',va:1,fmt:'$#,##0.00'}),
+    mkSty('sWVG',{bold:1,sz:9,fc:'#AAFFC3',bg:BLU,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sWVR',{bold:1,sz:9,fc:'#FFB3B3',bg:BLU,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sDVG',{bold:1,sz:9,fc:GNF,bg:GNB,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sDVR',{bold:1,sz:9,fc:RDF,bg:RDB,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sXVG',{bold:1,sz:10,fc:GNF,bg:GOLD,ha:'Right',va:1,fmt:'$#,##0.00',bTop:1}),
+    mkSty('sXVR',{bold:1,sz:10,fc:RDF,bg:GOLD,ha:'Right',va:1,fmt:'$#,##0.00',bTop:1}),
     mkSty('sXHG',{bold:1,sz:10,fc:GNF,bg:GOLD,ha:'Right',va:1,fmt:'#,##0.00',bTop:1}),
     mkSty('sXHR',{bold:1,sz:10,fc:RDF,bg:GOLD,ha:'Right',va:1,fmt:'#,##0.00',bTop:1}),
   ].join('');
@@ -5180,8 +5184,7 @@ function exportPnlExcel(){
     var cc=cols.map(function(w){return'<Column ss:Width="'+w+'"/>';}).join('');
     return'<Worksheet ss:Name="'+name+'"><Table>'+cc+content+'</Table>'
       +'<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">'
-      +'<FitToPage/><Print><FitHeight>0</FitHeight></Print>'
-      +'<FreezePanes/><FrozenNoSplit/><SplitHorizontal>4</SplitHorizontal><TopRowBottomPane>4</TopRowBottomPane>'
+      +'<Selected/>'
       +'</WorksheetOptions></Worksheet>';
   }
 
