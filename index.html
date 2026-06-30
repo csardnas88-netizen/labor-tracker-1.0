@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.6.7"/>
+<meta name="app-version" content="6.6.9"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.6.7';
+  var APP_VERSION = '6.6.9';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -3159,6 +3159,14 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.6.9', date:'2026-06-29',
+    features:['Budget now calculated from day 1 to the last day with data loaded — in the app P&L, Monthly Recap, and Excel export. Fixed positions (Turndown 21h/day, Public Area 32h/day) multiply by days loaded, not full month. Running the report on June 28 gives a 28-day fixed budget. P&L footer and rooms bar now show "X / Y días cargados". Excel shows "Days Loaded: X / Y" in both sheets.']
+  },
+  {
+    v:'6.6.8', date:'2026-06-29',
+    features:['Excel budget now reflects only the days actually loaded, not the full month. Fixed positions (Turndown 21h/day, Public Area 32h/day) are multiplied by the number of calendar days from the 1st through the last day with data — so running the export on June 28 gives 28 days of fixed-hour budget, not 30. Variable positions already used only actual rooms entered. Both sheets show "Days Loaded: X / Y" in the header.']
+  },
+  {
     v:'6.6.7', date:'2026-06-29',
     features:['Excel export overhauled: removed the weekly breakdown tab; Monthly Recap sheet now matches the P&L visual design (same columns, same color scheme, variance column). Fixed total-hours variance bug — OT hours are now correctly included in the actual total before computing the variance. Both sheets are now fully in English.']
   },
@@ -4955,18 +4963,26 @@ function exportPnlExcel(){
   var m=loadLaborModel();
   var label=MONTH_NAMES[mo]+' '+yr;
 
-  /* total rooms (accounting method) */
+  /* total rooms — only days with data in this month */
   var totRooms=0;
   Object.keys(roomsData).forEach(function(ds){
     var d=parseLocalDate(ds);
     if(d.getMonth()===mo&&d.getFullYear()===yr) totRooms+=parseInt(roomsData[ds])||0;
   });
 
+  /* effective days: calendar days 1 → last day with any data loaded */
+  var _latestDay=0;
+  Object.keys(days).forEach(function(ds){
+    var d=parseLocalDate(ds);
+    if(d.getMonth()===mo&&d.getFullYear()===yr) _latestDay=Math.max(_latestDay,d.getDate());
+  });
+  var effectiveDays=_latestDay>0?_latestDay:dim;
+
   /* ── Build per-position P&L data ── */
   var posData=[],tBud=0,tAct=0,tOT=0,tBudC=0,tActC=0;
   LM_ORDER.forEach(function(pos){
     var std=LABOR_STD[pos];
-    var bud=std?(std.type==='fixed'?std.daily*dim:totRooms*std.factor):0;
+    var bud=std?(std.type==='fixed'?std.daily*effectiveDays:totRooms*std.factor):0;
     var act=0,ot=0;
     Object.keys(days).forEach(function(ds){
       var sn=days[ds];
@@ -5114,7 +5130,7 @@ function exportPnlExcel(){
   var s1='';
   s1+=rw(cm('LABOR P&L — '+label.toUpperCase(),'sTit',9),38);
   s1+=rw(cx('Rooms Sold:','sInf')+cx(totRooms,'sInf')+cx('','sInf')
-        +cx('Days in Month:','sInf')+cx(dim,'sInf')+cx('','sInf')
+        +cx('Days Loaded:','sInf')+cx(effectiveDays+' / '+dim,'sInf')+cx('','sInf')
         +cx('Generated:','sInf')+cx(exportDate,'sInf')+cx('','sInf')+cx('','sInf'),22);
   s1+=blank(10,8);
   s1+=rw(cx('Position','sTHL')+cx('Budget Hrs','sTHR')+cx('Actual Hrs','sTHR')
@@ -5140,7 +5156,7 @@ function exportPnlExcel(){
         +cx(tActC>0?fmt2(tActC):'',(tActC>0?'sXC':'sXL'))
         +cx(tBudC>0?fmt2(tVar):'',tVarS),24);
   s1+=blank(10,6);
-  s1+=rw(cm('Budget based on accounting method: '+totRooms.toLocaleString()+' rooms × factor | fixed hours × '+dim+' days in month','sInf',9),16);
+  s1+=rw(cm('Budget based on days loaded: '+totRooms.toLocaleString()+' rooms × factor | fixed hours × '+effectiveDays+' days (of '+dim+' in month)','sInf',9),16);
 
   /* ══════════════════════
      SHEET 2 — MONTHLY RECAP
@@ -5153,7 +5169,7 @@ function exportPnlExcel(){
   var s3='';
   s3+=rw(cm('MONTHLY RECAP — '+label.toUpperCase(),'sTit',9),38);
   s3+=rw(cx('Rooms Sold:','sInf')+cx(totRooms,'sInf')+cx('','sInf')
-        +cx('Days in Month:','sInf')+cx(dim,'sInf')+cx('','sInf')
+        +cx('Days Loaded:','sInf')+cx(effectiveDays+' / '+dim,'sInf')+cx('','sInf')
         +cx('Generated:','sInf')+cx(exportDate,'sInf')+cx('','sInf')+cx('','sInf'),22);
   s3+=blank(10,8);
   s3+=rw(cx('Position','sTHL')+cx('Budget Hrs','sTHR')+cx('Actual Hrs','sTHR')
@@ -5178,7 +5194,7 @@ function exportPnlExcel(){
         +cx(tActC>0?fmt2(tActC):'',(tActC>0?'sXC':'sXL'))
         +cx(tBudC>0?fmt2(tVar):'',tVarS2),24);
   s3+=blank(10,6);
-  s3+=rw(cm('Budget based on accounting method: '+totRooms.toLocaleString()+' rooms × factor | fixed hours × '+dim+' days in month','sInf',9),16);
+  s3+=rw(cm('Budget based on days loaded: '+totRooms.toLocaleString()+' rooms × factor | fixed hours × '+effectiveDays+' days (of '+dim+' in month)','sInf',9),16);
 
   /* Period breakdown section */
   s3+=blank(10,12);
@@ -5972,7 +5988,7 @@ function renderPnl(){
   var days=mData.days||{};
   var dsList=Object.keys(days).sort();
 
-  /* ── Accounting-method budget basis ── */
+  /* ── Budget basis: day 1 → last loaded day ── */
   var yr2=viewMonth.getFullYear(),mo2=viewMonth.getMonth();
   var daysInMonth=new Date(yr2,mo2+1,0).getDate();
   var roomsData=mData.rooms||{};
@@ -5981,6 +5997,9 @@ function renderPnl(){
     var d=parseLocalDate(ds);
     if(d.getMonth()===mo2&&d.getFullYear()===yr2)totalMonthRooms+=parseInt(roomsData[ds])||0;
   });
+  var _pnlLast=0;
+  dsList.forEach(function(ds){var d=parseLocalDate(ds);if(d.getMonth()===mo2&&d.getFullYear()===yr2)_pnlLast=Math.max(_pnlLast,d.getDate());});
+  var pnlEffectiveDays=_pnlLast>0?_pnlLast:daysInMonth;
 
   /* Empty state */
   if(dsList.length===0){
@@ -6010,7 +6029,7 @@ function renderPnl(){
   LM_ORDER.forEach(function(pos){
     /* Budget: accounting method — monthly total rooms × factor, or fixed × days in month */
     var std=LABOR_STD[pos];
-    var budHrs=std?(std.type==='fixed'?std.daily*daysInMonth:totalMonthRooms*std.factor):0;
+    var budHrs=std?(std.type==='fixed'?std.daily*pnlEffectiveDays:totalMonthRooms*std.factor):0;
     var actHrs=0,dailyOtHrs=0;
     dsList.forEach(function(ds){
       var snap=days[ds];
@@ -6064,7 +6083,7 @@ function renderPnl(){
     +'<thead><tr><th>Position</th><th>Budget hrs</th><th>Actual hrs</th><th>OT hrs</th><th>Rate</th><th>Budget $</th><th>Regular $</th><th>OT $</th><th>Actual $</th><th>Variance $</th></tr></thead>'
     +'<tbody>'+rows+'</tbody>'
     +'<tfoot>'+foot+'</tfoot></table></div>'
-    +'<div style="font-size:10px;color:var(--text3);margin-top:8px;padding:0 2px;">&#8505; Presupuesto basado en método contabilidad: '+(totalMonthRooms>0?totalMonthRooms.toLocaleString()+' hab. totales × factor':'sin rooms registrados')+' &middot; horas fijas × '+daysInMonth+' días del mes</div>';
+    +'<div style="font-size:10px;color:var(--text3);margin-top:8px;padding:0 2px;">&#8505; Presupuesto: '+(totalMonthRooms>0?totalMonthRooms.toLocaleString()+' hab. vendidas × factor':'sin rooms registrados')+' &middot; horas fijas × '+pnlEffectiveDays+' días cargados (de '+daysInMonth+')</div>';
 
   /* ── Rooms bar ── */
   var rBar=document.getElementById('pnlRoomsBar');
@@ -6073,9 +6092,9 @@ function renderPnl(){
       rBar.style.display='flex';
       rBar.innerHTML='<span>&#127968; <b>Habitaciones vendidas:</b> '+totalMonthRooms.toLocaleString()+'</span>'
         +'<span style="color:var(--border2);">|</span>'
-        +'<span><b>Promedio/noche:</b> '+(totalMonthRooms/daysInMonth).toFixed(0)+'</span>'
+        +'<span><b>Promedio/noche:</b> '+(totalMonthRooms/pnlEffectiveDays).toFixed(0)+'</span>'
         +'<span style="color:var(--border2);">|</span>'
-        +'<span><b>Días del mes:</b> '+daysInMonth+'</span>';
+        +'<span><b>Días cargados:</b> '+pnlEffectiveDays+' / '+daysInMonth+'</span>';
     } else { rBar.style.display='none'; }
   }
 
@@ -7946,17 +7965,20 @@ function renderRecap(){
   var mData=loadMonthData(monthKey(recapViewMonth));
   var days=mData.days||{},rooms=mData.rooms||{};
 
-  /* ── Accounting-method budget basis (matches P&L) ── */
+  /* ── Budget basis: day 1 → last loaded day (matches P&L) ── */
   var recapDaysInMonth=new Date(yr,mo+1,0).getDate();
   var totalMonthRoomsRecap=0;
   Object.keys(rooms).forEach(function(ds){
     var d=parseLocalDate(ds);
     if(d.getMonth()===mo&&d.getFullYear()===yr) totalMonthRoomsRecap+=parseInt(rooms[ds])||0;
   });
+  var _rcLast=0;
+  Object.keys(days).forEach(function(ds){var d=parseLocalDate(ds);if(d.getMonth()===mo&&d.getFullYear()===yr)_rcLast=Math.max(_rcLast,d.getDate());});
+  var rcEffectiveDays=_rcLast>0?_rcLast:recapDaysInMonth;
   var recapMonthBudget=0;
   HK_POS_LIST.forEach(function(pos){
     var std=LABOR_STD[pos];
-    if(std) recapMonthBudget+=std.type==='fixed'?std.daily*recapDaysInMonth:totalMonthRoomsRecap*std.factor;
+    if(std) recapMonthBudget+=std.type==='fixed'?std.daily*rcEffectiveDays:totalMonthRoomsRecap*std.factor;
   });
 
   /* Totals */
@@ -7976,31 +7998,31 @@ function renderRecap(){
       HK_POS_LIST.forEach(function(pos){
         var p=s.byPosition[pos];
         var std=LABOR_STD[pos];
-        /* per-position budget uses accounting method */
-        var pb=std?(std.type==='fixed'?std.daily*recapDaysInMonth:totalMonthRoomsRecap*std.factor):0;
         /* Fallback to snap.emps if byPosition.paid is 0 */
         var posPaid=p&&p.paid>0?p.paid:0;
         if(posPaid===0&&s.emps&&s.emps.length){
           posPaid=s.emps.filter(function(e){return e.pos===pos;})
             .reduce(function(sum,e){return sum+(e.paid||0);},0);
         }
-        if(posPaid===0&&pb===0)return;
+        if(posPaid===0)return;
         byPos[pos].paid+=posPaid;
-        byPos[pos].budget+=pb;
         byPos[pos].ot+=(p&&p.ot1)||0;
         byPos[pos].breaks+=(p&&p.breakEx)||0;
       });
     }else if(s.emps&&s.emps.length){
       /* No byPosition at all — calculate from snap.emps */
       HK_POS_LIST.forEach(function(pos){
-        var std=LABOR_STD[pos];
-        var pb=std?(std.type==='fixed'?std.daily:(r>0?r*std.factor:0)):0;
         var posPaid=s.emps.filter(function(e){return e.pos===pos;})
           .reduce(function(sum,e){return sum+(e.paid||0);},0);
         byPos[pos].paid+=posPaid;
-        byPos[pos].budget+=pb;
       });
     }
+  });
+
+  /* Set per-position budget once using effectiveDays (day 1 → last loaded day) */
+  HK_POS_LIST.forEach(function(pos){
+    var std=LABOR_STD[pos];
+    byPos[pos].budget=std?(std.type==='fixed'?std.daily*rcEffectiveDays:totalMonthRoomsRecap*std.factor):0;
   });
 
   /* Previous month for comparison — also accounting method */
@@ -8127,7 +8149,7 @@ function renderRecap(){
   html+='<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
   html+='<div>'
     +'<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Monthly Labor Pace &mdash; '+label+'</div>'
-    +'<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+mDays+' days reported &nbsp;&middot;&nbsp; '+dRemaining+' days remaining &nbsp;&middot;&nbsp; Budget based on rooms sold &times; labor standard</div>'
+    +'<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+rcEffectiveDays+' of '+recapDaysInMonth+' days loaded &nbsp;&middot;&nbsp; '+dRemaining+' days remaining &nbsp;&middot;&nbsp; Budget: rooms × factor | fixed hrs × days loaded</div>'
     +'</div>';
   html+='<div style="text-align:right;">';
   html+='<div style="font-size:18px;font-weight:800;color:'+(netIsOver?'var(--red-border)':'var(--green-border)')+'">'+(netVariance>=0?'+':'')+netVariance.toFixed(2)+'h</div>';
