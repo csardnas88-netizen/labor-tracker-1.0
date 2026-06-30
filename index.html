@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.6.6"/>
+<meta name="app-version" content="6.6.7"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.6.6';
+  var APP_VERSION = '6.6.7';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -3159,6 +3159,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.6.7', date:'2026-06-29',
+    features:['Excel export overhauled: removed the weekly breakdown tab; Monthly Recap sheet now matches the P&L visual design (same columns, same color scheme, variance column). Fixed total-hours variance bug — OT hours are now correctly included in the actual total before computing the variance. Both sheets are now fully in English.']
+  },
+  {
     v:'6.6.6', date:'2026-06-29',
     features:['Excel export now shows per-position breakdown (Room Attendant, House Attendant, Supervisor, Laundry, Turndown, Public Area) within each week and partial period in both the Desglose Semanal and Monthly Recap sheets. Partial periods are now grouped into one summary row (instead of individual days) to match the app\'s P&L view. Position sub-rows use color-coded backgrounds: light blue under full weeks, light amber under partial periods.']
   },
@@ -5106,16 +5110,16 @@ function exportPnlExcel(){
   /* ══════════════════════
      SHEET 1 — P&L
      ══════════════════════ */
-  var exportDate=new Date().toLocaleDateString('es-US',{year:'numeric',month:'long',day:'numeric'});
+  var exportDate=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   var s1='';
   s1+=rw(cm('LABOR P&L — '+label.toUpperCase(),'sTit',9),38);
-  s1+=rw(cx('Habitaciones vendidas:','sInf')+cx(totRooms,'sInf')+cx('','sInf')
-        +cx('Días en el mes:','sInf')+cx(dim,'sInf')+cx('','sInf')
-        +cx('Generado:','sInf')+cx(exportDate,'sInf')+cx('','sInf')+cx('','sInf'),22);
+  s1+=rw(cx('Rooms Sold:','sInf')+cx(totRooms,'sInf')+cx('','sInf')
+        +cx('Days in Month:','sInf')+cx(dim,'sInf')+cx('','sInf')
+        +cx('Generated:','sInf')+cx(exportDate,'sInf')+cx('','sInf')+cx('','sInf'),22);
   s1+=blank(10,8);
-  s1+=rw(cx('Posición','sTHL')+cx('Budget hrs','sTHR')+cx('Horas reales','sTHR')
-        +cx('OT hrs','sTHR')+cx('Tarifa','sTHR')+cx('Budget $','sTHR')
-        +cx('Regular $','sTHR')+cx('OT $','sTHR')+cx('Real $','sTHR')+cx('Varianza $','sTHR'),22);
+  s1+=rw(cx('Position','sTHL')+cx('Budget Hrs','sTHR')+cx('Actual Hrs','sTHR')
+        +cx('OT Hrs','sTHR')+cx('Rate','sTHR')+cx('Budget $','sTHR')
+        +cx('Regular $','sTHR')+cx('OT $','sTHR')+cx('Actual $','sTHR')+cx('Variance $','sTHR'),22);
 
   posData.forEach(function(p,i){
     var alt=i%2===1;
@@ -5136,80 +5140,72 @@ function exportPnlExcel(){
         +cx(tActC>0?fmt2(tActC):'',(tActC>0?'sXC':'sXL'))
         +cx(tBudC>0?fmt2(tVar):'',tVarS),24);
   s1+=blank(10,6);
-  s1+=rw(cm('Presupuesto basado en método Contabilidad: '+totRooms.toLocaleString()+' habitaciones × factor | horas fijas × '+dim+' días del mes','sInf',9),16);
+  s1+=rw(cm('Budget based on accounting method: '+totRooms.toLocaleString()+' rooms × factor | fixed hours × '+dim+' days in month','sInf',9),16);
 
   /* ══════════════════════
-     SHEET 2 — SEMANAS
+     SHEET 2 — MONTHLY RECAP
+     Same position table as P&L + period breakdown below
      ══════════════════════ */
-  var s2='';
-  s2+=rw(cm('DESGLOSE SEMANAL — '+label.toUpperCase(),'sTit',6),38);
-  s2+=rw(cx('Presupuesto total:','sInf')+cx(fmt2(tBud),'sInf')
-        +cx('Rooms totales:','sInf')+cx(totRooms,'sInf')
-        +cx('Días del mes:','sInf')+cx(dim,'sInf')+cx('','sInf'),22);
-  s2+=blank(7,8);
-  s2+=rw(cx('Período','sTHL')+cx('Rooms','sTHR')+cx('Hrs reales','sTHR')
-        +cx('OT','sTHR')+cx('Acumulado','sTHR')+cx('Pace','sTHR')+cx('Diferencia','sTHR'),22);
+  var tHrsVar=tAct-tBud;
+  var tHrsVarS=tHrsVar<-0.005?'sXHG':tHrsVar>0.005?'sXHR':'sXR';
+  var tVarS2=tBudC>0?(tVar<-0.005?'sXVG':tVar>0.005?'sXVR':'sXC'):'sXL';
 
-  periods.forEach(function(p){
-    var isW=p.type==='week';
-    var lS=isW?'sWL':'sDL',rS=isW?'sWR':'sDR',iS=isW?'sWI':'sDI';
-    var vS=p.diff===null?rS:(p.diff<-0.05?(isW?'sWVG':'sDVG'):(p.diff>0.05?(isW?'sWVR':'sDVR'):rS));
-    s2+=rw(cx(p.label,lS)+cx(p.rooms>0?p.rooms:'',iS)
-          +cx(fmt2(p.paid),rS)+cx(p.ot>0?fmt2(p.ot):'',rS)
-          +cx(fmt2(p.run),rS)
-          +cx(p.pace!==null?fmt2(p.pace):'',rS)
-          +cx(p.diff!==null?fmt2(p.diff):'',vS),isW?22:18);
-    if(p.byPos){
-      var psL=isW?'sPL':'sQL',psR=isW?'sPR':'sQR';
-      LM_ORDER.forEach(function(pos){
-        var pa=p.byPos[pos];if(!pa)return;
-        s2+=rw(cx('    '+LM_LABELS[pos],psL)+cx('',psL)
-              +cx(pa.act>0?fmt2(pa.act):'',pa.act>0?psR:psL)
-              +cx(pa.ot>0?fmt2(pa.ot):'',pa.ot>0?psR:psL)
-              +cx('',psL)+cx('',psL)+cx('',psL),15);
-      });
-    }
-  });
-  s2+=rw(cx('TOTAL','sXL')+cx(totRooms,'sXI')+cx(fmt2(recapPaid),'sXR')
-        +cx(fmt2(recapOT),'sXR')+cx('','sXL')+cx('','sXL')+cx('','sXL'),24);
-
-  /* ══════════════════════
-     SHEET 3 — MONTHLY RECAP
-     ══════════════════════ */
   var s3='';
-  s3+=rw(cm('MONTHLY RECAP — '+label.toUpperCase(),'sTit',3),38);
-  s3+=blank(4,8);
+  s3+=rw(cm('MONTHLY RECAP — '+label.toUpperCase(),'sTit',9),38);
+  s3+=rw(cx('Rooms Sold:','sInf')+cx(totRooms,'sInf')+cx('','sInf')
+        +cx('Days in Month:','sInf')+cx(dim,'sInf')+cx('','sInf')
+        +cx('Generated:','sInf')+cx(exportDate,'sInf')+cx('','sInf')+cx('','sInf'),22);
+  s3+=blank(10,8);
+  s3+=rw(cx('Position','sTHL')+cx('Budget Hrs','sTHR')+cx('Actual Hrs','sTHR')
+        +cx('OT Hrs','sTHR')+cx('Rate','sTHR')+cx('Budget $','sTHR')
+        +cx('Regular $','sTHR')+cx('OT $','sTHR')+cx('Actual $','sTHR')+cx('Variance $','sTHR'),22);
 
-  var kpis3=[
-    ['Horas reales',fmt2(recapPaid)+'h','Habitaciones vendidas',totRooms,'sKV','sKV'],
-    ['Presupuesto',fmt2(tBud)+'h','Días en el mes',dim,'sKV','sKV'],
-    ['Varianza',(recapVar>=0?'+':'')+fmt2(recapVar)+'h','OT total',fmt2(recapOT)+'h',recapVar<0?'sKVG':recapVar>0?'sKVR':'sKV','sKV'],
-    ['% vs Budget',tBud>0?recapPct.toFixed(1)+'%':'—','No Break / Short Break',recapNB+' / '+recapSB,recapPct<100?'sKVG':recapPct>=105?'sKVR':'sKV','sKV'],
-    ['Días cargados',recapDays+'/'+dim,'Generado',exportDate,'sKV','sKV']
-  ];
-  kpis3.forEach(function(k){
-    s3+=rw(cx(k[0],'sKL')+cx(k[1],k[4])+cx(k[2],'sKL')+cx(k[3],k[5]),22);
+  posData.forEach(function(p,i){
+    var alt=i%2===1;
+    var lS=alt?'sBL':'sAL',rS=alt?'sBR':'sAR',cS=alt?'sBC':'sAC';
+    var vS=p.rate>0?(p.varC<-0.005?'sVGC':p.varC>0.005?'sVRC':cS):lS;
+    s3+=rw(cx(p.pos,lS)+cx(fmt2(p.bud),rS)+cx(fmt2(p.act),rS)+cx(fmt2(p.ot),rS)
+          +cx(p.rate>0?p.rate:'',p.rate>0?cS:lS)
+          +cx(p.rate>0?fmt2(p.budC):'',p.rate>0?cS:lS)
+          +cx(p.rate>0?fmt2(p.regC):'',p.rate>0?cS:lS)
+          +cx(p.rate>0&&p.ot>0?fmt2(p.otC):'',p.rate>0&&p.ot>0?cS:lS)
+          +cx(p.rate>0?fmt2(p.actC):'',p.rate>0?cS:lS)
+          +cx(p.rate>0?fmt2(p.varC):'',vS),20);
   });
-  s3+=blank(4,10);
-  s3+=rw(cx('Período','sTHL')+cx('Rooms','sTHR')+cx('Hrs reales','sTHR')+cx('OT','sTHR'),22);
+  s3+=rw(cx('TOTAL','sXL')+cx(fmt2(tBud),'sXR')+cx(fmt2(tAct),'sXR')+cx(fmt2(tOT),'sXR')
+        +cx('','sXL')+cx(tBudC>0?fmt2(tBudC):'',(tBudC>0?'sXC':'sXL'))
+        +cx('','sXL')+cx('','sXL')
+        +cx(tActC>0?fmt2(tActC):'',(tActC>0?'sXC':'sXL'))
+        +cx(tBudC>0?fmt2(tVar):'',tVarS2),24);
+  s3+=blank(10,6);
+  s3+=rw(cm('Budget based on accounting method: '+totRooms.toLocaleString()+' rooms × factor | fixed hours × '+dim+' days in month','sInf',9),16);
+
+  /* Period breakdown section */
+  s3+=blank(10,12);
+  s3+=rw(cm('PERIOD BREAKDOWN','sTit',9),28);
+  s3+=blank(10,6);
+  s3+=rw(cx('Period','sTHL')+cx('Rooms','sTHR')+cx('Actual Hrs','sTHR')+cx('OT Hrs','sTHR')
+        +cx('','sTHL')+cx('','sTHL')+cx('','sTHL')+cx('','sTHL')+cx('','sTHL')+cx('','sTHL'),22);
 
   periods.forEach(function(p){
     var isW=p.type==='week';
     var lS3=isW?'sWL':'sDL',rS3=isW?'sWR':'sDR',iS3=isW?'sWI':'sDI';
     s3+=rw(cx(p.label,lS3)+cx(p.rooms>0?p.rooms:'',iS3)
-          +cx(fmt2(p.paid),rS3)+cx(p.ot>0?fmt2(p.ot):'',rS3),isW?22:18);
+          +cx(fmt2(p.paid),rS3)+cx(p.ot>0?fmt2(p.ot):'',rS3)
+          +cx('',lS3)+cx('',lS3)+cx('',lS3)+cx('',lS3)+cx('',lS3)+cx('',lS3),isW?22:18);
     if(p.byPos){
       var psL3=isW?'sPL':'sQL',psR3=isW?'sPR':'sQR';
       LM_ORDER.forEach(function(pos){
         var pa=p.byPos[pos];if(!pa)return;
         s3+=rw(cx('    '+LM_LABELS[pos],psL3)+cx('',psL3)
               +cx(pa.act>0?fmt2(pa.act):'',pa.act>0?psR3:psL3)
-              +cx(pa.ot>0?fmt2(pa.ot):'',pa.ot>0?psR3:psL3),15);
+              +cx(pa.ot>0?fmt2(pa.ot):'',pa.ot>0?psR3:psL3)
+              +cx('',psL3)+cx('',psL3)+cx('',psL3)+cx('',psL3)+cx('',psL3)+cx('',psL3),15);
       });
     }
   });
-  var recVarS=recapVar<-0.005?'sXHG':recapVar>0.005?'sXHR':'sXR';
-  s3+=rw(cx('TOTAL','sXL')+cx(totRooms,'sXI')+cx(fmt2(recapPaid),'sXR')+cx(fmt2(recapOT),'sXR'),24);
+  s3+=rw(cx('TOTAL','sXL')+cx(totRooms,'sXI')+cx(fmt2(tAct),'sXR')+cx(fmt2(tOT),'sXR')
+        +cx('','sXL')+cx('','sXL')+cx('','sXL')+cx('','sXL')+cx('','sXL')+cx('','sXL'),24);
 
   /* ── Assemble XML ── */
   function sheet(name,cols,content){
@@ -5227,8 +5223,7 @@ function exportPnlExcel(){
     +' xmlns:o="urn:schemas-microsoft-com:office:office">\n'
     +'<Styles>'+STY+'</Styles>\n'
     +sheet('P&amp;L',[155,78,78,60,62,88,88,78,88,88],s1)
-    +sheet('Semanas',[158,68,78,58,88,88,88],s2)
-    +sheet('Monthly Recap',[180,80,80,68],s3)
+    +sheet('Monthly Recap',[155,78,78,60,62,88,88,78,88,88],s3)
     +'</Workbook>';
 
   var blob=new Blob(['﻿'+xml],{type:'application/vnd.ms-excel;charset=utf-8'});
