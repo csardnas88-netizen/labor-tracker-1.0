@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.6.2"/>
+<meta name="app-version" content="6.6.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.6.2';
+  var APP_VERSION = '6.6.3';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -1003,7 +1003,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <div class="sync-dot" id="syncDot"></div>
       <span id="syncStatus" style="font-size:10px;color:rgba(255,255,255,.45);">Connecting...</span>
     </div>
-    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v6.6.2</span></div>
+    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v6.6.3</span></div>
   </div>
 </div>
 
@@ -1188,7 +1188,8 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <button class="btn btn-ghost btn-sm" onclick="changeRecapMonth(-1)">&#8592; Prev Month</button>
         <span id="recapMonthLabel" style="font-size:14px;font-weight:700;min-width:110px;text-align:center;"></span>
         <button class="btn btn-ghost btn-sm" onclick="changeRecapMonth(1)">Next Month &#8594;</button>
-        <button class="btn btn-ghost btn-sm" onclick="printRecap()" style="margin-left:auto;">&#128424; Print / PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="printRecap()">&#128424; Print / PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportPnlExcel()" title="Export professional Excel report" style="margin-left:auto;">&#128229; Excel</button>
       </div>
       <div id="recapContent"></div>
     </div>
@@ -1541,14 +1542,19 @@ Supervisor 3</textarea>
           <div class="page-title serif" style="margin-bottom:2px;">P&amp;L<button class="help-dot" onclick="pnl_showHelp()" title="How to read this table">?</button></div>
           <div class="page-sub" style="margin-bottom:0;">Projected vs actual labor cost, using rates from the Labor Model</div>
         </div>
-        <div class="month-sel">
-          <button onclick="pnl_changeMonth(-1)" title="Previous month">&#8249;</button>
-          <span class="ms-label" id="pnlMonthLabel">&#128197; Month</span>
-          <button onclick="pnl_changeMonth(1)" title="Next month">&#8250;</button>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="month-sel">
+            <button onclick="pnl_changeMonth(-1)" title="Previous month">&#8249;</button>
+            <span class="ms-label" id="pnlMonthLabel">&#128197; Month</span>
+            <button onclick="pnl_changeMonth(1)" title="Next month">&#8250;</button>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="exportPnlExcel()" title="Export professional Excel report">&#128229; Excel</button>
         </div>
       </div>
+      <div id="pnlRoomsBar" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 14px;font-size:12px;color:var(--text2);margin-bottom:12px;gap:20px;flex-wrap:wrap;align-items:center;"></div>
       <div id="pnlRateNotice"></div>
       <div class="lm-scroll" id="pnlBody"></div>
+      <div id="pnlWeeklySection"></div>
 
       <!-- Paychex Reconciliation -->
       <div class="card" style="margin-top:16px;padding:0;" id="pnlPaychexCard">
@@ -3152,6 +3158,15 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.6.3', date:'2026-06-29',
+    features:[
+      'P&L and Monthly Recap now use the accounting method for budgeted hours: variable positions use total monthly room-nights × factor; fixed positions (Turndown, Public Area) use daily hours × days in the month. Both sections now show the same budget total.',
+      'Rooms sold now visible in P&L (bar showing total rooms, nightly average, and days in month).',
+      'New weekly breakdown section in P&L: full Sat–Fri hotel weeks show as one summary row; partial weeks at month start/end show day by day. Includes cumulative actual hours, budget pace, and running variance.',
+      'Professional Excel export (3 sheets: P&L by position, Weekly Breakdown, Monthly Recap) with color-coded formatting — navy headers, gold totals, blue week rows, gray day rows, green/red variance cells. Available in both P&L and Monthly Recap sections via the Excel button.'
+    ]
+  },
   {
     v:'6.6.2', date:'2026-06-29',
     features:['Added two-layer access control: a 4-digit PIN locks the app on every new session, and a cloud sign-in (Supabase Auth) protects data at the server level. Row Level Security is now enforced on the database — even if someone finds the API key in the page source, they cannot read or write any data without the authorized account. PIN can be changed anytime from Settings → Seguridad.']
@@ -4910,6 +4925,282 @@ function exportMonthExcel(){
   showToast("✓ Exported: "+filename);
 }
 
+/* ══════════════════════════════════════════════════════
+   PROFESSIONAL P&L EXCEL EXPORT  (SpreadsheetML / .xls)
+   3 hojas: P&L por posición · Desglose semanal · Monthly Recap
+   ══════════════════════════════════════════════════════ */
+function exportPnlExcel(){
+  /* ── Use the month shown in P&L (viewMonth) ── */
+  var vmo=viewMonth;
+  var yr=vmo.getFullYear(),mo=vmo.getMonth();
+  var dim=new Date(yr,mo+1,0).getDate();
+  var mData=loadMonthData(monthKey(vmo));
+  var days=mData.days||{},roomsData=mData.rooms||{};
+  var m=loadLaborModel();
+  var label=MONTH_NAMES[mo]+' '+yr;
+
+  /* total rooms (accounting method) */
+  var totRooms=0;
+  Object.keys(roomsData).forEach(function(ds){
+    var d=parseLocalDate(ds);
+    if(d.getMonth()===mo&&d.getFullYear()===yr) totRooms+=parseInt(roomsData[ds])||0;
+  });
+
+  /* ── Build per-position P&L data ── */
+  var posData=[],tBud=0,tAct=0,tOT=0,tBudC=0,tActC=0;
+  LM_ORDER.forEach(function(pos){
+    var std=LABOR_STD[pos];
+    var bud=std?(std.type==='fixed'?std.daily*dim:totRooms*std.factor):0;
+    var act=0,ot=0;
+    Object.keys(days).forEach(function(ds){
+      var sn=days[ds];
+      if(sn&&sn.byPosition&&sn.byPosition[pos]){act+=sn.byPosition[pos].paid||0;ot+=sn.byPosition[pos].ot1||0;}
+    });
+    var rate=(m.positions[pos]&&m.positions[pos].rate>0)?m.positions[pos].rate:0;
+    var reg=Math.max(0,act-ot);
+    var budC=bud*rate,regC=reg*rate,otC=ot*rate*1.5,actC=regC+otC,varC=actC-budC;
+    tBud+=bud;tAct+=act;tOT+=ot;tBudC+=budC;tActC+=actC;
+    posData.push({pos:LM_LABELS[pos],bud:bud,act:act,ot:ot,reg:reg,rate:rate,budC:budC,regC:regC,otC:otC,actC:actC,varC:varC});
+  });
+  var tVar=tActC-tBudC;
+
+  /* ── Build weekly/daily period data ── */
+  var periods=[],runTotal=0,dayNum=0;
+  var wks=getHotelWeeksForMonth(yr,mo);
+  wks.forEach(function(wk){
+    var wkDays=[];
+    for(var di=0;di<7;di++){var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+di);wkDays.push(dd);}
+    var inMo=wkDays.filter(function(dd){return dd.getMonth()===mo&&dd.getFullYear()===yr;});
+    if(inMo.length===7){
+      var wR=0,wP=0,wO=0,wL=0;
+      inMo.forEach(function(dd){var ds=dateStr(dd);wR+=parseInt(roomsData[ds])||0;var sn=days[ds];if(sn){wP+=sn.totalPaid;wO+=sn.totalOT;wL++;}});
+      dayNum+=7;runTotal+=wP;
+      var pace=tBud>0?tBud*(dayNum/dim):null;
+      var diff=pace!==null?runTotal-pace:null;
+      periods.push({type:'week',label:'Sáb '+inMo[0].getDate()+' – Vie '+inMo[6].getDate()+' '+label.slice(0,3),rooms:wR,paid:wP,ot:wO,loaded:wL,outOf:7,run:runTotal,pace:pace,diff:diff});
+    } else {
+      inMo.forEach(function(dd){
+        var ds=dateStr(dd);var sn=days[ds];
+        var rN=parseInt(roomsData[ds])||0,dP=sn?sn.totalPaid:0,dO=sn?sn.totalOT:0;
+        dayNum++;runTotal+=dP;
+        var pace=tBud>0?tBud*(dayNum/dim):null;
+        var diff=pace!==null?runTotal-pace:null;
+        var dn=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][dd.getDay()];
+        periods.push({type:'day',label:dn+' '+dd.getDate()+' '+MONTH_NAMES[mo].slice(0,3),rooms:rN,paid:dP,ot:dO,loaded:sn?1:0,outOf:1,run:runTotal,pace:pace,diff:diff});
+      });
+    }
+  });
+
+  /* ── Monthly Recap totals ── */
+  var recapPaid=0,recapOT=0,recapDays=0,recapNB=0,recapSB=0;
+  Object.keys(days).forEach(function(ds){
+    var d=parseLocalDate(ds);
+    if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
+    var sn=days[ds];recapPaid+=sn.totalPaid;recapOT+=sn.totalOT;recapDays++;recapNB+=sn.noBreak;recapSB+=sn.shortBreak;
+  });
+  var recapVar=recapPaid-tBud;
+  var recapPct=tBud>0?recapPaid/tBud*100:0;
+
+  /* ═══════════════════════════════════
+     SPREADSHEETML STYLES
+     ═══════════════════════════════════ */
+  var NA='#1B2A4A',NA2='#243860',GOLD='#C9A84C',BLU='#2C5282',BL2='#EBF0F8',GRL='#F1F3F5',
+      GNB='#D4EDDA',GNF='#155724',RDB='#F8D7DA',RDF='#7B1D1D',WHT='#FFFFFF',T1='#1A1A2E',T3='#6B7280';
+
+  function mkSty(id,opts){
+    var s='<Style ss:ID="'+id+'">';
+    var fa=[];
+    if(opts.bold)fa.push('ss:Bold="1"');
+    if(opts.sz)fa.push('ss:Size="'+opts.sz+'"');
+    if(opts.fc)fa.push('ss:Color="'+opts.fc+'"');
+    if(fa.length)s+='<Font '+fa.join(' ')+'/>';
+    if(opts.bg)s+='<Interior ss:Color="'+opts.bg+'" ss:Pattern="Solid"/>';
+    var aa=[];
+    if(opts.ha)aa.push('ss:Horizontal="'+opts.ha+'"');
+    if(opts.va)aa.push('ss:Vertical="Center"');
+    if(aa.length)s+='<Alignment '+aa.join(' ')+'/>';
+    if(opts.fmt)s+='<NumberFormat ss:Format="'+opts.fmt+'"/>';
+    if(opts.bTop)s+='<Borders><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="'+NA+'"/></Borders>';
+    s+='</Style>';
+    return s;
+  }
+
+  var STY=[
+    mkSty('s0',{}),
+    mkSty('sTit',{bold:1,sz:14,fc:WHT,bg:NA,ha:'Left',va:1}),
+    mkSty('sInf',{sz:9,fc:WHT,bg:NA2,ha:'Left',va:1}),
+    mkSty('sKL', {bold:1,sz:9,fc:NA, bg:BL2,ha:'Left',va:1}),
+    mkSty('sKV', {bold:1,sz:11,fc:NA,bg:WHT,ha:'Left',va:1}),
+    mkSty('sKVG',{bold:1,sz:11,fc:GNF,bg:WHT,ha:'Left',va:1}),
+    mkSty('sKVR',{bold:1,sz:11,fc:RDF,bg:WHT,ha:'Left',va:1}),
+    mkSty('sTHL',{bold:1,sz:9,fc:WHT,bg:NA,ha:'Left',va:1}),
+    mkSty('sTHR',{bold:1,sz:9,fc:WHT,bg:NA,ha:'Right',va:1}),
+    mkSty('sAL', {sz:9.5,fc:T1,bg:WHT,ha:'Left',va:1}),
+    mkSty('sAR', {sz:9.5,fc:T1,bg:WHT,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sAC', {sz:9.5,fc:T1,bg:WHT,ha:'Right',va:1,fmt:'"$"#,##0.00'}),
+    mkSty('sAI', {sz:9.5,fc:T1,bg:WHT,ha:'Right',va:1,fmt:'#,##0'}),
+    mkSty('sBL', {sz:9.5,fc:T1,bg:BL2,ha:'Left',va:1}),
+    mkSty('sBR', {sz:9.5,fc:T1,bg:BL2,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sBC', {sz:9.5,fc:T1,bg:BL2,ha:'Right',va:1,fmt:'"$"#,##0.00'}),
+    mkSty('sBI', {sz:9.5,fc:T1,bg:BL2,ha:'Right',va:1,fmt:'#,##0'}),
+    mkSty('sWL', {bold:1,sz:9.5,fc:WHT,bg:BLU,ha:'Left',va:1}),
+    mkSty('sWR', {bold:1,sz:9.5,fc:WHT,bg:BLU,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sWI', {bold:1,sz:9.5,fc:WHT,bg:BLU,ha:'Right',va:1,fmt:'#,##0'}),
+    mkSty('sDL', {sz:9.5,fc:T3,bg:GRL,ha:'Left',va:1}),
+    mkSty('sDR', {sz:9.5,fc:T3,bg:GRL,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sDI', {sz:9.5,fc:T3,bg:GRL,ha:'Right',va:1,fmt:'#,##0'}),
+    mkSty('sXL', {bold:1,sz:10,fc:NA,bg:GOLD,ha:'Left',va:1,bTop:1}),
+    mkSty('sXR', {bold:1,sz:10,fc:NA,bg:GOLD,ha:'Right',va:1,fmt:'#,##0.00',bTop:1}),
+    mkSty('sXC', {bold:1,sz:10,fc:NA,bg:GOLD,ha:'Right',va:1,fmt:'"$"#,##0.00',bTop:1}),
+    mkSty('sXI', {bold:1,sz:10,fc:NA,bg:GOLD,ha:'Right',va:1,fmt:'#,##0',bTop:1}),
+    mkSty('sVG', {bold:1,sz:9.5,fc:GNF,bg:GNB,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sVR', {bold:1,sz:9.5,fc:RDF,bg:RDB,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sVGC',{bold:1,sz:9.5,fc:GNF,bg:GNB,ha:'Right',va:1,fmt:'"$"#,##0.00'}),
+    mkSty('sVRC',{bold:1,sz:9.5,fc:RDF,bg:RDB,ha:'Right',va:1,fmt:'"$"#,##0.00'}),
+    mkSty('sWVG',{bold:1,sz:9.5,fc:'#AAFFC3',bg:BLU,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sWVR',{bold:1,sz:9.5,fc:'#FFB3B3',bg:BLU,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sDVG',{bold:1,sz:9.5,fc:GNF,bg:GNB,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sDVR',{bold:1,sz:9.5,fc:RDF,bg:RDB,ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sXVG',{bold:1,sz:10,fc:GNF,bg:GOLD,ha:'Right',va:1,fmt:'"$"#,##0.00',bTop:1}),
+    mkSty('sXVR',{bold:1,sz:10,fc:RDF,bg:GOLD,ha:'Right',va:1,fmt:'"$"#,##0.00',bTop:1}),
+    mkSty('sXHG',{bold:1,sz:10,fc:GNF,bg:GOLD,ha:'Right',va:1,fmt:'#,##0.00',bTop:1}),
+    mkSty('sXHR',{bold:1,sz:10,fc:RDF,bg:GOLD,ha:'Right',va:1,fmt:'#,##0.00',bTop:1}),
+  ].join('');
+
+  /* ── Cell / row helpers ── */
+  function cx(val,sid,type){
+    if(val===null||val===undefined||val==='')return'<Cell ss:StyleID="'+sid+'"><Data ss:Type="String"></Data></Cell>';
+    var t=type||(typeof val==='number'?'Number':'String');
+    var v=String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return'<Cell ss:StyleID="'+sid+'"><Data ss:Type="'+t+'">'+v+'</Data></Cell>';
+  }
+  function cm(val,sid,span,type){
+    var t=type||(typeof val==='number'?'Number':'String');
+    var v=String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return'<Cell ss:StyleID="'+sid+'" ss:MergeAcross="'+span+'"><Data ss:Type="'+t+'">'+v+'</Data></Cell>';
+  }
+  function rw(cells,h){return'<Row ss:Height="'+(h||20)+'">'+cells+'</Row>';}
+  function blank(n,h){var c='';for(var i=0;i<n;i++)c+=cx('','s0');return rw(c,h||6);}
+  function fmt2(n){return Math.round(n*100)/100;}
+
+  /* ══════════════════════
+     SHEET 1 — P&L
+     ══════════════════════ */
+  var exportDate=new Date().toLocaleDateString('es-US',{year:'numeric',month:'long',day:'numeric'});
+  var s1='';
+  s1+=rw(cm('LABOR P&L — '+label.toUpperCase(),'sTit',9),38);
+  s1+=rw(cx('Habitaciones vendidas:','sInf')+cx(totRooms,'sInf')+cx('','sInf')
+        +cx('Días en el mes:','sInf')+cx(dim,'sInf')+cx('','sInf')
+        +cx('Generado:','sInf')+cx(exportDate,'sInf')+cx('','sInf')+cx('','sInf'),22);
+  s1+=blank(10,8);
+  s1+=rw(cx('Posición','sTHL')+cx('Budget hrs','sTHR')+cx('Horas reales','sTHR')
+        +cx('OT hrs','sTHR')+cx('Tarifa','sTHR')+cx('Budget $','sTHR')
+        +cx('Regular $','sTHR')+cx('OT $','sTHR')+cx('Real $','sTHR')+cx('Varianza $','sTHR'),22);
+
+  posData.forEach(function(p,i){
+    var alt=i%2===1;
+    var lS=alt?'sBL':'sAL',rS=alt?'sBR':'sAR',cS=alt?'sBC':'sAC';
+    var vS=p.rate>0?(p.varC<-0.005?'sVGC':p.varC>0.005?'sVRC':cS):lS;
+    s1+=rw(cx(p.pos,lS)+cx(fmt2(p.bud),rS)+cx(fmt2(p.act),rS)+cx(fmt2(p.ot),rS)
+          +cx(p.rate>0?p.rate:'',p.rate>0?cS:lS)
+          +cx(p.rate>0?fmt2(p.budC):'',p.rate>0?cS:lS)
+          +cx(p.rate>0?fmt2(p.regC):'',p.rate>0?cS:lS)
+          +cx(p.rate>0&&p.ot>0?fmt2(p.otC):'',p.rate>0&&p.ot>0?cS:lS)
+          +cx(p.rate>0?fmt2(p.actC):'',p.rate>0?cS:lS)
+          +cx(p.rate>0?fmt2(p.varC):'',vS),20);
+  });
+  var tVarS=tBudC>0?(tVar<-0.005?'sXVG':tVar>0.005?'sXVR':'sXC'):'sXL';
+  s1+=rw(cx('TOTAL','sXL')+cx(fmt2(tBud),'sXR')+cx(fmt2(tAct),'sXR')+cx(fmt2(tOT),'sXR')
+        +cx('','sXL')+cx(tBudC>0?fmt2(tBudC):'',(tBudC>0?'sXC':'sXL'))
+        +cx('','sXL')+cx('','sXL')
+        +cx(tActC>0?fmt2(tActC):'',(tActC>0?'sXC':'sXL'))
+        +cx(tBudC>0?fmt2(tVar):'',tVarS),24);
+  s1+=blank(10,6);
+  s1+=rw(cm('Presupuesto basado en método Contabilidad: '+totRooms.toLocaleString()+' habitaciones × factor | horas fijas × '+dim+' días del mes','sInf',9),16);
+
+  /* ══════════════════════
+     SHEET 2 — SEMANAS
+     ══════════════════════ */
+  var s2='';
+  s2+=rw(cm('DESGLOSE SEMANAL — '+label.toUpperCase(),'sTit',6),38);
+  s2+=rw(cx('Presupuesto total:','sInf')+cx(fmt2(tBud),'sInf')
+        +cx('Rooms totales:','sInf')+cx(totRooms,'sInf')
+        +cx('Días del mes:','sInf')+cx(dim,'sInf')+cx('','sInf'),22);
+  s2+=blank(7,8);
+  s2+=rw(cx('Período','sTHL')+cx('Rooms','sTHR')+cx('Hrs reales','sTHR')
+        +cx('OT','sTHR')+cx('Acumulado','sTHR')+cx('Pace','sTHR')+cx('Diferencia','sTHR'),22);
+
+  periods.forEach(function(p){
+    var isW=p.type==='week';
+    var lS=isW?'sWL':'sDL',rS=isW?'sWR':'sDR',iS=isW?'sWI':'sDI';
+    var vS=p.diff===null?rS:(p.diff<-0.05?(isW?'sWVG':'sDVG'):(p.diff>0.05?(isW?'sWVR':'sDVR'):rS));
+    s2+=rw(cx(p.label,lS)+cx(p.rooms>0?p.rooms:'',iS)
+          +cx(fmt2(p.paid),rS)+cx(p.ot>0?fmt2(p.ot):'',rS)
+          +cx(fmt2(p.run),rS)
+          +cx(p.pace!==null?fmt2(p.pace):'',rS)
+          +cx(p.diff!==null?fmt2(p.diff):'',vS),isW?22:18);
+  });
+  s2+=rw(cx('TOTAL','sXL')+cx(totRooms,'sXI')+cx(fmt2(recapPaid),'sXR')
+        +cx(fmt2(recapOT),'sXR')+cx('','sXL')+cx('','sXL')+cx('','sXL'),24);
+
+  /* ══════════════════════
+     SHEET 3 — MONTHLY RECAP
+     ══════════════════════ */
+  var s3='';
+  s3+=rw(cm('MONTHLY RECAP — '+label.toUpperCase(),'sTit',3),38);
+  s3+=blank(4,8);
+
+  var kpis3=[
+    ['Horas reales',fmt2(recapPaid)+'h','Habitaciones vendidas',totRooms,'sKV','sKV'],
+    ['Presupuesto',fmt2(tBud)+'h','Días en el mes',dim,'sKV','sKV'],
+    ['Varianza',(recapVar>=0?'+':'')+fmt2(recapVar)+'h','OT total',fmt2(recapOT)+'h',recapVar<0?'sKVG':recapVar>0?'sKVR':'sKV','sKV'],
+    ['% vs Budget',tBud>0?recapPct.toFixed(1)+'%':'—','No Break / Short Break',recapNB+' / '+recapSB,recapPct<100?'sKVG':recapPct>=105?'sKVR':'sKV','sKV'],
+    ['Días cargados',recapDays+'/'+dim,'Generado',exportDate,'sKV','sKV']
+  ];
+  kpis3.forEach(function(k){
+    s3+=rw(cx(k[0],'sKL')+cx(k[1],k[4])+cx(k[2],'sKL')+cx(k[3],k[5]),22);
+  });
+  s3+=blank(4,10);
+  s3+=rw(cx('Período','sTHL')+cx('Rooms','sTHR')+cx('Hrs reales','sTHR')+cx('OT','sTHR'),22);
+
+  periods.forEach(function(p){
+    var isW=p.type==='week';
+    s3+=rw(cx(p.label,isW?'sWL':'sDL')+cx(p.rooms>0?p.rooms:'',isW?'sWI':'sDI')
+          +cx(fmt2(p.paid),isW?'sWR':'sDR')+cx(p.ot>0?fmt2(p.ot):'',isW?'sWR':'sDR'),isW?22:18);
+  });
+  var recVarS=recapVar<-0.005?'sXHG':recapVar>0.005?'sXHR':'sXR';
+  s3+=rw(cx('TOTAL','sXL')+cx(totRooms,'sXI')+cx(fmt2(recapPaid),'sXR')+cx(fmt2(recapOT),'sXR'),24);
+
+  /* ── Assemble XML ── */
+  function sheet(name,cols,content){
+    var cc=cols.map(function(w){return'<Column ss:Width="'+w+'"/>';}).join('');
+    return'<Worksheet ss:Name="'+name+'"><Table>'+cc+content+'</Table>'
+      +'<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">'
+      +'<FitToPage/><Print><FitHeight>0</FitHeight></Print>'
+      +'<FreezePanes/><FrozenNoSplit/><SplitHorizontal>4</SplitHorizontal><TopRowBottomPane>4</TopRowBottomPane>'
+      +'</WorksheetOptions></Worksheet>';
+  }
+
+  var xml='<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n'
+    +'<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n'
+    +' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"\n'
+    +' xmlns:x="urn:schemas-microsoft-com:office:excel"\n'
+    +' xmlns:o="urn:schemas-microsoft-com:office:office">\n'
+    +'<Styles>'+STY+'</Styles>\n'
+    +sheet('P&amp;L',[155,78,78,60,62,88,88,78,88,88],s1)
+    +sheet('Semanas',[158,68,78,58,88,88,88],s2)
+    +sheet('Monthly Recap',[180,80,80,68],s3)
+    +'</Workbook>';
+
+  var blob=new Blob(['﻿'+xml],{type:'application/vnd.ms-excel;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='Labor_PnL_'+MONTH_NAMES[mo]+'_'+yr+'.xls';
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+  showToast('✓ Excel exportado: '+label);
+}
+
 /* ── Hook into PDF upload moved to new UI section ── */
 
 /* One-time migration: shift rooms data from work-day keys to night-before keys */
@@ -5647,6 +5938,16 @@ function renderPnl(){
   var days=mData.days||{};
   var dsList=Object.keys(days).sort();
 
+  /* ── Accounting-method budget basis ── */
+  var yr2=viewMonth.getFullYear(),mo2=viewMonth.getMonth();
+  var daysInMonth=new Date(yr2,mo2+1,0).getDate();
+  var roomsData=mData.rooms||{};
+  var totalMonthRooms=0;
+  Object.keys(roomsData).forEach(function(ds){
+    var d=parseLocalDate(ds);
+    if(d.getMonth()===mo2&&d.getFullYear()===yr2)totalMonthRooms+=parseInt(roomsData[ds])||0;
+  });
+
   /* Empty state */
   if(dsList.length===0){
     if(notice)notice.innerHTML='';
@@ -5673,11 +5974,12 @@ function renderPnl(){
   var rows='';
   var tBud=0,tActH=0,tOtH=0,tBudC=0,tRegC=0,tOtC=0,tActC=0;
   LM_ORDER.forEach(function(pos){
-    var budHrs=0,actHrs=0,dailyOtHrs=0;
+    /* Budget: accounting method — monthly total rooms × factor, or fixed × days in month */
+    var std=LABOR_STD[pos];
+    var budHrs=std?(std.type==='fixed'?std.daily*daysInMonth:totalMonthRooms*std.factor):0;
+    var actHrs=0,dailyOtHrs=0;
     dsList.forEach(function(ds){
       var snap=days[ds];
-      var rooms=getRoomsForDay(ds);
-      budHrs+=posBudget(pos,rooms);
       if(snap&&snap.byPosition&&snap.byPosition[pos]){
         actHrs+=(snap.byPosition[pos].paid||0);
         dailyOtHrs+=(snap.byPosition[pos].ot1||0);
@@ -5727,8 +6029,116 @@ function renderPnl(){
   box.innerHTML='<div class="tbl-wrap"><table class="pnl-table">'
     +'<thead><tr><th>Position</th><th>Budget hrs</th><th>Actual hrs</th><th>OT hrs</th><th>Rate</th><th>Budget $</th><th>Regular $</th><th>OT $</th><th>Actual $</th><th>Variance $</th></tr></thead>'
     +'<tbody>'+rows+'</tbody>'
-    +'<tfoot>'+foot+'</tfoot></table></div>';
+    +'<tfoot>'+foot+'</tfoot></table></div>'
+    +'<div style="font-size:10px;color:var(--text3);margin-top:8px;padding:0 2px;">&#8505; Presupuesto basado en método contabilidad: '+(totalMonthRooms>0?totalMonthRooms.toLocaleString()+' hab. totales × factor':'sin rooms registrados')+' &middot; horas fijas × '+daysInMonth+' días del mes</div>';
+
+  /* ── Rooms bar ── */
+  var rBar=document.getElementById('pnlRoomsBar');
+  if(rBar){
+    if(totalMonthRooms>0){
+      rBar.style.display='flex';
+      rBar.innerHTML='<span>&#127968; <b>Habitaciones vendidas:</b> '+totalMonthRooms.toLocaleString()+'</span>'
+        +'<span style="color:var(--border2);">|</span>'
+        +'<span><b>Promedio/noche:</b> '+(totalMonthRooms/daysInMonth).toFixed(0)+'</span>'
+        +'<span style="color:var(--border2);">|</span>'
+        +'<span><b>Días del mes:</b> '+daysInMonth+'</span>';
+    } else { rBar.style.display='none'; }
+  }
+
+  /* ── Weekly breakdown ── */
+  var wkSec=document.getElementById('pnlWeeklySection');
+  if(!wkSec)return;
+
+  /* ── Build period list: group partial days into one row each ── */
+  var wks=getHotelWeeksForMonth(yr2,mo2);
+  var periods=[];
+  var DN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  wks.forEach(function(wk){
+    var wkDays=[];
+    for(var di=0;di<7;di++){var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+di);wkDays.push(dd);}
+    var inMo=wkDays.filter(function(dd){return dd.getMonth()===mo2&&dd.getFullYear()===yr2;});
+    if(inMo.length===7){
+      /* Full hotel week */
+      var wR=0,wP=0,wO=0,wL=0;
+      inMo.forEach(function(dd){var ds=dateStr(dd);wR+=parseInt(roomsData[ds])||0;var sn=days[ds];if(sn){wP+=sn.totalPaid;wO+=sn.totalOT;wL++;}});
+      periods.push({type:'week',first:inMo[0],last:inMo[6],rooms:wR,paid:wP,ot:wO,loaded:wL,days:7});
+    } else if(inMo.length>0){
+      /* Partial period — one grouped row */
+      var pR=0,pP=0,pO=0,pL=0;
+      inMo.forEach(function(dd){var ds=dateStr(dd);pR+=parseInt(roomsData[ds])||0;var sn=days[ds];if(sn){pP+=sn.totalPaid;pO+=sn.totalOT;pL++;}});
+      periods.push({type:'partial',first:inMo[0],last:inMo[inMo.length-1],rooms:pR,paid:pP,ot:pO,loaded:pL,days:inMo.length});
+    }
+  });
+
+  /* ── Render ── */
+  var runTotal=0,dayNum=0;
+  var wHtml='<div class="card" style="margin-top:16px;padding:0;">'
+    +'<div class="card-head" style="padding:14px 16px;cursor:pointer;user-select:none;" onclick="var b=document.getElementById(\'pnlWkBody\');b.style.display=b.style.display===\'none\'?\'block\':\'none\';">'
+    +'<div class="card-title">&#128197; Desglose semanal</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-top:2px;">Períodos Sáb–Vie · acumulado vs pace de presupuesto</div>'
+    +'</div>'
+    +'<div id="pnlWkBody"><div class="tbl-wrap"><table class="pnl-table">'
+    +'<thead><tr>'
+    +'<th style="text-align:left;min-width:150px;">Período</th>'
+    +'<th>Rooms</th><th>Hrs reales</th><th>OT</th>'
+    +'<th>Acumulado</th><th>Pace</th><th>Diferencia</th>'
+    +'</tr></thead><tbody>';
+
+  periods.forEach(function(p){
+    dayNum+=p.days;
+    runTotal+=p.paid;
+    var pace=tBud>0?+(tBud*(dayNum/daysInMonth)).toFixed(2):null;
+    var diff=pace!==null?+(runTotal-pace).toFixed(2):null;
+    var isWeek=p.type==='week';
+
+    /* Label */
+    var d1=DN[p.first.getDay()]+' '+p.first.getDate();
+    var d2=DN[p.last.getDay()]+' '+p.last.getDate();
+    var rangeLbl=d1+(p.first.getDate()!==p.last.getDate()?' – '+d2:'');
+
+    /* Variance styling */
+    var varColor=diff===null?'':diff<-0.05?'var(--green)':diff>0.05?'var(--red)':'var(--text2)';
+    var varVal=diff!==null?((diff>=0?'+':'')+diff.toFixed(2)+'h'):'—';
+
+    if(isWeek){
+      /* ── Full week row — navy bg, all-white text ── */
+      wHtml+='<tr style="background:var(--navy);color:#fff;">'
+        +'<td style="text-align:left;color:#fff;font-weight:700;">'
+          +'<span style="font-size:9px;font-weight:400;opacity:.55;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px;">Semana</span>'
+          +rangeLbl
+          +(p.loaded<p.days?'<span style="font-size:9px;opacity:.5;margin-left:6px;">'+p.loaded+'/'+p.days+' días</span>':'')
+        +'</td>'
+        +'<td style="text-align:right;color:#fff;">'+(p.rooms>0?p.rooms.toLocaleString():'—')+'</td>'
+        +'<td style="text-align:right;color:#fff;font-weight:600;">'+p.paid.toFixed(2)+'h</td>'
+        +'<td style="text-align:right;color:'+(p.ot>0?'var(--gl)':'rgba(255,255,255,.4)')+';font-weight:'+(p.ot>0?'700':'400')+';">'+(p.ot>0?p.ot.toFixed(2)+'h':'—')+'</td>'
+        +'<td style="text-align:right;color:#fff;font-weight:800;">'+runTotal.toFixed(2)+'h</td>'
+        +'<td style="text-align:right;color:rgba(255,255,255,.5);">'+(pace!==null?pace.toFixed(2)+'h':'—')+'</td>'
+        +'<td style="text-align:right;font-weight:700;color:'+(diff===null?'rgba(255,255,255,.5)':diff<-0.05?'var(--gl)':diff>0.05?'#f87171':'rgba(255,255,255,.8)')+'">'
+          +varVal+'</td>'
+        +'</tr>';
+    } else {
+      /* ── Partial period row — warm light bg, accent left border ── */
+      wHtml+='<tr style="background:var(--gt);border-left:3px solid var(--gold);">'
+        +'<td style="text-align:left;padding-left:10px;">'
+          +'<span style="font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px;">Período corto</span>'
+          +'<span style="font-weight:600;color:var(--text1);">'+rangeLbl+'</span>'
+          +(p.loaded<p.days?' <span style="font-size:9px;color:var(--text3);">'+p.loaded+'/'+p.days+' días</span>':'')
+        +'</td>'
+        +'<td style="text-align:right;color:var(--text2);">'+(p.rooms>0?p.rooms.toLocaleString():'—')+'</td>'
+        +'<td style="text-align:right;color:var(--text1);font-weight:600;">'+p.paid.toFixed(2)+'h</td>'
+        +'<td style="text-align:right;">'+(p.ot>0?'<span class="pnl-ot">'+p.ot.toFixed(2)+'h</span>':'<span class="pnl-muted">—</span>')+'</td>'
+        +'<td style="text-align:right;font-weight:700;color:var(--text1);">'+runTotal.toFixed(2)+'h</td>'
+        +'<td style="text-align:right;color:var(--text3);">'+(pace!==null?pace.toFixed(2)+'h':'—')+'</td>'
+        +'<td style="text-align:right;font-weight:700;color:'+varColor+';">'+varVal+'</td>'
+        +'</tr>';
+    }
+  });
+
+  wHtml+='</tbody></table></div></div></div>';
+  wkSec.innerHTML=wHtml;
 }
+
 
 /* P&L help modal */
 function pnl_showHelp(){var o=document.getElementById('pnlHelpOverlay');if(o)o.style.display='flex';}
@@ -7502,8 +7912,21 @@ function renderRecap(){
   var mData=loadMonthData(monthKey(recapViewMonth));
   var days=mData.days||{},rooms=mData.rooms||{};
 
+  /* ── Accounting-method budget basis (matches P&L) ── */
+  var recapDaysInMonth=new Date(yr,mo+1,0).getDate();
+  var totalMonthRoomsRecap=0;
+  Object.keys(rooms).forEach(function(ds){
+    var d=parseLocalDate(ds);
+    if(d.getMonth()===mo&&d.getFullYear()===yr) totalMonthRoomsRecap+=parseInt(rooms[ds])||0;
+  });
+  var recapMonthBudget=0;
+  HK_POS_LIST.forEach(function(pos){
+    var std=LABOR_STD[pos];
+    if(std) recapMonthBudget+=std.type==='fixed'?std.daily*recapDaysInMonth:totalMonthRoomsRecap*std.factor;
+  });
+
   /* Totals */
-  var mPaid=0,mBudget=0,mNB=0,mSB=0,mDays=0,mOT=0,mRooms=[];
+  var mPaid=0,mNB=0,mSB=0,mDays=0,mOT=0,mRooms=[];
   var byPos={};
   HK_POS_LIST.forEach(function(p){byPos[p]={paid:0,budget:0,ot:0,breaks:0};});
 
@@ -7512,14 +7935,15 @@ function renderRecap(){
     if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
     var s=days[ds];
     var r=getRoomsForDayExec(ds); /* executive view: same-night occupancy */
-    mPaid+=s.totalPaid;mBudget+=dayBudget(r);
+    mPaid+=s.totalPaid;
     mNB+=s.noBreak;mSB+=s.shortBreak;mDays++;mOT+=s.totalOT;
     if(r>0)mRooms.push(r);
     if(s.byPosition){
       HK_POS_LIST.forEach(function(pos){
         var p=s.byPosition[pos];
         var std=LABOR_STD[pos];
-        var pb=std?(std.type==='fixed'?std.daily:(r>0?r*std.factor:0)):0;
+        /* per-position budget uses accounting method */
+        var pb=std?(std.type==='fixed'?std.daily*recapDaysInMonth:totalMonthRoomsRecap*std.factor):0;
         /* Fallback to snap.emps if byPosition.paid is 0 */
         var posPaid=p&&p.paid>0?p.paid:0;
         if(posPaid===0&&s.emps&&s.emps.length){
@@ -7545,19 +7969,31 @@ function renderRecap(){
     }
   });
 
-  /* Previous month for comparison */
+  /* Previous month for comparison — also accounting method */
   var prevMo=new Date(yr,mo-1,1);
   var prevData=loadMonthData(monthKey(prevMo));
   var pDays=prevData.days||{},pRooms=prevData.rooms||{};
-  var prevPaid=0,prevBudget=0,prevNB=0,prevSB=0;
+  var prevPaid=0,prevNB=0,prevSB=0;
+  var prevDaysInMonth=new Date(prevMo.getFullYear(),prevMo.getMonth()+1,0).getDate();
+  var prevTotalRooms=0;
+  Object.keys(pRooms).forEach(function(ds){
+    var d=parseLocalDate(ds);
+    if(d.getMonth()===prevMo.getMonth()&&d.getFullYear()===prevMo.getFullYear()) prevTotalRooms+=parseInt(pRooms[ds])||0;
+  });
+  var prevBudget=0;
+  HK_POS_LIST.forEach(function(pos){
+    var std=LABOR_STD[pos];
+    if(std) prevBudget+=std.type==='fixed'?std.daily*prevDaysInMonth:prevTotalRooms*std.factor;
+  });
   Object.keys(pDays).forEach(function(ds){
     var d=parseLocalDate(ds);
     if(d.getMonth()!==prevMo.getMonth()||d.getFullYear()!==prevMo.getFullYear())return;
-    var s=pDays[ds];var r=getRoomsForDayExec(ds);
-    prevPaid+=s.totalPaid;prevBudget+=dayBudget(r);prevNB+=s.noBreak;prevSB+=s.shortBreak;
+    var s=pDays[ds];
+    prevPaid+=s.totalPaid;prevNB+=s.noBreak;prevSB+=s.shortBreak;
   });
   var prevVar=prevPaid-prevBudget;
 
+  var mBudget=recapMonthBudget;
   var mVar=mPaid-mBudget;
   var avgRooms=mRooms.length?Math.round(mRooms.reduce(function(a,b){return a+b;},0)/mRooms.length):0;
   var peakRooms=mRooms.length?Math.max.apply(null,mRooms):0;
