@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.6.5"/>
+<meta name="app-version" content="6.6.6"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.6.5';
+  var APP_VERSION = '6.6.6';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -3159,6 +3159,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.6.6', date:'2026-06-29',
+    features:['Excel export now shows per-position breakdown (Room Attendant, House Attendant, Supervisor, Laundry, Turndown, Public Area) within each week and partial period in both the Desglose Semanal and Monthly Recap sheets. Partial periods are now grouped into one summary row (instead of individual days) to match the app\'s P&L view. Position sub-rows use color-coded backgrounds: light blue under full weeks, light amber under partial periods.']
+  },
+  {
     v:'6.6.5', date:'2026-06-29',
     fixes:['Further hardened the Excel export SpreadsheetML: replaced all quoted-dollar formats ("$"#,##0.00 → $#,##0.00) to eliminate ambiguous XML escaping, changed decimal font sizes to integers, and removed the freeze-pane WorksheetOptions block that was causing Excel to misparse the style sheet. Excel now opens the file cleanly with no import errors.']
   },
@@ -4972,30 +4976,34 @@ function exportPnlExcel(){
   });
   var tVar=tActC-tBudC;
 
-  /* ── Build weekly/daily period data ── */
+  /* ── Build period data (grouped partial + full weeks, with per-position breakdown) ── */
   var periods=[],runTotal=0,dayNum=0;
   var wks=getHotelWeeksForMonth(yr,mo);
+  var _DN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   wks.forEach(function(wk){
     var wkDays=[];
     for(var di=0;di<7;di++){var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+di);wkDays.push(dd);}
     var inMo=wkDays.filter(function(dd){return dd.getMonth()===mo&&dd.getFullYear()===yr;});
+    if(inMo.length===0)return;
+    var pR=0,pP=0,pO=0,pL=0;
+    var pByPos={};LM_ORDER.forEach(function(pos){pByPos[pos]={act:0,ot:0};});
+    inMo.forEach(function(dd){
+      var ds=dateStr(dd);var sn=days[ds];
+      pR+=parseInt(roomsData[ds])||0;
+      if(sn){pP+=sn.totalPaid||0;pO+=sn.totalOT||0;pL++;
+        if(sn.byPosition)LM_ORDER.forEach(function(pos){
+          if(sn.byPosition[pos]){pByPos[pos].act+=sn.byPosition[pos].paid||0;pByPos[pos].ot+=sn.byPosition[pos].ot1||0;}
+        });
+      }
+      dayNum++;runTotal+=sn?(sn.totalPaid||0):0;
+    });
+    var pace=tBud>0?tBud*(dayNum/dim):null;
+    var diff=pace!==null?runTotal-pace:null;
     if(inMo.length===7){
-      var wR=0,wP=0,wO=0,wL=0;
-      inMo.forEach(function(dd){var ds=dateStr(dd);wR+=parseInt(roomsData[ds])||0;var sn=days[ds];if(sn){wP+=sn.totalPaid;wO+=sn.totalOT;wL++;}});
-      dayNum+=7;runTotal+=wP;
-      var pace=tBud>0?tBud*(dayNum/dim):null;
-      var diff=pace!==null?runTotal-pace:null;
-      periods.push({type:'week',label:'Sáb '+inMo[0].getDate()+' – Vie '+inMo[6].getDate()+' '+label.slice(0,3),rooms:wR,paid:wP,ot:wO,loaded:wL,outOf:7,run:runTotal,pace:pace,diff:diff});
+      periods.push({type:'week',label:'Sáb '+inMo[0].getDate()+' – Vie '+inMo[6].getDate(),rooms:pR,paid:pP,ot:pO,loaded:pL,outOf:7,run:runTotal,pace:pace,diff:diff,byPos:pByPos});
     } else {
-      inMo.forEach(function(dd){
-        var ds=dateStr(dd);var sn=days[ds];
-        var rN=parseInt(roomsData[ds])||0,dP=sn?sn.totalPaid:0,dO=sn?sn.totalOT:0;
-        dayNum++;runTotal+=dP;
-        var pace=tBud>0?tBud*(dayNum/dim):null;
-        var diff=pace!==null?runTotal-pace:null;
-        var dn=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][dd.getDay()];
-        periods.push({type:'day',label:dn+' '+dd.getDate()+' '+MONTH_NAMES[mo].slice(0,3),rooms:rN,paid:dP,ot:dO,loaded:sn?1:0,outOf:1,run:runTotal,pace:pace,diff:diff});
-      });
+      var _f=inMo[0],_la=inMo[inMo.length-1];
+      periods.push({type:'partial',label:_DN[_f.getDay()]+' '+_f.getDate()+' – '+_DN[_la.getDay()]+' '+_la.getDate(),rooms:pR,paid:pP,ot:pO,loaded:pL,outOf:inMo.length,run:runTotal,pace:pace,diff:diff,byPos:pByPos});
     }
   });
 
@@ -5073,6 +5081,10 @@ function exportPnlExcel(){
     mkSty('sXVR',{bold:1,sz:10,fc:RDF,bg:GOLD,ha:'Right',va:1,fmt:'$#,##0.00',bTop:1}),
     mkSty('sXHG',{bold:1,sz:10,fc:GNF,bg:GOLD,ha:'Right',va:1,fmt:'#,##0.00',bTop:1}),
     mkSty('sXHR',{bold:1,sz:10,fc:RDF,bg:GOLD,ha:'Right',va:1,fmt:'#,##0.00',bTop:1}),
+    mkSty('sPL', {sz:9,fc:NA,bg:'#C3D5ED',ha:'Left',va:1}),
+    mkSty('sPR', {sz:9,fc:NA,bg:'#C3D5ED',ha:'Right',va:1,fmt:'#,##0.00'}),
+    mkSty('sQL', {sz:9,fc:'#78350F',bg:'#FEF3C7',ha:'Left',va:1}),
+    mkSty('sQR', {sz:9,fc:'#78350F',bg:'#FEF3C7',ha:'Right',va:1,fmt:'#,##0.00'}),
   ].join('');
 
   /* ── Cell / row helpers ── */
@@ -5147,6 +5159,16 @@ function exportPnlExcel(){
           +cx(fmt2(p.run),rS)
           +cx(p.pace!==null?fmt2(p.pace):'',rS)
           +cx(p.diff!==null?fmt2(p.diff):'',vS),isW?22:18);
+    if(p.byPos){
+      var psL=isW?'sPL':'sQL',psR=isW?'sPR':'sQR';
+      LM_ORDER.forEach(function(pos){
+        var pa=p.byPos[pos];if(!pa)return;
+        s2+=rw(cx('    '+LM_LABELS[pos],psL)+cx('',psL)
+              +cx(pa.act>0?fmt2(pa.act):'',pa.act>0?psR:psL)
+              +cx(pa.ot>0?fmt2(pa.ot):'',pa.ot>0?psR:psL)
+              +cx('',psL)+cx('',psL)+cx('',psL),15);
+      });
+    }
   });
   s2+=rw(cx('TOTAL','sXL')+cx(totRooms,'sXI')+cx(fmt2(recapPaid),'sXR')
         +cx(fmt2(recapOT),'sXR')+cx('','sXL')+cx('','sXL')+cx('','sXL'),24);
@@ -5173,8 +5195,18 @@ function exportPnlExcel(){
 
   periods.forEach(function(p){
     var isW=p.type==='week';
-    s3+=rw(cx(p.label,isW?'sWL':'sDL')+cx(p.rooms>0?p.rooms:'',isW?'sWI':'sDI')
-          +cx(fmt2(p.paid),isW?'sWR':'sDR')+cx(p.ot>0?fmt2(p.ot):'',isW?'sWR':'sDR'),isW?22:18);
+    var lS3=isW?'sWL':'sDL',rS3=isW?'sWR':'sDR',iS3=isW?'sWI':'sDI';
+    s3+=rw(cx(p.label,lS3)+cx(p.rooms>0?p.rooms:'',iS3)
+          +cx(fmt2(p.paid),rS3)+cx(p.ot>0?fmt2(p.ot):'',rS3),isW?22:18);
+    if(p.byPos){
+      var psL3=isW?'sPL':'sQL',psR3=isW?'sPR':'sQR';
+      LM_ORDER.forEach(function(pos){
+        var pa=p.byPos[pos];if(!pa)return;
+        s3+=rw(cx('    '+LM_LABELS[pos],psL3)+cx('',psL3)
+              +cx(pa.act>0?fmt2(pa.act):'',pa.act>0?psR3:psL3)
+              +cx(pa.ot>0?fmt2(pa.ot):'',pa.ot>0?psR3:psL3),15);
+      });
+    }
   });
   var recVarS=recapVar<-0.005?'sXHG':recapVar>0.005?'sXHR':'sXR';
   s3+=rw(cx('TOTAL','sXL')+cx(totRooms,'sXI')+cx(fmt2(recapPaid),'sXR')+cx(fmt2(recapOT),'sXR'),24);
