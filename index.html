@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.7.2"/>
+<meta name="app-version" content="6.7.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -8148,7 +8148,7 @@ function renderRecap(){
     var p=byPos[pos];
     if(!p||(!p.paid&&!p.budget))return;
     var std=LABOR_STD[pos];
-    var sub=std?(std.type==='fixed'?std.daily+'h fixed · daily':(std.factor*100)+'% of rooms'):'';
+    var sub=std?(std.type==='fixed'?std.daily+'h fixed · daily':parseFloat((std.factor*100).toFixed(4))+'% of rooms'):'';
     var pActual=p.paid+p.ot;
     var variance=pActual-p.budget;
     var isOver=variance>0.5;
