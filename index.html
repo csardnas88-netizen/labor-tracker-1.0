@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.7.4"/>
+<meta name="app-version" content="6.7.5"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -898,7 +898,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 <script>
 (function(){
   var _mv=document.querySelector('meta[name="app-version"]');
-  var APP_VERSION = (_mv&&_mv.content)?_mv.content:'6.7.4';
+  var APP_VERSION = (_mv&&_mv.content)?_mv.content:'6.7.5';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -1004,7 +1004,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <div class="sync-dot" id="syncDot"></div>
       <span id="syncStatus" style="font-size:10px;color:rgba(255,255,255,.45);">Connecting...</span>
     </div>
-    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v6.7.4</span></div>
+    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v6.7.5</span></div>
   </div>
 </div>
 
@@ -3159,6 +3159,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.7.5', date:'2026-07-02',
+    fixes:['Fixed the Labor daily view showing "No Report" for every day of a week whenever that week belonged to a different month than the one currently in view (for example, browsing a June week while the app had rolled over to July). The days were never lost — the screen was only reading one month of saved reports at a time, so days from any other month looked empty. The Labor view now reads every saved month, so past weeks show their real hours, budgets, breaks, and overtime again.']
+  },
   {
     v:'6.7.4', date:'2026-07-02',
     fixes:['Version number now reads from a single source (the page meta tag) so the footer, the "new version" banner, and the changelog can never drift out of sync again. Fixed the "% of rooms" label in Monthly Recap that showed a long decimal (e.g. 56.600000000000001%) instead of 56.6%. No data or calculations were affected — this was display-only.']
@@ -7073,8 +7077,22 @@ function renderLaborDash(){
   var today=new Date();today.setHours(0,0,0,0);
   var wk=getDashWeek();
   var yr=viewMonth.getFullYear(),mo=viewMonth.getMonth();
-  var mData=loadMonthData(monthKey(viewMonth));
-  var days=mData.days||{},rooms=mData.rooms||{};
+  /* Merge day/room snapshots from EVERY stored month — not just viewMonth.
+     The dashboard week is anchored to today + dashWeekOffset and can land in
+     a different month than viewMonth (e.g. viewing a June week while viewMonth
+     is July). Loading only viewMonth made those out-of-month days look empty,
+     so every day showed a false "No Report" even though the data was saved.
+     Resolving each date against ALL months fixes that. (The Monthly KPI strip
+     below still filters to viewMonth via mo/yr, so it stays month-scoped.) */
+  var days={},rooms={};
+  Object.keys(localStorage).forEach(function(_k){
+    if(_k.indexOf('hk_month_')!==0)return;
+    try{
+      var _md=JSON.parse(localStorage.getItem(_k))||{};
+      if(_md.days)Object.keys(_md.days).forEach(function(dk){days[dk]=_md.days[dk];});
+      if(_md.rooms)Object.keys(_md.rooms).forEach(function(rk){rooms[rk]=_md.rooms[rk];});
+    }catch(e){}
+  });
   var isCurrent=(dashWeekOffset===0);
 
   /* Week header */
