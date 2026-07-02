@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.7.3"/>
+<meta name="app-version" content="6.7.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -897,7 +897,8 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
-  var APP_VERSION = '6.7.2';
+  var _mv=document.querySelector('meta[name="app-version"]');
+  var APP_VERSION = (_mv&&_mv.content)?_mv.content:'6.7.4';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -1003,7 +1004,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <div class="sync-dot" id="syncDot"></div>
       <span id="syncStatus" style="font-size:10px;color:rgba(255,255,255,.45);">Connecting...</span>
     </div>
-    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v6.6.3</span></div>
+    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v6.7.4</span></div>
   </div>
 </div>
 
@@ -3158,6 +3159,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.7.4', date:'2026-07-02',
+    fixes:['Version number now reads from a single source (the page meta tag) so the footer, the "new version" banner, and the changelog can never drift out of sync again. Fixed the "% of rooms" label in Monthly Recap that showed a long decimal (e.g. 56.600000000000001%) instead of 56.6%. No data or calculations were affected — this was display-only.']
+  },
   {
     v:'6.7.2', date:'2026-06-29',
     features:['Monthly Recap Excel sheet redesigned: removed the P&L position table; now shows only the period breakdown with 6 columns (Period / Rooms / Actual Hrs / OT Hrs / Budget Hrs / Variance). Budget per period is computed from actual days and rooms in that period. Variance cell is green when under budget, red when over. Total row shows cumulative actual + OT vs budget + variance. Colors match the P&L sheet exactly (alternating white/blue rows, gold total, navy header).']
