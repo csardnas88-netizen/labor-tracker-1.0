@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.7.5"/>
+<meta name="app-version" content="6.7.6"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3159,6 +3159,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.7.6', date:'2026-07-04',
+    fixes:['Projects → "Log Hours": the Employee dropdown now shows your full active roster, not just employees who already have a paid PDF report loaded this month. Previously, a real employee (e.g. someone scheduled today, before their timecard is processed) would be invisible in that list if their only PDF entry this month showed 0 paid hours or no PDF existed yet for that day.']
+  },
   {
     v:'6.7.5', date:'2026-07-02',
     fixes:['Fixed the Labor daily view showing "No Report" for every day of a week whenever that week belonged to a different month than the one currently in view (for example, browsing a June week while the app had rolled over to July). The days were never lost — the screen was only reading one month of saved reports at a time, so days from any other month looked empty. The Labor view now reads every saved month, so past weeks show their real hours, budgets, breaks, and overtime again.']
@@ -9976,6 +9980,27 @@ function getKnownEmployees(){
   return Object.values(empMap).sort(function(a,b){return a.name.localeCompare(b.name);});
 }
 
+/* ── Employee options for Projects "Log Hours": full active roster (so new
+   hires / anyone without a paid>0 PDF entry yet still show up), merged with
+   anyone from getKnownEmployees() who isn't in the roster (e.g. borrowed
+   staff from another department that showed up in a PDF). ── */
+function getProjectEmployeeOptions(){
+  var out=[];
+  var seen={};
+  (typeof getActiveRoster==='function'?getActiveRoster('all'):[]).forEach(function(e){
+    if(seen[e.id])return;
+    seen[e.id]=1;
+    out.push({id:e.id,name:e.name,pos:e.pos});
+  });
+  getKnownEmployees().forEach(function(e){
+    if(seen[e.id])return;
+    seen[e.id]=1;
+    out.push({id:e.id,name:e.name,pos:e.pos});
+  });
+  out.sort(function(a,b){return a.name.localeCompare(b.name);});
+  return out;
+}
+
 /* ── Get employee hours from a specific day's PDF data ── */
 function getEmpHoursForDay(empId, ds){
   var mk=ds.substring(0,7);
@@ -10220,7 +10245,7 @@ function showAddEntryModal(projIdx){
   var proj=projects[projIdx];
   if(!proj)return;
 
-  var emps=getKnownEmployees();
+  var emps=getProjectEmployeeOptions();
   var empOptions=emps.length>0
     ? emps.map(function(e){return '<option value="'+e.id+'|'+escHtml(e.name)+'|'+escHtml(e.pos||'')+'">'+escHtml(e.name)+' ('+escHtml(e.pos||'')+')</option>';}).join('')
     : '<option value="">No employees found — upload a PDF first</option>';
