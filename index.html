@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.7.6"/>
+<meta name="app-version" content="6.8.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3159,6 +3159,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.8.0', date:'2026-07-07',
+    fixes:['Projects: added a "Hours by month" and "Hours by week (Sat–Fri)" breakdown to each project card, so a project that spans several months now shows exactly how many hours were logged in each month and each housekeeping week. Also added a Period selector to the PDF export (&#128196; PDF button) — choose "Full Project" or a specific month/week to generate a report scoped to just that period, in addition to the full-project report.']
+  },
   {
     v:'6.7.6', date:'2026-07-04',
     fixes:['Projects → "Log Hours": the Employee dropdown now shows your full active roster, not just employees who already have a paid PDF report loaded this month. Previously, a real employee (e.g. someone scheduled today, before their timecard is processed) would be invisible in that list if their only PDF entry this month showed 0 paid hours or no PDF existed yet for that day.']
@@ -9963,6 +9967,51 @@ function updateProjectsBadge(){
   else{badge.style.display='none';}
 }
 
+/* ── Projects: month / housekeeping-week (Sat–Fri) breakdown helpers ── */
+function projMonthKeyFromStr(ds){ return ds.substring(0,7); } /* "YYYY-MM" */
+function projMonthLabel(mk){
+  var p=mk.split('-'); var y=parseInt(p[0],10), m=parseInt(p[1],10)-1;
+  return (MONTH_NAMES[m]||mk)+' '+y;
+}
+function projWeekKey(ds){
+  var d=parseLocalDate(ds);
+  var ws=getHotelWeekStart(d);
+  return dateStr(ws);
+}
+function projWeekLabel(weekKeyDs){
+  var ws=parseLocalDate(weekKeyDs);
+  var we=new Date(ws); we.setDate(ws.getDate()+6);
+  var fmt=function(d){return (MONTH_NAMES[d.getMonth()]||'').substring(0,3)+' '+d.getDate();};
+  return fmt(ws)+' – '+fmt(we)+', '+we.getFullYear();
+}
+/* Returns {months:[{key,label,hours}], weeks:[{key,label,hours}]} from a log array, ignoring pending entries */
+function getProjectBreakdown(log){
+  var byMonth={}, byWeek={};
+  (log||[]).forEach(function(e){
+    if(e.pending)return;
+    var mk=projMonthKeyFromStr(e.date);
+    byMonth[mk]=(byMonth[mk]||0)+(e.hours||0);
+    var wk=projWeekKey(e.date);
+    byWeek[wk]=(byWeek[wk]||0)+(e.hours||0);
+  });
+  var months=Object.keys(byMonth).sort().map(function(mk){return {key:mk,label:projMonthLabel(mk),hours:byMonth[mk]};});
+  var weeks=Object.keys(byWeek).sort().map(function(wk){return {key:wk,label:projWeekLabel(wk),hours:byWeek[wk]};});
+  return {months:months, weeks:weeks};
+}
+/* scope: null/undefined = full project; {type:'month',key:'YYYY-MM'}; {type:'week',key:'YYYY-MM-DD' (Sat start)} */
+function filterLogByScope(log, scope){
+  if(!scope||scope.type==='full')return log||[];
+  if(scope.type==='month')return (log||[]).filter(function(e){return projMonthKeyFromStr(e.date)===scope.key;});
+  if(scope.type==='week')return (log||[]).filter(function(e){return projWeekKey(e.date)===scope.key;});
+  return log||[];
+}
+function scopeLabel(scope){
+  if(!scope||scope.type==='full')return 'Full Project';
+  if(scope.type==='month')return projMonthLabel(scope.key);
+  if(scope.type==='week')return 'Week of '+projWeekLabel(scope.key);
+  return 'Full Project';
+}
+
 /* ── Get employees from current month data (for picker) ── */
 function getKnownEmployees(){
   var mk=monthKey(viewMonth);
@@ -10060,7 +10109,7 @@ function renderProjects(){
       html+='</div>';
       html+='<div style="display:flex;gap:6px;flex-shrink:0;">';
       html+='<button onclick="showAddEntryModal('+idx+')" style="background:var(--navy);color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;">+ Log Hours</button>';
-      html+='<button onclick="exportProjectPDF('+idx+')" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;">&#128196; PDF</button>';
+      html+='<button onclick="showExportPDFModal('+idx+')" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;">&#128196; PDF</button>';
       html+='<button onclick="showEditProjectModal('+idx+')" style="background:none;color:var(--text3);border:none;padding:7px 8px;font-size:14px;cursor:pointer;" title="Edit project (name &amp; dates)">&#9998;</button>';
       html+='<button onclick="deleteProject('+idx+')" style="background:none;color:var(--text3);border:none;padding:7px 8px;font-size:14px;cursor:pointer;" title="Delete project">&#128465;</button>';
       html+='</div>';
@@ -10088,6 +10137,33 @@ function renderProjects(){
           html+='<div style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
           html+='<div style="font-size:10px;color:var(--text2);margin-bottom:2px;">'+escHtml(p)+'</div>';
           html+='<div style="font-size:14px;font-weight:700;color:var(--navy);">'+byPos[p].toFixed(2)+'h</div>';
+          html+='</div>';
+        });
+        html+='</div></div>';
+      }
+
+      // Hours by month / by housekeeping week (Sat–Fri)
+      var breakdown=getProjectBreakdown(proj.log);
+      if(breakdown.months.length>0){
+        html+='<div style="padding:10px 18px;border-bottom:1px solid var(--border);">';
+        html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Hours by month</div>';
+        html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;">';
+        breakdown.months.forEach(function(m){
+          html+='<div style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
+          html+='<div style="font-size:10px;color:var(--text2);margin-bottom:2px;">'+escHtml(m.label)+'</div>';
+          html+='<div style="font-size:14px;font-weight:700;color:var(--navy);">'+m.hours.toFixed(2)+'h</div>';
+          html+='</div>';
+        });
+        html+='</div></div>';
+      }
+      if(breakdown.weeks.length>0){
+        html+='<div style="padding:10px 18px;border-bottom:1px solid var(--border);">';
+        html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Hours by week (Sat–Fri)</div>';
+        html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">';
+        breakdown.weeks.forEach(function(w){
+          html+='<div style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
+          html+='<div style="font-size:10px;color:var(--text2);margin-bottom:2px;">'+escHtml(w.label)+'</div>';
+          html+='<div style="font-size:14px;font-weight:700;color:var(--navy);">'+w.hours.toFixed(2)+'h</div>';
           html+='</div>';
         });
         html+='</div></div>';
@@ -10422,18 +10498,66 @@ function deleteProject(projIdx){
   showToast('Project deleted');
 }
 
-/* ── Export Project PDF ── */
-function exportProjectPDF(projIdx){
+/* ── Export Project PDF: period selector modal ── */
+function showExportPDFModal(projIdx){
   var projects=loadProjects();
   var proj=projects[projIdx];
   if(!proj)return;
-  var log=proj.log||[];
-  var totalHours=0;
-  log.forEach(function(e){totalHours+=e.hours||0;});
+  var breakdown=getProjectBreakdown(proj.log);
+  var monthOpts=breakdown.months.map(function(m){return '<option value="month:'+m.key+'">'+escHtml(m.label)+' ('+m.hours.toFixed(2)+'h)</option>';}).join('');
+  var weekOpts=breakdown.weeks.map(function(w){return '<option value="week:'+w.key+'">'+escHtml(w.label)+' ('+w.hours.toFixed(2)+'h)</option>';}).join('');
+  var overlay=document.createElement('div');
+  overlay.id='exportPdfModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#128196; Export PDF Report</div>'
+    +'<div style="display:flex;flex-direction:column;gap:13px;">'
+    +'<div>'
+    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Period</label>'
+    +'<select id="exportPdfScope" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;">'
+    +'<option value="full">Full Project ('+proj.startDate+' → '+proj.endDate+')</option>'
+    +(monthOpts?'<optgroup label="By Month">'+monthOpts+'</optgroup>':'')
+    +(weekOpts?'<optgroup label="By Week (Sat–Fri)">'+weekOpts+'</optgroup>':'')
+    +'</select>'
+    +'</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:20px;">'
+    +'<button onclick="document.getElementById(\'exportPdfModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="confirmExportPDF('+projIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Generate PDF</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
 
-  // Build by-position totals
+function confirmExportPDF(projIdx){
+  var sel=document.getElementById('exportPdfScope');
+  var val=sel?sel.value:'full';
+  var scope=null;
+  if(val&&val!=='full'){
+    var parts=val.split(':');
+    scope={type:parts[0],key:parts[1]};
+  }
+  var modal=document.getElementById('exportPdfModal');
+  if(modal)modal.remove();
+  exportProjectPDF(projIdx, scope);
+}
+
+/* ── Export Project PDF ── */
+function exportProjectPDF(projIdx, scope){
+  var projects=loadProjects();
+  var proj=projects[projIdx];
+  if(!proj)return;
+  scope=scope||null;
+  var log=filterLogByScope(proj.log||[], scope);
+  var totalHours=0;
+  log.forEach(function(e){if(!e.pending)totalHours+=e.hours||0;});
+  var breakdown=getProjectBreakdown(log);
+
+  // Build by-position totals (pending entries have no hours yet — excluded)
   var byPos={};
   log.forEach(function(e){
+    if(e.pending)return;
     var p=e.pos||'Unknown';
     byPos[p]=(byPos[p]||0)+(e.hours||0);
   });
@@ -10444,7 +10568,7 @@ function exportProjectPDF(projIdx){
       +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;">'+e.date+'</td>'
       +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;">'+escHtml(e.empName)+'</td>'
       +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);">'+escHtml(e.pos||'')+'</td>'
-      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-align:right;">'+e.hours.toFixed(2)+'h</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-align:right;">'+(e.pending?'Pending':e.hours.toFixed(2)+'h')+'</td>'
       +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);">'+escHtml(e.note||'—')+'</td>'
       +'</tr>';
   }).join('');
@@ -10457,13 +10581,28 @@ function exportProjectPDF(projIdx){
       +'</tr>';
   }).join('');
 
+  // Month / week breakdown rows
+  var monthRows=breakdown.months.map(function(m){
+    return '<tr>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;">'+escHtml(m.label)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-align:right;">'+m.hours.toFixed(2)+'h</td>'
+      +'</tr>';
+  }).join('');
+  var weekRows=breakdown.weeks.map(function(w){
+    return '<tr>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;">'+escHtml(w.label)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-align:right;">'+w.hours.toFixed(2)+'h</td>'
+      +'</tr>';
+  }).join('');
+  var periodLbl=scopeLabel(scope);
+
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
     +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
     +'.header{background:var(--navy);color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
     +'.hotel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px;}'
     +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}'
     +'.sub{font-size:12px;color:rgba(255,255,255,.55);}'
-    +'.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px;}'
+    +'.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;}'
     +'.meta-box{background:var(--bg);border-radius:8px;padding:14px 16px;}'
     +'.meta-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px;}'
     +'.meta-val{font-size:16px;font-weight:700;color:var(--navy);}'
@@ -10475,14 +10614,29 @@ function exportProjectPDF(projIdx){
     +'</style></head><body>'
     +'<div class="header">'
     +'<div class="title">'+escHtml(proj.name)+'</div>'
-    +'<div class="sub">Project Report</div>'
+    +'<div class="sub">Project Report — '+escHtml(periodLbl)+'</div>'
     +'</div>'
     +'<div class="meta">'
+    +'<div class="meta-box"><div class="meta-label">Period</div><div class="meta-val" style="font-size:13px;">'+escHtml(periodLbl)+'</div></div>'
     +'<div class="meta-box"><div class="meta-label">Start Date</div><div class="meta-val">'+proj.startDate+'</div></div>'
     +'<div class="meta-box"><div class="meta-label">End Date</div><div class="meta-val">'+proj.endDate+'</div></div>'
     +'<div class="meta-box"><div class="meta-label">Total Hours</div><div class="meta-val">'+totalHours.toFixed(2)+'h</div></div>'
     +'</div>'
     +(proj.notes?'<div style="background:var(--yellow-bg);border:1px solid var(--yellow-border);border-radius:8px;padding:12px 16px;margin-bottom:24px;font-size:13px;color:var(--yellow);">'+escHtml(proj.notes)+'</div>':'')
+    // Hours by month section
+    +(breakdown.months.length>1?
+      '<div style="margin-bottom:28px;">'
+      +'<p class="section-title">Hours by month</p>'
+      +'<table><thead><tr><th>Month</th><th style="text-align:right;">Hours</th></tr></thead>'
+      +'<tbody>'+monthRows+'</tbody></table></div>'
+    :'')
+    // Hours by week section
+    +(breakdown.weeks.length>1?
+      '<div style="margin-bottom:28px;">'
+      +'<p class="section-title">Hours by week (Sat–Fri)</p>'
+      +'<table><thead><tr><th>Week</th><th style="text-align:right;">Hours</th></tr></thead>'
+      +'<tbody>'+weekRows+'</tbody></table></div>'
+    :'')
     // Hours by position section
     +(posList.length>0?
       '<div style="margin-bottom:28px;">'
