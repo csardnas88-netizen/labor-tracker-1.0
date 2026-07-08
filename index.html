@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.8.0"/>
+<meta name="app-version" content="6.8.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3159,6 +3159,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.8.1', date:'2026-07-08',
+    fixes:['Projects: fixed "Log Hours" entries getting permanently stuck on "⏳ Pending" when that day\'s PDF had already been saved before (or right after) the entry was logged. Previously the auto-fill only checked at the exact moment a new PDF was uploaded, so entries logged out of that order were never picked up. Now every time you open Projects, the app re-checks all pending entries against whatever PDF data already exists and fills any it can — nothing should stay stuck on Pending anymore.']
+  },
   {
     v:'6.8.0', date:'2026-07-07',
     fixes:['Projects: added a "Hours by month" and "Hours by week (Sat–Fri)" breakdown to each project card, so a project that spans several months now shows exactly how many hours were logged in each month and each housekeeping week. Also added a Period selector to the PDF export (&#128196; PDF button) — choose "Full Project" or a specific month/week to generate a report scoped to just that period, in addition to the full-project report.']
@@ -8996,6 +9000,63 @@ function autofillPendingProjectEntries(ds, mData){
   }
 }
 
+/* ── Catch-up pass: scan EVERY pending project entry (any date, any project)
+   and fill it if that day's PDF data already exists in storage.
+   autofillPendingProjectEntries() above only runs at the exact moment a PDF
+   is uploaded — if a "Log Hours" pending entry gets added to a project
+   AFTER that day's PDF was already saved (e.g. logged the same day the report
+   posted, or a same-day preliminary report was uploaded before the entry was
+   created), it would otherwise stay stuck on "Pending" forever. This runs
+   every time the Projects page renders, so nothing stays stuck. ── */
+function autofillAllPendingProjectEntries(){
+  var projects=loadProjects();
+  var changed=false;
+  var filled=0;
+  var mdCache={};
+  projects.forEach(function(proj){
+    (proj.log||[]).forEach(function(entry){
+      if(!entry.pending||!entry.date)return;
+      var mk=entry.date.substring(0,7);
+      if(!mdCache.hasOwnProperty(mk))mdCache[mk]=loadMonthData(mk);
+      var mData=mdCache[mk];
+      var day=mData&&mData.days?mData.days[entry.date]:null;
+      if(!day||!day.emps)return;
+      var entries=day.emps.filter(function(e){return e.id===entry.empId&&e.paid>0;});
+      if(entries.length===0)return;
+      if(entries.length===1){
+        entry.hours=entries[0].paid;
+        entry.pos=entries[0].pos;
+        entry.pending=false;
+        entry.autoFilled=true;
+        entry.autoFilledAt=new Date().toISOString();
+        changed=true;filled++;
+      } else {
+        var match=entries.filter(function(e){return e.pos===entry.pos;})[0];
+        if(match){
+          entry.hours=match.paid;
+          entry.pending=false;
+          entry.autoFilled=true;
+          entry.autoFilledAt=new Date().toISOString();
+          changed=true;filled++;
+        } else {
+          var total=entries.reduce(function(s,e){return s+e.paid;},0);
+          entry.hours=total;
+          entry.pos='Multiple positions';
+          entry.pending=false;
+          entry.autoFilled=true;
+          entry.autoFilledAt=new Date().toISOString();
+          changed=true;filled++;
+        }
+      }
+    });
+  });
+  if(changed){
+    saveProjects(projects);
+    showToast('&#10003; '+filled+' project entr'+(filled===1?'y':'ies')+' auto-filled from PDF');
+  }
+  return changed;
+}
+
 /* ══════════════════════════════════════════════════════
    POLICY TRAINING TRACKER MODULE
    Storage key: hk_trainings (isolated, no impact on existing)
@@ -10069,6 +10130,7 @@ function getEmpHoursForDay(empId, ds){
 function renderProjects(){
   var el=document.getElementById('projectsContent');
   if(!el)return;
+  try{autofillAllPendingProjectEntries();}catch(e){}
   var projects=loadProjects();
   updateProjectsBadge();
 
