@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.8.3"/>
+<meta name="app-version" content="6.9.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3167,6 +3167,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.9.0', date:'2026-07-18',
+    fixes:['Two big reliability changes. (1) The app now automatically resumes uploading to the cloud the moment your connection comes back — no more needing to notice and tap "Retry now" yourself. (2) Fixed a real risk where two devices editing Projects or Call-Offs around the same time could silently overwrite each other — for example, adding hours for one employee on your phone while someone edits a different project on another device could previously wipe out whichever change synced last. Each project and call-off now saves to its own slot in the cloud, and hours logged inside the same project from two devices are combined entry-by-entry instead of one replacing the other.']
+  },
+  {
     v:'6.8.3', date:'2026-07-18',
     fixes:['Added a clear red banner at the top of the app that appears whenever something you saved (or the latest cloud data) fails to sync — previously the only sign was a tiny, easy-to-miss dot in the sidebar. The banner names what failed, offers a "Retry now" button, and stays up until it actually succeeds — it does not disappear on its own. Also: the app now proactively renews your session before it expires instead of silently failing once it does, which should prevent most of these failures from happening in the first place.']
   },
@@ -3836,6 +3840,8 @@ function _friendlyKeyLabel(key){
   if(key.indexOf('month_')===0)return 'Report for '+key.replace('month_','');
   if(key.indexOf('r106_')===0)return 'R106';
   if(key.indexOf('snapshot_')===0)return 'Backup';
+  if(key.indexOf('project_')===0)return 'Projects';
+  if(key.indexOf('calloff_')===0)return 'Call-Offs';
   return key;
 }
 function markSyncFailure(label,sessionExpired){
@@ -3863,6 +3869,24 @@ function retrySyncNow(){
   try{forceSyncToSupabase();}catch(e){}
   setTimeout(function(){try{syncFromSheets();}catch(e){}},800);
 }
+
+/* ── Auto-retry when the connection comes back ─────────────
+   Covers the "lost signal mid-edit" case: local saves already survive
+   offline (localStorage first, always). This makes the upload to the
+   cloud resume on its own once the connection is back, instead of
+   requiring a manual tap on "Retry now". The interval is a fallback for
+   the cases where the browser's online/offline events don't fire
+   reliably (e.g. connected to wifi with no real internet). ── */
+window.addEventListener('online',function(){
+  if(_syncFailCount>0){
+    showToast('&#128225; Back online — syncing…');
+    retrySyncNow();
+  }
+});
+window.addEventListener('offline',function(){ setSyncStatus('offline'); });
+setInterval(function(){
+  if(_syncFailCount>0){ try{forceSyncToSupabase();}catch(e){} }
+},30000);
 
 /* Upsert a key/value into Supabase */
 function supaPut(key, value){
@@ -3926,6 +3950,45 @@ function addDeletedId(key,id){
   try{ supaPut(key,ids); }catch(e){}
 }
 
+/* ── Multi-device concurrent edits ─────────────────────────
+   Problem: projects_data was one row holding EVERY project as a single
+   JSON blob. Every save pushed the whole array, so two devices editing
+   around the same time (even different projects, even different log
+   entries in the SAME project) could have one push silently overwrite
+   the other's not-yet-synced change.
+   Fix: each project now also gets its OWN row (project_<id>), so a save
+   only touches that project's row — edits to a different project can
+   never collide. Within a project, the log array is merged entry-by-entry
+   (keyed by date+employee+created-timestamp, which every entry already
+   has) instead of one whole array replacing the other, so two devices
+   adding different entries to the same project both survive. The old
+   whole-array "projects_data" key is still kept in sync too, purely as
+   a rollback safety net. ── */
+function _entryKey(e){ return (e&&e.date||'')+'|'+(e&&e.empId||'')+'|'+(e&&e.added||''); }
+function mergeProjectLogs(localLog,remoteLog){
+  var deletedKeys=getDeletedIds('project_entries_deleted_keys');
+  var byKey={};
+  (localLog||[]).forEach(function(e){ byKey[_entryKey(e)]=e; });
+  (remoteLog||[]).forEach(function(e){
+    var k=_entryKey(e);
+    var existing=byKey[k];
+    if(!existing){ byKey[k]=e; return; }
+    var lt=Date.parse(existing.editedAt||existing.autoFilledAt||existing.added||0)||0;
+    var rt=Date.parse(e.editedAt||e.autoFilledAt||e.added||0)||0;
+    byKey[k]=(rt>lt)?e:existing;
+  });
+  deletedKeys.forEach(function(k){ delete byKey[k]; });
+  return Object.values(byKey);
+}
+function mergeProjectObjects(localP,remoteP){
+  var lt=Date.parse(localP.updated||localP.created||0)||0;
+  var rt=Date.parse(remoteP.updated||remoteP.created||0)||0;
+  var base=(rt>lt)?remoteP:localP;
+  var out=Object.assign({},base);
+  out.log=mergeProjectLogs(localP.log,remoteP.log);
+  return out;
+}
+
 /* Override save functions to also push to Supabase */
 var _origSaveMonthData=saveMonthData;
 saveMonthData=function(data,mk){
@@ -3939,6 +4002,75 @@ function syncR106ToSheets(mk,data){
 }
 function saveR106Local(mk,data){
   try{localStorage.setItem('hk_r106_'+mk,JSON.stringify(data));}catch(e){}
+}
+
+/* Merge every project_<id> row (plus the legacy projects_data blob as a
+   fallback source) into local storage, entry-by-entry. Returns true if
+   anything changed. */
+function _mergeProjectsFromRemote(all){
+  var remoteRows={};
+  Object.keys(all).forEach(function(k){
+    if(k.indexOf('project_')===0)remoteRows[k.replace('project_','')]=all[k];
+  });
+  var legacyArr=Array.isArray(all['projects_data'])?all['projects_data']:[];
+  legacyArr.forEach(function(p){ if(p&&p.id&&!remoteRows[p.id])remoteRows[p.id]=p; });
+  if(Object.keys(remoteRows).length===0)return false;
+
+  var localProjects=[];
+  try{var lp=localStorage.getItem('projects_data');if(lp)localProjects=JSON.parse(lp);}catch(e){}
+  var pDeletedIds=getDeletedIds('projects_deleted_ids');
+  var remotePDeletedIds=all['projects_deleted_ids'];
+  if(Array.isArray(remotePDeletedIds)){
+    remotePDeletedIds.forEach(function(id){if(pDeletedIds.indexOf(id)===-1)pDeletedIds.push(id);});
+    try{localStorage.setItem('projects_deleted_ids',JSON.stringify(pDeletedIds));}catch(e){}
+  }
+  var eDeletedKeys=getDeletedIds('project_entries_deleted_keys');
+  var remoteEDeletedKeys=all['project_entries_deleted_keys'];
+  if(Array.isArray(remoteEDeletedKeys)){
+    remoteEDeletedKeys.forEach(function(k){if(eDeletedKeys.indexOf(k)===-1)eDeletedKeys.push(k);});
+    try{localStorage.setItem('project_entries_deleted_keys',JSON.stringify(eDeletedKeys));}catch(e){}
+  }
+
+  var mergedP={};
+  localProjects.forEach(function(p){ if(p.id)mergedP[p.id]=p; });
+  Object.keys(remoteRows).forEach(function(pid){
+    var remoteP=remoteRows[pid];
+    var localP=mergedP[pid];
+    mergedP[pid]=localP?mergeProjectObjects(localP,remoteP):remoteP;
+  });
+  pDeletedIds.forEach(function(id){ delete mergedP[id]; });
+  var mergedArr=Object.values(mergedP).sort(function(a,b){return b.id-a.id;});
+  try{localStorage.setItem('projects_data',JSON.stringify(mergedArr));}catch(e){}
+  return true;
+}
+/* Merge every calloff_<id> row (plus the legacy calloffs_data blob) into
+   local storage. Call-off records are flat, so per-row storage alone
+   (no entry-level sub-merge needed) already prevents two devices adding
+   different call-offs from clobbering each other. */
+function _mergeCallOffsFromRemote(all){
+  var remoteRows={};
+  Object.keys(all).forEach(function(k){
+    if(k.indexOf('calloff_')===0)remoteRows[k.replace('calloff_','')]=all[k];
+  });
+  var legacyArr=Array.isArray(all['calloffs_data'])?all['calloffs_data']:[];
+  legacyArr.forEach(function(c){ if(c&&c.id&&!remoteRows[c.id])remoteRows[c.id]=c; });
+  if(Object.keys(remoteRows).length===0)return false;
+
+  var localCallOffs=[];
+  try{var lc=localStorage.getItem('calloffs_data');if(lc)localCallOffs=JSON.parse(lc);}catch(e){}
+  var cDeletedIds=getDeletedIds('calloffs_deleted_ids');
+  var remoteCDeletedIds=all['calloffs_deleted_ids'];
+  if(Array.isArray(remoteCDeletedIds)){
+    remoteCDeletedIds.forEach(function(id){if(cDeletedIds.indexOf(id)===-1)cDeletedIds.push(id);});
+    try{localStorage.setItem('calloffs_deleted_ids',JSON.stringify(cDeletedIds));}catch(e){}
+  }
+  var mergedC={};
+  localCallOffs.forEach(function(c){ if(c.id)mergedC[c.id]=c; });
+  Object.keys(remoteRows).forEach(function(cid){ mergedC[cid]=remoteRows[cid]; });
+  cDeletedIds.forEach(function(id){ delete mergedC[id]; });
+  var mergedCArr=Object.values(mergedC).sort(function(a,b){return b.id-a.id;});
+  try{localStorage.setItem('calloffs_data',JSON.stringify(mergedCArr));}catch(e){}
+  return true;
 }
 
 /* Pull latest data from Supabase on load */
@@ -3980,46 +4112,6 @@ function _syncFromSheetsPull(){
             try{var ls=localStorage.getItem('hk_r106_'+mk2);if(ls)localR106=JSON.parse(ls);}catch(e){}
             var mergedR106=Object.assign({},localR106,remoteR106);
             saveR106Local(mk2,mergedR106);
-            updated=true;
-          }
-        }
-        if(key==="projects_data"){
-          var remoteProjects=all[key];
-          if(Array.isArray(remoteProjects)&&remoteProjects.length>0){
-            var localProjects=[];
-            try{var lp=localStorage.getItem('projects_data');if(lp)localProjects=JSON.parse(lp);}catch(e){}
-            var pDeletedIds=getDeletedIds('projects_deleted_ids');
-            var remotePDeletedIds=all['projects_deleted_ids'];
-            if(Array.isArray(remotePDeletedIds)){
-              remotePDeletedIds.forEach(function(id){if(pDeletedIds.indexOf(id)===-1)pDeletedIds.push(id);});
-              try{localStorage.setItem('projects_deleted_ids',JSON.stringify(pDeletedIds));}catch(e){}
-            }
-            var mergedP={};
-            localProjects.forEach(function(p){if(p.id)mergedP[p.id]=p;});
-            remoteProjects.forEach(function(p){if(p.id)mergedP[p.id]=p;});
-            pDeletedIds.forEach(function(id){delete mergedP[id];});
-            var mergedArr=Object.values(mergedP).sort(function(a,b){return b.id-a.id;});
-            try{localStorage.setItem('projects_data',JSON.stringify(mergedArr));}catch(e){}
-            updated=true;
-          }
-        }
-        if(key==="calloffs_data"){
-          var remoteCallOffs=all[key];
-          if(Array.isArray(remoteCallOffs)&&remoteCallOffs.length>0){
-            var localCallOffs=[];
-            try{var lc=localStorage.getItem('calloffs_data');if(lc)localCallOffs=JSON.parse(lc);}catch(e){}
-            var cDeletedIds=getDeletedIds('calloffs_deleted_ids');
-            var remoteCDeletedIds=all['calloffs_deleted_ids'];
-            if(Array.isArray(remoteCDeletedIds)){
-              remoteCDeletedIds.forEach(function(id){if(cDeletedIds.indexOf(id)===-1)cDeletedIds.push(id);});
-              try{localStorage.setItem('calloffs_deleted_ids',JSON.stringify(cDeletedIds));}catch(e){}
-            }
-            var mergedC={};
-            localCallOffs.forEach(function(c){if(c.id)mergedC[c.id]=c;});
-            remoteCallOffs.forEach(function(c){if(c.id)mergedC[c.id]=c;});
-            cDeletedIds.forEach(function(id){delete mergedC[id];});
-            var mergedCArr=Object.values(mergedC).sort(function(a,b){return b.id-a.id;});
-            try{localStorage.setItem('calloffs_data',JSON.stringify(mergedCArr));}catch(e){}
             updated=true;
           }
         }
@@ -4135,6 +4227,8 @@ function _syncFromSheetsPull(){
         }
       }catch(keyErr){console.warn('[sync] Error processing key',key,keyErr);}
     });
+    try{ if(_mergeProjectsFromRemote(all))updated=true; }catch(e){console.warn('[sync] projects merge',e);}
+    try{ if(_mergeCallOffsFromRemote(all))updated=true; }catch(e){console.warn('[sync] calloffs merge',e);}
     setSyncStatus("synced");
     if(updated){
       try{renderLaborDash();}catch(e){try{renderMonthDashboard();}catch(e2){}}
@@ -4166,16 +4260,27 @@ function forceSyncToSupabase(){
       try{ supaPut("r106_"+mk2, JSON.parse(localStorage[k])); pushed++; }catch(e){}
     }
     if(k==="projects_data"){
-      try{ supaPut("projects_data", JSON.parse(localStorage[k])); pushed++; }catch(e){}
+      try{
+        var _pd=JSON.parse(localStorage[k]);
+        supaPut("projects_data", _pd); pushed++;
+        (_pd||[]).forEach(function(p){ if(p&&p.id){ supaPut('project_'+p.id,p); pushed++; } });
+      }catch(e){}
     }
     if(k==="calloffs_data"){
-      try{ supaPut("calloffs_data", JSON.parse(localStorage[k])); pushed++; }catch(e){}
+      try{
+        var _cd=JSON.parse(localStorage[k]);
+        supaPut("calloffs_data", _cd); pushed++;
+        (_cd||[]).forEach(function(c){ if(c&&c.id){ supaPut('calloff_'+c.id,c); pushed++; } });
+      }catch(e){}
     }
     if(k==="projects_deleted_ids"){
       try{ supaPut("projects_deleted_ids", JSON.parse(localStorage[k])); pushed++; }catch(e){}
     }
     if(k==="calloffs_deleted_ids"){
       try{ supaPut("calloffs_deleted_ids", JSON.parse(localStorage[k])); pushed++; }catch(e){}
+    }
+    if(k==="project_entries_deleted_keys"){
+      try{ supaPut("project_entries_deleted_keys", JSON.parse(localStorage[k])); pushed++; }catch(e){}
     }
     if(k==="hk_roster_overrides"){
       try{ supaPut("hk_roster_overrides", JSON.parse(localStorage[k])); pushed++; }catch(e){}
@@ -4321,8 +4426,17 @@ function restoreSnapshot(key){
         try{localStorage.setItem("hk_r106_"+mk,JSON.stringify(data.r106[mk]));}catch(e){}
       });
       if(data.roster_overrides)try{localStorage.setItem("hk_roster_overrides",JSON.stringify(data.roster_overrides));}catch(e){}
-      if(data.projects)try{localStorage.setItem("projects_data",JSON.stringify(data.projects));}catch(e){}
-      if(data.calloffs)try{localStorage.setItem("calloffs_data",JSON.stringify(data.calloffs));}catch(e){}
+      /* Push each restored project/call-off to its own row too — otherwise the
+         next auto-sync would merge the still-current (pre-restore) per-row
+         copies back in and silently undo the restore. */
+      if(data.projects){
+        try{localStorage.setItem("projects_data",JSON.stringify(data.projects));}catch(e){}
+        (data.projects||[]).forEach(function(p){ if(p&&p.id){ try{supaPut('project_'+p.id,p);}catch(e){} } });
+      }
+      if(data.calloffs){
+        try{localStorage.setItem("calloffs_data",JSON.stringify(data.calloffs));}catch(e){}
+        (data.calloffs||[]).forEach(function(c){ if(c&&c.id){ try{supaPut('calloff_'+c.id,c);}catch(e){} } });
+      }
       if(data.manager_name)try{localStorage.setItem("hk_manager_name",data.manager_name);}catch(e){}
       showToast("&#10003; Restored backup from "+ds+" — reloading…");
       setTimeout(function(){location.reload();},800);
@@ -10140,7 +10254,10 @@ function loadProjects(){
 }
 function saveProjects(projects){
   try{localStorage.setItem('projects_data',JSON.stringify(projects));}catch(e){}
-  try{supaPut('projects_data',projects);}catch(e){}
+  try{supaPut('projects_data',projects);}catch(e){} /* legacy blob, kept as a rollback safety net */
+  (projects||[]).forEach(function(p){
+    if(p&&p.id){ try{ supaPut('project_'+p.id,p); }catch(e){} }
+  });
 }
 
 function updateProjectsBadge(){
@@ -10635,8 +10752,10 @@ function deleteLogEntry(projIdx,entryIdx){
   if(!confirm('Remove this entry?'))return;
   var projects=loadProjects();
   if(!projects[projIdx])return;
+  var removedEntry=projects[projIdx].log[entryIdx];
   projects[projIdx].log.splice(entryIdx,1);
   saveProjects(projects);
+  if(removedEntry)addDeletedId('project_entries_deleted_keys',_entryKey(removedEntry));
   renderProjects();
 }
 
@@ -10869,7 +10988,10 @@ function loadCallOffs(){
 }
 function saveCallOffs(list){
   try{localStorage.setItem('calloffs_data',JSON.stringify(list));}catch(e){}
-  try{supaPut('calloffs_data',list);}catch(e){}
+  try{supaPut('calloffs_data',list);}catch(e){} /* legacy blob, kept as a rollback safety net */
+  (list||[]).forEach(function(c){
+    if(c&&c.id){ try{ supaPut('calloff_'+c.id,c); }catch(e){} }
+  });
 }
 function updateCallOffsBadge(){
   var list=loadCallOffs();
