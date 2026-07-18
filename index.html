@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.8.1"/>
+<meta name="app-version" content="6.8.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3160,6 +3160,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.8.2', date:'2026-07-18',
+    fixes:['Projects &amp; Call-Offs: fixed deleted projects/call-offs sometimes reappearing after the app re-synced with the cloud. Previously, deleting something only removed it from one side (your device or the shared cloud copy) if the upload happened to fail silently at that moment — the next sync would then bring the "deleted" item right back, since the sync had no way to know it had been deleted on purpose. The app now remembers what you deleted and will never bring it back, even if an old copy still exists somewhere else.']
+  },
+  {
     v:'6.8.1', date:'2026-07-08',
     fixes:['Projects: fixed "Log Hours" entries getting permanently stuck on "⏳ Pending" when that day\'s PDF had already been saved before (or right after) the entry was logged. Previously the auto-fill only checked at the exact moment a new PDF was uploaded, so entries logged out of that order were never picked up. Now every time you open Projects, the app re-checks all pending entries against whatever PDF data already exists and fills any it can — nothing should stay stuck on Pending anymore.']
   },
@@ -3830,6 +3834,24 @@ function supaGetAll(cb){
   .catch(function(e){ cb(e,{}); });
 }
 
+/* ── Deletion tombstones ──────────────────────────────────
+   Problem: the projects/call-offs merge below unions local+remote by id,
+   so a delete whose push silently failed (expired session, dropped
+   network request) gets resurrected by the very next auto-sync, forever.
+   Fix: record deleted ids locally AND push them as their own synced key,
+   then have the merge drop any id listed here even if a stale copy is
+   still sitting in the other side. Once deleted, always deleted. ── */
+function getDeletedIds(key){
+  try{ var s=localStorage.getItem(key); var a=s?JSON.parse(s):[]; return Array.isArray(a)?a:[]; }catch(e){ return []; }
+}
+function addDeletedId(key,id){
+  if(id===undefined||id===null)return;
+  var ids=getDeletedIds(key);
+  if(ids.indexOf(id)===-1)ids.push(id);
+  try{ localStorage.setItem(key,JSON.stringify(ids)); }catch(e){}
+  try{ supaPut(key,ids); }catch(e){}
+}
+
 /* Override save functions to also push to Supabase */
 var _origSaveMonthData=saveMonthData;
 saveMonthData=function(data,mk){
@@ -3880,9 +3902,16 @@ function syncFromSheets(){
           if(Array.isArray(remoteProjects)&&remoteProjects.length>0){
             var localProjects=[];
             try{var lp=localStorage.getItem('projects_data');if(lp)localProjects=JSON.parse(lp);}catch(e){}
+            var pDeletedIds=getDeletedIds('projects_deleted_ids');
+            var remotePDeletedIds=all['projects_deleted_ids'];
+            if(Array.isArray(remotePDeletedIds)){
+              remotePDeletedIds.forEach(function(id){if(pDeletedIds.indexOf(id)===-1)pDeletedIds.push(id);});
+              try{localStorage.setItem('projects_deleted_ids',JSON.stringify(pDeletedIds));}catch(e){}
+            }
             var mergedP={};
             localProjects.forEach(function(p){if(p.id)mergedP[p.id]=p;});
             remoteProjects.forEach(function(p){if(p.id)mergedP[p.id]=p;});
+            pDeletedIds.forEach(function(id){delete mergedP[id];});
             var mergedArr=Object.values(mergedP).sort(function(a,b){return b.id-a.id;});
             try{localStorage.setItem('projects_data',JSON.stringify(mergedArr));}catch(e){}
             updated=true;
@@ -3893,9 +3922,16 @@ function syncFromSheets(){
           if(Array.isArray(remoteCallOffs)&&remoteCallOffs.length>0){
             var localCallOffs=[];
             try{var lc=localStorage.getItem('calloffs_data');if(lc)localCallOffs=JSON.parse(lc);}catch(e){}
+            var cDeletedIds=getDeletedIds('calloffs_deleted_ids');
+            var remoteCDeletedIds=all['calloffs_deleted_ids'];
+            if(Array.isArray(remoteCDeletedIds)){
+              remoteCDeletedIds.forEach(function(id){if(cDeletedIds.indexOf(id)===-1)cDeletedIds.push(id);});
+              try{localStorage.setItem('calloffs_deleted_ids',JSON.stringify(cDeletedIds));}catch(e){}
+            }
             var mergedC={};
             localCallOffs.forEach(function(c){if(c.id)mergedC[c.id]=c;});
             remoteCallOffs.forEach(function(c){if(c.id)mergedC[c.id]=c;});
+            cDeletedIds.forEach(function(id){delete mergedC[id];});
             var mergedCArr=Object.values(mergedC).sort(function(a,b){return b.id-a.id;});
             try{localStorage.setItem('calloffs_data',JSON.stringify(mergedCArr));}catch(e){}
             updated=true;
@@ -4048,6 +4084,12 @@ function forceSyncToSupabase(){
     }
     if(k==="calloffs_data"){
       try{ supaPut("calloffs_data", JSON.parse(localStorage[k])); pushed++; }catch(e){}
+    }
+    if(k==="projects_deleted_ids"){
+      try{ supaPut("projects_deleted_ids", JSON.parse(localStorage[k])); pushed++; }catch(e){}
+    }
+    if(k==="calloffs_deleted_ids"){
+      try{ supaPut("calloffs_deleted_ids", JSON.parse(localStorage[k])); pushed++; }catch(e){}
     }
     if(k==="hk_roster_overrides"){
       try{ supaPut("hk_roster_overrides", JSON.parse(localStorage[k])); pushed++; }catch(e){}
@@ -10554,8 +10596,10 @@ function saveEditEntry(projIdx, entryIdx){
 function deleteProject(projIdx){
   if(!confirm('Delete this project and all its entries? This cannot be undone.'))return;
   var projects=loadProjects();
+  var removed=projects[projIdx];
   projects.splice(projIdx,1);
   saveProjects(projects);
+  if(removed&&removed.id)addDeletedId('projects_deleted_ids',removed.id);
   renderProjects();
   showToast('Project deleted');
 }
@@ -11015,6 +11059,7 @@ function deleteCallOff(id){
   if(!confirm('Delete this call-off record?'))return;
   var list=loadCallOffs().filter(function(c){return c.id!==id;});
   saveCallOffs(list);
+  addDeletedId('calloffs_deleted_ids',id);
   if(COF_FILTER!=='all'&&!list.some(function(c){return((c.empId||'')+'|'+c.empName)===COF_FILTER;})){
     COF_FILTER='all';
   }
