@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.9.1"/>
+<meta name="app-version" content="6.10.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1271,6 +1271,41 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
           <span class="settings-info-label">Sync user</span>
           <span class="settings-info-value" id="settingsSyncStatus">—</span>
         </div>
+        <div class="settings-info-row">
+          <span class="settings-info-label">Signed in as</span>
+          <span class="settings-info-value" id="settingsSignedInEmail">—</span>
+        </div>
+      </div>
+
+      <!-- Owner-only: who can open this app. Hidden for managers. -->
+      <div class="card" id="teamAccessCard" style="margin-bottom:14px;display:none;">
+        <div class="card-head"><div class="card-title">Team Access</div></div>
+        <div style="padding:12px 16px 0;font-size:11.5px;color:var(--text3);line-height:1.55;">
+          Everyone listed here can open the app and has full access — including editing and deleting.
+          Each person signs up with their <b>own</b> email and password on the sign-in screen; never share yours.
+        </div>
+        <div style="padding:12px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="newManagerEmail" type="email" placeholder="manager@email.com" autocomplete="off"
+            style="flex:2;min-width:190px;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:14px;"/>
+          <input id="newManagerName" type="text" placeholder="Name (optional)" autocomplete="off"
+            style="flex:1;min-width:130px;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:14px;"/>
+          <button class="btn btn-navy" onclick="addAllowedUser()">Give Access</button>
+        </div>
+        <div id="allowedUsersList" style="padding:0 16px 16px;"></div>
+      </div>
+
+      <!-- Owner-only: attribution for changes, since everyone can edit. -->
+      <div class="card" id="activityLogCard" style="margin-bottom:14px;display:none;">
+        <div class="card-head"><div class="card-title">Recent Activity</div></div>
+        <div class="settings-row" onclick="loadAuditLog()">
+          <div class="settings-row-icon" style="background:var(--surface);color:var(--text2);">&#128203;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">See Who Changed What</div>
+            <div class="settings-row-desc">Shows the last 50 changes and who made them — useful if something goes missing</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
+        <div id="auditLogResults" style="padding:0 16px 16px;"></div>
       </div>
 
       <div class="card" style="margin-bottom:14px;">
@@ -3200,6 +3235,11 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.10.0', date:'2026-07-18',
+    fixes:['Team access: you can now give your managers access to the app. In Settings → Team Access, enter a manager\'s email to grant access, or remove it at any time. Each manager creates their own account with their own password on the sign-in screen — never share yours. Only you (the owner) can see or change that list.',
+           'Because everyone with access can edit and delete, Settings → Recent Activity now shows the last 50 changes and who made them, so nothing that goes missing is a mystery.']
+  },
+  {
     v:'6.9.1', date:'2026-07-18',
     fixes:['The app no longer says "Saved" when it actually failed to save. Every save to this device used to fail silently if the device ran out of storage — the screen showed success while nothing was written. You now get a clear red warning that names what failed and tells you whether the cloud copy survived, plus a new "Device Storage" section in Settings showing how much room is left and a one-tap way to free space (old months stay safe in the cloud).',
            'The app now opens with no internet at all. Until now it had to be downloaded from the internet every time, so with no signal it simply would not load — even though your data was already on the device. It is now stored on your phone/computer, along with the PDF and Excel tools it needs. Tip: add the app to your Home Screen — on iPhone that also stops Safari from erasing your data after 7 days of not opening it.']
@@ -3775,6 +3815,20 @@ async function authSignIn(){
     var d=await r.json();
     if(d.access_token){
       _authStore(d);
+      /* Valid credentials are not the same as having access. Without this
+         check an unlisted account lands in a fully empty app with no
+         explanation — it looks like the data was wiped rather than like a
+         permission the owner still needs to grant. */
+      var allowed=await isCurrentUserAllowed();
+      if(!allowed){
+        localStorage.removeItem(_SA_TOK);localStorage.removeItem(_SA_REF);localStorage.removeItem(_SA_EXP);
+        SUPA_HEADERS['Authorization']='Bearer '+SUPA_KEY;
+        _isOwnerCached=null;
+        errEl.style.color='';
+        errEl.textContent='Tu cuenta se creó correctamente, pero aún no tiene acceso. Pídele a Carlos que agregue '+email+' en Settings → Team Access.';
+        btn.textContent='Iniciar sesión';btn.disabled=false;
+        return;
+      }
       document.getElementById('authOverlay').style.display='none';
       _authUpdateUI();
       setTimeout(syncFromSheets,400);
@@ -3830,12 +3884,185 @@ async function authSignUp(){
 function authSignOut(){
   if(!confirm('¿Cerrar sesión? Deberás iniciar sesión la próxima vez.'))return;
   localStorage.removeItem(_SA_TOK);localStorage.removeItem(_SA_REF);localStorage.removeItem(_SA_EXP);
+  _isOwnerCached=null;
   SUPA_HEADERS['Authorization']='Bearer '+SUPA_KEY;
   lockApp();
 }
 function _authUpdateUI(){
   var el=document.getElementById('settingsSyncStatus');
   if(el)el.textContent=_authToken()?'Sesión activa':'No autenticado';
+  var em=document.getElementById('settingsSignedInEmail');
+  if(em)em.textContent=getSignedInEmail()||'—';
+  refreshOwnerOnlyUI();
+}
+
+/* ══════════════════════════════════════════════════════
+   TEAM ACCESS
+   Access is a row in Supabase's `allowed_users` table, enforced by RLS —
+   not by hiding buttons here. The UI below is a convenience for the owner;
+   a manager who forged these calls still gets rejected by the database.
+   ══════════════════════════════════════════════════════ */
+
+/* Read the email out of the Supabase JWT (payload is the middle segment). */
+function getSignedInEmail(){
+  var t=_authToken();
+  if(!t)return '';
+  try{
+    var p=t.split('.')[1];
+    if(!p)return '';
+    p=p.replace(/-/g,'+').replace(/_/g,'/');
+    while(p.length%4)p+='=';
+    var claims=JSON.parse(decodeURIComponent(escape(atob(p))));
+    return claims.email||'';
+  }catch(e){ return ''; }
+}
+
+/* Does the signed-in account actually have access? Asks the database
+   rather than trusting anything stored on the device. */
+function isCurrentUserAllowed(){
+  var em=getSignedInEmail();
+  if(!em)return Promise.resolve(false);
+  return fetch(SUPA_URL+'/rest/v1/allowed_users?select=email&email=eq.'+encodeURIComponent(em.toLowerCase()),{headers:SUPA_HEADERS})
+    .then(function(r){ return r.ok?r.json():[]; })
+    .then(function(rows){ return !!(rows&&rows.length); })
+    .catch(function(){
+      /* Offline: don't lock out someone who was already signed in and is
+         simply out of signal — the database still gates every read/write. */
+      return true;
+    });
+}
+
+var _isOwnerCached=null;
+function refreshOwnerOnlyUI(){
+  var show=function(isOwner){
+    ['teamAccessCard','activityLogCard'].forEach(function(id){
+      var c=document.getElementById(id);
+      if(c)c.style.display=isOwner?'':'none';
+    });
+  };
+  if(!_authToken()){show(false);return;}
+  if(_isOwnerCached!==null){show(_isOwnerCached);return;}
+  fetch(SUPA_URL+'/rest/v1/allowed_users?select=role&email=eq.'+encodeURIComponent(getSignedInEmail()),{headers:SUPA_HEADERS})
+    .then(function(r){return r.ok?r.json():[];})
+    .then(function(rows){
+      _isOwnerCached=!!(rows&&rows[0]&&rows[0].role==='owner');
+      show(_isOwnerCached);
+    }).catch(function(){show(false);});
+}
+
+function loadAllowedUsers(){
+  var el=document.getElementById('allowedUsersList');
+  if(!el)return;
+  el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--text3);">Loading…</div>';
+  fetch(SUPA_URL+'/rest/v1/allowed_users?select=email,name,role,added_at&order=role.asc,email.asc',{headers:SUPA_HEADERS})
+    .then(function(r){ if(!r.ok)throw new Error('http'); return r.json(); })
+    .then(function(rows){ renderAllowedUsers(rows||[]); })
+    .catch(function(){ el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--red);">Could not load the access list — check your connection.</div>'; });
+}
+
+function renderAllowedUsers(rows){
+  var el=document.getElementById('allowedUsersList');
+  if(!el)return;
+  var me=(getSignedInEmail()||'').toLowerCase();
+  var html='<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">';
+  rows.forEach(function(u){
+    var isOwner=u.role==='owner';
+    var isMe=(u.email||'').toLowerCase()===me;
+    html+='<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface);border-radius:8px;">'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div style="font-size:12.5px;font-weight:600;color:var(--text1);overflow:hidden;text-overflow:ellipsis;">'+escHtml(u.name||u.email)+(isMe?' <span style="font-weight:400;color:var(--text3);">(you)</span>':'')+'</div>'
+      +'<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;">'+escHtml(u.email)+'</div>'
+      +'</div>'
+      +'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:'+(isOwner?'var(--gt)':'var(--bg)')+';color:'+(isOwner?'var(--yellow)':'var(--text3)')+';flex-shrink:0;">'+(isOwner?'Owner':'Manager')+'</span>';
+    /* The owner row has no remove button: removing it would lock everyone
+       out of managing access, with no way back from inside the app. */
+    if(!isOwner){
+      html+='<button class="btn btn-ghost" style="min-height:30px;padding:5px 11px;font-size:11.5px;flex-shrink:0;" onclick="removeAllowedUser(\''+escHtml(u.email).replace(/'/g,"\\'")+'\')">Remove</button>';
+    }
+    html+='</div>';
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function addAllowedUser(){
+  var emIn=document.getElementById('newManagerEmail');
+  var nmIn=document.getElementById('newManagerName');
+  var email=((emIn&&emIn.value)||'').trim().toLowerCase();
+  var name=((nmIn&&nmIn.value)||'').trim();
+  if(!email||email.indexOf('@')===-1||email.indexOf('.')===-1){showToast('&#9888; Enter a valid email address.');return;}
+  fetch(SUPA_URL+'/rest/v1/allowed_users',{
+    method:'POST',
+    headers:Object.assign({},SUPA_HEADERS,{'Prefer':'resolution=merge-duplicates'}),
+    body:JSON.stringify({email:email,name:name||null,role:'manager',added_by:getSignedInEmail()})
+  }).then(function(r){
+    if(!r.ok)throw new Error('http '+r.status);
+    if(emIn)emIn.value='';
+    if(nmIn)nmIn.value='';
+    showToast('&#10003; Access granted to '+email);
+    logAudit('allowed_users','grant:'+email);
+    loadAllowedUsers();
+  }).catch(function(){ showToast('&#9888; Could not grant access — only the owner can do this.'); });
+}
+
+function removeAllowedUser(email){
+  if(!confirm('Remove access for '+email+'?\n\nThey will no longer be able to open the app or see any data. Anything they already entered stays.'))return;
+  fetch(SUPA_URL+'/rest/v1/allowed_users?email=eq.'+encodeURIComponent(email),{
+    method:'DELETE', headers:SUPA_HEADERS
+  }).then(function(r){
+    if(!r.ok)throw new Error('http '+r.status);
+    showToast('&#128465; Access removed for '+email);
+    logAudit('allowed_users','revoke:'+email);
+    loadAllowedUsers();
+  }).catch(function(){ showToast('&#9888; Could not remove access — only the owner can do this.'); });
+}
+
+/* ── Change attribution ───────────────────────────────────
+   Everyone has full edit rights, so a delete or overwrite needs to be
+   traceable to a person. Fire-and-forget: a failed audit write must never
+   block or fail the actual save. ── */
+function logAudit(dataKey,action){
+  if(!_authToken())return;
+  try{
+    fetch(SUPA_URL+'/rest/v1/audit_log',{
+      method:'POST',
+      headers:Object.assign({},SUPA_HEADERS,{'Prefer':'return=minimal'}),
+      body:JSON.stringify({email:getSignedInEmail(),data_key:dataKey,action:action||'save'})
+    }).catch(function(){});
+  }catch(e){}
+}
+
+function loadAuditLog(){
+  var el=document.getElementById('auditLogResults');
+  if(!el)return;
+  el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--text3);">Loading…</div>';
+  fetch(SUPA_URL+'/rest/v1/audit_log?select=email,data_key,action,at&order=at.desc&limit=50',{headers:SUPA_HEADERS})
+    .then(function(r){ if(!r.ok)throw new Error('http'); return r.json(); })
+    .then(function(rows){ renderAuditLog(rows||[]); })
+    .catch(function(){ el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--red);">Could not load activity.</div>'; });
+}
+
+function renderAuditLog(rows){
+  var el=document.getElementById('auditLogResults');
+  if(!el)return;
+  if(!rows.length){ el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--text3);">No activity recorded yet.</div>'; return; }
+  var html='<div style="display:flex;flex-direction:column;gap:5px;margin-top:4px;max-height:340px;overflow-y:auto;">';
+  rows.forEach(function(a){
+    var when='';
+    try{
+      var d=new Date(a.at);
+      when=d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+    }catch(e){ when=a.at||''; }
+    html+='<div style="display:flex;align-items:baseline;gap:8px;padding:7px 11px;background:var(--surface);border-radius:7px;">'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div style="font-size:12px;font-weight:600;color:var(--text1);overflow:hidden;text-overflow:ellipsis;">'+escHtml(a.email||'unknown')+'</div>'
+      +'<div style="font-size:11px;color:var(--text3);">'+escHtml(_friendlyKeyLabel(a.data_key||''))+(a.action&&a.action!=='save'?' · '+escHtml(a.action):'')+'</div>'
+      +'</div>'
+      +'<div style="font-size:11px;color:var(--text3);flex-shrink:0;">'+escHtml(when)+'</div>'
+      +'</div>';
+  });
+  html+='</div>';
+  el.innerHTML=html;
 }
 /* On load: skip PIN if already unlocked this session; also restore auth header */
 window.addEventListener('load',function(){
@@ -4070,7 +4297,12 @@ function supaPut(key, value){
       return;
     }
     go().then(function(r){
-      if(r.ok){ setSyncStatus("synced"); markSyncSuccess(); }
+      if(r.ok){
+        setSyncStatus("synced"); markSyncSuccess();
+        /* Attribute the change. Snapshots and tombstone lists are machine
+           bookkeeping, not user edits, so they'd only add noise. */
+        if(key.indexOf('snapshot_')!==0&&key.indexOf('_deleted_')===-1)logAudit(key,'save');
+      }
       else{ setSyncStatus("error"); markSyncFailure(_friendlyKeyLabel(key)); }
     }).catch(function(){ setSyncStatus("error"); markSyncFailure(_friendlyKeyLabel(key)); });
   });
@@ -6001,6 +6233,8 @@ function showPage(page){
     updateLastBackupLabel();
     try{updateStorageMeter();}catch(e){}
     try{updateOfflineReadyLabel();}catch(e){}
+    try{refreshOwnerOnlyUI();}catch(e){}
+    try{if(_isOwnerCached)loadAllowedUsers();}catch(e){}
   }
 }
 
