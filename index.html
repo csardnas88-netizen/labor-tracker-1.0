@@ -6,9 +6,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.9.0"/>
+<meta name="app-version" content="6.9.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="apple-touch-icon" href="./icon-180.png"/>
+<link rel="icon" type="image/png" href="./icon-192.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
@@ -1011,6 +1014,13 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 <!-- ══ MAIN CONTENT ══ -->
 <div class="main-wrap">
 
+  <!-- Storage-full banner: this device could not save at all (most severe) -->
+  <div id="storageFailBanner" style="display:none;position:sticky;top:0;z-index:501;background:#7f1d1d;color:#fff;padding:10px 16px;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.25);">
+    <span style="font-size:16px;">&#128190;</span>
+    <span id="storageFailBannerText" style="flex:1;min-width:200px;">This device is out of storage.</span>
+    <button onclick="freeUpStorage(6)" style="background:#fff;color:#7f1d1d;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;">Free up space</button>
+  </div>
+
   <!-- Sync failure banner: hidden unless a save to the cloud has failed -->
   <div id="syncFailBanner" style="display:none;position:sticky;top:0;z-index:500;background:#b3261e;color:#fff;padding:10px 16px;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2);">
     <span style="font-size:16px;">&#9888;&#65039;</span>
@@ -1352,6 +1362,29 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
           <div class="settings-row-arrow">&#8250;</div>
         </div>
         <div id="snapshotResults" style="padding:0 16px 16px;"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-head"><div class="card-title">Device Storage</div></div>
+        <div style="padding:14px 16px 4px;">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px;">
+            <span style="font-size:12px;color:var(--text2);font-weight:600;">Used on this device</span>
+            <span id="storageMeterLabel" style="font-size:12.5px;font-weight:700;color:var(--navy);">—</span>
+          </div>
+          <div style="height:9px;background:var(--surface);border-radius:99px;overflow:hidden;">
+            <div id="storageMeterBar" style="height:100%;width:0%;background:var(--green);border-radius:99px;transition:width .3s;"></div>
+          </div>
+          <div id="storageMeterNote" style="font-size:11px;color:var(--text3);margin-top:7px;line-height:1.5;">Your phone or computer limits how much this app can store. If it fills up, saves stop working — the app will warn you.</div>
+        </div>
+        <div class="settings-info-row"><span class="settings-info-label">Offline mode</span><span class="settings-info-value" id="settingsOfflineReady">—</span></div>
+        <div class="settings-row" onclick="freeUpStorage(6)">
+          <div class="settings-row-icon" style="background:var(--surface);color:var(--text2);">&#129529;</div>
+          <div class="settings-row-text">
+            <div class="settings-row-title">Free Up Space</div>
+            <div class="settings-row-desc">Removes month reports older than 6 months from this device. They stay safe in the cloud and come back when you view that month.</div>
+          </div>
+          <div class="settings-row-arrow">&#8250;</div>
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:14px;">
@@ -1897,15 +1930,15 @@ var POS_LIST=Object.keys(DEFAULT_ROSTER);
 var POS_NOTES=["Worked different position today - approved","Should be corrected in Paychex","Approved for operation needs","Needs manager review","Cross-training - documented"];
 var OTHER_NOTES=["Approved - working different dept today","Not an HK employee - ignore","Transferred temporarily from HK","Error in Paychex - needs correction","Needs manager review"];
 function loadRoster(){try{var s=localStorage.getItem("hk_roster");if(s)return JSON.parse(s);}catch(e){}return JSON.parse(JSON.stringify(DEFAULT_ROSTER));}
-function saveRoster(){try{localStorage.setItem("hk_roster",JSON.stringify(ROSTER));}catch(e){}}
+function saveRoster(){safeSetItem("hk_roster",JSON.stringify(ROSTER));}
 function loadEmpMeta(){try{var s=localStorage.getItem("hk_emp_meta");if(s)return JSON.parse(s);}catch(e){}return {};}
-function saveEmpMeta(){try{localStorage.setItem("hk_emp_meta",JSON.stringify(EMP_META));}catch(e){}}
+function saveEmpMeta(){safeSetItem("hk_emp_meta",JSON.stringify(EMP_META));}
 
 /* ── Employee dates store (hire date + last seen). Separate key, no impact on existing stores. ── */
 /* Shape: { "<empId>": { hire:"YYYY-MM-DD", lastSeen:"YYYY-MM-DD" } } */
 function loadEmpDates(){try{var s=localStorage.getItem("hk_emp_dates");if(s)return JSON.parse(s);}catch(e){}return {};}
 function saveEmpDates(d){
-  try{localStorage.setItem("hk_emp_dates",JSON.stringify(d));}catch(e){}
+  safeSetItem("hk_emp_dates",JSON.stringify(d));
   if(typeof supaPut==='function'){try{supaPut('hk_emp_dates',d);}catch(_){}}
 }
 var NEW_HIRE_DAYS=90;
@@ -3167,6 +3200,11 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.9.1', date:'2026-07-18',
+    fixes:['The app no longer says "Saved" when it actually failed to save. Every save to this device used to fail silently if the device ran out of storage — the screen showed success while nothing was written. You now get a clear red warning that names what failed and tells you whether the cloud copy survived, plus a new "Device Storage" section in Settings showing how much room is left and a one-tap way to free space (old months stay safe in the cloud).',
+           'The app now opens with no internet at all. Until now it had to be downloaded from the internet every time, so with no signal it simply would not load — even though your data was already on the device. It is now stored on your phone/computer, along with the PDF and Excel tools it needs. Tip: add the app to your Home Screen — on iPhone that also stops Safari from erasing your data after 7 days of not opening it.']
+  },
+  {
     v:'6.9.0', date:'2026-07-18',
     fixes:['Two big reliability changes. (1) The app now automatically resumes uploading to the cloud the moment your connection comes back — no more needing to notice and tap "Retry now" yourself. (2) Fixed a real risk where two devices editing Projects or Call-Offs around the same time could silently overwrite each other — for example, adding hours for one employee on your phone while someone edits a different project on another device could previously wipe out whichever change synced last. Each project and call-off now saves to its own slot in the cloud, and hours logged inside the same project from two devices are combined entry-by-entry instead of one replacing the other.']
   },
@@ -3369,7 +3407,7 @@ function showChangelogModal(){
 }
 function dismissChangelog(){
   var m=document.getElementById('changelogModal');if(m)m.remove();
-  try{localStorage.setItem('hk_changelog_seen',window.APP_VERSION||'');}catch(e){}
+  safeSetItem('hk_changelog_seen',window.APP_VERSION||'');
 }
 /* Auto-open the change log the first time a NEW version is opened (but not on a
    brand-new install, where there is nothing to compare against). */
@@ -3391,7 +3429,7 @@ function loadOverrides(){
   try{var r=localStorage.getItem("hk_roster_overrides");return r?JSON.parse(r):{};} catch(e){return {};}
 }
 function saveOverrides(ov){
-  try{localStorage.setItem("hk_roster_overrides",JSON.stringify(ov));}catch(e){}
+  safeSetItem("hk_roster_overrides",JSON.stringify(ov));
   if(typeof supaPut==='function'){try{supaPut('hk_roster_overrides',ov);}catch(_){}}
 }
 
@@ -3524,7 +3562,7 @@ function loadWeekData(){
   try{var r=localStorage.getItem("hk_week_"+getWeekKey());return r?JSON.parse(r):{};}catch(e){return {};}
 }
 function saveWeekData(wd){
-  try{localStorage.setItem("hk_week_"+getWeekKey(),JSON.stringify(wd));}catch(e){}
+  safeSetItem("hk_week_"+getWeekKey(),JSON.stringify(wd));
 }
 function clearWeek(){
   if(!confirm("Clear all data for this week?"))return;
@@ -3864,6 +3902,129 @@ function markSyncSuccess(){
   var b=document.getElementById('syncFailBanner');
   if(b)b.style.display='none';
 }
+
+/* ── Local save failures ──────────────────────────────────
+   Every localStorage.setItem in this app used to be wrapped in a bare
+   try/catch that swallowed the error. When the browser's storage quota
+   is reached (or Safari private mode blocks writes), the save silently
+   did nothing while the UI still said "Saved" — the user only found out
+   days later that the data was never there. safeSetItem() surfaces the
+   failure loudly instead, and reports whether the cloud copy survived,
+   since that determines whether the data is actually recoverable. ── */
+var _storageFailedKeys=[];
+function safeSetItem(key,value){
+  try{
+    localStorage.setItem(key,value);
+    /* The quota is per-origin, not per-key: any write succeeding means the
+       device is no longer full, so clear the warning rather than waiting
+       for the one key that happened to fail to be written again. */
+    if(_storageFailedKeys.length)markStorageSuccess();
+    return true;
+  }catch(e){
+    markStorageFailure(_friendlyKeyLabel(key));
+    return false;
+  }
+}
+function markStorageFailure(label){
+  if(label&&_storageFailedKeys.indexOf(label)===-1)_storageFailedKeys.push(label);
+  var b=document.getElementById('storageFailBanner');
+  var t=document.getElementById('storageFailBannerText');
+  if(!b||!t)return;
+  var list=_storageFailedKeys.slice(0,3).join(', ')+(_storageFailedKeys.length>3?'…':'');
+  var cloudOk=(_syncFailCount===0);
+  t.textContent='This device is out of storage, so it could NOT save: '+list+'. '
+    +(cloudOk
+      ? 'The cloud copy did save, so your data is not lost — but free up space below to keep working safely on this device.'
+      : 'The cloud save also failed, so THIS DATA IS NOT SAVED ANYWHERE. Do not close the app — free up space now, then tap Retry.');
+  b.style.display='flex';
+}
+function markStorageSuccess(){
+  _storageFailedKeys=[];
+  var b=document.getElementById('storageFailBanner');
+  if(b)b.style.display='none';
+}
+/* ── Offline app shell ────────────────────────────────────
+   The offline queue added in 6.9.0 only helps while the tab is already
+   open — the app itself is served from GitHub Pages, so closing it
+   without signal meant it simply would not load. Registering a service
+   worker caches the app and its PDF/Excel/chart libraries on the device
+   so it boots with no connection at all. Navigation stays network-first
+   inside the worker, so a new deploy is still picked up when online. ── */
+function registerServiceWorker(){
+  if(!('serviceWorker' in navigator))return;
+  if(location.protocol!=='https:'&&location.hostname!=='localhost')return;
+  navigator.serviceWorker.register('./sw.js').then(function(reg){
+    /* Check for a newer build whenever the app regains focus. */
+    document.addEventListener('visibilitychange',function(){
+      if(!document.hidden){try{reg.update();}catch(e){}}
+    });
+  }).catch(function(){ /* offline support is a bonus; never block the app */ });
+}
+function updateOfflineReadyLabel(){
+  var el=document.getElementById('settingsOfflineReady');
+  if(!el)return;
+  if(!('serviceWorker' in navigator)){el.textContent='Not supported';return;}
+  navigator.serviceWorker.getRegistration().then(function(reg){
+    el.textContent=(reg&&reg.active)?'Ready — opens without internet':'Setting up…';
+  }).catch(function(){el.textContent='Unavailable';});
+}
+
+/* Paint the Settings storage meter. Browsers don't expose the real quota
+   for localStorage, so ~5MB (the de-facto limit in Safari/Chrome) is used
+   as the reference point — this is a "how close am I" gauge, not exact. */
+var STORAGE_ASSUMED_LIMIT=5*1024*1024;
+function updateStorageMeter(){
+  var bar=document.getElementById('storageMeterBar');
+  var lab=document.getElementById('storageMeterLabel');
+  var note=document.getElementById('storageMeterNote');
+  if(!bar||!lab)return;
+  var rep=getStorageReport();
+  var pct=Math.min(100,Math.round(rep.totalBytes/STORAGE_ASSUMED_LIMIT*1000)/10);
+  var mb=Math.round(rep.totalBytes/1024/10.24)/100;
+  lab.textContent=mb+' MB used ('+pct+'%)';
+  bar.style.width=Math.max(2,pct)+'%';
+  bar.style.background=pct>=85?'var(--red)':(pct>=60?'var(--yellow)':'var(--green)');
+  if(note){
+    if(pct>=85)note.textContent='Almost full. Tap "Free Up Space" below — old months are safe in the cloud and will come back when you open them.';
+    else if(pct>=60)note.textContent='Getting full. Consider freeing up space soon so saves keep working.';
+    else note.textContent='Plenty of room. Your phone or computer limits how much this app can store; if it fills up, the app will warn you instead of failing silently.';
+  }
+}
+
+/* How much room is left, and what's taking it up */
+function getStorageReport(){
+  var total=0,items=[];
+  Object.keys(localStorage).forEach(function(k){
+    var sz=0;
+    try{ sz=((localStorage.getItem(k)||'').length+k.length)*2; }catch(e){}
+    total+=sz;
+    items.push({key:k,label:_friendlyKeyLabel(k.replace(/^hk_/,'')),bytes:sz});
+  });
+  items.sort(function(a,b){return b.bytes-a.bytes;});
+  return {totalBytes:total,items:items};
+}
+/* Drop month reports older than `keepMonths`; they stay safe in Supabase
+   and are re-pulled on demand, so this only reclaims local space. */
+function freeUpStorage(keepMonths){
+  keepMonths=keepMonths||6;
+  var cutoff=new Date();cutoff.setMonth(cutoff.getMonth()-keepMonths);
+  var cutoffKey=cutoff.getFullYear()+'-'+String(cutoff.getMonth()+1).padStart(2,'0');
+  var removed=0;
+  Object.keys(localStorage).forEach(function(k){
+    var mk=null;
+    if(k.indexOf('hk_month_')===0)mk=k.replace('hk_month_','');
+    else if(k.indexOf('hk_r106_')===0)mk=k.replace('hk_r106_','');
+    if(mk&&mk<cutoffKey){ try{localStorage.removeItem(k);removed++;}catch(e){} }
+  });
+  if(removed){
+    showToast('&#10003; Freed up space — removed '+removed+' old month'+(removed===1?'':'s')+' from this device (still safe in the cloud)');
+    markStorageSuccess();
+  } else {
+    showToast('No old months to remove. Everything stored is from the last '+keepMonths+' months.');
+  }
+  try{updateStorageMeter();}catch(e){}
+  return removed;
+}
 function retrySyncNow(){
   showToast('&#128260; Retrying sync…');
   try{forceSyncToSupabase();}catch(e){}
@@ -3946,7 +4107,7 @@ function addDeletedId(key,id){
   if(id===undefined||id===null)return;
   var ids=getDeletedIds(key);
   if(ids.indexOf(id)===-1)ids.push(id);
-  try{ localStorage.setItem(key,JSON.stringify(ids)); }catch(e){}
+  safeSetItem(key,JSON.stringify(ids));
   try{ supaPut(key,ids); }catch(e){}
 }
 
@@ -4001,7 +4162,7 @@ function syncR106ToSheets(mk,data){
   supaPut("r106_"+mk, data);
 }
 function saveR106Local(mk,data){
-  try{localStorage.setItem('hk_r106_'+mk,JSON.stringify(data));}catch(e){}
+  safeSetItem('hk_r106_'+mk,JSON.stringify(data));
 }
 
 /* Merge every project_<id> row (plus the legacy projects_data blob as a
@@ -4022,13 +4183,13 @@ function _mergeProjectsFromRemote(all){
   var remotePDeletedIds=all['projects_deleted_ids'];
   if(Array.isArray(remotePDeletedIds)){
     remotePDeletedIds.forEach(function(id){if(pDeletedIds.indexOf(id)===-1)pDeletedIds.push(id);});
-    try{localStorage.setItem('projects_deleted_ids',JSON.stringify(pDeletedIds));}catch(e){}
+    safeSetItem('projects_deleted_ids',JSON.stringify(pDeletedIds));
   }
   var eDeletedKeys=getDeletedIds('project_entries_deleted_keys');
   var remoteEDeletedKeys=all['project_entries_deleted_keys'];
   if(Array.isArray(remoteEDeletedKeys)){
     remoteEDeletedKeys.forEach(function(k){if(eDeletedKeys.indexOf(k)===-1)eDeletedKeys.push(k);});
-    try{localStorage.setItem('project_entries_deleted_keys',JSON.stringify(eDeletedKeys));}catch(e){}
+    safeSetItem('project_entries_deleted_keys',JSON.stringify(eDeletedKeys));
   }
 
   var mergedP={};
@@ -4040,7 +4201,7 @@ function _mergeProjectsFromRemote(all){
   });
   pDeletedIds.forEach(function(id){ delete mergedP[id]; });
   var mergedArr=Object.values(mergedP).sort(function(a,b){return b.id-a.id;});
-  try{localStorage.setItem('projects_data',JSON.stringify(mergedArr));}catch(e){}
+  safeSetItem('projects_data',JSON.stringify(mergedArr));
   return true;
 }
 /* Merge every calloff_<id> row (plus the legacy calloffs_data blob) into
@@ -4062,14 +4223,14 @@ function _mergeCallOffsFromRemote(all){
   var remoteCDeletedIds=all['calloffs_deleted_ids'];
   if(Array.isArray(remoteCDeletedIds)){
     remoteCDeletedIds.forEach(function(id){if(cDeletedIds.indexOf(id)===-1)cDeletedIds.push(id);});
-    try{localStorage.setItem('calloffs_deleted_ids',JSON.stringify(cDeletedIds));}catch(e){}
+    safeSetItem('calloffs_deleted_ids',JSON.stringify(cDeletedIds));
   }
   var mergedC={};
   localCallOffs.forEach(function(c){ if(c.id)mergedC[c.id]=c; });
   Object.keys(remoteRows).forEach(function(cid){ mergedC[cid]=remoteRows[cid]; });
   cDeletedIds.forEach(function(id){ delete mergedC[id]; });
   var mergedCArr=Object.values(mergedC).sort(function(a,b){return b.id-a.id;});
-  try{localStorage.setItem('calloffs_data',JSON.stringify(mergedCArr));}catch(e){}
+  safeSetItem('calloffs_data',JSON.stringify(mergedCArr));
   return true;
 }
 
@@ -4133,7 +4294,7 @@ function _syncFromSheetsPull(){
               var rt=(r&&r.updated)?Date.parse(r.updated):0;
               mergedOverrides[id]=(lt>=rt)?l:r;
             });
-            try{localStorage.setItem('hk_roster_overrides',JSON.stringify(mergedOverrides));}catch(e){}
+            safeSetItem('hk_roster_overrides',JSON.stringify(mergedOverrides));
             Object.keys(mergedOverrides).forEach(function(id){
               if(!ROSTER_BY_ID[id])ROSTER_BY_ID[id]=mergedOverrides[id];
             });
@@ -4143,7 +4304,7 @@ function _syncFromSheetsPull(){
         if(key==="hk_staffing_actual"){
           var remoteSA=all[key];
           if(remoteSA&&typeof remoteSA==='object'){
-            try{localStorage.setItem('hk_staffing_actual',JSON.stringify(remoteSA));}catch(e){}
+            safeSetItem('hk_staffing_actual',JSON.stringify(remoteSA));
             STF_ACTUAL=remoteSA;
             updated=true;
           }
@@ -4151,7 +4312,7 @@ function _syncFromSheetsPull(){
         if(key==="hk_staffing_input"){
           var remoteSI=all[key];
           if(remoteSI&&typeof remoteSI==='object'){
-            try{localStorage.setItem('hk_staffing_input',JSON.stringify(remoteSI));}catch(e){}
+            safeSetItem('hk_staffing_input',JSON.stringify(remoteSI));
             try{if(typeof stf_loadInput==='function'){stf_loadInput();STF_STATE.calculated=true;}}catch(e){}
             updated=true;
           }
@@ -4184,7 +4345,7 @@ function _syncFromSheetsPull(){
               trById[rt.id]=merged;
             });
             var mergedTr=Object.keys(trById).map(function(k){return trById[k];});
-            try{localStorage.setItem('hk_trainings',JSON.stringify(mergedTr));}catch(e){}
+            safeSetItem('hk_trainings',JSON.stringify(mergedTr));
             updated=true;
           }
         }
@@ -4199,14 +4360,14 @@ function _syncFromSheetsPull(){
               var ls=(l.lastSeen&&r.lastSeen)?(l.lastSeen>r.lastSeen?l.lastSeen:r.lastSeen):(l.lastSeen||r.lastSeen);
               mergedED[id]={hire:l.hire||r.hire,lastSeen:ls};
             });
-            try{localStorage.setItem('hk_emp_dates',JSON.stringify(mergedED));}catch(e){}
+            safeSetItem('hk_emp_dates',JSON.stringify(mergedED));
             updated=true;
           }
         }
         if(key==="hk_labor_model"){
           var remoteLM=all[key];
           if(remoteLM&&remoteLM.positions){
-            try{localStorage.setItem('hk_labor_model',JSON.stringify(remoteLM));}catch(e){}
+            safeSetItem('hk_labor_model',JSON.stringify(remoteLM));
             try{applyLaborModelToStd();}catch(e){}
             updated=true;
           }
@@ -4214,14 +4375,14 @@ function _syncFromSheetsPull(){
         if(key==="hk_paychex_report"){
           var remotePR=all[key];
           if(remotePR&&remotePR.byPos){
-            try{localStorage.setItem('hk_paychex_report',JSON.stringify(remotePR));}catch(e){}
+            safeSetItem('hk_paychex_report',JSON.stringify(remotePR));
             updated=true;
           }
         }
         if(key==="hk_wtc_report"){
           var remoteWTC=all[key];
           if(remoteWTC&&remoteWTC.byId){
-            try{localStorage.setItem('hk_wtc_report',JSON.stringify(remoteWTC));}catch(e){}
+            safeSetItem('hk_wtc_report',JSON.stringify(remoteWTC));
             updated=true;
           }
         }
@@ -4339,7 +4500,7 @@ function createSnapshot(silent){
     body:JSON.stringify({key:"snapshot_"+today,value:JSON.stringify(data)})
   }).then(function(r){
     if(r.ok){
-      try{localStorage.setItem("hk_last_snapshot_date",today);}catch(e){}
+      safeSetItem("hk_last_snapshot_date",today);
       updateLastBackupLabel();
       if(!silent)showToast("&#128190; Backup saved for "+today);
       cleanupOldSnapshots();
@@ -4420,24 +4581,24 @@ function restoreSnapshot(key){
       if(!rows||!rows[0])throw new Error("not found");
       var data=JSON.parse(rows[0].value);
       Object.keys(data.months||{}).forEach(function(mk){
-        try{localStorage.setItem("hk_month_"+mk,JSON.stringify(data.months[mk]));}catch(e){}
+        safeSetItem("hk_month_"+mk,JSON.stringify(data.months[mk]));
       });
       Object.keys(data.r106||{}).forEach(function(mk){
-        try{localStorage.setItem("hk_r106_"+mk,JSON.stringify(data.r106[mk]));}catch(e){}
+        safeSetItem("hk_r106_"+mk,JSON.stringify(data.r106[mk]));
       });
-      if(data.roster_overrides)try{localStorage.setItem("hk_roster_overrides",JSON.stringify(data.roster_overrides));}catch(e){}
+      if(data.roster_overrides)safeSetItem("hk_roster_overrides",JSON.stringify(data.roster_overrides));
       /* Push each restored project/call-off to its own row too — otherwise the
          next auto-sync would merge the still-current (pre-restore) per-row
          copies back in and silently undo the restore. */
       if(data.projects){
-        try{localStorage.setItem("projects_data",JSON.stringify(data.projects));}catch(e){}
+        safeSetItem("projects_data",JSON.stringify(data.projects));
         (data.projects||[]).forEach(function(p){ if(p&&p.id){ try{supaPut('project_'+p.id,p);}catch(e){} } });
       }
       if(data.calloffs){
-        try{localStorage.setItem("calloffs_data",JSON.stringify(data.calloffs));}catch(e){}
+        safeSetItem("calloffs_data",JSON.stringify(data.calloffs));
         (data.calloffs||[]).forEach(function(c){ if(c&&c.id){ try{supaPut('calloff_'+c.id,c);}catch(e){} } });
       }
-      if(data.manager_name)try{localStorage.setItem("hk_manager_name",data.manager_name);}catch(e){}
+      if(data.manager_name)safeSetItem("hk_manager_name",data.manager_name);
       showToast("&#10003; Restored backup from "+ds+" — reloading…");
       setTimeout(function(){location.reload();},800);
     })
@@ -4499,7 +4660,7 @@ function loadLaborModel(){
   return JSON.parse(JSON.stringify(LABOR_MODEL_DEFAULTS));
 }
 function saveLaborModel(model){
-  try{localStorage.setItem('hk_labor_model',JSON.stringify(model));}catch(e){}
+  safeSetItem('hk_labor_model',JSON.stringify(model));
   if(typeof supaPut==='function'){try{supaPut('hk_labor_model',model);}catch(_){}}
   applyLaborModelToStd();
 }
@@ -4523,7 +4684,7 @@ var viewMonth=new Date();viewMonth.setDate(1);
 /* ── Storage keys ── */
 function monthKey(d){return(d||viewMonth).getFullYear()+"-"+String((d||viewMonth).getMonth()+1).padStart(2,"0");}
 function loadMonthData(mk){try{var r=localStorage.getItem("hk_month_"+(mk||monthKey()));return r?JSON.parse(r):{days:{},rooms:{}};}catch(e){return{days:{},rooms:{}}}}
-function saveMonthData(data,mk){try{localStorage.setItem("hk_month_"+(mk||monthKey()),JSON.stringify(data));}catch(e){}}
+function saveMonthData(data,mk){safeSetItem("hk_month_"+(mk||monthKey()),JSON.stringify(data));}
 
 /* ── Date string helpers ── */
 function dateStr(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
@@ -5801,7 +5962,7 @@ function toggleSidebarSmart(){
     toggleSidebar();
   }else{
     document.body.classList.toggle('sb-collapsed');
-    try{localStorage.setItem('hk_sb_collapsed', document.body.classList.contains('sb-collapsed')?'1':'0');}catch(e){}
+    safeSetItem('hk_sb_collapsed', document.body.classList.contains('sb-collapsed')?'1':'0');
   }
 }
 
@@ -5838,6 +5999,8 @@ function showPage(page){
     var av=document.getElementById('settingsAppVersion');
     if(av)av.textContent='v'+APP_VERSION;
     updateLastBackupLabel();
+    try{updateStorageMeter();}catch(e){}
+    try{updateOfflineReadyLabel();}catch(e){}
   }
 }
 
@@ -6448,7 +6611,7 @@ var PX_CODE_TO_POS={'2550':'Housekeeping Supervisor','2560':'Room Attendant','25
 
 function loadPaychexReport(){try{var r=localStorage.getItem('hk_paychex_report');return r?JSON.parse(r):null;}catch(e){return null;}}
 function savePaychexReport(data){
-  try{localStorage.setItem('hk_paychex_report',JSON.stringify(data));}catch(e){}
+  safeSetItem('hk_paychex_report',JSON.stringify(data));
   if(typeof supaPut==='function'){try{supaPut('hk_paychex_report',data);}catch(_){}}
 }
 function pnl_clearPaychex(){
@@ -6682,7 +6845,7 @@ function parseWtc(items){
 /* ── Storage (push on save; pull handled in syncFromSheets; push-all in forceSyncToSupabase) ── */
 function loadWtcReport(){try{var r=localStorage.getItem('hk_wtc_report');return r?JSON.parse(r):null;}catch(e){return null;}}
 function saveWtcReport(data){
-  try{localStorage.setItem('hk_wtc_report',JSON.stringify(data));}catch(e){}
+  safeSetItem('hk_wtc_report',JSON.stringify(data));
   if(typeof supaPut==='function'){try{supaPut('hk_wtc_report',data);}catch(_){}}
 }
 function wtc_clear(){
@@ -7034,7 +7197,7 @@ var STF_ACTUAL={};  /* pos -> actual current FTE/headcount (editable) */
 var STF_NEEDED={};  /* pos -> FTEs needed, captured at render for live gap recompute */
 function stf_loadActual(){try{var s=localStorage.getItem('hk_staffing_actual');if(s){var o=JSON.parse(s);if(o&&typeof o==='object')STF_ACTUAL=o;}}catch(e){}}
 function stf_saveActual(){
-  try{localStorage.setItem('hk_staffing_actual',JSON.stringify(STF_ACTUAL));}catch(e){}
+  safeSetItem('hk_staffing_actual',JSON.stringify(STF_ACTUAL));
   if(typeof supaPut==='function'){try{supaPut('hk_staffing_actual',STF_ACTUAL);}catch(_){}}
 }
 function stf_gapHtml(gap){
@@ -7082,7 +7245,7 @@ function stf_loadInput(){
 }
 function stf_saveInput(){
   var payload={mode:STF_STATE.mode,view:STF_STATE.view,days:STF_STATE.days};
-  try{localStorage.setItem('hk_staffing_input',JSON.stringify(payload));}catch(e){}
+  safeSetItem('hk_staffing_input',JSON.stringify(payload));
   /* Back up to the cloud like every other data key, so occupancy survives
      a localStorage eviction (mobile Safari) or a switch of device/browser. */
   if(typeof supaPut==='function'){try{supaPut('hk_staffing_input',payload);}catch(_){}}
@@ -8188,7 +8351,7 @@ function toggleBreakResolved(key){
   var notes=JSON.parse(localStorage.getItem('hk_break_notes')||'{}');
   if(!notes[key])notes[key]={noteText:'',resolved:false};
   notes[key].resolved=!notes[key].resolved;
-  localStorage.setItem('hk_break_notes',JSON.stringify(notes));
+  safeSetItem('hk_break_notes',JSON.stringify(notes));
   supaPut('hk_break_notes',notes);
   if(currentPage==='breaks')renderBreaksPage();
   else renderLaborDash();
@@ -8199,7 +8362,7 @@ function saveBreakNote(key,val){
   var notes=JSON.parse(localStorage.getItem('hk_break_notes')||'{}');
   if(!notes[key])notes[key]={noteText:'',resolved:false};
   notes[key].noteText=val;
-  localStorage.setItem('hk_break_notes',JSON.stringify(notes));
+  safeSetItem('hk_break_notes',JSON.stringify(notes));
   supaPut('hk_break_notes',notes);
 }
 
@@ -9160,7 +9323,7 @@ function handleR106Upload(input){
           byMonth[mk][ds]=parsed[ds]; /* store full {occ, comp, net} */
         });
         Object.keys(byMonth).forEach(function(mk){
-          localStorage.setItem('hk_r106_'+mk,JSON.stringify(byMonth[mk]));
+          safeSetItem('hk_r106_'+mk,JSON.stringify(byMonth[mk]));
           syncR106ToSheets(mk,byMonth[mk]);
         });
 
@@ -9313,7 +9476,7 @@ function loadTrainings(){
   return [];
 }
 function saveTrainings(list){
-  try{localStorage.setItem('hk_trainings',JSON.stringify(list));}catch(e){}
+  safeSetItem('hk_trainings',JSON.stringify(list));
   try{supaPut('hk_trainings',list);}catch(e){}
 }
 
@@ -10253,7 +10416,7 @@ function loadProjects(){
   return [];
 }
 function saveProjects(projects){
-  try{localStorage.setItem('projects_data',JSON.stringify(projects));}catch(e){}
+  safeSetItem('projects_data',JSON.stringify(projects));
   try{supaPut('projects_data',projects);}catch(e){} /* legacy blob, kept as a rollback safety net */
   (projects||[]).forEach(function(p){
     if(p&&p.id){ try{ supaPut('project_'+p.id,p); }catch(e){} }
@@ -10987,7 +11150,7 @@ function loadCallOffs(){
   return [];
 }
 function saveCallOffs(list){
-  try{localStorage.setItem('calloffs_data',JSON.stringify(list));}catch(e){}
+  safeSetItem('calloffs_data',JSON.stringify(list));
   try{supaPut('calloffs_data',list);}catch(e){} /* legacy blob, kept as a rollback safety net */
   (list||[]).forEach(function(c){
     if(c&&c.id){ try{ supaPut('calloff_'+c.id,c); }catch(e){} }
@@ -11376,7 +11539,7 @@ function confirmNewEmployees(count){
         var prev=overrides[emp.id]||{};
         overrides[emp.id]={name:emp.name,pos:emp.pos,code:emp.code,status:'active',updated:now};
       });
-      localStorage.setItem('hk_roster_overrides',JSON.stringify(overrides));
+      safeSetItem('hk_roster_overrides',JSON.stringify(overrides));
       supaPut('hk_roster_overrides',overrides);
     }catch(e){}
     try{renderRoster();}catch(e){}
@@ -11423,6 +11586,7 @@ window.addEventListener('load',function(){
   try{maybeShowChangelog();}catch(e){}
   setTimeout(syncFromSheets,1000);
   setTimeout(maybeAutoSnapshot,3000);
+  try{registerServiceWorker();}catch(e){}
 
   /* Date picker defaults to yesterday */
   var yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
