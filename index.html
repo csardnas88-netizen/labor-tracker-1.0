@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.8.2"/>
+<meta name="app-version" content="6.8.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1010,6 +1010,13 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 
 <!-- ══ MAIN CONTENT ══ -->
 <div class="main-wrap">
+
+  <!-- Sync failure banner: hidden unless a save to the cloud has failed -->
+  <div id="syncFailBanner" style="display:none;position:sticky;top:0;z-index:500;background:#b3261e;color:#fff;padding:10px 16px;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2);">
+    <span style="font-size:16px;">&#9888;&#65039;</span>
+    <span id="syncFailBannerText" style="flex:1;min-width:200px;">Couldn't save to the cloud.</span>
+    <button onclick="retrySyncNow()" style="background:#fff;color:#b3261e;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;">Retry now</button>
+  </div>
 
   <!-- Topbar -->
   <div class="topbar" id="topbar">
@@ -3160,6 +3167,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.8.3', date:'2026-07-18',
+    fixes:['Added a clear red banner at the top of the app that appears whenever something you saved (or the latest cloud data) fails to sync — previously the only sign was a tiny, easy-to-miss dot in the sidebar. The banner names what failed, offers a "Retry now" button, and stays up until it actually succeeds — it does not disappear on its own. Also: the app now proactively renews your session before it expires instead of silently failing once it does, which should prevent most of these failures from happening in the first place.']
+  },
+  {
     v:'6.8.2', date:'2026-07-18',
     fixes:['Projects &amp; Call-Offs: fixed deleted projects/call-offs sometimes reappearing after the app re-synced with the cloud. Previously, deleting something only removed it from one side (your device or the shared cloud copy) if the upload happened to fail silently at that moment — the next sync would then bring the "deleted" item right back, since the sync had no way to know it had been deleted on purpose. The app now remembers what you deleted and will never bring it back, even if an old copy still exists somewhere else.']
   },
@@ -3805,16 +3816,79 @@ function setSyncStatus(s){
   else{el.textContent="● Offline";el.style.color="rgba(255,255,255,.4)";}
 }
 
+/* ── Loud sync-failure banner ─────────────────────────────
+   The tiny sidebar sync dot is easy to miss. When a save to the cloud
+   actually fails, show a sticky top banner that stays until it succeeds,
+   so it's obvious the data is only on this device — not just a color
+   change nobody notices. ── */
+var _syncFailCount=0;
+var _syncFailedKeys=[];
+var KEY_LABELS={
+  'projects_data':'Projects','projects_deleted_ids':'Projects',
+  'calloffs_data':'Call-Offs','calloffs_deleted_ids':'Call-Offs',
+  'hk_roster_overrides':'Roster','hk_trainings':'Trainings',
+  'hk_labor_model':'Labor Model','hk_staffing_actual':'Staffing',
+  'hk_staffing_input':'Staffing','hk_emp_dates':'Employee Dates',
+  'hk_paychex_report':'Paychex Report','hk_wtc_report':'WTC Report'
+};
+function _friendlyKeyLabel(key){
+  if(KEY_LABELS[key])return KEY_LABELS[key];
+  if(key.indexOf('month_')===0)return 'Report for '+key.replace('month_','');
+  if(key.indexOf('r106_')===0)return 'R106';
+  if(key.indexOf('snapshot_')===0)return 'Backup';
+  return key;
+}
+function markSyncFailure(label,sessionExpired){
+  _syncFailCount++;
+  if(label&&_syncFailedKeys.indexOf(label)===-1)_syncFailedKeys.push(label);
+  var b=document.getElementById('syncFailBanner');
+  var t=document.getElementById('syncFailBannerText');
+  if(!b||!t)return;
+  if(sessionExpired){
+    t.textContent='Your session expired and could not be renewed. Go to Settings and sign out/in again to keep saving to the cloud. Your changes are safe on this device in the meantime.';
+  } else {
+    var list=_syncFailedKeys.slice(0,3).join(', ')+(_syncFailedKeys.length>3?'…':'');
+    t.textContent='Couldn\'t save to the cloud: '+list+'. Your changes are safe on this device — tap "Retry now" or check your connection.';
+  }
+  b.style.display='flex';
+}
+function markSyncSuccess(){
+  _syncFailCount=0;
+  _syncFailedKeys=[];
+  var b=document.getElementById('syncFailBanner');
+  if(b)b.style.display='none';
+}
+function retrySyncNow(){
+  showToast('&#128260; Retrying sync…');
+  try{forceSyncToSupabase();}catch(e){}
+  setTimeout(function(){try{syncFromSheets();}catch(e){}},800);
+}
+
 /* Upsert a key/value into Supabase */
 function supaPut(key, value){
   setSyncStatus("syncing");
-  fetch(SUPA_URL+"/rest/v1/labor_data", {
-    method:"POST",
-    headers:Object.assign({},SUPA_HEADERS,{"Prefer":"resolution=merge-duplicates"}),
-    body:JSON.stringify({key:key, value:JSON.stringify(value)})
-  })
-  .then(function(r){ setSyncStatus(r.ok?"synced":"error"); })
-  .catch(function(){ setSyncStatus("error"); });
+  var go=function(){
+    return fetch(SUPA_URL+"/rest/v1/labor_data", {
+      method:"POST",
+      headers:Object.assign({},SUPA_HEADERS,{"Prefer":"resolution=merge-duplicates"}),
+      body:JSON.stringify({key:key, value:JSON.stringify(value)})
+    });
+  };
+  /* Proactively refresh an expired session before writing, instead of
+     silently failing with a stale token and only finding out later. */
+  var needsRefresh=(typeof _authExpired==='function'&&_authExpired());
+  var ready=needsRefresh?_authRefresh():Promise.resolve(true);
+  ready.then(function(refreshOk){
+    if(needsRefresh&&!refreshOk){
+      setSyncStatus("error");
+      markSyncFailure(_friendlyKeyLabel(key),true);
+      return;
+    }
+    go().then(function(r){
+      if(r.ok){ setSyncStatus("synced"); markSyncSuccess(); }
+      else{ setSyncStatus("error"); markSyncFailure(_friendlyKeyLabel(key)); }
+    }).catch(function(){ setSyncStatus("error"); markSyncFailure(_friendlyKeyLabel(key)); });
+  });
 }
 
 /* Pull all keys from Supabase */
@@ -3823,7 +3897,7 @@ function supaGetAll(cb){
     method:"GET",
     headers:SUPA_HEADERS
   })
-  .then(function(r){ return r.json(); })
+  .then(function(r){ if(!r.ok)throw new Error('HTTP '+r.status); return r.json(); })
   .then(function(rows){
     var all={};
     (rows||[]).forEach(function(row){
@@ -3870,8 +3944,20 @@ function saveR106Local(mk,data){
 /* Pull latest data from Supabase on load */
 function syncFromSheets(){
   setSyncStatus("syncing");
+  var needsRefresh=(typeof _authExpired==='function'&&_authExpired());
+  var ready=needsRefresh?_authRefresh():Promise.resolve(true);
+  ready.then(function(refreshOk){
+    if(needsRefresh&&!refreshOk){
+      setSyncStatus("error");
+      markSyncFailure('Data refresh',true);
+      return;
+    }
+    _syncFromSheetsPull();
+  });
+}
+function _syncFromSheetsPull(){
   supaGetAll(function(err,all){
-    if(err){setSyncStatus("offline");return;}
+    if(err){setSyncStatus("offline");markSyncFailure('Data refresh');return;}
     var updated=false;
     Object.keys(all).forEach(function(key){
       try{
