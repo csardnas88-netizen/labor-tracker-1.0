@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.11.0"/>
+<meta name="app-version" content="6.12.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -842,7 +842,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 <body>
 
 <!-- ── PIN Gate ─────────────────────────────────────────── -->
-<div id="pinOverlay">
+<div id="pinOverlay" style="display:none;">
   <div class="ov-logo">Labor</div>
   <div class="ov-sub">Enter PIN to continue</div>
   <div class="pin-dots">
@@ -882,15 +882,15 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <input type="password" id="authPassword" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"
         onkeydown="if(event.key==='Enter')authSignIn()"/>
     </div>
-    <button class="auth-btn" id="authSignInBtn" onclick="authSignIn()">Iniciar sesión</button>
+    <button class="auth-btn" id="authSignInBtn" onclick="authSignIn()">Sign in</button>
     <div class="auth-err" id="authError"></div>
     <div style="text-align:center;margin-top:14px;">
       <button onclick="_authToggleMode()" id="authToggleBtn"
         style="background:none;border:none;color:rgba(255,255,255,.4);font-size:11px;cursor:pointer;text-decoration:underline;padding:4px;">
-        ¿Primera vez? Crear cuenta
+        First time? Create account
       </button>
     </div>
-    <div class="auth-note">Tus datos están protegidos por reglas de acceso en el servidor.<br>Solo cuentas autorizadas pueden leer o escribir.</div>
+    <div class="auth-note">Your data is protected by access rules on the server.<br>Only authorized accounts can read or write.</div>
   </div>
 </div>
 
@@ -1429,28 +1429,20 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       </div>
 
       <div class="card">
-        <div class="card-head"><div class="card-title">Seguridad</div></div>
-        <div class="settings-row" onclick="changePinFlow()">
-          <div class="settings-row-icon" style="background:var(--navy);color:#fff;">&#128290;</div>
-          <div class="settings-row-text">
-            <div class="settings-row-title">Cambiar PIN</div>
-            <div class="settings-row-desc">Establece un nuevo PIN de 4 dígitos para desbloquear la app</div>
-          </div>
-          <div class="settings-row-arrow">&#8250;</div>
-        </div>
+        <div class="card-head"><div class="card-title">Security</div></div>
         <div class="settings-row" onclick="lockApp()">
           <div class="settings-row-icon" style="background:var(--surface);color:var(--text2);">&#128274;</div>
           <div class="settings-row-text">
-            <div class="settings-row-title">Bloquear app</div>
-            <div class="settings-row-desc">Regresa a la pantalla de PIN de inmediato</div>
+            <div class="settings-row-title">Lock app</div>
+            <div class="settings-row-desc">Return to the sign-in screen right away</div>
           </div>
           <div class="settings-row-arrow">&#8250;</div>
         </div>
         <div class="settings-row" onclick="authSignOut()">
           <div class="settings-row-icon" style="background:var(--red-bg);color:var(--red);">&#9099;</div>
           <div class="settings-row-text">
-            <div class="settings-row-title" style="color:var(--red);">Cerrar sesión</div>
-            <div class="settings-row-desc">Termina tu sesión — requerirá inicio de sesión la próxima vez</div>
+            <div class="settings-row-title" style="color:var(--red);">Sign out</div>
+            <div class="settings-row-desc">End your session — you'll need to sign in next time</div>
           </div>
           <div class="settings-row-arrow">&#8250;</div>
         </div>
@@ -3235,6 +3227,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.12.0', date:'2026-07-20',
+    fixes:['The app is now fully in English — the sign-in screen, Settings and the Labor/P&L weekly breakdown that still had some Spanish text. Also removed the 4-digit PIN screen: signing in with your email and password is now the only step, since that login is what actually protects the data. Nothing about your data or access changed.']
+  },
+  {
     v:'6.11.0', date:'2026-07-20',
     fixes:['Live updates between devices: when a manager saves something — logs project hours, uploads a PDF, edits the roster — it now appears on everyone else\'s screen within a few seconds automatically, without needing to reopen the app. A "⚡ Live" indicator in the sidebar shows when you\'re connected. If the connection drops or you\'re offline, the app keeps working exactly as before and catches up the next time it reconnects or you reopen it — nothing is ever lost.']
   },
@@ -3752,18 +3748,10 @@ async function _pinSubmit(){
     if(ov){ov.classList.add('shake');setTimeout(function(){ov.classList.remove('shake');},400);}
   }
 }
-async function changePinFlow(){
-  var np=prompt('Nuevo PIN (4 dígitos):');
-  if(!np||!/^\d{4}$/.test(np)){alert('El PIN debe ser exactamente 4 dígitos.');return;}
-  var c=prompt('Confirma el nuevo PIN:');
-  if(np!==c){alert('Los PINs no coinciden.');return;}
-  localStorage.setItem(_PIN_LS_KEY,await _sha256(np));
-  alert('PIN actualizado correctamente.');
-}
+/* PIN removed: "locking" now just returns to the Supabase sign-in screen. */
 function lockApp(){
-  sessionStorage.removeItem('_pu');_pinBuf='';_pinUpdateDots();
-  var e=document.getElementById('pinError');if(e)e.textContent='';
-  var po=document.getElementById('pinOverlay');if(po)po.style.display='flex';
+  sessionStorage.removeItem('_pu');
+  var ao=document.getElementById('authOverlay');if(ao)ao.style.display='flex';
 }
 
 /* ══ SUPABASE AUTH ═══════════════════════════════════════
@@ -3887,8 +3875,8 @@ async function authSignIn(){
   var pass=(document.getElementById('authPassword')||{}).value||'';
   var errEl=document.getElementById('authError');
   var btn=document.getElementById('authSignInBtn');
-  if(!email||!pass){errEl.textContent='Ingresa tu email y contraseña.';return;}
-  btn.textContent='Iniciando sesión…';btn.disabled=true;
+  if(!email||!pass){errEl.textContent='Enter your email and password.';return;}
+  btn.textContent='Signing in…';btn.disabled=true;
   try{
     var r=await fetch(SUPA_URL+'/auth/v1/token?grant_type=password',{
       method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
@@ -3907,8 +3895,8 @@ async function authSignIn(){
         SUPA_HEADERS['Authorization']='Bearer '+SUPA_KEY;
         _isOwnerCached=null;
         errEl.style.color='';
-        errEl.textContent='Tu cuenta se creó correctamente, pero aún no tiene acceso. Pídele a Carlos que agregue '+email+' en Settings → Team Access.';
-        btn.textContent='Iniciar sesión';btn.disabled=false;
+        errEl.textContent='Your account was created, but it doesn\'t have access yet. Ask Carlos to add '+email+' under Settings → Team Access.';
+        btn.textContent='Sign in';btn.disabled=false;
         return;
       }
       document.getElementById('authOverlay').style.display='none';
@@ -3917,10 +3905,10 @@ async function authSignIn(){
       setTimeout(function(){try{startRealtime();}catch(e){}},1200);
       errEl.textContent='';
     } else {
-      errEl.textContent=d.error_description||d.msg||'Credenciales incorrectas.';
+      errEl.textContent=d.error_description||d.msg||'Incorrect credentials.';
     }
-  }catch(e){errEl.textContent='Error de red. Intenta de nuevo.';}
-  btn.textContent='Sign In';btn.disabled=false;
+  }catch(e){errEl.textContent='Network error. Please try again.';}
+  btn.textContent='Sign in';btn.disabled=false;
 }
 var _authMode='signin';
 function _authToggleMode(){
@@ -3930,11 +3918,11 @@ function _authToggleMode(){
   var err=document.getElementById('authError');
   if(err)err.textContent='';
   if(_authMode==='signup'){
-    if(btn){btn.textContent='Crear cuenta';btn.onclick=authSignUp;}
-    if(tog)tog.textContent='¿Ya tienes cuenta? Iniciar sesión';
+    if(btn){btn.textContent='Create account';btn.onclick=authSignUp;}
+    if(tog)tog.textContent='Already have an account? Sign in';
   } else {
-    if(btn){btn.textContent='Iniciar sesión';btn.onclick=authSignIn;}
-    if(tog)tog.textContent='¿Primera vez? Crear cuenta';
+    if(btn){btn.textContent='Sign in';btn.onclick=authSignIn;}
+    if(tog)tog.textContent='First time? Create account';
   }
 }
 async function authSignUp(){
@@ -3942,9 +3930,9 @@ async function authSignUp(){
   var pass=(document.getElementById('authPassword')||{}).value||'';
   var errEl=document.getElementById('authError');
   var btn=document.getElementById('authSignInBtn');
-  if(!email||!pass){errEl.textContent='Ingresa tu email y contraseña.';return;}
-  if(pass.length<6){errEl.textContent='La contraseña debe tener al menos 6 caracteres.';return;}
-  btn.textContent='Creando cuenta…';btn.disabled=true;
+  if(!email||!pass){errEl.textContent='Enter your email and password.';return;}
+  if(pass.length<6){errEl.textContent='Password must be at least 6 characters.';return;}
+  btn.textContent='Creating account…';btn.disabled=true;
   try{
     var r=await fetch(SUPA_URL+'/auth/v1/signup',{
       method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
@@ -3957,15 +3945,15 @@ async function authSignUp(){
       _authUpdateUI();setTimeout(syncFromSheets,400);errEl.textContent='';
     } else if(d.id||d.identities){
       errEl.style.color='#a5d6a7';
-      errEl.textContent='Cuenta creada. Revisa tu email para confirmar, luego inicia sesión.';
+      errEl.textContent='Account created. Check your email to confirm, then sign in.';
     } else {
-      errEl.textContent=d.error_description||d.msg||'Error al crear la cuenta.';
+      errEl.textContent=d.error_description||d.msg||'Could not create the account.';
     }
-  }catch(e){errEl.textContent='Error de red. Intenta de nuevo.';}
-  btn.textContent='Crear cuenta';btn.disabled=false;
+  }catch(e){errEl.textContent='Network error. Please try again.';}
+  btn.textContent='Create account';btn.disabled=false;
 }
 function authSignOut(){
-  if(!confirm('¿Cerrar sesión? Deberás iniciar sesión la próxima vez.'))return;
+  if(!confirm('Sign out? You\'ll need to sign in next time.'))return;
   try{stopRealtime();}catch(e){}
   localStorage.removeItem(_SA_TOK);localStorage.removeItem(_SA_REF);localStorage.removeItem(_SA_EXP);
   _isOwnerCached=null;
@@ -3974,7 +3962,7 @@ function authSignOut(){
 }
 function _authUpdateUI(){
   var el=document.getElementById('settingsSyncStatus');
-  if(el)el.textContent=_authToken()?'Sesión activa':'No autenticado';
+  if(el)el.textContent=_authToken()?'Signed in':'Not signed in';
   var em=document.getElementById('settingsSignedInEmail');
   if(em)em.textContent=getSignedInEmail()||'—';
   refreshOwnerOnlyUI();
@@ -4185,15 +4173,14 @@ function renderAuditLog(rows){
   html+='</div>';
   el.innerHTML=html;
 }
-/* On load: skip PIN if already unlocked this session; also restore auth header */
+/* On load: the local PIN gate was removed (the Supabase login is the real
+   access control), so go straight to the auth check. */
 window.addEventListener('load',function(){
-  if(sessionStorage.getItem('_pu')==='1'){
-    var po=document.getElementById('pinOverlay');if(po)po.style.display='none';
-    _authCheckAndProceed();
-  }
+  var po=document.getElementById('pinOverlay');if(po)po.style.display='none';
   /* Restore auth header if token exists (app was just reloaded mid-session) */
   var tok=_authToken();
   if(tok&&!_authExpired())SUPA_HEADERS['Authorization']='Bearer '+tok;
+  _authCheckAndProceed();
   _authUpdateUI();
 });
 
@@ -5788,7 +5775,7 @@ function exportPnlExcel(){
   /* ── Build period data (grouped partial + full weeks, with per-position breakdown) ── */
   var periods=[],runTotal=0,dayNum=0;
   var wks=getHotelWeeksForMonth(yr,mo);
-  var _DN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var _DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   wks.forEach(function(wk){
     var wkDays=[];
     for(var di=0;di<7;di++){var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+di);wkDays.push(dd);}
@@ -6851,18 +6838,18 @@ function renderPnl(){
     +'<thead><tr><th>Position</th><th>Budget hrs</th><th>Actual hrs</th><th>OT hrs</th><th>Rate</th><th>Budget $</th><th>Regular $</th><th>OT $</th><th>Actual $</th><th>Variance $</th></tr></thead>'
     +'<tbody>'+rows+'</tbody>'
     +'<tfoot>'+foot+'</tfoot></table></div>'
-    +'<div style="font-size:10px;color:var(--text3);margin-top:8px;padding:0 2px;">&#8505; Presupuesto: '+(totalMonthRooms>0?totalMonthRooms.toLocaleString()+' hab. vendidas × factor':'sin rooms registrados')+' &middot; horas fijas × '+pnlEffectiveDays+' días cargados (de '+daysInMonth+')</div>';
+    +'<div style="font-size:10px;color:var(--text3);margin-top:8px;padding:0 2px;">&#8505; Budget: '+(totalMonthRooms>0?totalMonthRooms.toLocaleString()+' rooms sold × factor':'no rooms recorded')+' &middot; fixed hours × '+pnlEffectiveDays+' days loaded (of '+daysInMonth+')</div>';
 
   /* ── Rooms bar ── */
   var rBar=document.getElementById('pnlRoomsBar');
   if(rBar){
     if(totalMonthRooms>0){
       rBar.style.display='flex';
-      rBar.innerHTML='<span>&#127968; <b>Habitaciones vendidas:</b> '+totalMonthRooms.toLocaleString()+'</span>'
+      rBar.innerHTML='<span>&#127968; <b>Rooms sold:</b> '+totalMonthRooms.toLocaleString()+'</span>'
         +'<span style="color:var(--border2);">|</span>'
-        +'<span><b>Promedio/noche:</b> '+(totalMonthRooms/pnlEffectiveDays).toFixed(0)+'</span>'
+        +'<span><b>Average/night:</b> '+(totalMonthRooms/pnlEffectiveDays).toFixed(0)+'</span>'
         +'<span style="color:var(--border2);">|</span>'
-        +'<span><b>Días cargados:</b> '+pnlEffectiveDays+' / '+daysInMonth+'</span>';
+        +'<span><b>Days loaded:</b> '+pnlEffectiveDays+' / '+daysInMonth+'</span>';
     } else { rBar.style.display='none'; }
   }
 
@@ -6873,7 +6860,7 @@ function renderPnl(){
   /* ── Build period list: group partial days into one row each ── */
   var wks=getHotelWeeksForMonth(yr2,mo2);
   var periods=[];
-  var DN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   wks.forEach(function(wk){
     var wkDays=[];
@@ -6896,14 +6883,14 @@ function renderPnl(){
   var runTotal=0,dayNum=0;
   var wHtml='<div class="card" style="margin-top:16px;padding:0;">'
     +'<div class="card-head" style="padding:14px 16px;cursor:pointer;user-select:none;" onclick="var b=document.getElementById(\'pnlWkBody\');b.style.display=b.style.display===\'none\'?\'block\':\'none\';">'
-    +'<div class="card-title">&#128197; Desglose semanal</div>'
-    +'<div style="font-size:11px;color:var(--text3);margin-top:2px;">Períodos Sáb–Vie · acumulado vs pace de presupuesto</div>'
+    +'<div class="card-title">&#128197; Weekly breakdown</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-top:2px;">Sat–Fri periods · running total vs budget pace</div>'
     +'</div>'
     +'<div id="pnlWkBody"><div class="tbl-wrap"><table class="pnl-table">'
     +'<thead><tr>'
-    +'<th style="text-align:left;min-width:150px;">Período</th>'
-    +'<th>Rooms</th><th>Hrs reales</th><th>OT</th>'
-    +'<th>Acumulado</th><th>Pace</th><th>Diferencia</th>'
+    +'<th style="text-align:left;min-width:150px;">Period</th>'
+    +'<th>Rooms</th><th>Actual hrs</th><th>OT</th>'
+    +'<th>Running</th><th>Pace</th><th>Difference</th>'
     +'</tr></thead><tbody>';
 
   periods.forEach(function(p){
@@ -6926,9 +6913,9 @@ function renderPnl(){
       /* ── Full week row — navy bg, all-white text ── */
       wHtml+='<tr style="background:var(--navy);color:#fff;">'
         +'<td style="text-align:left;color:#fff;font-weight:700;">'
-          +'<span style="font-size:9px;font-weight:400;opacity:.55;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px;">Semana</span>'
+          +'<span style="font-size:9px;font-weight:400;opacity:.55;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px;">Week</span>'
           +rangeLbl
-          +(p.loaded<p.days?'<span style="font-size:9px;opacity:.5;margin-left:6px;">'+p.loaded+'/'+p.days+' días</span>':'')
+          +(p.loaded<p.days?'<span style="font-size:9px;opacity:.5;margin-left:6px;">'+p.loaded+'/'+p.days+' days</span>':'')
         +'</td>'
         +'<td style="text-align:right;color:#fff;">'+(p.rooms>0?p.rooms.toLocaleString():'—')+'</td>'
         +'<td style="text-align:right;color:#fff;font-weight:600;">'+p.paid.toFixed(2)+'h</td>'
@@ -6942,9 +6929,9 @@ function renderPnl(){
       /* ── Partial period row — warm light bg, accent left border ── */
       wHtml+='<tr style="background:var(--gt);border-left:3px solid var(--gold);">'
         +'<td style="text-align:left;padding-left:10px;">'
-          +'<span style="font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px;">Período corto</span>'
+          +'<span style="font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px;">Partial period</span>'
           +'<span style="font-weight:600;color:var(--text1);">'+rangeLbl+'</span>'
-          +(p.loaded<p.days?' <span style="font-size:9px;color:var(--text3);">'+p.loaded+'/'+p.days+' días</span>':'')
+          +(p.loaded<p.days?' <span style="font-size:9px;color:var(--text3);">'+p.loaded+'/'+p.days+' days</span>':'')
         +'</td>'
         +'<td style="text-align:right;color:var(--text2);">'+(p.rooms>0?p.rooms.toLocaleString():'—')+'</td>'
         +'<td style="text-align:right;color:var(--text1);font-weight:600;">'+p.paid.toFixed(2)+'h</td>'
@@ -9706,7 +9693,7 @@ function handleR106Upload(input){
           autoFilled++;
         });
 
-        showToast('✓ R106 cargado — '+autoFilled+' días autollenados'+(kept>0?' · '+kept+' protegidos (manual)':''));
+        showToast('✓ R106 loaded — '+autoFilled+' days auto-filled'+(kept>0?' · '+kept+' protected (manual)':''));
         renderLaborDash();
         if(currentPage==='occupancy')renderOccupancy();
       });
@@ -10633,7 +10620,7 @@ function triggerHRImport(tid){
 }
 
 function clearHRImport(tid){
-  if(!confirm('¿Limpiar todas las marcas de RH de este training?'))return;
+  if(!confirm('Clear all HR marks from this training?'))return;
   var list=loadTrainings();
   var t=list.filter(function(x){return x.id===tid;})[0];
   if(!t)return;
@@ -10718,7 +10705,7 @@ function showHRImportReview(tid, matched, notFound){
       +'<span style="font-size:13px;font-weight:600;flex:1;">'+escHtml(e.name)+'</span>'
       +'<span style="font-size:10px;color:var(--text3);">'+escHtml(e.pos||'')+'</span>'
       +'</div>';
-  }).join('')||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">Ninguno emparejó con el roster.</div>';
+  }).join('')||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">None matched the roster.</div>';
 
   var notFoundRows=notFound.map(function(n){
     return '<div style="font-size:12px;color:var(--yellow);padding:5px 0;border-bottom:1px solid var(--yellow-border);">'+escHtml(n)+'</div>';
