@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.10.0"/>
+<meta name="app-version" content="6.10.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3235,6 +3235,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.10.1', date:'2026-07-18',
+    fixes:['Fixed "Only the owner can add members" appearing for the owner. Login sessions expire about once an hour, and the Team Access screen was still sending the expired session instead of renewing it first — so a normal expiry looked like a permissions problem. Team Access, the activity log and the backup/restore screens now renew your session automatically before each request, and when something does go wrong they say what actually happened (session expired, no permission, email already added) instead of guessing.']
+  },
+  {
     v:'6.10.0', date:'2026-07-18',
     fixes:['Team access: you can now give your managers access to the app. In Settings → Team Access, enter a manager\'s email to grant access, or remove it at any time. Each manager creates their own account with their own password on the sign-in screen — never share yours. Only you (the owner) can see or change that list.',
            'Because everyone with access can edit and delete, Settings → Recent Activity now shows the last 50 changes and who made them, so nothing that goes missing is a mystery.']
@@ -3922,7 +3926,7 @@ function getSignedInEmail(){
 function isCurrentUserAllowed(){
   var em=getSignedInEmail();
   if(!em)return Promise.resolve(false);
-  return fetch(SUPA_URL+'/rest/v1/allowed_users?select=email&email=eq.'+encodeURIComponent(em.toLowerCase()),{headers:SUPA_HEADERS})
+  return authedFetch(SUPA_URL+'/rest/v1/allowed_users?select=email&email=eq.'+encodeURIComponent(em.toLowerCase()))
     .then(function(r){ return r.ok?r.json():[]; })
     .then(function(rows){ return !!(rows&&rows.length); })
     .catch(function(){
@@ -3930,6 +3934,38 @@ function isCurrentUserAllowed(){
          simply out of signal — the database still gates every read/write. */
       return true;
     });
+}
+
+/* ── Authenticated fetch ──────────────────────────────────
+   Access tokens expire (~1h). supaPut/syncFromSheets renew proactively,
+   but the Team Access calls below were written without that and simply
+   sent the stale token, so a routine expiry surfaced as "only the owner
+   can do this" — wrong cause, and alarming for the actual owner. Route
+   every authenticated call through here so the token is refreshed first
+   and callers can report what really happened. ── */
+function authedFetch(url,opts){
+  var needsRefresh=(typeof _authExpired==='function'&&_authExpired());
+  var ready=needsRefresh?_authRefresh():Promise.resolve(true);
+  return ready.then(function(ok){
+    if(needsRefresh&&!ok){
+      var err=new Error('session-expired');
+      err.sessionExpired=true;
+      throw err;
+    }
+    var o=opts||{};
+    /* Read SUPA_HEADERS after the refresh — _authStore() rewrites it. */
+    o.headers=Object.assign({},SUPA_HEADERS,o.headers||{});
+    return fetch(url,o);
+  });
+}
+/* Turn a failure into something true, rather than guessing at the cause. */
+function accessErrorMessage(e,verb){
+  if(e&&e.sessionExpired)return '&#9888; Your session expired. Go to Settings → Sign out, then sign in again.';
+  var s=e&&e.status;
+  if(s===401)return '&#9888; Your session expired. Go to Settings → Sign out, then sign in again.';
+  if(s===403)return '&#9888; Only the owner can '+verb+'.';
+  if(s===409)return '&#9888; That email already has access.';
+  return '&#9888; Could not '+verb+' — check your connection and try again.';
 }
 
 var _isOwnerCached=null;
@@ -3942,7 +3978,7 @@ function refreshOwnerOnlyUI(){
   };
   if(!_authToken()){show(false);return;}
   if(_isOwnerCached!==null){show(_isOwnerCached);return;}
-  fetch(SUPA_URL+'/rest/v1/allowed_users?select=role&email=eq.'+encodeURIComponent(getSignedInEmail()),{headers:SUPA_HEADERS})
+  authedFetch(SUPA_URL+'/rest/v1/allowed_users?select=role&email=eq.'+encodeURIComponent(getSignedInEmail()))
     .then(function(r){return r.ok?r.json():[];})
     .then(function(rows){
       _isOwnerCached=!!(rows&&rows[0]&&rows[0].role==='owner');
@@ -3954,10 +3990,15 @@ function loadAllowedUsers(){
   var el=document.getElementById('allowedUsersList');
   if(!el)return;
   el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--text3);">Loading…</div>';
-  fetch(SUPA_URL+'/rest/v1/allowed_users?select=email,name,role,added_at&order=role.asc,email.asc',{headers:SUPA_HEADERS})
-    .then(function(r){ if(!r.ok)throw new Error('http'); return r.json(); })
+  authedFetch(SUPA_URL+'/rest/v1/allowed_users?select=email,name,role,added_at&order=role.asc,email.asc')
+    .then(function(r){ if(!r.ok){var e=new Error('http');e.status=r.status;throw e;} return r.json(); })
     .then(function(rows){ renderAllowedUsers(rows||[]); })
-    .catch(function(){ el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--red);">Could not load the access list — check your connection.</div>'; });
+    .catch(function(e){
+      var msg=(e&&(e.sessionExpired||e.status===401))
+        ? 'Your session expired — go to Settings → Sign out, then sign in again.'
+        : 'Could not load the access list — check your connection.';
+      el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--red);">'+msg+'</div>';
+    });
 }
 
 function renderAllowedUsers(rows){
@@ -3991,30 +4032,30 @@ function addAllowedUser(){
   var email=((emIn&&emIn.value)||'').trim().toLowerCase();
   var name=((nmIn&&nmIn.value)||'').trim();
   if(!email||email.indexOf('@')===-1||email.indexOf('.')===-1){showToast('&#9888; Enter a valid email address.');return;}
-  fetch(SUPA_URL+'/rest/v1/allowed_users',{
+  authedFetch(SUPA_URL+'/rest/v1/allowed_users?on_conflict=email',{
     method:'POST',
-    headers:Object.assign({},SUPA_HEADERS,{'Prefer':'resolution=merge-duplicates'}),
+    headers:{'Prefer':'resolution=merge-duplicates'},
     body:JSON.stringify({email:email,name:name||null,role:'manager',added_by:getSignedInEmail()})
   }).then(function(r){
-    if(!r.ok)throw new Error('http '+r.status);
+    if(!r.ok){var e=new Error('http');e.status=r.status;throw e;}
     if(emIn)emIn.value='';
     if(nmIn)nmIn.value='';
     showToast('&#10003; Access granted to '+email);
     logAudit('allowed_users','grant:'+email);
     loadAllowedUsers();
-  }).catch(function(){ showToast('&#9888; Could not grant access — only the owner can do this.'); });
+  }).catch(function(e){ showToast(accessErrorMessage(e,'grant access')); });
 }
 
 function removeAllowedUser(email){
   if(!confirm('Remove access for '+email+'?\n\nThey will no longer be able to open the app or see any data. Anything they already entered stays.'))return;
-  fetch(SUPA_URL+'/rest/v1/allowed_users?email=eq.'+encodeURIComponent(email),{
-    method:'DELETE', headers:SUPA_HEADERS
+  authedFetch(SUPA_URL+'/rest/v1/allowed_users?email=eq.'+encodeURIComponent(email),{
+    method:'DELETE'
   }).then(function(r){
-    if(!r.ok)throw new Error('http '+r.status);
+    if(!r.ok){var e=new Error('http');e.status=r.status;throw e;}
     showToast('&#128465; Access removed for '+email);
     logAudit('allowed_users','revoke:'+email);
     loadAllowedUsers();
-  }).catch(function(){ showToast('&#9888; Could not remove access — only the owner can do this.'); });
+  }).catch(function(e){ showToast(accessErrorMessage(e,'remove access')); });
 }
 
 /* ── Change attribution ───────────────────────────────────
@@ -4036,7 +4077,7 @@ function loadAuditLog(){
   var el=document.getElementById('auditLogResults');
   if(!el)return;
   el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--text3);">Loading…</div>';
-  fetch(SUPA_URL+'/rest/v1/audit_log?select=email,data_key,action,at&order=at.desc&limit=50',{headers:SUPA_HEADERS})
+  authedFetch(SUPA_URL+'/rest/v1/audit_log?select=email,data_key,action,at&order=at.desc&limit=50')
     .then(function(r){ if(!r.ok)throw new Error('http'); return r.json(); })
     .then(function(rows){ renderAuditLog(rows||[]); })
     .catch(function(){ el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--red);">Could not load activity.</div>'; });
@@ -4749,7 +4790,7 @@ function maybeAutoSnapshot(){
 }
 
 function cleanupOldSnapshots(){
-  fetch(SUPA_URL+"/rest/v1/labor_data?select=key&key=like.snapshot_*",{method:"GET",headers:SUPA_HEADERS})
+  authedFetch(SUPA_URL+"/rest/v1/labor_data?select=key&key=like.snapshot_*",{method:"GET"})
     .then(function(r){return r.json();})
     .then(function(rows){
       var cutoff=new Date();cutoff.setDate(cutoff.getDate()-SNAPSHOT_RETAIN_DAYS);
@@ -4758,7 +4799,7 @@ function cleanupOldSnapshots(){
         var d;
         try{d=parseLocalDate(ds);}catch(e){return;}
         if(d&&!isNaN(d.getTime())&&d<cutoff){
-          fetch(SUPA_URL+"/rest/v1/labor_data?key=eq."+encodeURIComponent(row.key),{method:"DELETE",headers:SUPA_HEADERS}).catch(function(){});
+          authedFetch(SUPA_URL+"/rest/v1/labor_data?key=eq."+encodeURIComponent(row.key),{method:"DELETE"}).catch(function(){});
         }
       });
     }).catch(function(){});
@@ -4775,7 +4816,7 @@ function listSnapshots(){
   var el=document.getElementById("snapshotResults");
   if(!el)return;
   el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--text3);">Looking for backups…</div>';
-  fetch(SUPA_URL+"/rest/v1/labor_data?select=key&key=like.snapshot_*&order=key.desc",{method:"GET",headers:SUPA_HEADERS})
+  authedFetch(SUPA_URL+"/rest/v1/labor_data?select=key&key=like.snapshot_*&order=key.desc",{method:"GET"})
     .then(function(r){return r.json();})
     .then(function(rows){renderSnapshotList(rows||[]);})
     .catch(function(){el.innerHTML='<div style="padding:10px 0;font-size:12px;color:var(--red);">Could not load backups — check your connection</div>';});
@@ -4807,7 +4848,7 @@ function renderSnapshotList(rows){
 function restoreSnapshot(key){
   var ds=key.replace("snapshot_","");
   if(!confirm("This will REPLACE all your current data (this month, R106, roster, projects) with the backup from "+ds+". This cannot be undone. Continue?"))return;
-  fetch(SUPA_URL+"/rest/v1/labor_data?select=value&key=eq."+encodeURIComponent(key),{method:"GET",headers:SUPA_HEADERS})
+  authedFetch(SUPA_URL+"/rest/v1/labor_data?select=value&key=eq."+encodeURIComponent(key),{method:"GET"})
     .then(function(r){return r.json();})
     .then(function(rows){
       if(!rows||!rows[0])throw new Error("not found");
