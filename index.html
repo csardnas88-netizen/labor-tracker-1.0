@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.12.0"/>
+<meta name="app-version" content="6.13.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3227,6 +3227,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.13.0', date:'2026-07-20',
+    fixes:['Added automatic sign-out for security: after 45 minutes with no activity, the app signs you out and returns to the login screen, so an unattended device (especially a shared hotel computer) can\'t leave payroll and P&L data exposed. While you\'re actively using the app nothing changes — the timer only counts idle time. This replaces the old PIN screen with something that protects the data itself, not just the app.']
+  },
+  {
     v:'6.12.0', date:'2026-07-20',
     fixes:['The app is now fully in English — the sign-in screen, Settings and the Labor/P&L weekly breakdown that still had some Spanish text. Also removed the 4-digit PIN screen: signing in with your email and password is now the only step, since that login is what actually protects the data. Nothing about your data or access changed.']
   },
@@ -3952,14 +3956,42 @@ async function authSignUp(){
   }catch(e){errEl.textContent='Network error. Please try again.';}
   btn.textContent='Create account';btn.disabled=false;
 }
-function authSignOut(){
-  if(!confirm('Sign out? You\'ll need to sign in next time.'))return;
+function _clearSession(){
   try{stopRealtime();}catch(e){}
   localStorage.removeItem(_SA_TOK);localStorage.removeItem(_SA_REF);localStorage.removeItem(_SA_EXP);
   _isOwnerCached=null;
   SUPA_HEADERS['Authorization']='Bearer '+SUPA_KEY;
+}
+function authSignOut(){
+  if(!confirm('Sign out? You\'ll need to sign in next time.'))return;
+  _clearSession();
   lockApp();
 }
+
+/* ── Auto sign-out after inactivity ───────────────────────
+   The local PIN was removed, so an unattended signed-in device would
+   otherwise expose all payroll/P&L data indefinitely. After AUTO_LOGOUT_MS
+   with no interaction, the session is cleared and the sign-in screen
+   returns. Uses a timestamp checked on an interval + on tab focus (a plain
+   setTimeout doesn't fire reliably while a mobile tab is backgrounded), so
+   a device left open overnight is signed out even if the timer was frozen. */
+var AUTO_LOGOUT_MS=45*60*1000; /* 45 min — middle of Carlos's 30–60 min */
+var _lastActivity=Date.now();
+function _bumpActivity(){ _lastActivity=Date.now(); }
+['click','keydown','touchstart','mousedown'].forEach(function(ev){
+  document.addEventListener(ev,_bumpActivity,{passive:true,capture:true});
+});
+function _checkInactivity(){
+  if(!_authToken())return;                         /* already signed out */
+  if(Date.now()-_lastActivity<AUTO_LOGOUT_MS)return;
+  _clearSession();
+  var ao=document.getElementById('authOverlay');if(ao)ao.style.display='flex';
+  var er=document.getElementById('authError');
+  if(er){er.style.color='';er.textContent='Signed out after '+(AUTO_LOGOUT_MS/60000)+' minutes of inactivity, for security. Please sign in again.';}
+}
+document.addEventListener('visibilitychange',function(){ if(!document.hidden)_checkInactivity(); });
+window.addEventListener('focus',_checkInactivity);
+setInterval(_checkInactivity,60000);
 function _authUpdateUI(){
   var el=document.getElementById('settingsSyncStatus');
   if(el)el.textContent=_authToken()?'Signed in':'Not signed in';
