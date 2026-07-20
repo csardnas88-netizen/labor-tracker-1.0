@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.10.1"/>
+<meta name="app-version" content="6.11.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3235,6 +3235,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.11.0', date:'2026-07-20',
+    fixes:['Live updates between devices: when a manager saves something — logs project hours, uploads a PDF, edits the roster — it now appears on everyone else\'s screen within a few seconds automatically, without needing to reopen the app. A "⚡ Live" indicator in the sidebar shows when you\'re connected. If the connection drops or you\'re offline, the app keeps working exactly as before and catches up the next time it reconnects or you reopen it — nothing is ever lost.']
+  },
+  {
     v:'6.10.1', date:'2026-07-18',
     fixes:['Fixed "Only the owner can add members" appearing for the owner. Login sessions expire about once an hour, and the Team Access screen was still sending the expired session instead of renewing it first — so a normal expiry looked like a permissions problem. Team Access, the activity log and the backup/restore screens now renew your session automatically before each request, and when something does go wrong they say what actually happened (session expired, no permission, email already added) instead of guessing.']
   },
@@ -3785,21 +3789,95 @@ async function _authRefresh(){
       body:JSON.stringify({refresh_token:rt})
     });
     var d=await r.json();
-    if(d.access_token){_authStore(d);return true;}
+    if(d.access_token){_authStore(d);try{_rtSetAuth(d.access_token);}catch(e){}return true;}
   }catch(e){}
   return false;
+}
+
+/* ══ LIVE UPDATES (Supabase Realtime) ═════════════════════
+   Additive on top of the existing open/reconnect pull sync. When another
+   device writes to labor_data, this triggers a debounced syncFromSheets()
+   so the change appears within seconds instead of only on reopen. If the
+   Supabase client can't load (offline, CDN down) or the socket drops, the
+   app keeps working exactly as before — realtime is best-effort, never a
+   dependency. Realtime applies the same RLS as REST, so only allowed_users
+   receive events, scoped by the signed-in user's token. ── */
+var _rtClient=null,_rtChannel=null,_rtLoading=false,_rtDebounce=null;
+var _lastLocalWriteAt=0;
+function _loadSupabaseLib(){
+  return new Promise(function(resolve,reject){
+    if(window.supabase&&window.supabase.createClient)return resolve();
+    if(_rtLoading){ /* wait for the in-flight load */
+      var t=setInterval(function(){
+        if(window.supabase&&window.supabase.createClient){clearInterval(t);resolve();}
+      },150);
+      setTimeout(function(){clearInterval(t);reject(new Error('timeout'));},8000);
+      return;
+    }
+    _rtLoading=true;
+    var s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+    s.async=true;
+    s.onload=function(){_rtLoading=false;resolve();};
+    s.onerror=function(){_rtLoading=false;reject(new Error('load failed'));};
+    document.head.appendChild(s);
+  });
+}
+function _rtSetAuth(tok){
+  if(_rtClient&&_rtClient.realtime&&tok){ try{_rtClient.realtime.setAuth(tok);}catch(e){} }
+}
+function _rtSetLiveStatus(on){
+  var el=document.getElementById('syncStatus');
+  if(!el)return;
+  if(on){ el.textContent='⚡ Live'; el.style.color='var(--green-border)'; }
+}
+function startRealtime(){
+  var tok=_authToken();
+  if(!tok||_authExpired())return;               /* need a valid session */
+  if(!navigator.onLine)return;                   /* nothing to connect to */
+  if(_rtChannel)return;                           /* already subscribed */
+  _loadSupabaseLib().then(function(){
+    if(_rtChannel)return;
+    if(!_rtClient){
+      _rtClient=window.supabase.createClient(SUPA_URL,SUPA_KEY,{
+        auth:{persistSession:false,autoRefreshToken:false},
+        realtime:{params:{eventsPerSecond:2}}
+      });
+    }
+    _rtSetAuth(_authToken());
+    _rtChannel=_rtClient
+      .channel('labor_data_live')
+      .on('postgres_changes',{event:'*',schema:'public',table:'labor_data'},function(payload){
+        /* Skip the echo of our own just-made write to avoid a needless
+           re-render flash; other devices still come through. */
+        if(Date.now()-_lastLocalWriteAt<3000)return;
+        if(_rtDebounce)clearTimeout(_rtDebounce);
+        _rtDebounce=setTimeout(function(){ try{syncFromSheets();}catch(e){} },1200);
+      })
+      .subscribe(function(status){
+        if(status==='SUBSCRIBED')_rtSetLiveStatus(true);
+      });
+  }).catch(function(){ /* stay on open/reconnect pull sync */ });
+}
+function stopRealtime(){
+  try{ if(_rtChannel&&_rtClient)_rtClient.removeChannel(_rtChannel); }catch(e){}
+  _rtChannel=null;
 }
 async function _authCheckAndProceed(){
   var tok=_authToken();
   if(tok&&!_authExpired()){
     SUPA_HEADERS['Authorization']='Bearer '+tok;
     document.getElementById('authOverlay').style.display='none';
-    _authUpdateUI();return;
+    _authUpdateUI();
+    setTimeout(function(){try{startRealtime();}catch(e){}},1500);
+    return;
   }
   if(tok&&_authExpired()){
     if(await _authRefresh()){
       document.getElementById('authOverlay').style.display='none';
-      _authUpdateUI();return;
+      _authUpdateUI();
+      setTimeout(function(){try{startRealtime();}catch(e){}},1500);
+      return;
     }
   }
   document.getElementById('authOverlay').style.display='flex';
@@ -3836,6 +3914,7 @@ async function authSignIn(){
       document.getElementById('authOverlay').style.display='none';
       _authUpdateUI();
       setTimeout(syncFromSheets,400);
+      setTimeout(function(){try{startRealtime();}catch(e){}},1200);
       errEl.textContent='';
     } else {
       errEl.textContent=d.error_description||d.msg||'Credenciales incorrectas.';
@@ -3887,6 +3966,7 @@ async function authSignUp(){
 }
 function authSignOut(){
   if(!confirm('¿Cerrar sesión? Deberás iniciar sesión la próxima vez.'))return;
+  try{stopRealtime();}catch(e){}
   localStorage.removeItem(_SA_TOK);localStorage.removeItem(_SA_REF);localStorage.removeItem(_SA_EXP);
   _isOwnerCached=null;
   SUPA_HEADERS['Authorization']='Bearer '+SUPA_KEY;
@@ -4120,8 +4200,13 @@ window.addEventListener('load',function(){
 function setSyncStatus(s){
   var el=document.getElementById("syncStatus");
   if(!el)return;
+  /* When the live channel is connected, "synced" reads as "⚡ Live" so the
+     realtime state isn't hidden every time a save settles. */
   if(s==="syncing"){el.textContent="☁ Syncing...";el.style.color="rgba(255,255,255,.6)";}
-  else if(s==="synced"){el.textContent="✓ Synced";el.style.color="var(--green-border)";}
+  else if(s==="synced"){
+    if(_rtChannel){el.textContent="⚡ Live";el.style.color="var(--green-border)";}
+    else{el.textContent="✓ Synced";el.style.color="var(--green-border)";}
+  }
   else if(s==="offline"){el.textContent="● Offline";el.style.color="rgba(255,255,255,.4)";}
   else{el.textContent="● Offline";el.style.color="rgba(255,255,255,.4)";}
 }
@@ -4313,12 +4398,16 @@ window.addEventListener('online',function(){
   }
 });
 window.addEventListener('offline',function(){ setSyncStatus('offline'); });
+window.addEventListener('online',function(){ try{startRealtime();}catch(e){} });
 setInterval(function(){
   if(_syncFailCount>0){ try{forceSyncToSupabase();}catch(e){} }
+  /* Re-establish the live channel if it dropped while the app stayed open. */
+  try{ if(navigator.onLine&&_authToken()&&!_authExpired()&&!_rtChannel)startRealtime(); }catch(e){}
 },30000);
 
 /* Upsert a key/value into Supabase */
 function supaPut(key, value){
+  _lastLocalWriteAt=Date.now();
   setSyncStatus("syncing");
   var go=function(){
     return fetch(SUPA_URL+"/rest/v1/labor_data", {
