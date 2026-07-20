@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.13.0"/>
+<meta name="app-version" content="6.13.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3227,6 +3227,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.13.1', date:'2026-07-20',
+    fixes:['Fixed a confusing sign-up message. Email confirmation is turned off — new accounts can sign in right away, no email needed. But if you tapped "Create account" using an email that already had an account, the app wrongly said "Check your email to confirm," and people waited for an email that never came. Now it tells you clearly that the account already exists and switches you to the sign-in screen. Also, if a new account isn\'t on the Team Access list yet, sign-up now says so instead of dropping you into an empty app.']
+  },
+  {
     v:'6.13.0', date:'2026-07-20',
     fixes:['Added automatic sign-out for security: after 45 minutes with no activity, the app signs you out and returns to the login screen, so an unattended device (especially a shared hotel computer) can\'t leave payroll and P&L data exposed. While you\'re actively using the app nothing changes — the timer only counts idle time. This replaces the old PIN screen with something that protects the data itself, not just the app.']
   },
@@ -3944,17 +3948,40 @@ async function authSignUp(){
     });
     var d=await r.json();
     if(d.access_token){
+      /* Email confirmation is OFF on this project, so a brand-new signup is
+         logged in immediately — no email step. */
       _authStore(d);
+      var allowed=await isCurrentUserAllowed();
+      if(!allowed){
+        localStorage.removeItem(_SA_TOK);localStorage.removeItem(_SA_REF);localStorage.removeItem(_SA_EXP);
+        SUPA_HEADERS['Authorization']='Bearer '+SUPA_KEY;_isOwnerCached=null;
+        errEl.style.color='';
+        errEl.textContent='Account created, but it doesn\'t have access yet. Ask Carlos to add '+email+' under Settings → Team Access, then sign in.';
+        btn.textContent='Create account';btn.disabled=false;
+        return;
+      }
       document.getElementById('authOverlay').style.display='none';
-      _authUpdateUI();setTimeout(syncFromSheets,400);errEl.textContent='';
+      _authUpdateUI();setTimeout(syncFromSheets,400);
+      setTimeout(function(){try{startRealtime();}catch(e){}},1200);
+      errEl.textContent='';
+    } else if(Array.isArray(d.identities)&&d.identities.length===0){
+      /* Supabase returns a user with an EMPTY identities array when the email
+         already exists (it hides this to prevent email enumeration). This is
+         NOT a new account and no email is coming — the person already signed
+         up. Send them to sign-in instead of the misleading "check your email". */
+      errEl.style.color='';
+      errEl.textContent='This email already has an account — tap "Already have an account? Sign in" below and sign in with your password.';
+      _authMode='signin';
+      var _b=document.getElementById('authSignInBtn');if(_b){_b.textContent='Sign in';_b.onclick=authSignIn;}
+      var _t=document.getElementById('authToggleBtn');if(_t)_t.textContent='First time? Create account';
     } else if(d.id||d.identities){
       errEl.style.color='#a5d6a7';
-      errEl.textContent='Account created. Check your email to confirm, then sign in.';
+      errEl.textContent='Account created. You can sign in now.';
     } else {
       errEl.textContent=d.error_description||d.msg||'Could not create the account.';
     }
   }catch(e){errEl.textContent='Network error. Please try again.';}
-  btn.textContent='Create account';btn.disabled=false;
+  btn.textContent=_authMode==='signin'?'Sign in':'Create account';btn.disabled=false;
 }
 function _clearSession(){
   try{stopRealtime();}catch(e){}
