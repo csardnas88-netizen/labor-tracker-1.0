@@ -1,0 +1,12 @@
+{
+  "name": "labor-tracker-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Automated safety checks for the Housekeeping Labor Tracker (index.html).",
+  "scripts": {
+    "test": "node tests/run.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.0"
+  }
+}
