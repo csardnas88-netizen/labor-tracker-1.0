@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.17.0"/>
+<meta name="app-version" content="6.18.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3410,6 +3410,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.18.0', date:'2026-07-20',
+    fixes:['Training Hours: you can now mark a trainee\'s days off. A new hire works ~5 days and rests ~2 per week, so their rest days shouldn\'t sit there as "Pending" (which means "waiting for the report"). On each day in a trainee\'s list, tap "Off" to mark it a day off — it stops counting as pending and shows as "Off" (including on the printed PDF). Tap "undo" to put it back if you marked it by mistake. Days off don\'t change the total; they just make the record accurate.']
+  },
   {
     v:'6.17.0', date:'2026-07-20',
     fixes:['Training Hours is now semi-automatic. When you upload a report and the app finds a brand-new employee, the "New Employee Detected" box now includes a pre-checked "Add to Training Hours" option with their training dates — one glance and they\'re tracked (uncheck it for a transfer or rehire who isn\'t really a trainee). The dates anchor to the report date, not an HR hire date, so it still works when HR adds someone late. If a trainee actually started earlier than their first report (e.g. they started Monday but first showed up in Tuesday\'s report), set their first day back — either in that box or with the new "Edit dates" (✎) button on their card — and those earlier days fill in automatically once that day\'s report is uploaded.']
@@ -11164,16 +11168,25 @@ function renderTrainingHours(){
       html+='</div></div>';
     }
     html+='<div style="padding:0 18px;">';
-    html+='<div style="display:grid;grid-template-columns:120px 1fr 70px;gap:8px;padding:10px 0 6px;border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;"><div>Date</div><div>Position</div><div style="text-align:right;">Hours</div></div>';
+    html+='<div style="display:grid;grid-template-columns:110px 1fr 62px 58px;gap:8px;padding:10px 0 6px;border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;"><div>Date</div><div>Position</div><div style="text-align:right;">Hours</div><div></div></div>';
     var _DTN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     log.forEach(function(e){
       var dd=parseLocalDate(e.date);
       var dl=_DTN[dd.getDay()]+' '+(MONTH_NAMES[dd.getMonth()]||'').substring(0,3)+' '+dd.getDate();
-      html+='<div style="display:grid;grid-template-columns:120px 1fr 70px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;">';
+      html+='<div style="display:grid;grid-template-columns:110px 1fr 62px 58px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;">';
       html+='<div style="font-size:12px;color:var(--text2);font-weight:600;">'+dl+'</div>';
-      html+='<div style="font-size:11px;color:var(--text3);">'+escHtml(e.pos||'—')+'</div>';
-      if(e.pending)html+='<div style="font-size:11px;font-weight:700;color:var(--yellow);text-align:right;">Pending</div>';
-      else html+='<div style="font-size:13px;font-weight:700;color:var(--navy);text-align:right;">'+(e.hours||0).toFixed(2)+'h</div>';
+      html+='<div style="font-size:11px;color:var(--text3);">'+(e.off?'Day off':escHtml(e.pos||'—'))+'</div>';
+      var actionCell='';
+      if(e.off){
+        html+='<div style="font-size:11px;font-weight:700;color:var(--text3);text-align:right;">Off</div>';
+        actionCell='<button onclick="toggleTraineeDayOff('+idx+',\''+e.date+'\')" title="Not a day off — put back" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;padding:2px 4px;text-decoration:underline;">undo</button>';
+      } else if(e.pending){
+        html+='<div style="font-size:11px;font-weight:700;color:var(--yellow);text-align:right;">Pending</div>';
+        actionCell='<button onclick="toggleTraineeDayOff('+idx+',\''+e.date+'\')" title="Mark this as a day off" style="background:none;border:1px solid var(--border);color:var(--text3);cursor:pointer;font-size:10px;padding:3px 6px;border-radius:6px;">Off</button>';
+      } else {
+        html+='<div style="font-size:13px;font-weight:700;color:var(--navy);text-align:right;">'+(e.hours||0).toFixed(2)+'h</div>';
+      }
+      html+='<div style="text-align:right;">'+actionCell+'</div>';
       html+='</div>';
     });
     html+='</div></div>';
@@ -11298,6 +11311,23 @@ function saveEditTrainee(idx){
   try{autofillAllPendingProjectEntries();}catch(e){}
   renderTrainingHours();
   showToast('&#10003; Training dates updated');
+}
+/* Toggle a training day between Pending and Off. A trainee works ~5 days and
+   is off ~2 per week; the off days aren't "waiting for a PDF" — they're rest
+   days with no hours. Marking off sets pending:false so it stops counting as
+   pending and is skipped by auto-fill; un-marking returns it to Pending and
+   fills from the report if one exists. */
+function toggleTraineeDayOff(idx, ds){
+  var projects=loadProjects();
+  var t=projects[idx];
+  if(!t||t.kind!=='training')return;
+  var e=(t.log||[]).filter(function(x){return x.date===ds;})[0];
+  if(!e)return;
+  if(e.off){ e.off=false; e.pending=true; e.hours=null; }
+  else { e.off=true; e.pending=false; e.hours=0; }
+  saveProjects(projects);
+  if(!e.off){ try{autofillAllPendingProjectEntries();}catch(_){} }
+  renderTrainingHours();
 }
 function deleteTrainee(idx){
   var projects=loadProjects();
@@ -11922,7 +11952,7 @@ function exportProjectPDF(projIdx, scope){
       +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;">'+e.date+'</td>'
       +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;">'+escHtml(e.empName)+'</td>'
       +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);">'+escHtml(e.pos||'')+'</td>'
-      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-align:right;">'+(e.pending?'Pending':e.hours.toFixed(2)+'h')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-align:right;">'+(e.off?'Off':(e.pending?'Pending':(e.hours||0).toFixed(2)+'h'))+'</td>'
       +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);">'+escHtml(e.note||'—')+'</td>'
       +'</tr>';
   }).join('');
