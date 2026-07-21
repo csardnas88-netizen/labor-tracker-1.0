@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.14.0"/>
+<meta name="app-version" content="6.15.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -100,6 +100,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .hamburger span{display:block;width:20px;height:2px;background:var(--text2);border-radius:99px;transition:.3s;}
 .topbar-greeting{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--text1);}
 .topbar-date{font-size:11px;color:var(--text3);margin-top:1px;}
+/* ── Profile avatar + dropdown (top-right, Google-style) ── */
+.profile-wrap{position:relative;flex-shrink:0;margin-left:auto;}
+.profile-avatar{width:36px;height:36px;border-radius:50%;background:var(--navy);color:#fff;font-weight:700;font-size:15px;font-family:var(--serif);display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px solid var(--gold);transition:.15s;padding:0;}
+.profile-avatar:hover{filter:brightness(1.12);}
+.profile-avatar:active{transform:scale(.94);}
+.profile-menu{position:absolute;top:calc(100% + 10px);right:0;min-width:236px;background:var(--white);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 36px rgba(0,0,0,.18);padding:6px;z-index:120;display:none;}
+.profile-menu.open{display:block;animation:pmPop .14s ease;}
+@keyframes pmPop{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+.profile-head{display:flex;align-items:center;gap:11px;padding:10px 10px 12px;border-bottom:1px solid var(--border);margin-bottom:6px;}
+.profile-head .pa-lg{width:42px;height:42px;border-radius:50%;background:var(--navy);color:#fff;font-weight:700;font-size:18px;font-family:var(--serif);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.profile-head .pa-meta{min-width:0;}
+.profile-head .pa-email{font-size:12.5px;font-weight:600;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:158px;}
+.profile-head .pa-role{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-top:3px;}
+.profile-item{display:flex;align-items:center;gap:11px;width:100%;padding:10px;border:none;background:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text1);text-align:left;}
+.profile-item:hover{background:var(--surface);}
+.profile-item.danger{color:var(--red);}
+.profile-item .pi-ico{font-size:15px;width:18px;text-align:center;flex-shrink:0;}
 .upload-btn{display:flex;align-items:center;gap:7px;background:var(--navy);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px;transition:.15s;white-space:nowrap;}
 .upload-btn:hover{background:var(--navy2);}
 .upload-btn:active{transform:scale(.97);}
@@ -1174,6 +1191,20 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <div class="topbar-left">
       <div class="topbar-greeting" id="topbarGreeting">Good morning &#128075;</div>
       <div class="topbar-date" id="topbarDate"></div>
+    </div>
+    <div class="profile-wrap" id="profileWrap" style="display:none;">
+      <button class="profile-avatar" id="profileAvatar" onclick="toggleProfileMenu(event)" title="Account" aria-haspopup="true" aria-expanded="false">?</button>
+      <div class="profile-menu" id="profileMenu" role="menu">
+        <div class="profile-head">
+          <div class="pa-lg" id="profileMenuAvatar">?</div>
+          <div class="pa-meta">
+            <div class="pa-email" id="profileMenuEmail">&mdash;</div>
+            <div class="pa-role" id="profileMenuRole"></div>
+          </div>
+        </div>
+        <button class="profile-item" role="menuitem" onclick="_pmGo('settings')"><span class="pi-ico">&#9881;</span> Settings</button>
+        <button class="profile-item danger" role="menuitem" onclick="closeProfileMenu();authSignOut();"><span class="pi-ico">&#9099;</span> Sign out</button>
+      </div>
     </div>
   </div>
 
@@ -3367,6 +3398,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.15.0', date:'2026-07-20',
+    fixes:['Added a profile button in the top-right corner (a circle with your initial), like Google and other apps. Tap it to see your email and role and to sign out from anywhere — you no longer have to go into Settings to sign out.']
+  },
+  {
     v:'6.14.0', date:'2026-07-20',
     fixes:['Added a loading animation when you open the app — a housekeeper vacuuming with the gold "L" — so you no longer stare at a blank screen while the app starts up. It appears instantly and fades out on its own the moment the app is ready.']
   },
@@ -4169,7 +4204,36 @@ function _authUpdateUI(){
   var em=document.getElementById('settingsSignedInEmail');
   if(em)em.textContent=getSignedInEmail()||'—';
   refreshOwnerOnlyUI();
+  updateProfileAvatar();
 }
+
+/* ── Profile avatar + dropdown menu (top-right) ── */
+function updateProfileAvatar(){
+  var em=getSignedInEmail();
+  var ini=em?em.trim().charAt(0).toUpperCase():'?';
+  var a=document.getElementById('profileAvatar');if(a)a.textContent=ini;
+  var la=document.getElementById('profileMenuAvatar');if(la)la.textContent=ini;
+  var pe=document.getElementById('profileMenuEmail');if(pe)pe.textContent=em||'Not signed in';
+  var pr=document.getElementById('profileMenuRole');
+  if(pr)pr.textContent=(_isOwnerCached===true?'Owner':(_isOwnerCached===false?'Manager':''));
+  var w=document.getElementById('profileWrap');if(w)w.style.display=em?'':'none';
+}
+function toggleProfileMenu(e){
+  if(e)e.stopPropagation();
+  var m=document.getElementById('profileMenu');if(!m)return;
+  var open=m.classList.toggle('open');
+  var a=document.getElementById('profileAvatar');if(a)a.setAttribute('aria-expanded',open?'true':'false');
+}
+function closeProfileMenu(){
+  var m=document.getElementById('profileMenu');if(m)m.classList.remove('open');
+  var a=document.getElementById('profileAvatar');if(a)a.setAttribute('aria-expanded','false');
+}
+function _pmGo(page){ closeProfileMenu(); try{showPage(page);}catch(e){} }
+document.addEventListener('click',function(e){
+  var w=document.getElementById('profileWrap');
+  if(w&&!w.contains(e.target))closeProfileMenu();
+});
+document.addEventListener('keydown',function(e){ if(e.key==='Escape')closeProfileMenu(); });
 
 /* ══════════════════════════════════════════════════════
    TEAM ACCESS
@@ -4254,6 +4318,7 @@ function refreshOwnerOnlyUI(){
     .then(function(rows){
       _isOwnerCached=!!(rows&&rows[0]&&rows[0].role==='owner');
       show(_isOwnerCached);
+      try{updateProfileAvatar();}catch(e){} /* fill Owner/Manager once known */
     }).catch(function(){show(false);});
 }
 
