@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.21.0"/>
+<meta name="app-version" content="6.22.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3410,6 +3410,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.22.0', date:'2026-07-20',
+    fixes:['Weekly Labor Pace now also shows a "Project hours this week" strip (below the training one) — the hours logged to your special projects (e.g. 812 Building Prep, Go Back Rooms) for that hotel week, broken down by position with a total and listed by project name. So in the labor meeting you can explain a week\'s hours as training vs. project work at a glance. Read-only, pulled automatically from Projects; only appears on weeks that had project hours.']
+  },
   {
     v:'6.21.0', date:'2026-07-20',
     fixes:['The "Training hours this week" strip under Weekly Labor Pace now also lists the trainees by name — each with their position and the total hours they worked in that week — under the by-position totals. So in the labor meeting you can see exactly who was in training that week and how much.']
@@ -8437,35 +8441,20 @@ function buildWeeklyPaceHTML(days,rooms,wk){
 
   html+='</div>';
 
-  /* ── Training hours logged this week, by position — read-only visual from the
-     Training Hours section, so training hours can be discussed in the labor
-     meeting right under the week's pace. Only shows when there are any. ── */
+  /* ── Extra hours logged this week (training + special projects) — read-only
+     visuals under the week's pace, so both can be explained in the labor
+     meeting. Each strip only appears when that week had those hours. ── */
   try{
     var _twk=dateStr(getHotelWeekStart(wk.start));
     var _tw=getTrainingSummary().weeks.filter(function(w){return w.key===_twk;})[0];
     if(_tw){
-      html+='<div style="border-top:1px solid var(--border);background:var(--gt);padding:10px 14px;">';
-      html+='<div style="font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">&#127891; Training hours this week</div>';
-      html+='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
-      Object.keys(_tw.byPos).sort().forEach(function(pos){
-        html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;white-space:nowrap;">'
-          +'<span style="color:var(--text2);">'+escHtml(pos)+'</span> '
-          +'<strong style="color:var(--navy);">'+_tw.byPos[pos].toFixed(2)+'h</strong></div>';
-      });
-      html+='<div style="background:var(--navy);border-radius:8px;padding:5px 10px;font-size:11px;color:#fff;white-space:nowrap;"><span style="opacity:.7;">Total</span> <strong>'+_tw.total.toFixed(2)+'h</strong></div>';
-      html+='</div>';
-      /* Who was in training this week — name · position · their hours for the week */
-      if(_tw.emps&&_tw.emps.length){
-        html+='<div style="margin-top:9px;padding-top:9px;border-top:1px dashed var(--gold);">';
-        _tw.emps.forEach(function(em){
-          html+='<div style="display:flex;align-items:baseline;gap:6px;font-size:11px;padding:2px 0;">'
-            +'<span style="font-weight:700;color:var(--text1);">'+escHtml(em.name)+'</span>'
-            +'<span style="color:var(--text3);">'+escHtml(em.pos||'')+'</span>'
-            +'<strong style="margin-left:auto;color:var(--navy);">'+em.hours.toFixed(2)+'h</strong></div>';
-        });
-        html+='</div>';
-      }
-      html+='</div>';
+      html+=_paceExtraStrip('Training hours this week','&#127891;','var(--gt)','var(--gd)',_tw.byPos,_tw.total,
+        (_tw.emps||[]).map(function(em){return {name:em.name,sub:em.pos,hours:em.hours};}));
+    }
+    var _pw=getProjectHoursForWeek(_twk);
+    if(_pw.total>0){
+      html+=_paceExtraStrip('Project hours this week','&#128193;','var(--surface)','var(--navy)',_pw.byPos,_pw.total,
+        _pw.projects.map(function(pr){return {name:pr.name,sub:'',hours:pr.hours};}));
     }
   }catch(e){}
 
@@ -11194,6 +11183,47 @@ function getTrainingSummary(){
   });
   return {positions:positions,weeks:weeks,grandTotal:grandTotal,grandByPos:grandByPos,
           perTrainee:perTrainee,traineeCount:trainees.length,minStart:minStart,maxEnd:maxEnd};
+}
+/* Special-project (non-training) hours logged in one hotel week, by position and
+   by project name — powers the "Project hours this week" strip under the pace. */
+function getProjectHoursForWeek(weekKey){
+  var projects=loadProjects(), byPos={}, byProject={}, total=0;
+  projects.forEach(function(p){
+    if(p.kind==='training')return;
+    (p.log||[]).forEach(function(e){
+      if(e.pending||e.off)return;
+      var hh=e.hours||0; if(!hh)return;
+      if(projWeekKey(e.date)!==weekKey)return;
+      var pos=e.pos||'Unknown';
+      byPos[pos]=(byPos[pos]||0)+hh;
+      byProject[p.name]=(byProject[p.name]||0)+hh;
+      total+=hh;
+    });
+  });
+  return {total:total,byPos:byPos,
+    projects:Object.keys(byProject).sort().map(function(n){return {name:n,hours:byProject[n]};})};
+}
+/* Shared renderer for an "extra hours this week" strip under Weekly Labor Pace:
+   by-position chips + a total, then an optional name list. Used for both the
+   training strip and the projects strip so they stay visually identical. */
+function _paceExtraStrip(title, icon, tintVar, accentVar, byPos, total, rows){
+  var h='<div style="border-top:1px solid var(--border);background:'+tintVar+';padding:10px 14px;">';
+  h+='<div style="font-size:9px;font-weight:700;color:'+accentVar+';text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">'+icon+' '+title+'</div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+  Object.keys(byPos).sort().forEach(function(pos){
+    h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;white-space:nowrap;"><span style="color:var(--text2);">'+escHtml(pos)+'</span> <strong style="color:var(--navy);">'+byPos[pos].toFixed(2)+'h</strong></div>';
+  });
+  h+='<div style="background:var(--navy);border-radius:8px;padding:5px 10px;font-size:11px;color:#fff;white-space:nowrap;"><span style="opacity:.7;">Total</span> <strong>'+total.toFixed(2)+'h</strong></div>';
+  h+='</div>';
+  if(rows&&rows.length){
+    h+='<div style="margin-top:9px;padding-top:9px;border-top:1px dashed '+accentVar+';">';
+    rows.forEach(function(r){
+      h+='<div style="display:flex;align-items:baseline;gap:6px;font-size:11px;padding:2px 0;"><span style="font-weight:700;color:var(--text1);">'+escHtml(r.name)+'</span>'+(r.sub?'<span style="color:var(--text3);">'+escHtml(r.sub)+'</span>':'')+'<strong style="margin-left:auto;color:var(--navy);">'+r.hours.toFixed(2)+'h</strong></div>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
 }
 /* One combined PDF for the whole department's training hours (not one per employee). */
 function exportTrainingSummaryPDF(){
