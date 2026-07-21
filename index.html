@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.19.0"/>
+<meta name="app-version" content="6.20.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3410,6 +3410,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.20.0', date:'2026-07-20',
+    fixes:['Labor → Weekly Labor Pace now shows a small "Training hours this week" strip right under each week, listing the training hours by position (with a total) for that hotel week. It only appears on weeks that had training hours, so in the labor meeting you can point to exactly how much of that week\'s hours were training. Read-only — pulled automatically from the Training Hours section.']
+  },
   {
     v:'6.19.0', date:'2026-07-20',
     fixes:['Training Hours now has a department-wide view. (1) At the top there\'s a "Training hours by week & position" table — all trainees combined, broken down by hotel week (Sat–Fri) and position, so you can see at a glance which week to scrutinize for training hours. (2) One "Summary PDF" button replaces the per-employee PDFs: it prints a single report with the week × position breakdown, hours by position, and a per-trainee total list, for the weekly labor meeting.']
@@ -8428,6 +8432,26 @@ function buildWeeklyPaceHTML(days,rooms,wk){
   });
 
   html+='</div>';
+
+  /* ── Training hours logged this week, by position — read-only visual from the
+     Training Hours section, so training hours can be discussed in the labor
+     meeting right under the week's pace. Only shows when there are any. ── */
+  try{
+    var _twk=dateStr(getHotelWeekStart(wk.start));
+    var _tw=getTrainingSummary().weeks.filter(function(w){return w.key===_twk;})[0];
+    if(_tw){
+      html+='<div style="border-top:1px solid var(--border);background:var(--gt);padding:10px 14px;">';
+      html+='<div style="font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">&#127891; Training hours this week</div>';
+      html+='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+      Object.keys(_tw.byPos).sort().forEach(function(pos){
+        html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;white-space:nowrap;">'
+          +'<span style="color:var(--text2);">'+escHtml(pos)+'</span> '
+          +'<strong style="color:var(--navy);">'+_tw.byPos[pos].toFixed(2)+'h</strong></div>';
+      });
+      html+='<div style="background:var(--navy);border-radius:8px;padding:5px 10px;font-size:11px;color:#fff;white-space:nowrap;"><span style="opacity:.7;">Total</span> <strong>'+_tw.total.toFixed(2)+'h</strong></div>';
+      html+='</div></div>';
+    }
+  }catch(e){}
 
   html+='</div>';
   return html;
