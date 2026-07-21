@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.16.0"/>
+<meta name="app-version" content="6.17.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3410,6 +3410,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.17.0', date:'2026-07-20',
+    fixes:['Training Hours is now semi-automatic. When you upload a report and the app finds a brand-new employee, the "New Employee Detected" box now includes a pre-checked "Add to Training Hours" option with their training dates — one glance and they\'re tracked (uncheck it for a transfer or rehire who isn\'t really a trainee). The dates anchor to the report date, not an HR hire date, so it still works when HR adds someone late. If a trainee actually started earlier than their first report (e.g. they started Monday but first showed up in Tuesday\'s report), set their first day back — either in that box or with the new "Edit dates" (✎) button on their card — and those earlier days fill in automatically once that day\'s report is uploaded.']
+  },
   {
     v:'6.16.0', date:'2026-07-20',
     fixes:['New "Training Hours" section. Add a new hire and set their training start and end dates once — then each day, as you upload the Labor Distribution Report, that employee\'s hours fill in automatically for every day of their training window. Each trainee shows a day-by-day list, a Sat–Fri weekly total, and a grand total, with a PDF you can print for the weekly labor meeting to explain training hours when you\'re over on the week. Nothing to log by hand day by day.']
@@ -11141,6 +11145,7 @@ function renderTrainingHours(){
     html+='</div>';
     html+='<div style="display:flex;gap:6px;flex-shrink:0;">';
     html+='<button onclick="showExportPDFModal('+idx+')" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;">&#128196; PDF</button>';
+    html+='<button onclick="showEditTraineeModal('+idx+')" style="background:none;color:var(--text3);border:none;padding:7px 8px;font-size:14px;cursor:pointer;" title="Edit training dates">&#9998;</button>';
     html+='<button onclick="deleteTrainee('+idx+')" style="background:none;color:var(--text3);border:none;padding:7px 8px;font-size:14px;cursor:pointer;" title="Remove trainee">&#128465;</button>';
     html+='</div></div>';
     html+='<div style="padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">';
@@ -11206,6 +11211,27 @@ function showAddTraineeModal(){
   document.getElementById('trEnd').value=dateStr(wk);
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
 }
+/* Build a trainee's day-by-day log for [start,end], PRESERVING any existing
+   entry for a date that stays in range (so already-filled hours are never
+   lost when the window is edited) and adding a pending entry for new days. */
+function _buildTraineeLog(empId, empName, pos, start, end, existingLog){
+  var byDate={};
+  (existingLog||[]).forEach(function(e){ if(e&&e.date)byDate[e.date]=e; });
+  return _datesInRange(start,end).map(function(ds){
+    if(byDate[ds])return byDate[ds];
+    return {date:ds, empId:empId, empName:empName, pos:pos, hours:null, pending:true, added:new Date().toISOString()};
+  });
+}
+/* Create a trainee (a kind:'training' project). Returns the new record's id.
+   Unique id even when several are created in the same millisecond (bulk add). */
+function createTrainee(empId, empName, pos, start, end, note){
+  var id=Date.now()*1000+Math.floor(Math.random()*1000);
+  var log=_buildTraineeLog(empId, empName, pos, start, end, null);
+  var projects=loadProjects();
+  projects.unshift({id:id, kind:'training', name:empName, empId:empId, pos:pos, startDate:start, endDate:end, notes:note||'', log:log, created:new Date().toISOString()});
+  saveProjects(projects);
+  return id;
+}
 function saveNewTrainee(){
   var sel=document.getElementById('trEmp');
   var empId=(sel&&sel.value)||'';
@@ -11215,21 +11241,63 @@ function saveNewTrainee(){
   if(!empId){showToast('Please select an employee.');return;}
   if(!start||!end){showToast('Please set both training dates.');return;}
   if(start>end){showToast('Last day must be on or after the first day.');return;}
-  var dates=_datesInRange(start,end);
-  if(dates.length>60){showToast('That range is over 60 days — please shorten it.');return;}
+  if(_datesInRange(start,end).length>60){showToast('That range is over 60 days — please shorten it.');return;}
   var emp=getProjectEmployeeOptions().filter(function(e){return String(e.id)===String(empId);})[0];
   var empName=emp?emp.name:empId;
   var pos=emp?(emp.pos||''):'';
-  var log=dates.map(function(ds){
-    return {date:ds, empId:empId, empName:empName, pos:pos, hours:null, pending:true, added:new Date().toISOString()};
-  });
-  var projects=loadProjects();
-  projects.unshift({id:Date.now(), kind:'training', name:empName, empId:empId, pos:pos, startDate:start, endDate:end, notes:note, log:log, created:new Date().toISOString()});
-  saveProjects(projects);
+  createTrainee(empId, empName, pos, start, end, note);
   var m=document.getElementById('traineeModal');if(m)m.remove();
   try{autofillAllPendingProjectEntries();}catch(e){}
   renderTrainingHours();
-  showToast('&#10003; Trainee added — '+dates.length+' day'+(dates.length===1?'':'s')+' set');
+  showToast('&#10003; Trainee added — '+_datesInRange(start,end).length+' day'+(_datesInRange(start,end).length===1?'':'s')+' set');
+}
+/* Edit a trainee's date range. Extending backward (e.g. their real first day
+   turned out to be earlier) adds pending days that auto-fill when their report
+   loads; already-filled days are kept. */
+function showEditTraineeModal(idx){
+  var t=loadProjects()[idx];
+  if(!t||t.kind!=='training')return;
+  var overlay=document.createElement('div');
+  overlay.id='editTraineeModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#9998; Edit Training Dates</div>'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(t.name)+' &middot; '+escHtml(t.pos||'')+'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:13px;">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">First training day *</label>'
+    +'<input id="etStart" type="date" value="'+t.startDate+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Last training day *</label>'
+    +'<input id="etEnd" type="date" value="'+t.endDate+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'</div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'
+    +'<input id="etNote" value="'+escHtml(t.notes||'')+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'<div style="font-size:11px;color:var(--text3);line-height:1.5;">Days already filled from a report are kept. New days start as Pending and fill in when that day\'s report is uploaded.</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:20px;">'
+    +'<button onclick="document.getElementById(\'editTraineeModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveEditTrainee('+idx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save</button>'
+    +'</div></div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+function saveEditTrainee(idx){
+  var projects=loadProjects();
+  var t=projects[idx];
+  if(!t||t.kind!=='training')return;
+  var start=(document.getElementById('etStart').value||'').trim();
+  var end=(document.getElementById('etEnd').value||'').trim();
+  var note=(document.getElementById('etNote').value||'').trim();
+  if(!start||!end){showToast('Please set both training dates.');return;}
+  if(start>end){showToast('Last day must be on or after the first day.');return;}
+  if(_datesInRange(start,end).length>60){showToast('That range is over 60 days — please shorten it.');return;}
+  t.startDate=start; t.endDate=end; t.notes=note;
+  t.log=_buildTraineeLog(t.empId, t.name, t.pos, start, end, t.log);
+  saveProjects(projects);
+  var m=document.getElementById('editTraineeModal');if(m)m.remove();
+  try{autofillAllPendingProjectEntries();}catch(e){}
+  renderTrainingHours();
+  showToast('&#10003; Training dates updated');
 }
 function deleteTrainee(idx){
   var projects=loadProjects();
@@ -12257,6 +12325,13 @@ function showNewEmployeeModal(newEmps, pdfDate){
   var existing=document.getElementById('newEmpModal');
   if(existing)existing.remove();
 
+  /* Default training window: the report date (their first appearance) through
+     +6 days = one week. Editable per employee — the manager may know they
+     actually started a day or two earlier than this report. */
+  var _trStart=pdfDate||dateStr(new Date());
+  var _trEndD=parseLocalDate(_trStart); _trEndD.setDate(_trEndD.getDate()+6);
+  var _trEnd=dateStr(_trEndD);
+
   var posOptions=Object.keys(HK_POS).map(function(code){
     return '<option value="'+HK_POS[code]+'|'+code+'">'+HK_POS[code]+'</option>';
   }).join('');
@@ -12275,6 +12350,17 @@ function showNewEmployeeModal(newEmps, pdfDate){
       +'<select id="newEmpPos_'+i+'" style="flex:1;min-width:160px;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:#fff;">'
       +posOptions
       +'</select>'
+      +'</div>'
+      +'<div style="margin-top:11px;padding-top:11px;border-top:1px dashed var(--border);">'
+      +'<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--navy);cursor:pointer;">'
+      +'<input type="checkbox" id="newEmpTrain_'+i+'" checked onchange="var d=document.getElementById(\'newEmpTrainDates_'+i+'\');if(d)d.style.display=this.checked?\'flex\':\'none\';" style="width:16px;height:16px;cursor:pointer;"> &#127891; Add to Training Hours</label>'
+      +'<div id="newEmpTrainDates_'+i+'" style="display:flex;gap:8px;margin-top:9px;">'
+      +'<div style="flex:1;"><label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:3px;">First training day</label>'
+      +'<input type="date" id="newEmpTrainStart_'+i+'" value="'+_trStart+'" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;"></div>'
+      +'<div style="flex:1;"><label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:3px;">Last training day</label>'
+      +'<input type="date" id="newEmpTrainEnd_'+i+'" value="'+_trEnd+'" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;"></div>'
+      +'</div>'
+      +'<div style="font-size:10.5px;color:var(--text3);margin-top:6px;line-height:1.5;">If they actually started earlier than this report, set the first day back — those days fill in when that day\'s report is uploaded.</div>'
       +'</div>'
       +'<input type="hidden" id="newEmpId_'+i+'" value="'+e.id+'">'
       +'<input type="hidden" id="newEmpName_'+i+'" value="'+escHtml(e.name)+'">'
@@ -12311,6 +12397,7 @@ function showNewEmployeeModal(newEmps, pdfDate){
 function confirmNewEmployees(count){
   var added=0;
   var addedIds=[];
+  var trainAdded=0;
   for(var i=0;i<count;i++){
     var idEl=document.getElementById('newEmpId_'+i);
     var nameEl=document.getElementById('newEmpName_'+i);
@@ -12336,6 +12423,20 @@ function confirmNewEmployees(count){
       }
     }catch(e){}
     added++;
+    /* Forma 1: if the "Add to Training Hours" box is checked, create the
+       trainee with the (editable) dates from the modal. Anchored to the report
+       date, not any HR hire date, so late HR entry never breaks the window. */
+    try{
+      var trCk=document.getElementById('newEmpTrain_'+i);
+      if(trCk&&trCk.checked){
+        var ts=(document.getElementById('newEmpTrainStart_'+i)||{}).value||'';
+        var te=(document.getElementById('newEmpTrainEnd_'+i)||{}).value||'';
+        if(ts&&te&&ts<=te&&_datesInRange(ts,te).length<=60){
+          createTrainee(id,name,pos,ts,te,'New hire — training');
+          trainAdded++;
+        }
+      }
+    }catch(e){}
   }
   if(added>0){
     /* Persist ONLY the newly-added employees as proper override records, each
@@ -12356,6 +12457,12 @@ function confirmNewEmployees(count){
     }catch(e){}
     try{renderRoster();}catch(e){}
     showToast('✓ '+added+' employee'+(added>1?'s':'')+' added to roster');
+  }
+  if(trainAdded>0){
+    try{autofillAllPendingProjectEntries();}catch(e){}
+    try{updateTrainHoursBadge();}catch(e){}
+    try{if(currentPage==='trainhours')renderTrainingHours();}catch(e){}
+    showToast('&#127891; '+trainAdded+' added to Training Hours');
   }
   document.getElementById('newEmpModal').remove();
 }
