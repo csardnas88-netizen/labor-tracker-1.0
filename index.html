@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.13.1"/>
+<meta name="app-version" content="6.14.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -840,6 +840,146 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </style>
 </head>
 <body>
+
+<!-- ══ APP LOADER (splash) — shown instantly on open, fades out when ready.
+     Fully namespaced (hkl-*) and colors scoped to #appLoader so it can't
+     touch the rest of the app's styles. ══ -->
+<style id="hklLoaderStyle">
+  #appLoader{
+    --hkl-navy:#1f3457; --hkl-navy-dark:#142642;
+    --hkl-gold:#d7b25a; --hkl-gold-light:#f0cf7a;
+    --hkl-skin:#d99a6c; --hkl-hair:#2c211c;
+    position:fixed; inset:0; z-index:100000;
+    display:flex; align-items:center; justify-content:center;
+    background:
+      radial-gradient(circle at 50% 42%, rgba(255,255,255,.05), transparent 38%),
+      linear-gradient(180deg,var(--hkl-navy) 0%,var(--hkl-navy-dark) 100%);
+    overflow:hidden;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  #appLoader .hkl-scene{width:320px;height:330px;position:relative;transform:translateY(-10px);}
+  #appLoader .hkl-character{position:absolute;left:62px;top:45px;width:120px;height:190px;transform-origin:60px 150px;animation:hkl-body-bob 1.2s ease-in-out infinite;}
+  #appLoader .hkl-head{position:absolute;width:48px;height:54px;left:36px;top:0;background:var(--hkl-skin);border-radius:48% 48% 46% 46%;z-index:5;}
+  #appLoader .hkl-hair{position:absolute;width:50px;height:28px;left:35px;top:-3px;background:var(--hkl-hair);border-radius:60% 60% 35% 35%;z-index:6;}
+  #appLoader .hkl-bun{position:absolute;width:24px;height:24px;left:49px;top:-16px;background:var(--hkl-hair);border-radius:50%;z-index:6;}
+  #appLoader .hkl-eye{position:absolute;width:4px;height:4px;background:#1d1d1d;border-radius:50%;top:27px;z-index:7;}
+  #appLoader .hkl-eye.hkl-left{left:14px}
+  #appLoader .hkl-eye.hkl-right{right:14px}
+  #appLoader .hkl-smile{position:absolute;width:16px;height:8px;border-bottom:2px solid #7f4a35;border-radius:50%;left:16px;top:35px;z-index:7;}
+  #appLoader .hkl-torso{position:absolute;width:70px;height:86px;left:25px;top:51px;background:var(--hkl-navy-dark);border-radius:16px 16px 12px 12px;z-index:3;}
+  #appLoader .hkl-collar{position:absolute;width:34px;height:15px;left:43px;top:52px;background:var(--hkl-gold);clip-path:polygon(0 0,50% 100%,100% 0,78% 0,50% 55%,22% 0);z-index:4;}
+  #appLoader .hkl-apron{position:absolute;width:72px;height:45px;left:24px;top:104px;background:#c9a56b;border-radius:4px 4px 14px 14px;z-index:4;}
+  #appLoader .hkl-arm{position:absolute;width:18px;height:76px;background:var(--hkl-skin);border-radius:12px;transform-origin:9px 8px;z-index:2;}
+  #appLoader .hkl-arm.hkl-back{left:17px;top:64px;transform:rotate(18deg);}
+  #appLoader .hkl-arm.hkl-front{left:84px;top:65px;transform:rotate(-24deg);animation:hkl-arm-sweep 1.2s ease-in-out infinite;}
+  #appLoader .hkl-leg{position:absolute;width:24px;height:64px;top:132px;background:var(--hkl-navy-dark);border-radius:10px;z-index:2;}
+  #appLoader .hkl-leg.hkl-left{left:32px;transform:rotate(5deg)}
+  #appLoader .hkl-leg.hkl-right{left:66px;transform:rotate(-4deg)}
+  #appLoader .hkl-shoe{position:absolute;width:32px;height:12px;background:#1d1d1d;border-radius:10px 10px 4px 4px;top:186px;z-index:3;}
+  #appLoader .hkl-shoe.hkl-left{left:24px}
+  #appLoader .hkl-shoe.hkl-right{left:65px}
+  #appLoader .hkl-vacuum{position:absolute;left:10px;top:190px;width:90px;height:58px;border-radius:30px 30px 16px 16px;background:linear-gradient(145deg,var(--hkl-gold-light),#b98d35);box-shadow:0 10px 24px rgba(0,0,0,.22);}
+  #appLoader .hkl-vacuum:before{content:"L";position:absolute;left:37px;top:12px;font-family:Georgia,serif;font-size:25px;color:var(--hkl-navy-dark);font-weight:700;}
+  #appLoader .hkl-wheel{position:absolute;width:20px;height:20px;border-radius:50%;background:#20242d;bottom:-7px;border:3px solid #3b414d;}
+  #appLoader .hkl-wheel.hkl-left{left:10px}
+  #appLoader .hkl-wheel.hkl-right{right:10px}
+  #appLoader .hkl-hose{position:absolute;left:79px;top:148px;width:105px;height:95px;border:8px solid #20242d;border-left-color:transparent;border-bottom-color:transparent;border-radius:50%;transform:rotate(15deg);}
+  #appLoader .hkl-wand{position:absolute;left:157px;top:145px;width:10px;height:115px;background:linear-gradient(90deg,#b88c35,var(--hkl-gold-light));border-radius:8px;transform-origin:5px 7px;transform:rotate(-38deg);animation:hkl-wand-sweep 1.2s ease-in-out infinite;z-index:8;}
+  #appLoader .hkl-wand:after{content:"";position:absolute;width:64px;height:18px;left:-27px;bottom:-7px;background:linear-gradient(180deg,var(--hkl-gold-light),#b88c35);border-radius:5px 5px 9px 9px;}
+  #appLoader .hkl-debris{position:absolute;right:18px;top:244px;width:105px;height:45px;}
+  #appLoader .hkl-piece{position:absolute;background:var(--hkl-gold);animation:hkl-suck 2.4s linear infinite;opacity:0;}
+  #appLoader .hkl-p1{width:10px;height:10px;left:78px;top:24px;animation-delay:0s}
+  #appLoader .hkl-p2{width:7px;height:7px;left:94px;top:10px;animation-delay:.25s}
+  #appLoader .hkl-p3{width:12px;height:6px;left:58px;top:7px;animation-delay:.5s}
+  #appLoader .hkl-p4{width:6px;height:6px;left:43px;top:30px;animation-delay:.75s}
+  #appLoader .hkl-p5{width:9px;height:9px;left:87px;top:34px;animation-delay:1s}
+  #appLoader .hkl-p6{width:6px;height:6px;left:69px;top:18px;animation-delay:1.25s}
+  #appLoader .hkl-spark{position:absolute;color:var(--hkl-gold-light);font-size:22px;opacity:0;animation:hkl-sparkle 2.4s ease-in-out infinite;}
+  #appLoader .hkl-s1{right:48px;top:195px;animation-delay:1.55s}
+  #appLoader .hkl-s2{right:18px;top:215px;animation-delay:1.7s}
+  #appLoader .hkl-loading{position:absolute;width:100%;bottom:18px;text-align:center;color:var(--hkl-gold-light);letter-spacing:.28em;font-size:18px;font-weight:600;}
+  #appLoader .hkl-dots{display:flex;justify-content:center;gap:10px;margin-top:15px;}
+  #appLoader .hkl-dot{width:10px;height:10px;border-radius:50%;background:rgba(215,178,90,.25);animation:hkl-dot 1.4s ease-in-out infinite;}
+  #appLoader .hkl-dot:nth-child(2){animation-delay:.18s}
+  #appLoader .hkl-dot:nth-child(3){animation-delay:.36s}
+  #appLoader .hkl-dot:nth-child(4){animation-delay:.54s}
+  @keyframes hkl-body-bob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(3px) rotate(1deg)}}
+  @keyframes hkl-arm-sweep{0%,100%{transform:rotate(-24deg)}50%{transform:rotate(-34deg)}}
+  @keyframes hkl-wand-sweep{0%,100%{transform:rotate(-38deg)}50%{transform:rotate(-30deg)}}
+  @keyframes hkl-suck{0%{opacity:0;transform:translate(0,0) scale(1) rotate(0)}15%{opacity:1}72%{opacity:1;transform:translate(-72px,-8px) scale(.55) rotate(180deg)}100%{opacity:0;transform:translate(-92px,-15px) scale(.1) rotate(270deg)}}
+  @keyframes hkl-sparkle{0%,65%,100%{opacity:0;transform:scale(.4)}76%{opacity:1;transform:scale(1.1)}88%{opacity:0;transform:scale(.8)}}
+  @keyframes hkl-dot{0%,100%{background:rgba(215,178,90,.25);transform:scale(.85)}50%{background:var(--hkl-gold-light);transform:scale(1.2)}}
+  @media (prefers-reduced-motion: reduce){#appLoader *,#appLoader *:before,#appLoader *:after{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+<div id="appLoader" role="status" aria-label="Loading">
+  <div class="hkl-scene">
+    <div class="hkl-character">
+      <div class="hkl-bun"></div>
+      <div class="hkl-head">
+        <div class="hkl-eye hkl-left"></div>
+        <div class="hkl-eye hkl-right"></div>
+        <div class="hkl-smile"></div>
+      </div>
+      <div class="hkl-hair"></div>
+      <div class="hkl-torso"></div>
+      <div class="hkl-collar"></div>
+      <div class="hkl-apron"></div>
+      <div class="hkl-arm hkl-back"></div>
+      <div class="hkl-arm hkl-front"></div>
+      <div class="hkl-leg hkl-left"></div>
+      <div class="hkl-leg hkl-right"></div>
+      <div class="hkl-shoe hkl-left"></div>
+      <div class="hkl-shoe hkl-right"></div>
+    </div>
+    <div class="hkl-vacuum">
+      <div class="hkl-wheel hkl-left"></div>
+      <div class="hkl-wheel hkl-right"></div>
+    </div>
+    <div class="hkl-hose"></div>
+    <div class="hkl-wand"></div>
+    <div class="hkl-debris">
+      <span class="hkl-piece hkl-p1"></span>
+      <span class="hkl-piece hkl-p2"></span>
+      <span class="hkl-piece hkl-p3"></span>
+      <span class="hkl-piece hkl-p4"></span>
+      <span class="hkl-piece hkl-p5"></span>
+      <span class="hkl-piece hkl-p6"></span>
+    </div>
+    <div class="hkl-spark hkl-s1">&#10022;</div>
+    <div class="hkl-spark hkl-s2">&#10022;</div>
+    <div class="hkl-loading">
+      LOADING
+      <div class="hkl-dots">
+        <span class="hkl-dot"></span>
+        <span class="hkl-dot"></span>
+        <span class="hkl-dot"></span>
+        <span class="hkl-dot"></span>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  /* Splash loader: guarantees a minimum on-screen time so it doesn't just
+     flash, then fades out. A hard fallback removes it even if the app's
+     boot code never calls hide, so it can never trap the user on the splash. */
+  window.__hklLoaderStart=Date.now();
+  window.__hklHidden=false;
+  function hideLaborLoader(){
+    if(window.__hklHidden)return;
+    var loader=document.getElementById('appLoader');
+    if(!loader)return;
+    var MIN=1400;
+    var wait=Math.max(0,MIN-(Date.now()-window.__hklLoaderStart));
+    setTimeout(function(){
+      window.__hklHidden=true;
+      loader.style.transition='opacity .35s ease';
+      loader.style.opacity='0';
+      setTimeout(function(){if(loader&&loader.parentNode)loader.parentNode.removeChild(loader);},380);
+    },wait);
+  }
+  /* Safety net: never let the splash trap the user if boot code fails. */
+  setTimeout(hideLaborLoader,8000);
+</script>
 
 <!-- ── PIN Gate ─────────────────────────────────────────── -->
 <div id="pinOverlay" style="display:none;">
@@ -3226,6 +3366,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.14.0', date:'2026-07-20',
+    fixes:['Added a loading animation when you open the app — a housekeeper vacuuming with the gold "L" — so you no longer stare at a blank screen while the app starts up. It appears instantly and fades out on its own the moment the app is ready.']
+  },
   {
     v:'6.13.1', date:'2026-07-20',
     fixes:['Fixed a confusing sign-up message. Email confirmation is turned off — new accounts can sign in right away, no email needed. But if you tapped "Create account" using an email that already had an account, the app wrongly said "Check your email to confirm," and people waited for an email that never came. Now it tells you clearly that the account already exists and switches you to the sign-in screen. Also, if a new account isn\'t on the Team Access list yet, sign-up now says so instead of dropping you into an empty app.']
@@ -11997,6 +12141,8 @@ window.addEventListener('load',function(){
   setTimeout(syncFromSheets,1000);
   setTimeout(maybeAutoSnapshot,3000);
   try{registerServiceWorker();}catch(e){}
+  /* App is rendered underneath — fade the splash out (min-display guard inside). */
+  try{hideLaborLoader();}catch(e){}
 
   /* Date picker defaults to yesterday */
   var yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
