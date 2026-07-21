@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.18.0"/>
+<meta name="app-version" content="6.19.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3410,6 +3410,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.19.0', date:'2026-07-20',
+    fixes:['Training Hours now has a department-wide view. (1) At the top there\'s a "Training hours by week & position" table — all trainees combined, broken down by hotel week (Sat–Fri) and position, so you can see at a glance which week to scrutinize for training hours. (2) One "Summary PDF" button replaces the per-employee PDFs: it prints a single report with the week × position breakdown, hours by position, and a per-trainee total list, for the weekly labor meeting.']
+  },
   {
     v:'6.18.0', date:'2026-07-20',
     fixes:['Training Hours: you can now mark a trainee\'s days off. A new hire works ~5 days and rests ~2 per week, so their rest days shouldn\'t sit there as "Pending" (which means "waiting for the report"). On each day in a trainee\'s list, tap "Off" to mark it a day off — it stops counting as pending and shows as "Off" (including on the printed PDF). Tap "undo" to put it back if you marked it by mistake. Days off don\'t change the total; they just make the record accurate.']
@@ -11115,13 +11119,101 @@ function updateTrainHoursBadge(){
   if(active>0){badge.textContent=active;badge.style.display='inline-flex';}
   else{badge.style.display='none';}
 }
+/* Aggregate every trainee's real (filled, non-off) hours by hotel week and
+   position, plus per-trainee totals. Powers both the on-screen matrix and the
+   Summary PDF. */
+function getTrainingSummary(){
+  var trainees=loadTrainees();
+  var posSet={}, byWeek={}, grandTotal=0, grandByPos={}, perTrainee=[];
+  var minStart=null, maxEnd=null;
+  trainees.forEach(function(x){
+    var t=x.t, tTotal=0;
+    if(t.startDate&&(!minStart||t.startDate<minStart))minStart=t.startDate;
+    if(t.endDate&&(!maxEnd||t.endDate>maxEnd))maxEnd=t.endDate;
+    (t.log||[]).forEach(function(e){
+      if(e.pending||e.off)return;
+      var h=e.hours||0; if(!h)return;
+      var pos=e.pos||'Unknown', wk=projWeekKey(e.date);
+      if(!byWeek[wk])byWeek[wk]={};
+      byWeek[wk][pos]=(byWeek[wk][pos]||0)+h;
+      posSet[pos]=1; grandTotal+=h; grandByPos[pos]=(grandByPos[pos]||0)+h; tTotal+=h;
+    });
+    perTrainee.push({name:t.name,pos:t.pos,startDate:t.startDate,endDate:t.endDate,total:tTotal});
+  });
+  var positions=Object.keys(posSet).sort();
+  var weeks=Object.keys(byWeek).sort().map(function(wk){
+    var bp=byWeek[wk], total=0; Object.keys(bp).forEach(function(p){total+=bp[p];});
+    return {key:wk,label:projWeekLabel(wk),byPos:bp,total:total};
+  });
+  return {positions:positions,weeks:weeks,grandTotal:grandTotal,grandByPos:grandByPos,
+          perTrainee:perTrainee,traineeCount:trainees.length,minStart:minStart,maxEnd:maxEnd};
+}
+/* One combined PDF for the whole department's training hours (not one per employee). */
+function exportTrainingSummaryPDF(){
+  var s=getTrainingSummary();
+  if(s.traineeCount===0){showToast('No trainees to report yet.');return;}
+  var wkHead='<th style="text-align:left;">Week</th>'+s.positions.map(function(p){return '<th style="text-align:right;">'+escHtml(p)+'</th>';}).join('')+'<th style="text-align:right;">Total</th>';
+  var wkRows=s.weeks.map(function(w){
+    return '<tr><td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;">'+escHtml(w.label)+'</td>'
+      +s.positions.map(function(p){var v=w.byPos[p];return '<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;text-align:right;">'+(v?v.toFixed(2)+'h':'—')+'</td>';}).join('')
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-align:right;">'+w.total.toFixed(2)+'h</td></tr>';
+  }).join('');
+  var wkTotal='<tr class="total-row"><td style="padding:10px 12px;font-size:13px;">Total</td>'
+    +s.positions.map(function(p){var v=s.grandByPos[p];return '<td style="padding:10px 12px;font-size:12px;font-weight:700;text-align:right;">'+(v?v.toFixed(2)+'h':'—')+'</td>';}).join('')
+    +'<td style="padding:10px 12px;font-size:14px;font-weight:800;text-align:right;color:var(--navy);">'+s.grandTotal.toFixed(2)+'h</td></tr>';
+  var posRows=s.positions.map(function(p){
+    return '<tr><td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;">'+escHtml(p)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-align:right;">'+s.grandByPos[p].toFixed(2)+'h</td></tr>';
+  }).join('');
+  var trRows=s.perTrainee.slice().sort(function(a,b){return b.total-a.total;}).map(function(t){
+    return '<tr><td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;">'+escHtml(t.name)+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);">'+escHtml(t.pos||'')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);">'+t.startDate+' → '+t.endDate+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-align:right;">'+t.total.toFixed(2)+'h</td></tr>';
+  }).join('');
+  var range=(s.minStart&&s.maxEnd)?(s.minStart+' → '+s.maxEnd):'—';
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
+    +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
+    +'.header{background:var(--navy);color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
+    +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}.sub{font-size:12px;color:rgba(255,255,255,.55);}'
+    +'.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px;}'
+    +'.meta-box{background:var(--bg);border-radius:8px;padding:14px 16px;}'
+    +'.meta-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px;}'
+    +'.meta-val{font-size:16px;font-weight:700;color:var(--navy);}'
+    +'.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin:0 0 10px;}'
+    +'table{width:100%;border-collapse:collapse;margin-bottom:28px;}'
+    +'th{background:var(--navy);color:#fff;padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:left;}'
+    +'.total-row{background:var(--bg);font-weight:700;}'
+    +'.footer{margin-top:12px;text-align:center;font-size:10px;color:var(--text3);border-top:1px solid var(--border);padding-top:16px;}'
+    +'</style></head><body>'
+    +'<div class="header"><div class="title">Training Hours Summary</div><div class="sub">All trainees combined</div></div>'
+    +'<div class="meta">'
+    +'<div class="meta-box"><div class="meta-label">Trainees</div><div class="meta-val">'+s.traineeCount+'</div></div>'
+    +'<div class="meta-box"><div class="meta-label">Total Training Hours</div><div class="meta-val">'+s.grandTotal.toFixed(2)+'h</div></div>'
+    +'<div class="meta-box"><div class="meta-label">Period</div><div class="meta-val" style="font-size:12px;">'+range+'</div></div>'
+    +'</div>'
+    +'<p class="section-title">Hours by week (Sat–Fri) &amp; position</p>'
+    +'<table><thead><tr>'+wkHead+'</tr></thead><tbody>'+wkRows+wkTotal+'</tbody></table>'
+    +'<p class="section-title">Hours by position</p>'
+    +'<table><thead><tr><th>Position</th><th style="text-align:right;">Hours</th></tr></thead><tbody>'+posRows
+    +'<tr class="total-row"><td style="padding:10px 12px;font-size:13px;">Total</td><td style="padding:10px 12px;font-size:14px;font-weight:800;text-align:right;color:var(--navy);">'+s.grandTotal.toFixed(2)+'h</td></tr>'
+    +'</tbody></table>'
+    +'<p class="section-title">By trainee</p>'
+    +'<table><thead><tr><th>Employee</th><th>Position</th><th>Training dates</th><th style="text-align:right;">Hours</th></tr></thead><tbody>'+trRows+'</tbody></table>'
+    +'<div class="footer">Generated '+dateStr(new Date())+' &middot; Confidential</div>'
+    +'</body></html>';
+  var win=window.open('','_blank');
+  win.document.write(html); win.document.close();
+  setTimeout(function(){win.print();},500);
+}
 function renderTrainingHours(){
   var el=document.getElementById('trainHoursContent');
   if(!el)return;
   try{autofillAllPendingProjectEntries();}catch(e){}
   updateTrainHoursBadge();
   var trainees=loadTrainees();
-  var html='<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
+  var html='<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px;">'
+    +'<button onclick="exportTrainingSummaryPDF()" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;">&#128196; Summary PDF</button>'
     +'<button onclick="showAddTraineeModal()" style="background:var(--gold);color:var(--navy);border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#43; Add Trainee</button>'
     +'</div>';
   if(trainees.length===0){
@@ -11131,6 +11223,31 @@ function renderTrainingHours(){
       +'<div style="font-size:13px;">Add a new hire and set their training dates — hours fill in from your daily PDF.</div>'
       +'</div>';
     el.innerHTML=html; return;
+  }
+
+  /* ── Summary visual: training hours by hotel week (Sat–Fri) × position,
+     across ALL trainees — so the manager can see which week to scrutinize. ── */
+  var sum=getTrainingSummary();
+  if(sum.weeks.length>0){
+    html+='<div class="card" style="margin-bottom:16px;">';
+    html+='<div style="padding:14px 18px;border-bottom:1px solid var(--border);"><div style="font-size:13px;font-weight:800;color:var(--navy);">&#128202; Training hours by week &amp; position</div><div style="font-size:11px;color:var(--text3);margin-top:2px;">All trainees combined &middot; Sat&ndash;Fri hotel weeks</div></div>';
+    html+='<div style="overflow-x:auto;padding:4px 4px 8px;">';
+    html+='<table style="width:100%;border-collapse:collapse;min-width:'+(160+sum.positions.length*80+80)+'px;">';
+    html+='<thead><tr style="background:var(--surface);">';
+    html+='<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;position:sticky;left:0;background:var(--surface);">Week</th>';
+    sum.positions.forEach(function(p){ html+='<th style="text-align:right;padding:9px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;">'+escHtml(p)+'</th>'; });
+    html+='<th style="text-align:right;padding:9px 14px;font-size:10px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;">Total</th></tr></thead><tbody>';
+    sum.weeks.forEach(function(w){
+      html+='<tr style="border-top:1px solid var(--border);">';
+      html+='<td style="text-align:left;padding:9px 14px;font-size:12px;font-weight:600;color:var(--text1);white-space:nowrap;position:sticky;left:0;background:var(--white);">'+escHtml(w.label)+'</td>';
+      sum.positions.forEach(function(p){ var v=w.byPos[p]; html+='<td style="text-align:right;padding:9px 12px;font-size:12px;color:'+(v?'var(--text1)':'var(--text3)')+';">'+(v?v.toFixed(2)+'h':'—')+'</td>'; });
+      html+='<td style="text-align:right;padding:9px 14px;font-size:13px;font-weight:800;color:var(--navy);">'+w.total.toFixed(2)+'h</td></tr>';
+    });
+    html+='<tr style="border-top:2px solid var(--border);background:var(--surface);">';
+    html+='<td style="text-align:left;padding:10px 14px;font-size:12px;font-weight:800;color:var(--text1);position:sticky;left:0;background:var(--surface);">Total</td>';
+    sum.positions.forEach(function(p){ var v=sum.grandByPos[p]; html+='<td style="text-align:right;padding:10px 12px;font-size:12px;font-weight:700;color:var(--navy);">'+(v?v.toFixed(2)+'h':'—')+'</td>'; });
+    html+='<td style="text-align:right;padding:10px 14px;font-size:14px;font-weight:800;color:var(--navy);">'+sum.grandTotal.toFixed(2)+'h</td></tr>';
+    html+='</tbody></table></div></div>';
   }
   trainees.forEach(function(x){
     var t=x.t, idx=x.idx, log=t.log||[];
@@ -11148,7 +11265,6 @@ function renderTrainingHours(){
     if(t.notes)html+='<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+escHtml(t.notes)+'</div>';
     html+='</div>';
     html+='<div style="display:flex;gap:6px;flex-shrink:0;">';
-    html+='<button onclick="showExportPDFModal('+idx+')" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;">&#128196; PDF</button>';
     html+='<button onclick="showEditTraineeModal('+idx+')" style="background:none;color:var(--text3);border:none;padding:7px 8px;font-size:14px;cursor:pointer;" title="Edit training dates">&#9998;</button>';
     html+='<button onclick="deleteTrainee('+idx+')" style="background:none;color:var(--text3);border:none;padding:7px 8px;font-size:14px;cursor:pointer;" title="Remove trainee">&#128465;</button>';
     html+='</div></div>';
