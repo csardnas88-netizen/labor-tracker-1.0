@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.20.0"/>
+<meta name="app-version" content="6.21.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3410,6 +3410,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.21.0', date:'2026-07-20',
+    fixes:['The "Training hours this week" strip under Weekly Labor Pace now also lists the trainees by name — each with their position and the total hours they worked in that week — under the by-position totals. So in the labor meeting you can see exactly who was in training that week and how much.']
+  },
   {
     v:'6.20.0', date:'2026-07-20',
     fixes:['Labor → Weekly Labor Pace now shows a small "Training hours this week" strip right under each week, listing the training hours by position (with a total) for that hotel week. It only appears on weeks that had training hours, so in the labor meeting you can point to exactly how much of that week\'s hours were training. Read-only — pulled automatically from the Training Hours section.']
@@ -8449,7 +8453,19 @@ function buildWeeklyPaceHTML(days,rooms,wk){
           +'<strong style="color:var(--navy);">'+_tw.byPos[pos].toFixed(2)+'h</strong></div>';
       });
       html+='<div style="background:var(--navy);border-radius:8px;padding:5px 10px;font-size:11px;color:#fff;white-space:nowrap;"><span style="opacity:.7;">Total</span> <strong>'+_tw.total.toFixed(2)+'h</strong></div>';
-      html+='</div></div>';
+      html+='</div>';
+      /* Who was in training this week — name · position · their hours for the week */
+      if(_tw.emps&&_tw.emps.length){
+        html+='<div style="margin-top:9px;padding-top:9px;border-top:1px dashed var(--gold);">';
+        _tw.emps.forEach(function(em){
+          html+='<div style="display:flex;align-items:baseline;gap:6px;font-size:11px;padding:2px 0;">'
+            +'<span style="font-weight:700;color:var(--text1);">'+escHtml(em.name)+'</span>'
+            +'<span style="color:var(--text3);">'+escHtml(em.pos||'')+'</span>'
+            +'<strong style="margin-left:auto;color:var(--navy);">'+em.hours.toFixed(2)+'h</strong></div>';
+        });
+        html+='</div>';
+      }
+      html+='</div>';
     }
   }catch(e){}
 
@@ -11148,7 +11164,7 @@ function updateTrainHoursBadge(){
    Summary PDF. */
 function getTrainingSummary(){
   var trainees=loadTrainees();
-  var posSet={}, byWeek={}, grandTotal=0, grandByPos={}, perTrainee=[];
+  var posSet={}, byWeek={}, byWeekEmp={}, grandTotal=0, grandByPos={}, perTrainee=[];
   var minStart=null, maxEnd=null;
   trainees.forEach(function(x){
     var t=x.t, tTotal=0;
@@ -11160,6 +11176,11 @@ function getTrainingSummary(){
       var pos=e.pos||'Unknown', wk=projWeekKey(e.date);
       if(!byWeek[wk])byWeek[wk]={};
       byWeek[wk][pos]=(byWeek[wk][pos]||0)+h;
+      /* per-week, per-employee (so each week can list who was in training + their weekly hours) */
+      var eid=e.empId||t.empId||t.id, ename=e.empName||t.name;
+      if(!byWeekEmp[wk])byWeekEmp[wk]={};
+      if(!byWeekEmp[wk][eid])byWeekEmp[wk][eid]={name:ename,pos:pos,hours:0};
+      byWeekEmp[wk][eid].hours+=h;
       posSet[pos]=1; grandTotal+=h; grandByPos[pos]=(grandByPos[pos]||0)+h; tTotal+=h;
     });
     perTrainee.push({name:t.name,pos:t.pos,startDate:t.startDate,endDate:t.endDate,total:tTotal});
@@ -11167,7 +11188,9 @@ function getTrainingSummary(){
   var positions=Object.keys(posSet).sort();
   var weeks=Object.keys(byWeek).sort().map(function(wk){
     var bp=byWeek[wk], total=0; Object.keys(bp).forEach(function(p){total+=bp[p];});
-    return {key:wk,label:projWeekLabel(wk),byPos:bp,total:total};
+    var emps=Object.keys(byWeekEmp[wk]||{}).map(function(id){return byWeekEmp[wk][id];})
+      .sort(function(a,b){return a.name.localeCompare(b.name);});
+    return {key:wk,label:projWeekLabel(wk),byPos:bp,total:total,emps:emps};
   });
   return {positions:positions,weeks:weeks,grandTotal:grandTotal,grandByPos:grandByPos,
           perTrainee:perTrainee,traineeCount:trainees.length,minStart:minStart,maxEnd:maxEnd};
