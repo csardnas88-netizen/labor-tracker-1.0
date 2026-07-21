@@ -34,8 +34,17 @@ module.exports = {
     t.assert(/Ana Lopez/.test(strip) && /Beto Cruz/.test(strip), 'employee names missing from strip');
     t.assert(/Deep cleaned rooms 1401-1410/.test(strip), 'activity note missing from strip');
 
-    // Reconciliation line: Worked − Training − Projects = Operations, and it
-    // must appear (the fixture has both training and project hours that week).
-    t.assert(/This week/.test(strip) && /Operations/.test(strip), 'reconciliation line missing');
+    // Reconciliation line: Variance − Projects − Training = Adjusted, and the
+    // math must actually hold (this is the number the meeting reads).
+    t.assert(/This week/.test(strip) && /Variance/.test(strip) && /Adjusted/.test(strip), 'reconciliation line missing');
+    const num = (label) => {
+      const m = strip.match(new RegExp(label + '\\s*<strong[^>]*>([+-]?[0-9.]+)h'));
+      return m ? parseFloat(m[1]) : null;
+    };
+    const variance = num('Variance'), adjusted = num('Adjusted');
+    t.assert(variance !== null && adjusted !== null, 'could not read Variance/Adjusted from the strip');
+    // Fixture week has 17h projects + 15.5h training. Adjusted = Variance − 17 − 15.5.
+    t.assert(Math.abs(adjusted - (variance - 17 - 15.5)) < 0.02,
+      'adjusted variance math wrong (got ' + adjusted + ', expected ' + (variance - 17 - 15.5).toFixed(2) + ')');
   }
 };

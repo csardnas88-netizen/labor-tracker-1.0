@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.23.0"/>
+<meta name="app-version" content="6.24.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3410,6 +3410,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.24.0', date:'2026-07-20',
+    fixes:['Cleaner labor-meeting view under Weekly Labor Pace. The "Training hours this week" and "Project hours this week" strips now match as a pair — a report-style layout with each person on their own row (name, position, hours), and for projects the activity note underneath. Training uses a gold header, Projects a navy one, so you can tell them apart at a glance. And the bottom summary line was corrected to what you actually want: it now takes the week\'s over/under variance and subtracts the project and training hours — "Variance − Projects − Training = Adjusted" — so you can see what the variance would be without those extra hours.']
+  },
   {
     v:'6.23.0', date:'2026-07-20',
     fixes:['The "Project hours this week" strip under Weekly Labor Pace now shows the full picture for the labor meeting: under each project, every employee with their position, hours, and the note describing what they did that week. Also added a reconciliation line at the bottom of each week — "Worked − Training − Projects = Operations" — so you can see at a glance how the week\'s hours split between training, special projects, and regular operations.']
@@ -8451,47 +8455,47 @@ function buildWeeklyPaceHTML(days,rooms,wk){
   try{
     var _twk=dateStr(getHotelWeekStart(wk.start));
     var _tw=getTrainingSummary().weeks.filter(function(w){return w.key===_twk;})[0];
+    /* Training strip — report style, GOLD header. No activity notes (training
+       has none), so rows are name · position · hours. */
     if(_tw){
-      html+=_paceExtraStrip('Training hours this week','&#127891;','var(--gt)','var(--gd)',_tw.byPos,_tw.total,
-        (_tw.emps||[]).map(function(em){return {name:em.name,sub:em.pos,hours:em.hours};}));
+      html+='<div style="border-top:1px solid var(--border);background:var(--gt);padding:10px 14px;">';
+      html+='<div style="font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">&#127891; Training hours this week</div>';
+      html+=_paceChips(_tw.byPos, _tw.total);
+      if(_tw.emps&&_tw.emps.length){
+        html+='<div style="margin-top:10px;background:var(--white);border:1px solid var(--border);border-radius:9px;overflow:hidden;">';
+        (_tw.emps).forEach(function(em,i){ html+=_paceRow(em.name, em.pos, em.hours, '', i===0); });
+        html+='</div>';
+      }
+      html+='</div>';
     }
+    /* Projects strip — report style, NAVY project headers + gold left-accent
+       rows with the activity note, so the meeting sees each activity. */
     var _pw=getProjectHoursForWeek(_twk);
     if(_pw.total>0){
-      /* Projects strip: position chips + total, then per project each employee
-         with their position, hours, and the note describing what they did. */
       html+='<div style="border-top:1px solid var(--border);background:var(--surface);padding:10px 14px;">';
-      html+='<div style="font-size:9px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">&#128193; Project hours this week</div>';
-      html+='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
-      Object.keys(_pw.byPos).sort().forEach(function(pos){
-        html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;white-space:nowrap;"><span style="color:var(--text2);">'+escHtml(pos)+'</span> <strong style="color:var(--navy);">'+_pw.byPos[pos].toFixed(2)+'h</strong></div>';
-      });
-      html+='<div style="background:var(--navy);border-radius:8px;padding:5px 10px;font-size:11px;color:#fff;white-space:nowrap;"><span style="opacity:.7;">Total</span> <strong>'+_pw.total.toFixed(2)+'h</strong></div>';
-      html+='</div>';
+      html+='<div style="font-size:9px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">&#128193; Project hours this week</div>';
+      html+=_paceChips(_pw.byPos, _pw.total);
       _pw.projects.forEach(function(pr){
-        html+='<div style="margin-top:9px;padding-top:9px;border-top:1px dashed var(--navy);">';
-        html+='<div style="font-size:11px;font-weight:800;color:var(--text1);margin-bottom:3px;">'+escHtml(pr.name)+' <span style="color:var(--text3);font-weight:600;">&middot; '+pr.hours.toFixed(2)+'h</span></div>';
-        pr.items.forEach(function(it){
-          html+='<div style="padding:2px 0 3px 8px;">';
-          html+='<div style="display:flex;align-items:baseline;gap:6px;font-size:11px;"><span style="font-weight:700;color:var(--text1);">'+escHtml(it.empName)+'</span><span style="color:var(--text3);">'+escHtml(it.pos||'')+'</span><strong style="margin-left:auto;color:var(--navy);">'+it.hours.toFixed(2)+'h</strong></div>';
-          if(it.note)html+='<div style="font-size:10.5px;color:var(--text2);line-height:1.4;margin-top:1px;">'+escHtml(it.note)+'</div>';
-          html+='</div>';
-        });
+        html+='<div style="margin-top:10px;background:var(--white);border:1px solid var(--border);border-radius:9px;overflow:hidden;">';
+        html+='<div style="background:var(--navy);color:#fff;padding:8px 12px;display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:700;font-size:12px;">'+escHtml(pr.name)+'</span><strong style="font-size:12px;white-space:nowrap;">'+pr.hours.toFixed(2)+'h</strong></div>';
+        pr.items.forEach(function(it){ html+=_paceRow(it.empName, it.pos, it.hours, it.note, false); });
         html+='</div>';
       });
       html+='</div>';
     }
-    /* Reconciliation: how the week's worked hours split into training, projects,
-       and everything else — so the meeting can see what drove the week. */
-    var _tt=_tw?_tw.total:0, _pt=_pw.total, _worked=0;
-    positions.forEach(function(p){_worked+=weekActual[p.key];});
+    /* Reconciliation: the week's variance minus the training + project hours,
+       = the operational variance (what the over/under would be without them).
+       Uses the pace's net variance, not total worked. */
+    var _tt=_tw?_tw.total:0, _pt=_pw.total;
     if(_tt>0||_pt>0){
-      var _ops=_worked-_tt-_pt;
-      html+='<div style="border-top:1px solid var(--border);background:var(--navy);color:#fff;padding:9px 14px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;font-size:11px;">';
+      var _adj=netVar-_pt-_tt;
+      var _adjColor=_adj>0.05?'#f87171':(_adj<-0.05?'var(--green-border)':'#fff');
+      html+='<div style="border-top:1px solid var(--border);background:var(--navy);color:#fff;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;font-size:11px;">';
       html+='<span style="font-size:9px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.5px;">This week</span>';
-      html+='<span>Worked <strong>'+_worked.toFixed(2)+'h</strong></span>';
-      html+='<span style="opacity:.85;">&minus; Training <strong>'+_tt.toFixed(2)+'h</strong></span>';
+      html+='<span>Variance <strong>'+(netVar>=0?'+':'')+netVar.toFixed(2)+'h</strong></span>';
       html+='<span style="opacity:.85;">&minus; Projects <strong>'+_pt.toFixed(2)+'h</strong></span>';
-      html+='<span style="margin-left:auto;border-top:0;">= Operations <strong style="color:var(--gl);">'+_ops.toFixed(2)+'h</strong></span>';
+      html+='<span style="opacity:.85;">&minus; Training <strong>'+_tt.toFixed(2)+'h</strong></span>';
+      html+='<span style="margin-left:auto;">= Adjusted <strong style="color:'+_adjColor+';">'+(_adj>=0?'+':'')+_adj.toFixed(2)+'h</strong></span>';
       html+='</div>';
     }
   }catch(e){}
@@ -11254,25 +11258,24 @@ function getProjectHoursForWeek(weekKey){
   });
   return {total:total,byPos:byPos,projects:projList};
 }
-/* Shared renderer for an "extra hours this week" strip under Weekly Labor Pace:
-   by-position chips + a total, then an optional name list. Used for both the
-   training strip and the projects strip so they stay visually identical. */
-function _paceExtraStrip(title, icon, tintVar, accentVar, byPos, total, rows){
-  var h='<div style="border-top:1px solid var(--border);background:'+tintVar+';padding:10px 14px;">';
-  h+='<div style="font-size:9px;font-weight:700;color:'+accentVar+';text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">'+icon+' '+title+'</div>';
-  h+='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+/* Report-style renderers for the Weekly Labor Pace "extra hours" strips
+   (Training + Projects). Shared so the two blocks read as a consistent pair:
+   position chips + total, then white boxes with a gold left-accent row per
+   person (name · position · hours, plus a note for projects). */
+function _paceChips(byPos, total){
+  var h='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
   Object.keys(byPos).sort().forEach(function(pos){
     h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;white-space:nowrap;"><span style="color:var(--text2);">'+escHtml(pos)+'</span> <strong style="color:var(--navy);">'+byPos[pos].toFixed(2)+'h</strong></div>';
   });
   h+='<div style="background:var(--navy);border-radius:8px;padding:5px 10px;font-size:11px;color:#fff;white-space:nowrap;"><span style="opacity:.7;">Total</span> <strong>'+total.toFixed(2)+'h</strong></div>';
   h+='</div>';
-  if(rows&&rows.length){
-    h+='<div style="margin-top:9px;padding-top:9px;border-top:1px dashed '+accentVar+';">';
-    rows.forEach(function(r){
-      h+='<div style="display:flex;align-items:baseline;gap:6px;font-size:11px;padding:2px 0;"><span style="font-weight:700;color:var(--text1);">'+escHtml(r.name)+'</span>'+(r.sub?'<span style="color:var(--text3);">'+escHtml(r.sub)+'</span>':'')+'<strong style="margin-left:auto;color:var(--navy);">'+r.hours.toFixed(2)+'h</strong></div>';
-    });
-    h+='</div>';
-  }
+  return h;
+}
+function _paceRow(name, pos, hours, note, isFirst){
+  var h='<div style="padding:9px 12px;border-left:3px solid var(--gold);'+(isFirst?'':'border-top:1px solid var(--border);')+'">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font-weight:700;font-size:12.5px;color:var(--text1);">'+escHtml(name)+'</span><strong style="font-size:13px;color:var(--navy);white-space:nowrap;">'+hours.toFixed(2)+'h</strong></div>';
+  if(pos)h+='<div style="font-size:11px;color:var(--gd);font-weight:600;">'+escHtml(pos)+'</div>';
+  if(note)h+='<div style="font-size:11px;color:var(--text2);line-height:1.5;margin-top:3px;">'+escHtml(note)+'</div>';
   h+='</div>';
   return h;
 }
