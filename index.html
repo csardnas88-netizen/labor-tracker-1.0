@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.15.0"/>
+<meta name="app-version" content="6.16.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1145,6 +1145,10 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <span class="nav-icon">&#128193;</span> Projects
     <span class="nav-badge" id="navProjectsBadge" style="display:none;">0</span>
   </div>
+  <div class="nav-item" id="nav-trainhours" onclick="showPage('trainhours')">
+    <span class="nav-icon">&#127891;</span> Training Hours
+    <span class="nav-badge" id="navTrainHoursBadge" style="display:none;">0</span>
+  </div>
   <div class="nav-item" id="nav-training" onclick="showPage('training')">
     <span class="nav-icon">&#128218;</span> Training
     <span class="nav-badge" id="navTrainingBadge" style="display:none;">0</span>
@@ -1400,6 +1404,15 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div class="page-sub">Track special assignments and extra work hours</div>
       </div>
       <div id="projectsContent"></div>
+    </div>
+
+    <div id="page-trainhours" style="display:none;">
+      <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
+      <div class="page-header">
+        <div class="page-title">&#127891; Training Hours</div>
+        <div class="page-sub">Set each new hire's training window once — daily hours fill in automatically as you upload the Labor Distribution Report</div>
+      </div>
+      <div id="trainHoursContent"></div>
     </div>
 
     <div id="page-training" style="display:none;">
@@ -3397,6 +3410,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.16.0', date:'2026-07-20',
+    fixes:['New "Training Hours" section. Add a new hire and set their training start and end dates once — then each day, as you upload the Labor Distribution Report, that employee\'s hours fill in automatically for every day of their training window. Each trainee shows a day-by-day list, a Sat–Fri weekly total, and a grand total, with a PDF you can print for the weekly labor meeting to explain training hours when you\'re over on the week. Nothing to log by hand day by day.']
+  },
   {
     v:'6.15.0', date:'2026-07-20',
     fixes:['Added a profile button in the top-right corner (a circle with your initial), like Google and other apps. Tap it to see your email and role and to sign out from anywhere — you no longer have to go into Settings to sign out.']
@@ -6584,7 +6601,7 @@ function toggleSidebarSmart(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','labormodel','pnl','staffing','projects','training','calloffs','assignments','tutorial','settings'];
+var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','labormodel','pnl','staffing','projects','trainhours','training','calloffs','assignments','tutorial','settings'];
 function showPage(page){
   PAGES.forEach(function(p){
     var el=document.getElementById('page-'+p);
@@ -6607,6 +6624,7 @@ function showPage(page){
   if(page==='pnl'){renderPnl();renderPaychexRecon();}
   if(page==='staffing')renderStaffing();
   if(page==='projects')renderProjects();
+  if(page==='trainhours')renderTrainingHours();
   if(page==='training')renderTraining();
   if(page==='calloffs')renderCallOffs();
   if(page==='tutorial')renderTutContent();
@@ -11045,6 +11063,7 @@ function saveProjects(projects){
 function updateProjectsBadge(){
   var projects=loadProjects();
   var active=projects.filter(function(p){
+    if(p.kind==='training')return false;
     var now=new Date();
     var end=new Date(p.endDate+'T23:59:59');
     return end>=now;
@@ -11053,6 +11072,175 @@ function updateProjectsBadge(){
   if(!badge)return;
   if(active>0){badge.textContent=active;badge.style.display='inline-flex';}
   else{badge.style.display='none';}
+}
+
+/* ══════════════════════════════════════════════════════
+   TRAINING HOURS MODULE
+   New hires spend ~a week in paid training. Instead of logging each day by
+   hand, the manager sets a trainee's date range once; the app creates one
+   pending entry per day, and the SAME auto-fill engine as Projects populates
+   each day's hours as the Labor Distribution PDF is uploaded. Trainees are
+   stored inside projects_data as kind:'training', so they inherit all the
+   hardened per-row sync / tombstone / auto-fill code — but render in their
+   own "Training Hours" section (and are hidden from the Projects list).
+   ══════════════════════════════════════════════════════ */
+function loadTrainees(){
+  var all=loadProjects();
+  var out=[];
+  all.forEach(function(p,idx){ if(p&&p.kind==='training')out.push({t:p,idx:idx}); });
+  return out;
+}
+/* YYYY-MM-DD strings from start to end inclusive. */
+function _datesInRange(startDs,endDs){
+  var out=[];
+  var d=parseLocalDate(startDs), end=parseLocalDate(endDs), guard=0;
+  while(d<=end && guard<400){ out.push(dateStr(d)); d.setDate(d.getDate()+1); guard++; }
+  return out;
+}
+function updateTrainHoursBadge(){
+  var badge=document.getElementById('navTrainHoursBadge');
+  if(!badge)return;
+  var now=new Date();
+  var active=loadTrainees().filter(function(x){
+    var end=new Date(x.t.endDate+'T23:59:59'); return end>=now;
+  }).length;
+  if(active>0){badge.textContent=active;badge.style.display='inline-flex';}
+  else{badge.style.display='none';}
+}
+function renderTrainingHours(){
+  var el=document.getElementById('trainHoursContent');
+  if(!el)return;
+  try{autofillAllPendingProjectEntries();}catch(e){}
+  updateTrainHoursBadge();
+  var trainees=loadTrainees();
+  var html='<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
+    +'<button onclick="showAddTraineeModal()" style="background:var(--gold);color:var(--navy);border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#43; Add Trainee</button>'
+    +'</div>';
+  if(trainees.length===0){
+    html+='<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
+      +'<div style="font-size:40px;margin-bottom:12px;">&#127891;</div>'
+      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No trainees yet</div>'
+      +'<div style="font-size:13px;">Add a new hire and set their training dates — hours fill in from your daily PDF.</div>'
+      +'</div>';
+    el.innerHTML=html; return;
+  }
+  trainees.forEach(function(x){
+    var t=x.t, idx=x.idx, log=t.log||[];
+    var total=0; log.forEach(function(e){if(!e.pending)total+=(e.hours||0);});
+    var pending=log.filter(function(e){return e.pending;}).length;
+    var isActive=(new Date(t.endDate+'T23:59:59'))>=new Date();
+    html+='<div class="card" style="margin-bottom:14px;">';
+    html+='<div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">';
+    html+='<div style="flex:1;">';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">';
+    html+='<span style="font-size:15px;font-weight:800;color:var(--text1);">'+escHtml(t.name)+'</span>';
+    html+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:'+(isActive?'var(--green-bg)':'var(--bg)')+';color:'+(isActive?'var(--green)':'var(--text3)')+';">'+(isActive?'In training':'Completed')+'</span>';
+    html+='</div>';
+    html+='<div style="font-size:11px;color:var(--text3);">'+escHtml(t.pos||'')+' &middot; '+t.startDate+' &rarr; '+t.endDate+'</div>';
+    if(t.notes)html+='<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+escHtml(t.notes)+'</div>';
+    html+='</div>';
+    html+='<div style="display:flex;gap:6px;flex-shrink:0;">';
+    html+='<button onclick="showExportPDFModal('+idx+')" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;">&#128196; PDF</button>';
+    html+='<button onclick="deleteTrainee('+idx+')" style="background:none;color:var(--text3);border:none;padding:7px 8px;font-size:14px;cursor:pointer;" title="Remove trainee">&#128465;</button>';
+    html+='</div></div>';
+    html+='<div style="padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">';
+    html+='<span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Training hours</span>';
+    if(pending>0)html+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--gt);color:var(--yellow);margin-left:6px;">&#9203; '+pending+' day'+(pending===1?'':'s')+' waiting for PDF</span>';
+    html+='<span style="font-size:18px;font-weight:800;color:var(--navy);margin-left:auto;">'+total.toFixed(2)+'h</span>';
+    html+='</div>';
+    var bd=getProjectBreakdown(log);
+    if(bd.weeks.length>0){
+      html+='<div style="padding:10px 18px;border-bottom:1px solid var(--border);">';
+      html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Hours by week (Sat&ndash;Fri)</div>';
+      html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">';
+      bd.weeks.forEach(function(w){
+        html+='<div style="background:var(--surface);border-radius:8px;padding:8px 10px;"><div style="font-size:10px;color:var(--text2);margin-bottom:2px;">'+escHtml(w.label)+'</div><div style="font-size:14px;font-weight:700;color:var(--navy);">'+w.hours.toFixed(2)+'h</div></div>';
+      });
+      html+='</div></div>';
+    }
+    html+='<div style="padding:0 18px;">';
+    html+='<div style="display:grid;grid-template-columns:120px 1fr 70px;gap:8px;padding:10px 0 6px;border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;"><div>Date</div><div>Position</div><div style="text-align:right;">Hours</div></div>';
+    var _DTN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    log.forEach(function(e){
+      var dd=parseLocalDate(e.date);
+      var dl=_DTN[dd.getDay()]+' '+(MONTH_NAMES[dd.getMonth()]||'').substring(0,3)+' '+dd.getDate();
+      html+='<div style="display:grid;grid-template-columns:120px 1fr 70px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;">';
+      html+='<div style="font-size:12px;color:var(--text2);font-weight:600;">'+dl+'</div>';
+      html+='<div style="font-size:11px;color:var(--text3);">'+escHtml(e.pos||'—')+'</div>';
+      if(e.pending)html+='<div style="font-size:11px;font-weight:700;color:var(--yellow);text-align:right;">Pending</div>';
+      else html+='<div style="font-size:13px;font-weight:700;color:var(--navy);text-align:right;">'+(e.hours||0).toFixed(2)+'h</div>';
+      html+='</div>';
+    });
+    html+='</div></div>';
+  });
+  el.innerHTML=html;
+}
+function showAddTraineeModal(){
+  var emps=getProjectEmployeeOptions();
+  var opts=emps.map(function(e){return '<option value="'+e.id+'">'+escHtml(e.name)+(e.pos?' — '+escHtml(e.pos):'')+'</option>';}).join('');
+  var overlay=document.createElement('div');
+  overlay.id='traineeModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#127891; Add Trainee</div>'
+    +'<div style="display:flex;flex-direction:column;gap:13px;">'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee *</label>'
+    +'<select id="trEmp" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;"><option value="">Select an employee&hellip;</option>'+opts+'</select></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">First training day *</label>'
+    +'<input id="trStart" type="date" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Last training day *</label>'
+    +'<input id="trEnd" type="date" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'</div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'
+    +'<input id="trNote" placeholder="e.g. New hire — Room Attendant training" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
+    +'<div style="font-size:11px;color:var(--text3);line-height:1.5;">Hours fill in automatically for each day in this range as you upload the daily Labor Distribution Report.</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:20px;">'
+    +'<button onclick="document.getElementById(\'traineeModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveNewTrainee()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Add Trainee</button>'
+    +'</div></div>';
+  document.body.appendChild(overlay);
+  var today=new Date(), wk=new Date(); wk.setDate(wk.getDate()+6);
+  document.getElementById('trStart').value=dateStr(today);
+  document.getElementById('trEnd').value=dateStr(wk);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+function saveNewTrainee(){
+  var sel=document.getElementById('trEmp');
+  var empId=(sel&&sel.value)||'';
+  var start=(document.getElementById('trStart').value||'').trim();
+  var end=(document.getElementById('trEnd').value||'').trim();
+  var note=(document.getElementById('trNote').value||'').trim();
+  if(!empId){showToast('Please select an employee.');return;}
+  if(!start||!end){showToast('Please set both training dates.');return;}
+  if(start>end){showToast('Last day must be on or after the first day.');return;}
+  var dates=_datesInRange(start,end);
+  if(dates.length>60){showToast('That range is over 60 days — please shorten it.');return;}
+  var emp=getProjectEmployeeOptions().filter(function(e){return String(e.id)===String(empId);})[0];
+  var empName=emp?emp.name:empId;
+  var pos=emp?(emp.pos||''):'';
+  var log=dates.map(function(ds){
+    return {date:ds, empId:empId, empName:empName, pos:pos, hours:null, pending:true, added:new Date().toISOString()};
+  });
+  var projects=loadProjects();
+  projects.unshift({id:Date.now(), kind:'training', name:empName, empId:empId, pos:pos, startDate:start, endDate:end, notes:note, log:log, created:new Date().toISOString()});
+  saveProjects(projects);
+  var m=document.getElementById('traineeModal');if(m)m.remove();
+  try{autofillAllPendingProjectEntries();}catch(e){}
+  renderTrainingHours();
+  showToast('&#10003; Trainee added — '+dates.length+' day'+(dates.length===1?'':'s')+' set');
+}
+function deleteTrainee(idx){
+  var projects=loadProjects();
+  var t=projects[idx];
+  if(!t||t.kind!=='training')return;
+  if(!confirm('Remove '+(t.name||'this trainee')+' and their training hours? This cannot be undone.'))return;
+  projects.splice(idx,1);
+  saveProjects(projects);
+  if(t.id)addDeletedId('projects_deleted_ids',t.id);
+  renderTrainingHours();
+  showToast('Trainee removed');
 }
 
 /* ── Projects: month / housekeeping-week (Sat–Fri) breakdown helpers ── */
@@ -11168,7 +11356,11 @@ function renderProjects(){
     +'<button onclick="showNewProjectModal()" style="background:var(--gold);color:var(--navy);border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Project</button>'
     +'</div>';
 
-  if(projects.length===0){
+  /* Training-hours trainees live in this same array (kind:'training') but are
+     shown in their own "Training Hours" section — skip them here, keeping the
+     real index so edit/delete/PDF handlers still target the right project. */
+  var visibleCount=projects.filter(function(p){return p&&p.kind!=='training';}).length;
+  if(visibleCount===0){
     html+='<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
       +'<div style="font-size:40px;margin-bottom:12px;">&#128193;</div>'
       +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No projects yet</div>'
@@ -11176,6 +11368,7 @@ function renderProjects(){
       +'</div>';
   } else {
     projects.forEach(function(proj,idx){
+      if(proj&&proj.kind==='training')return;
       var totalHours=0;
       (proj.log||[]).forEach(function(entry){if(!entry.pending)totalHours+=(entry.hours||0);});
       var pendingCount=(proj.log||[]).filter(function(e){return e.pending;}).length;
@@ -12199,6 +12392,7 @@ window.addEventListener('load',function(){
   try{renderLaborDash();}catch(ex){console.warn('labor:',ex);}
   try{renderDashHub();}catch(ex){console.warn('hub:',ex);}
   updateProjectsBadge();
+  try{updateTrainHoursBadge();}catch(e){}
   updateTrainingBadge();
   updateCallOffsBadge();
   try{updateWtcBadge();}catch(e){}
