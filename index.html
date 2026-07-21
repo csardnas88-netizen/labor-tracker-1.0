@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.22.0"/>
+<meta name="app-version" content="6.23.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3410,6 +3410,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.23.0', date:'2026-07-20',
+    fixes:['The "Project hours this week" strip under Weekly Labor Pace now shows the full picture for the labor meeting: under each project, every employee with their position, hours, and the note describing what they did that week. Also added a reconciliation line at the bottom of each week — "Worked − Training − Projects = Operations" — so you can see at a glance how the week\'s hours split between training, special projects, and regular operations.']
+  },
   {
     v:'6.22.0', date:'2026-07-20',
     fixes:['Weekly Labor Pace now also shows a "Project hours this week" strip (below the training one) — the hours logged to your special projects (e.g. 812 Building Prep, Go Back Rooms) for that hotel week, broken down by position with a total and listed by project name. So in the labor meeting you can explain a week\'s hours as training vs. project work at a glance. Read-only, pulled automatically from Projects; only appears on weeks that had project hours.']
@@ -8453,8 +8457,42 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     }
     var _pw=getProjectHoursForWeek(_twk);
     if(_pw.total>0){
-      html+=_paceExtraStrip('Project hours this week','&#128193;','var(--surface)','var(--navy)',_pw.byPos,_pw.total,
-        _pw.projects.map(function(pr){return {name:pr.name,sub:'',hours:pr.hours};}));
+      /* Projects strip: position chips + total, then per project each employee
+         with their position, hours, and the note describing what they did. */
+      html+='<div style="border-top:1px solid var(--border);background:var(--surface);padding:10px 14px;">';
+      html+='<div style="font-size:9px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">&#128193; Project hours this week</div>';
+      html+='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+      Object.keys(_pw.byPos).sort().forEach(function(pos){
+        html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;white-space:nowrap;"><span style="color:var(--text2);">'+escHtml(pos)+'</span> <strong style="color:var(--navy);">'+_pw.byPos[pos].toFixed(2)+'h</strong></div>';
+      });
+      html+='<div style="background:var(--navy);border-radius:8px;padding:5px 10px;font-size:11px;color:#fff;white-space:nowrap;"><span style="opacity:.7;">Total</span> <strong>'+_pw.total.toFixed(2)+'h</strong></div>';
+      html+='</div>';
+      _pw.projects.forEach(function(pr){
+        html+='<div style="margin-top:9px;padding-top:9px;border-top:1px dashed var(--navy);">';
+        html+='<div style="font-size:11px;font-weight:800;color:var(--text1);margin-bottom:3px;">'+escHtml(pr.name)+' <span style="color:var(--text3);font-weight:600;">&middot; '+pr.hours.toFixed(2)+'h</span></div>';
+        pr.items.forEach(function(it){
+          html+='<div style="padding:2px 0 3px 8px;">';
+          html+='<div style="display:flex;align-items:baseline;gap:6px;font-size:11px;"><span style="font-weight:700;color:var(--text1);">'+escHtml(it.empName)+'</span><span style="color:var(--text3);">'+escHtml(it.pos||'')+'</span><strong style="margin-left:auto;color:var(--navy);">'+it.hours.toFixed(2)+'h</strong></div>';
+          if(it.note)html+='<div style="font-size:10.5px;color:var(--text2);line-height:1.4;margin-top:1px;">'+escHtml(it.note)+'</div>';
+          html+='</div>';
+        });
+        html+='</div>';
+      });
+      html+='</div>';
+    }
+    /* Reconciliation: how the week's worked hours split into training, projects,
+       and everything else — so the meeting can see what drove the week. */
+    var _tt=_tw?_tw.total:0, _pt=_pw.total, _worked=0;
+    positions.forEach(function(p){_worked+=weekActual[p.key];});
+    if(_tt>0||_pt>0){
+      var _ops=_worked-_tt-_pt;
+      html+='<div style="border-top:1px solid var(--border);background:var(--navy);color:#fff;padding:9px 14px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;font-size:11px;">';
+      html+='<span style="font-size:9px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.5px;">This week</span>';
+      html+='<span>Worked <strong>'+_worked.toFixed(2)+'h</strong></span>';
+      html+='<span style="opacity:.85;">&minus; Training <strong>'+_tt.toFixed(2)+'h</strong></span>';
+      html+='<span style="opacity:.85;">&minus; Projects <strong>'+_pt.toFixed(2)+'h</strong></span>';
+      html+='<span style="margin-left:auto;border-top:0;">= Operations <strong style="color:var(--gl);">'+_ops.toFixed(2)+'h</strong></span>';
+      html+='</div>';
     }
   }catch(e){}
 
@@ -11184,8 +11222,11 @@ function getTrainingSummary(){
   return {positions:positions,weeks:weeks,grandTotal:grandTotal,grandByPos:grandByPos,
           perTrainee:perTrainee,traineeCount:trainees.length,minStart:minStart,maxEnd:maxEnd};
 }
-/* Special-project (non-training) hours logged in one hotel week, by position and
-   by project name — powers the "Project hours this week" strip under the pace. */
+/* Special-project (non-training) hours logged in one hotel week: by position,
+   and per project a breakdown of who did what (employee · position · hours ·
+   the note describing the activity). Powers the "Project hours this week" strip
+   so the labor meeting sees each activity, not just a number. Entries for the
+   same employee + same note are collapsed and their hours summed. */
 function getProjectHoursForWeek(weekKey){
   var projects=loadProjects(), byPos={}, byProject={}, total=0;
   projects.forEach(function(p){
@@ -11196,12 +11237,22 @@ function getProjectHoursForWeek(weekKey){
       if(projWeekKey(e.date)!==weekKey)return;
       var pos=e.pos||'Unknown';
       byPos[pos]=(byPos[pos]||0)+hh;
-      byProject[p.name]=(byProject[p.name]||0)+hh;
       total+=hh;
+      if(!byProject[p.name])byProject[p.name]={name:p.name,hours:0,_items:{}};
+      byProject[p.name].hours+=hh;
+      var key=(e.empId||e.empName||'?')+'|'+(e.note||'');
+      var it=byProject[p.name]._items[key];
+      if(!it){it={empName:e.empName||'',pos:pos,note:e.note||'',hours:0};byProject[p.name]._items[key]=it;}
+      it.hours+=hh;
     });
   });
-  return {total:total,byPos:byPos,
-    projects:Object.keys(byProject).sort().map(function(n){return {name:n,hours:byProject[n]};})};
+  var projList=Object.keys(byProject).sort().map(function(n){
+    var pr=byProject[n];
+    var items=Object.keys(pr._items).map(function(k){return pr._items[k];})
+      .sort(function(a,b){return b.hours-a.hours;});
+    return {name:pr.name,hours:pr.hours,items:items};
+  });
+  return {total:total,byPos:byPos,projects:projList};
 }
 /* Shared renderer for an "extra hours this week" strip under Weekly Labor Pace:
    by-position chips + a total, then an optional name list. Used for both the

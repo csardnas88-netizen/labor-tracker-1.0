@@ -39,8 +39,8 @@ function build() {
       'Public Area Attendant': { driver: 'fixed', value: 32, rate: 13.84 } } },
     'projects_data': [
       { id: 9001, name: '812 Building Prep', startDate: '2026-07-01', endDate: '2026-07-31', notes: 'Reno', created: 'x', log: [
-        { date: '2026-07-14', empId: 'E2', empName: 'Beto Cruz', pos: 'House Attendant', hours: 8, pending: false, added: 'x' },
-        { date: '2026-07-15', empId: 'E1', empName: 'Ana Lopez', pos: 'Room Attendant', hours: 9, pending: false, added: 'x' } ] },
+        { date: '2026-07-14', empId: 'E2', empName: 'Beto Cruz', pos: 'House Attendant', hours: 8, pending: false, added: 'x', note: 'Moved furniture and bagged linens on floor 14' },
+        { date: '2026-07-15', empId: 'E1', empName: 'Ana Lopez', pos: 'Room Attendant', hours: 9, pending: false, added: 'x', note: 'Deep cleaned rooms 1401-1410' } ] },
       { id: 9002, kind: 'training', name: 'Nuevo Uno', empId: 'N1', pos: 'Room Attendant', startDate: '2026-07-13', endDate: '2026-07-17', notes: '', created: 'x', log: [
         { date: '2026-07-13', empId: 'N1', empName: 'Nuevo Uno', pos: 'Room Attendant', hours: 8, pending: false, added: 'x' },
         { date: '2026-07-14', empId: 'N1', empName: 'Nuevo Uno', pos: 'Room Attendant', hours: 7.5, pending: false, added: 'x' },

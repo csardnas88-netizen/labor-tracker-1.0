@@ -5,6 +5,7 @@ const cases = [
   require('./cases/data-not-lost'),
   require('./cases/deletes-stay-deleted'),
   require('./cases/training-hours'),
+  require('./cases/labor-pace-projects'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
