@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.25.0"/>
+<meta name="app-version" content="6.26.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3415,6 +3415,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.26.0', date:'2026-07-21',
+    fixes:['Fixed rooms/budget showing blank ("—") for recent days even though the R106 had the numbers. The R106 occupancy and the per-day rooms that drive the budget are stored separately, and the last day or two (and days synced from another device) could be left empty — so the budget couldn\'t calculate and you had to re-enter or re-upload. The app now fills any empty day automatically from the R106 whenever you open Labor or sync, so budgets show up on their own. Days you typed by hand are never overwritten. Your R106 data was always safe — this just applies it. Note: nothing was lost; all of July\'s occupancy was intact in the cloud.']
+  },
+  {
     v:'6.25.0', date:'2026-07-20',
     fixes:['Your profile menu (the circle with your initial, top-right) now shows a "Team" list: who\'s online right now (green dot) and, for everyone else, when they were last seen ("last seen 8 min ago"). It updates while the app is open. Only people you\'ve given access to appear, and no one can fake being someone else — each person can only mark their own presence.']
   },
@@ -5021,6 +5025,7 @@ function _syncFromSheetsPull(){
             try{var ls=localStorage.getItem('hk_r106_'+mk2);if(ls)localR106=JSON.parse(ls);}catch(e){}
             var mergedR106=Object.assign({},localR106,remoteR106);
             saveR106Local(mk2,mergedR106);
+            try{applyR106ToEmptyRooms(mk2);}catch(e){} /* backfill empty rooms from the just-synced R106 */
             updated=true;
           }
         }
@@ -5764,6 +5769,37 @@ function saveRoomsForDate(ds,val){
   mData.roomsSource[ds]='manual'; /* protege este día de futuras importaciones R106 */
   saveMonthData(mData,mk); /* also syncs to Sheets */
   renderMonthDashboard();
+}
+
+/* ── Backfill empty room counts from R106 ─────────────────────────
+   The R106 upload deliberately skips the most recent 1–2 days, and R106 data
+   syncs in its own store separate from the per-day "rooms" that drive the
+   budget — so recent days (and days synced from another device) could end up
+   with an EMPTY rooms value even though R106 has the occupancy. That left the
+   budget blank ("—") and forced a manual re-entry. This fills any empty,
+   non-manual day from the R106 net, so it self-heals on view/sync. Never
+   touches a day the manager set by hand (roomsSource==='manual'). ── */
+function applyR106ToEmptyRooms(mk){
+  if(!mk)return false;
+  var r106={};
+  try{ r106=JSON.parse(localStorage.getItem('hk_r106_'+mk)||'{}'); }catch(e){ return false; }
+  if(!r106||typeof r106!=='object')return false;
+  var mData=loadMonthData(mk);
+  mData.rooms=mData.rooms||{}; mData.roomsSource=mData.roomsSource||{};
+  var changed=false;
+  Object.keys(r106).forEach(function(ds){
+    var net=r106[ds]&&r106[ds].net;
+    if(!(net>0))return;                              /* only real occupancy */
+    if(mData.roomsSource[ds]==='manual')return;      /* never overwrite a hand-entered value */
+    var cur=mData.rooms[ds];
+    if(cur===undefined||cur===null||parseInt(cur)===0){
+      mData.rooms[ds]=net;
+      mData.roomsSource[ds]='r106';
+      changed=true;
+    }
+  });
+  if(changed)saveMonthData(mData,mk);               /* persists locally + pushes to cloud */
+  return changed;
 }
 
 /* ── Toggle week accordion ── */
@@ -8243,6 +8279,9 @@ try{stf_loadActual();}catch(e){}
 
 function renderLaborDash(){
   var today=new Date();today.setHours(0,0,0,0);
+  /* Self-heal any empty room counts from R106 before computing the pace, so
+     recently-uploaded / just-synced days show their budget instead of "—". */
+  try{ Object.keys(localStorage).forEach(function(_k){ if(_k.indexOf('hk_r106_')===0)applyR106ToEmptyRooms(_k.replace('hk_r106_','')); }); }catch(e){}
   var wk=getDashWeek();
   var yr=viewMonth.getFullYear(),mo=viewMonth.getMonth();
   /* Merge day/room snapshots from EVERY stored month — not just viewMonth.
