@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.24.0"/>
+<meta name="app-version" content="6.25.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1205,6 +1205,10 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
             <div class="pa-email" id="profileMenuEmail">&mdash;</div>
             <div class="pa-role" id="profileMenuRole"></div>
           </div>
+        </div>
+        <div id="presenceSection" style="padding:4px 4px 8px;border-bottom:1px solid var(--border);margin-bottom:6px;">
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:4px 8px 6px;">Team</div>
+          <div id="presenceList" style="font-size:12.5px;color:var(--text3);padding:2px 8px;">Loading&hellip;</div>
         </div>
         <button class="profile-item" role="menuitem" onclick="_pmGo('settings')"><span class="pi-ico">&#9881;</span> Settings</button>
         <button class="profile-item danger" role="menuitem" onclick="closeProfileMenu();authSignOut();"><span class="pi-ico">&#9099;</span> Sign out</button>
@@ -3411,6 +3415,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.25.0', date:'2026-07-20',
+    fixes:['Your profile menu (the circle with your initial, top-right) now shows a "Team" list: who\'s online right now (green dot) and, for everyone else, when they were last seen ("last seen 8 min ago"). It updates while the app is open. Only people you\'ve given access to appear, and no one can fake being someone else — each person can only mark their own presence.']
+  },
+  {
     v:'6.24.0', date:'2026-07-20',
     fixes:['Cleaner labor-meeting view under Weekly Labor Pace. The "Training hours this week" and "Project hours this week" strips now match as a pair — a report-style layout with each person on their own row (name, position, hours), and for projects the activity note underneath. Training uses a gold header, Projects a navy one, so you can tell them apart at a glance. And the bottom summary line was corrected to what you actually want: it now takes the week\'s over/under variance and subtracts the project and training hours — "Variance − Projects − Training = Adjusted" — so you can see what the variance would be without those extra hours.']
   },
@@ -4058,6 +4066,7 @@ function _rtSetLiveStatus(on){
 function startRealtime(){
   var tok=_authToken();
   if(!tok||_authExpired())return;               /* need a valid session */
+  try{startPresence();}catch(e){}                /* heartbeat rides the same lifecycle */
   if(!navigator.onLine)return;                   /* nothing to connect to */
   if(_rtChannel)return;                           /* already subscribed */
   _loadSupabaseLib().then(function(){
@@ -4086,6 +4095,78 @@ function startRealtime(){
 function stopRealtime(){
   try{ if(_rtChannel&&_rtClient)_rtClient.removeChannel(_rtChannel); }catch(e){}
   _rtChannel=null;
+  try{stopPresence();}catch(e){}
+}
+
+/* ── Team presence ────────────────────────────────────────
+   Each signed-in device heartbeats its own row in user_presence (~every 45s)
+   while the app is open. The profile menu reads the table to show who's
+   online now (seen within PRESENCE_ONLINE_MS) and "last seen X ago" for the
+   rest. Writing is RLS-locked to your own email, so presence can't be faked. */
+var PRESENCE_ONLINE_MS=90*1000;
+var _presenceTimer=null;
+function _presenceName(){
+  var n=(localStorage.getItem('hk_manager_name')||'').trim();
+  if(n)return n;
+  var em=getSignedInEmail();
+  return em?em.split('@')[0]:'';
+}
+function pingPresence(){
+  var em=getSignedInEmail();
+  if(!em)return;
+  authedFetch(SUPA_URL+'/rest/v1/user_presence',{
+    method:'POST',
+    headers:{'Prefer':'resolution=merge-duplicates','Content-Type':'application/json'},
+    body:JSON.stringify({email:em.toLowerCase(),name:_presenceName(),last_seen:new Date().toISOString()})
+  }).catch(function(){});
+}
+function startPresence(){
+  if(!getSignedInEmail())return;
+  pingPresence();
+  if(_presenceTimer)clearInterval(_presenceTimer);
+  _presenceTimer=setInterval(function(){ if(getSignedInEmail())pingPresence(); },45000);
+}
+function stopPresence(){
+  if(_presenceTimer){clearInterval(_presenceTimer);_presenceTimer=null;}
+}
+/* "online" if seen within the window, else a short "X ago" label. */
+function _presenceRel(iso){
+  var ms=Date.now()-new Date(iso).getTime();
+  if(ms<PRESENCE_ONLINE_MS)return 'online';
+  var m=Math.floor(ms/60000);
+  if(m<1)return 'just now';
+  if(m<60)return m+' min ago';
+  var h=Math.floor(m/60);
+  if(h<24)return h+'h ago';
+  return Math.floor(h/24)+'d ago';
+}
+function renderPresenceList(rows){
+  var el=document.getElementById('presenceList');
+  if(!el)return;
+  var me=(getSignedInEmail()||'').toLowerCase();
+  var list=(rows||[]).slice().sort(function(a,b){ return new Date(b.last_seen)-new Date(a.last_seen); });
+  if(!list.length){ el.innerHTML='<div style="color:var(--text3);padding:2px 0;">No one signed in yet.</div>'; return; }
+  var h='';
+  list.forEach(function(r){
+    var rel=_presenceRel(r.last_seen);
+    var online=(rel==='online');
+    var isMe=(r.email||'').toLowerCase()===me;
+    var nm=escHtml(r.name||(r.email||'').split('@')[0])+(isMe?' (you)':'');
+    h+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">'
+      +'<span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:'+(online?'var(--green)':'var(--border2,#c9c9c9)')+';"></span>'
+      +'<span style="font-weight:600;color:var(--text1);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+nm+'</span>'
+      +'<span style="font-size:11px;color:'+(online?'var(--green)':'var(--text3)')+';white-space:nowrap;">'+(online?'online':'last seen '+rel)+'</span>'
+      +'</div>';
+  });
+  el.innerHTML=h;
+}
+function loadPresence(){
+  var el=document.getElementById('presenceList');
+  if(el)el.innerHTML='<div style="color:var(--text3);padding:2px 0;">Loading&hellip;</div>';
+  authedFetch(SUPA_URL+'/rest/v1/user_presence?select=email,name,last_seen&order=last_seen.desc')
+    .then(function(r){ return r.ok?r.json():[]; })
+    .then(function(rows){ renderPresenceList(rows); })
+    .catch(function(){ if(el)el.innerHTML='<div style="color:var(--text3);padding:2px 0;">Couldn\'t load.</div>'; });
 }
 async function _authCheckAndProceed(){
   var tok=_authToken();
@@ -4272,6 +4353,7 @@ function toggleProfileMenu(e){
   var m=document.getElementById('profileMenu');if(!m)return;
   var open=m.classList.toggle('open');
   var a=document.getElementById('profileAvatar');if(a)a.setAttribute('aria-expanded',open?'true':'false');
+  if(open){ try{pingPresence();loadPresence();}catch(_){} } /* refresh team list when opened */
 }
 function closeProfileMenu(){
   var m=document.getElementById('profileMenu');if(m)m.classList.remove('open');
