@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.29.0"/>
+<meta name="app-version" content="6.30.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3415,6 +3415,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.30.0', date:'2026-07-22',
+    fixes:['Fixed the most likely real cause of "I opened the app and it looked out of date": (1) if the live connection silently dropped (common on mobile when a network blips or the OS suspends a backgrounded tab), the app had no way to tell and would never reconnect on its own — now it notices and reconnects automatically. (2) Switching back to the app after backgrounding it (or bringing the browser tab back into focus) now also pulls the latest data right away, instead of only relying on the live connection having stayed up the whole time you were away. Together these mean returning to the app — on your phone or anyone else\'s — now reliably shows what\'s actually in the cloud.']
+  },
+  {
     v:'6.29.0', date:'2026-07-22',
     fixes:['Strengthened multi-device sync for day reports and room counts (the numbers behind your Labor Pace budget). Two fixes: (1) A manually-entered room count ("manual" — protected from being overwritten by R106) is now correctly preserved through every sync; before, a sync could silently drop that protection, leaving the day open to being overwritten later. (2) Syncing day reports and room counts now keeps whichever edit is actually more recent, the same protection Projects and Call-Offs already had since an earlier version — instead of always letting the last device to sync win, even if its data was older. This only matters in the rare case of two people editing the same day around the same time; nothing about your existing data changes.']
   },
@@ -4104,7 +4108,18 @@ function startRealtime(){
         _rtDebounce=setTimeout(function(){ try{syncFromSheets();}catch(e){} },1200);
       })
       .subscribe(function(status){
-        if(status==='SUBSCRIBED')_rtSetLiveStatus(true);
+        if(status==='SUBSCRIBED'){_rtSetLiveStatus(true);return;}
+        /* CHANNEL_ERROR / TIMED_OUT / CLOSED: the socket died. Without this,
+           _rtChannel stayed set to the dead channel forever, so both
+           startRealtime()'s "already subscribed" guard and the 30s watchdog's
+           "!_rtChannel" check kept thinking it was still live — no more
+           updates would arrive until the whole app was reloaded. Clearing it
+           here lets the existing watchdog (and the next 'online' event)
+           reconnect on their own. */
+        if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+          try{ if(_rtClient&&_rtChannel)_rtClient.removeChannel(_rtChannel); }catch(e){}
+          _rtChannel=null;
+        }
       });
   }).catch(function(){ /* stay on open/reconnect pull sync */ });
 }
@@ -4349,8 +4364,22 @@ function _checkInactivity(){
   var er=document.getElementById('authError');
   if(er){er.style.color='';er.textContent='Signed out after '+(AUTO_LOGOUT_MS/60000)+' minutes of inactivity, for security. Please sign in again.';}
 }
-document.addEventListener('visibilitychange',function(){ if(!document.hidden)_checkInactivity(); });
-window.addEventListener('focus',_checkInactivity);
+/* Coming back to the app after it was backgrounded (switched phone apps,
+   alt-tabbed) is exactly when a stale realtime connection goes unnoticed —
+   mobile OSes commonly suspend a backgrounded tab's WebSocket, so it can be
+   dead by the time you return with no signal that anything changed. Pulling
+   fresh data and re-checking realtime on every return closes that gap,
+   instead of relying only on the periodic watchdog (which can itself be
+   throttled while backgrounded) or the user noticing and reloading. */
+function _onResumeForeground(){
+  _checkInactivity();
+  if(_authToken()&&!_authExpired()){
+    try{syncFromSheets();}catch(e){}
+    try{startRealtime();}catch(e){}
+  }
+}
+document.addEventListener('visibilitychange',function(){ if(!document.hidden)_onResumeForeground(); });
+window.addEventListener('focus',_onResumeForeground);
 setInterval(_checkInactivity,60000);
 function _authUpdateUI(){
   var el=document.getElementById('settingsSyncStatus');

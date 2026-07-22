@@ -10,6 +10,8 @@ const cases = [
   require('./cases/r106-backfill'),
   require('./cases/resume-session-sync'),
   require('./cases/month-sync-conflict'),
+  require('./cases/realtime-reconnect'),
+  require('./cases/resume-foreground-sync'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
