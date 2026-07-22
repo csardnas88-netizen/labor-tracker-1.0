@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.26.0"/>
+<meta name="app-version" content="6.27.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3414,6 +3414,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.27.0', date:'2026-07-22',
+    fixes:['Cleaner, easier-to-read Labor view for the labor meeting. (1) Weekly Labor Pace rows no longer fill the whole row with red/green — each row now just has a thin colored edge on the left (red = over budget, green = under), so the page is calmer and the numbers that matter stand out. (2) The week summary line (Variance − Projects − Training = Adjusted) now sits right under the pace, where you read the variance. (3) "Training Hours This Week" and "Project Hours This Week" are now their own separate, smaller cards under a "Supporting detail" heading — clearly secondary, so they no longer compete with the main pace. (4) Break Exceptions now show a white row with just a colored left edge (no full yellow fill) and the employee name in black, so when breaks are fine the screen stays clean. (5) Fixed two small display glitches: the day\'s "Employees" count and the month\'s "Breaks MTD" no longer show "undefined"/"NaN".']
+  },
   {
     v:'6.26.0', date:'2026-07-21',
     fixes:['Fixed rooms/budget showing blank ("—") for recent days even though the R106 had the numbers. The R106 occupancy and the per-day rooms that drive the budget are stored separately, and the last day or two (and days synced from another device) could be left empty — so the budget couldn\'t calculate and you had to re-enter or re-upload. The app now fills any empty day automatically from the R106 whenever you open Labor or sync, so budgets show up on their own. Days you typed by hand are never overwritten. Your R106 data was always safe — this just applies it. Note: nothing was lost; all of July\'s occupancy was intact in the cloud.']
@@ -8425,7 +8429,10 @@ function renderLaborDash(){
     var d2=parseLocalDate(ds2);
     if(d2.getMonth()!==mo||d2.getFullYear()!==yr)return;
     var s=days[ds2];var r2=getRoomsForDay(ds2);
-    mPaid+=s.totalPaid;mBudget+=dayBudget(r2);mNB+=s.noBreak;mSB+=s.shortBreak;mDays++;
+    var sEmps=s.emps||[];
+    var sNB=sEmps.length?sEmps.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='none';}).length:(s.noBreak||0);
+    var sSB=sEmps.length?sEmps.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos,e.id);return st==='short'||st==='over'||st==='long';}).length:(s.shortBreak||0);
+    mPaid+=s.totalPaid;mBudget+=dayBudget(r2);mNB+=sNB;mSB+=sSB;mDays++;
   });
   var mVar=mPaid-mBudget;
   var dInMonth=new Date(yr,mo+1,0).getDate();
@@ -8531,7 +8538,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
 
   html+='<div style="overflow-x:auto;">';
 
-  html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;padding:7px 14px;background:var(--surface);border-bottom:1px solid var(--border);width:100%;min-width:'+rowMinW+'px;">';
+  html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;padding:7px 14px;border-left:3px solid transparent;background:var(--surface);border-bottom:1px solid var(--border);width:100%;min-width:'+rowMinW+'px;">';
   html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Position</div>';
   activeDayIdx.forEach(function(di){
     html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);line-height:1.3;">'+dayLabelsDow[di]
@@ -8549,12 +8556,12 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     var variance=actual-budget;
     var isOver=variance>0.5;
     var isUnder=variance<-0.5;
-    var rowBg=isOver?'var(--red-bg)':isUnder?'var(--green-bg)':'var(--white)';
+    var accent=isOver?'var(--red-border)':isUnder?'var(--green-border)':'var(--border)';
     var valColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
     var pillBg=isOver?'var(--red-border)':isUnder?'var(--green-border)':'var(--border)';
     var pillColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
 
-    html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;padding:9px 14px;border-top:1px solid var(--border);background:'+rowBg+';width:100%;min-width:'+rowMinW+'px;">';
+    html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;padding:9px 14px;border-top:1px solid var(--border);border-left:3px solid '+accent+';background:var(--white);width:100%;min-width:'+rowMinW+'px;">';
     html+='<div><div style="font-size:11.5px;font-weight:700;color:var(--text1);">'+p.label+'</div>'
       +'<div style="font-size:9px;color:var(--text3);margin-top:1px;">'+p.sub+'</div></div>';
     activeDayIdx.forEach(function(di){
@@ -8569,59 +8576,71 @@ function buildWeeklyPaceHTML(days,rooms,wk){
   });
 
   html+='</div>';
+  html+='</div>';
 
-  /* ── Extra hours logged this week (training + special projects) — read-only
-     visuals under the week's pace, so both can be explained in the labor
-     meeting. Each strip only appears when that week had those hours. ── */
+  /* ── Extra hours (training + special projects) + a week-summary
+     reconciliation. These are SECONDARY, so they render as compact sub-cards
+     below the pace, with the summary bar sitting directly under it. Read-only,
+     pulled automatically; each only appears when that week had those hours. ── */
   try{
     var _twk=dateStr(getHotelWeekStart(wk.start));
     var _tw=getTrainingSummary().weeks.filter(function(w){return w.key===_twk;})[0];
-    /* Training strip — report style, GOLD header. No activity notes (training
-       has none), so rows are name · position · hours. */
-    if(_tw){
-      html+='<div style="border-top:1px solid var(--border);background:var(--gt);padding:10px 14px;">';
-      html+='<div style="font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">&#127891; Training hours this week</div>';
-      html+=_paceChips(_tw.byPos, _tw.total);
-      if(_tw.emps&&_tw.emps.length){
-        html+='<div style="margin-top:10px;background:var(--white);border:1px solid var(--border);border-radius:9px;overflow:hidden;">';
-        (_tw.emps).forEach(function(em,i){ html+=_paceRow(em.name, em.pos, em.hours, '', i===0); });
-        html+='</div>';
-      }
-      html+='</div>';
-    }
-    /* Projects strip — report style, NAVY project headers + gold left-accent
-       rows with the activity note, so the meeting sees each activity. */
     var _pw=getProjectHoursForWeek(_twk);
-    if(_pw.total>0){
-      html+='<div style="border-top:1px solid var(--border);background:var(--surface);padding:10px 14px;">';
-      html+='<div style="font-size:9px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">&#128193; Project hours this week</div>';
-      html+=_paceChips(_pw.byPos, _pw.total);
-      _pw.projects.forEach(function(pr){
-        html+='<div style="margin-top:10px;background:var(--white);border:1px solid var(--border);border-radius:9px;overflow:hidden;">';
-        html+='<div style="background:var(--navy);color:#fff;padding:8px 12px;display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:700;font-size:12px;">'+escHtml(pr.name)+'</span><strong style="font-size:12px;white-space:nowrap;">'+pr.hours.toFixed(2)+'h</strong></div>';
-        pr.items.forEach(function(it){ html+=_paceRow(it.empName, it.pos, it.hours, it.note, false); });
-        html+='</div>';
-      });
-      html+='</div>';
-    }
-    /* Reconciliation: the week's variance minus the training + project hours,
-       = the operational variance (what the over/under would be without them).
-       Uses the pace's net variance, not total worked. */
     var _tt=_tw?_tw.total:0, _pt=_pw.total;
+
+    /* Week summary — the week's variance minus training + project hours = the
+       adjusted variance (what the over/under would be without them). Placed
+       right under the pace since it headlines the same variance. */
     if(_tt>0||_pt>0){
       var _adj=netVar-_pt-_tt;
       var _adjColor=_adj>0.05?'#f87171':(_adj<-0.05?'var(--green-border)':'#fff');
-      html+='<div style="border-top:1px solid var(--border);background:var(--navy);color:#fff;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;font-size:11px;">';
-      html+='<span style="font-size:9px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.5px;">This week</span>';
+      html+='<div style="background:var(--navy);color:#fff;border-radius:10px;margin-bottom:9px;padding:8px 13px;display:flex;flex-wrap:wrap;gap:6px 13px;align-items:baseline;font-size:9.5px;">';
+      html+='<span style="font-size:8.5px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.4px;">Week summary</span>';
       html+='<span>Variance <strong>'+(netVar>=0?'+':'')+netVar.toFixed(2)+'h</strong></span>';
       html+='<span style="opacity:.85;">&minus; Projects <strong>'+_pt.toFixed(2)+'h</strong></span>';
       html+='<span style="opacity:.85;">&minus; Training <strong>'+_tt.toFixed(2)+'h</strong></span>';
       html+='<span style="margin-left:auto;">= Adjusted <strong style="color:'+_adjColor+';">'+(_adj>=0?'+':'')+_adj.toFixed(2)+'h</strong></span>';
       html+='</div>';
+
+      html+='<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin:16px 2px 8px;">Supporting detail &middot; extra hours</div>';
+    }
+
+    /* Training — its own compact sub-card, gold left accent. Name · position ·
+       hours (training has no activity notes). */
+    if(_tw){
+      html+='<div style="background:var(--white);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:10px;overflow:hidden;margin-bottom:9px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid var(--border);background:var(--surface);">';
+      html+='<div style="font-size:10.5px;font-weight:700;color:var(--text2);"><span style="color:var(--gd);">&#127891;</span> Training Hours This Week</div>';
+      html+='<div style="font-size:9.5px;font-weight:800;padding:2px 9px;border-radius:99px;white-space:nowrap;background:var(--gt);color:var(--gd);border:1px solid var(--gold);">Total '+_tw.total.toFixed(2)+'h</div>';
+      html+='</div><div style="padding:8px 11px;">';
+      html+=_paceChips(_tw.byPos);
+      if(_tw.emps&&_tw.emps.length){
+        html+='<div style="margin-top:7px;background:var(--white);border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+        (_tw.emps).forEach(function(em,i){ html+=_paceRow(em.name, em.pos, em.hours, '', i===0); });
+        html+='</div>';
+      }
+      html+='</div></div>';
+    }
+
+    /* Projects — its own compact sub-card, navy left accent. Each project
+       header, then name · position · hours + the activity note. */
+    if(_pw.total>0){
+      html+='<div style="background:var(--white);border:1px solid var(--border);border-left:3px solid var(--navy);border-radius:10px;overflow:hidden;margin-bottom:9px;">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid var(--border);background:var(--surface);">';
+      html+='<div style="font-size:10.5px;font-weight:700;color:var(--text2);"><span style="color:var(--navy);">&#128193;</span> Project Hours This Week</div>';
+      html+='<div style="font-size:9.5px;font-weight:800;padding:2px 9px;border-radius:99px;white-space:nowrap;background:var(--navy);color:#fff;">Total '+_pw.total.toFixed(2)+'h</div>';
+      html+='</div><div style="padding:8px 11px;">';
+      html+=_paceChips(_pw.byPos);
+      _pw.projects.forEach(function(pr){
+        html+='<div style="margin-top:7px;background:var(--white);border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+        html+='<div style="background:var(--navy2);color:#fff;padding:5px 10px;display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:700;font-size:10px;">'+escHtml(pr.name)+'</span><strong style="font-size:10px;white-space:nowrap;">'+pr.hours.toFixed(2)+'h</strong></div>';
+        pr.items.forEach(function(it){ html+=_paceRow(it.empName, it.pos, it.hours, it.note, false); });
+        html+='</div>';
+      });
+      html+='</div></div>';
     }
   }catch(e){}
 
-  html+='</div>';
   return html;
 }
 
@@ -8673,7 +8692,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       html+='<div class="dsc-row"><div class="dsc-label">vs Budget</div>'
         +'<div class="dsc-val '+(varH>0?'red':'green')+'">'+Math.round((snap.totalPaid/bud)*100)+'%</div></div>';
     }
-    html+='<div class="dsc-row"><div class="dsc-label">Employees</div><div class="dsc-val">'+snap.totalEmps+'</div></div>';
+    html+='<div class="dsc-row"><div class="dsc-label">Employees</div><div class="dsc-val">'+(snap.totalEmps!=null?snap.totalEmps:(snap.emps||[]).length)+'</div></div>';
     html+='</div></div>';
 
     /* By position table */
@@ -8813,26 +8832,24 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         var pos=(e.pos||'').replace(/^\d+-/,'')||'Unknown Position';
         var isNone=(st==='none');
         var isOver=(st==='over');
-        var rowBg=isNone?'var(--red-bg)':'var(--yellow-bg)';
         var leftBar=isNone?'var(--red)':'var(--yellow)';
-        var nameColor=isNone?'var(--red)':'var(--yellow)';
         var badgeBg=isNone?'var(--red-bg)':'var(--yellow-bg)';
         var badgeColor=isNone?'var(--red)':'var(--yellow)';
         var icon=isNone?'🔴':'🟠';
         var label=breakLabel(mins,e.pos||'',e.id);
         var tdBadge=isTurndown(e.pos)?'<span style="background:var(--indigo-bg);color:var(--indigo);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:5px;">Part-time</span>':'';
 
-        html+='<div style="margin:8px 0;border-radius:8px;background:'+rowBg+';'
-          +'border-left:4px solid '+leftBar+';display:flex;align-items:center;'
-          +'justify-content:space-between;padding:10px 12px;gap:10px;">';
-        html+='<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">';
-        html+='<span style="font-size:18px;flex-shrink:0;">'+icon+'</span>';
+        html+='<div style="margin:6px 0;border-radius:8px;background:var(--white);'
+          +'border:1px solid var(--border);border-left:3px solid '+leftBar+';display:flex;align-items:center;'
+          +'justify-content:space-between;padding:8px 11px;gap:10px;">';
+        html+='<div style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;">';
+        html+='<span style="font-size:15px;flex-shrink:0;">'+icon+'</span>';
         html+='<div style="min-width:0;">';
-        html+='<div style="font-weight:700;color:'+nameColor+';font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+'</div>';
-        html+='<div style="font-size:11px;color:var(--text3);margin-top:1px;">'+pos+tdBadge+'</div>';
+        html+='<div style="font-weight:700;color:var(--text1);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+'</div>';
+        html+='<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+pos+tdBadge+'</div>';
         html+='</div></div>';
         html+='<span style="flex-shrink:0;background:'+badgeBg+';color:'+badgeColor+';'
-          +'font-size:11px;font-weight:800;padding:4px 10px;border-radius:99px;white-space:nowrap;">'+label+'</span>';
+          +'font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;white-space:nowrap;">'+label+'</span>';
         html+='</div>';
       });
 
@@ -8842,17 +8859,17 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         tdOkEmps.forEach(function(e){
           var mins=toMins(parseFloat(e.unpaid||0));
           var pos=(e.pos||'').replace(/^\d+-/,'')||'Unknown Position';
-          html+='<div style="margin:6px 0;border-radius:8px;background:var(--green-bg);'
-            +'border-left:4px solid var(--green);display:flex;align-items:center;'
-            +'justify-content:space-between;padding:10px 12px;gap:10px;">';
-          html+='<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">';
-          html+='<span style="font-size:18px;flex-shrink:0;">✅</span>';
+          html+='<div style="margin:6px 0;border-radius:8px;background:var(--white);'
+            +'border:1px solid var(--border);border-left:3px solid var(--green);display:flex;align-items:center;'
+            +'justify-content:space-between;padding:8px 11px;gap:10px;">';
+          html+='<div style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;">';
+          html+='<span style="font-size:15px;flex-shrink:0;">✅</span>';
           html+='<div style="min-width:0;">';
-          html+='<div style="font-weight:700;color:var(--green);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+'</div>';
-          html+='<div style="font-size:11px;color:var(--text3);margin-top:1px;">'+pos+' <span style="background:var(--indigo-bg);color:var(--indigo);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:3px;">Part-time</span></div>';
+          html+='<div style="font-weight:700;color:var(--text1);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+'</div>';
+          html+='<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+pos+' <span style="background:var(--indigo-bg);color:var(--indigo);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:3px;">Part-time</span></div>';
           html+='</div></div>';
           html+='<span style="flex-shrink:0;background:var(--green-bg);color:var(--green);'
-            +'font-size:11px;font-weight:800;padding:4px 10px;border-radius:99px;white-space:nowrap;">OK — '+mins+' min</span>';
+            +'font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;white-space:nowrap;">OK — '+mins+' min</span>';
           html+='</div>';
         });
       }
@@ -11383,20 +11400,20 @@ function getProjectHoursForWeek(weekKey){
    (Training + Projects). Shared so the two blocks read as a consistent pair:
    position chips + total, then white boxes with a gold left-accent row per
    person (name · position · hours, plus a note for projects). */
-function _paceChips(byPos, total){
-  var h='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+function _paceChips(byPos){
+  var h='<div style="font-size:7.8px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:6px;">By position</div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:4px;">';
   Object.keys(byPos).sort().forEach(function(pos){
-    h+='<div style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;white-space:nowrap;"><span style="color:var(--text2);">'+escHtml(pos)+'</span> <strong style="color:var(--navy);">'+byPos[pos].toFixed(2)+'h</strong></div>';
+    h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:2px 8px;font-size:8.7px;white-space:nowrap;"><span style="color:var(--text2);">'+escHtml(pos)+'</span> <strong style="color:var(--text1);">'+byPos[pos].toFixed(2)+'h</strong></div>';
   });
-  h+='<div style="background:var(--navy);border-radius:8px;padding:5px 10px;font-size:11px;color:#fff;white-space:nowrap;"><span style="opacity:.7;">Total</span> <strong>'+total.toFixed(2)+'h</strong></div>';
   h+='</div>';
   return h;
 }
 function _paceRow(name, pos, hours, note, isFirst){
-  var h='<div style="padding:9px 12px;border-left:3px solid var(--gold);'+(isFirst?'':'border-top:1px solid var(--border);')+'">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font-weight:700;font-size:12.5px;color:var(--text1);">'+escHtml(name)+'</span><strong style="font-size:13px;color:var(--navy);white-space:nowrap;">'+hours.toFixed(2)+'h</strong></div>';
-  if(pos)h+='<div style="font-size:11px;color:var(--gd);font-weight:600;">'+escHtml(pos)+'</div>';
-  if(note)h+='<div style="font-size:11px;color:var(--text2);line-height:1.5;margin-top:3px;">'+escHtml(note)+'</div>';
+  var h='<div style="padding:6px 10px;border-left:2px solid var(--gold);'+(isFirst?'':'border-top:1px solid var(--border);')+'">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font-weight:700;font-size:10px;color:var(--text1);">'+escHtml(name)+'</span><strong style="font-size:10.5px;color:var(--navy);white-space:nowrap;">'+hours.toFixed(2)+'h</strong></div>';
+  if(pos)h+='<div style="font-size:8px;color:var(--gd);font-weight:700;">'+escHtml(pos)+'</div>';
+  if(note)h+='<div style="font-size:8.7px;color:var(--text2);line-height:1.45;margin-top:3px;">'+escHtml(note)+'</div>';
   h+='</div>';
   return h;
 }

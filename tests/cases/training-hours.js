@@ -47,6 +47,6 @@ module.exports = {
 
     // The Labor pace strip for that week must include a training strip.
     const strip = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 200, { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) });
-    t.assert(/Training hours this week/.test(strip), 'Weekly pace should show the training strip');
+    t.assert(/Training Hours This Week/i.test(strip), 'Weekly pace should show the training strip');
   }
 };

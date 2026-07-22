@@ -30,13 +30,13 @@ module.exports = {
       win.loadMonthData('2026-07').days, 200,
       { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) }
     );
-    t.assert(/Project hours this week/.test(strip), 'project strip title missing');
+    t.assert(/Project Hours This Week/i.test(strip), 'project strip title missing');
     t.assert(/Ana Lopez/.test(strip) && /Beto Cruz/.test(strip), 'employee names missing from strip');
     t.assert(/Deep cleaned rooms 1401-1410/.test(strip), 'activity note missing from strip');
 
     // Reconciliation line: Variance − Projects − Training = Adjusted, and the
     // math must actually hold (this is the number the meeting reads).
-    t.assert(/This week/.test(strip) && /Variance/.test(strip) && /Adjusted/.test(strip), 'reconciliation line missing');
+    t.assert(/Week summary/i.test(strip) && /Variance/.test(strip) && /Adjusted/.test(strip), 'reconciliation line missing');
     const num = (label) => {
       const m = strip.match(new RegExp(label + '\\s*<strong[^>]*>([+-]?[0-9.]+)h'));
       return m ? parseFloat(m[1]) : null;
