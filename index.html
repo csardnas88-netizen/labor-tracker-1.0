@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.27.0"/>
+<meta name="app-version" content="6.28.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3415,6 +3415,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.28.0', date:'2026-07-22',
+    fixes:['Fixed a gap where a device with an already-saved session (the normal case — you\'re not typing your password every time) could open the app and see stale data until something happened to trigger a sync. The app now also pulls the latest data from the cloud every time it opens with a saved session, not only on a fresh sign-in — so whoever opens the app (you, Alejandro, Rebeca) always sees what\'s actually in the cloud, right away. Nothing was lost before this fix; the data was always safe in the cloud, it just wasn\'t always being pulled down immediately on open.']
+  },
+  {
     v:'6.27.0', date:'2026-07-22',
     fixes:['Cleaner, easier-to-read Labor view for the labor meeting. (1) Weekly Labor Pace rows no longer fill the whole row with red/green — each row now just has a thin colored edge on the left (red = over budget, green = under), so the page is calmer and the numbers that matter stand out. (2) The week summary line (Variance − Projects − Training = Adjusted) now sits right under the pace, where you read the variance. (3) "Training Hours This Week" and "Project Hours This Week" are now their own separate, smaller cards under a "Supporting detail" heading — clearly secondary, so they no longer compete with the main pace. (4) Break Exceptions now show a white row with just a colored left edge (no full yellow fill) and the employee name in black, so when breaks are fine the screen stays clean. (5) Fixed two small display glitches: the day\'s "Employees" count and the month\'s "Breaks MTD" no longer show "undefined"/"NaN".']
   },
@@ -4182,6 +4186,13 @@ async function _authCheckAndProceed(){
     SUPA_HEADERS['Authorization']='Bearer '+tok;
     document.getElementById('authOverlay').style.display='none';
     _authUpdateUI();
+    /* Resuming a saved session renders straight from local cache. Without a
+       pull here, a device only sees other people's changes once realtime
+       happens to be connected at the moment they save — if that connection
+       hasn't come up yet (or another device edited between sessions), the
+       screen shows stale data until something else triggers a sync. Pulling
+       on every resume closes that gap regardless of realtime timing. */
+    setTimeout(function(){try{syncFromSheets();}catch(e){}},400);
     setTimeout(function(){try{startRealtime();}catch(e){}},1500);
     return;
   }
@@ -4189,6 +4200,7 @@ async function _authCheckAndProceed(){
     if(await _authRefresh()){
       document.getElementById('authOverlay').style.display='none';
       _authUpdateUI();
+      setTimeout(function(){try{syncFromSheets();}catch(e){}},400);
       setTimeout(function(){try{startRealtime();}catch(e){}},1500);
       return;
     }
