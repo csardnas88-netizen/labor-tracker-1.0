@@ -9,6 +9,7 @@ const cases = [
   require('./cases/presence'),
   require('./cases/r106-backfill'),
   require('./cases/resume-session-sync'),
+  require('./cases/month-sync-conflict'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

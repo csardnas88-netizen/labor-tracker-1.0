@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.28.0"/>
+<meta name="app-version" content="6.29.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3415,6 +3415,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.29.0', date:'2026-07-22',
+    fixes:['Strengthened multi-device sync for day reports and room counts (the numbers behind your Labor Pace budget). Two fixes: (1) A manually-entered room count ("manual" — protected from being overwritten by R106) is now correctly preserved through every sync; before, a sync could silently drop that protection, leaving the day open to being overwritten later. (2) Syncing day reports and room counts now keeps whichever edit is actually more recent, the same protection Projects and Call-Offs already had since an earlier version — instead of always letting the last device to sync win, even if its data was older. This only matters in the rare case of two people editing the same day around the same time; nothing about your existing data changes.']
+  },
+  {
     v:'6.28.0', date:'2026-07-22',
     fixes:['Fixed a gap where a device with an already-saved session (the normal case — you\'re not typing your password every time) could open the app and see stale data until something happened to trigger a sync. The app now also pulls the latest data from the cloud every time it opens with a saved session, not only on a fresh sign-in — so whoever opens the app (you, Alejandro, Rebeca) always sees what\'s actually in the cloud, right away. Nothing was lost before this fix; the data was always safe in the cloud, it just wasn\'t always being pulled down immediately on open.']
   },
@@ -4918,6 +4922,37 @@ function mergeProjectObjects(localP,remoteP){
   return out;
 }
 
+/* Per-day last-write-wins merge for month data (day reports, room counts).
+   Until this fix, syncing a month_ key always let the CLOUD value win for any
+   day present on both sides, with no timestamp check — the same overwrite
+   risk that projects/call-offs already got fixed for in v6.9.0, just never
+   applied here. A day/room edit that hadn't finished pushing yet (e.g. a
+   sync fired right after) could get silently clobbered by an older cloud
+   value. `extra` (used for roomsSource) follows whichever side's value wins,
+   so "manual" protection travels with the room count it was set for instead
+   of a separate, unsynced merge. Old data with no timestamp on either side
+   keeps the previous behavior (remote wins) so historical days don't change. */
+function _mergeTimedDayMap(localMap,localTimes,remoteMap,remoteTimes,localExtra,remoteExtra){
+  localMap=localMap||{};localTimes=localTimes||{};remoteMap=remoteMap||{};remoteTimes=remoteTimes||{};
+  localExtra=localExtra||{};remoteExtra=remoteExtra||{};
+  var outMap={},outTimes={},outExtra={};
+  var keys={};
+  Object.keys(localMap).forEach(function(k){keys[k]=1;});
+  Object.keys(remoteMap).forEach(function(k){keys[k]=1;});
+  Object.keys(keys).forEach(function(k){
+    var hasL=Object.prototype.hasOwnProperty.call(localMap,k);
+    var hasR=Object.prototype.hasOwnProperty.call(remoteMap,k);
+    var takeLocal=function(){ outMap[k]=localMap[k]; if(localTimes[k])outTimes[k]=localTimes[k]; if(localExtra[k])outExtra[k]=localExtra[k]; };
+    var takeRemote=function(){ outMap[k]=remoteMap[k]; if(remoteTimes[k])outTimes[k]=remoteTimes[k]; if(remoteExtra[k])outExtra[k]=remoteExtra[k]; };
+    if(hasL&&!hasR){takeLocal();return;}
+    if(hasR&&!hasL){takeRemote();return;}
+    var lt=Date.parse(localTimes[k]||0)||0;
+    var rt=Date.parse(remoteTimes[k]||0)||0;
+    if(rt>=lt)takeRemote();else takeLocal();
+  });
+  return {map:outMap,times:outTimes,extra:outExtra};
+}
+
 /* Override save functions to also push to Supabase */
 var _origSaveMonthData=saveMonthData;
 saveMonthData=function(data,mk){
@@ -5026,9 +5061,14 @@ function _syncFromSheetsPull(){
           var mk=key.replace("month_","");
           var remote=all[key];
           var local=_origLoadMonthData(mk);
+          var daysMerge=_mergeTimedDayMap(local.days,local.daysUpdatedAt,remote.days,remote.daysUpdatedAt);
+          var roomsMerge=_mergeTimedDayMap(local.rooms,local.roomsUpdatedAt,remote.rooms,remote.roomsUpdatedAt,local.roomsSource,remote.roomsSource);
           var mergedM={
-            days:Object.assign({},local.days||{},remote.days||{}),
-            rooms:Object.assign({},local.rooms||{},remote.rooms||{})
+            days:daysMerge.map,
+            daysUpdatedAt:daysMerge.times,
+            rooms:roomsMerge.map,
+            roomsUpdatedAt:roomsMerge.times,
+            roomsSource:roomsMerge.extra
           };
           _origSaveMonthData(mergedM,mk);
           updated=true;
@@ -5601,6 +5641,8 @@ function saveDayToMonth(pdfDate){
   });
 
   mData.days[ds]=snap;
+  mData.daysUpdatedAt=mData.daysUpdatedAt||{};
+  mData.daysUpdatedAt[ds]=new Date().toISOString();
   saveMonthData(mData,mk);
 
   /* Auto-fill pending project entries for this date */
@@ -5783,6 +5825,8 @@ function saveRoomsForDate(ds,val){
   var n=parseInt(val)||0;
   if(n>0)mData.rooms[ds]=n;else delete mData.rooms[ds];
   mData.roomsSource[ds]='manual'; /* protege este día de futuras importaciones R106 */
+  mData.roomsUpdatedAt=mData.roomsUpdatedAt||{};
+  mData.roomsUpdatedAt[ds]=new Date().toISOString();
   saveMonthData(mData,mk); /* also syncs to Sheets */
   renderMonthDashboard();
 }
@@ -5811,6 +5855,8 @@ function applyR106ToEmptyRooms(mk){
     if(cur===undefined||cur===null||parseInt(cur)===0){
       mData.rooms[ds]=net;
       mData.roomsSource[ds]='r106';
+      mData.roomsUpdatedAt=mData.roomsUpdatedAt||{};
+      mData.roomsUpdatedAt[ds]=new Date().toISOString();
       changed=true;
     }
   });
@@ -9943,6 +9989,8 @@ function saveOccupancyRoom(ds,val){
   var prevDs=prevDateStr(ds);
   if(val>0){mData.rooms[prevDs]=val;}
   else{delete mData.rooms[prevDs];}
+  mData.roomsUpdatedAt=mData.roomsUpdatedAt||{};
+  mData.roomsUpdatedAt[prevDs]=new Date().toISOString();
   saveMonthData(mData,mk);
   renderOccupancy();
   renderLaborDash();
@@ -10208,6 +10256,8 @@ function handleR106Upload(input){
           if(mData.roomsSource[ds]==='manual'){kept++;return;} /* protegido — no sobreescribir */
           mData.rooms[ds]=parsed[ds].net;
           mData.roomsSource[ds]='r106';
+          mData.roomsUpdatedAt=mData.roomsUpdatedAt||{};
+          mData.roomsUpdatedAt[ds]=new Date().toISOString();
           saveMonthData(mData,mk);
           autoFilled++;
         });
