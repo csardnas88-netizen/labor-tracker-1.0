@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.32.0"/>
+<meta name="app-version" content="6.33.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -862,7 +862,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .month-sel .ms-label{min-width:104px;text-align:center;}
 
 /* ── PIN / Auth overlays ─────────────────────────────── */
-#pinOverlay,#authOverlay{position:fixed;inset:0;z-index:99999;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;}
+#pinOverlay,#authOverlay,#authRecoveryOverlay{position:fixed;inset:0;z-index:99999;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;}
 .ov-logo{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:700;color:var(--gl);letter-spacing:.5px;margin-bottom:4px;}
 .ov-sub{font-size:11px;color:rgba(255,255,255,.4);margin-bottom:36px;letter-spacing:.6px;text-transform:uppercase;}
 .pin-dots{display:flex;gap:16px;margin-bottom:28px;}
@@ -1066,10 +1066,16 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <label>Email</label>
       <input type="email" id="authEmail" placeholder="your@email.com" autocomplete="email" autocapitalize="off"/>
     </div>
-    <div class="auth-field">
+    <div class="auth-field" id="authPasswordField">
       <label>Password</label>
       <input type="password" id="authPassword" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"
         onkeydown="if(event.key==='Enter')authSignIn()"/>
+      <div style="text-align:right;margin-top:6px;">
+        <button onclick="_authSetMode('forgot')" id="authForgotLink"
+          style="background:none;border:none;color:rgba(255,255,255,.4);font-size:11px;cursor:pointer;text-decoration:underline;padding:2px;">
+          Forgot password?
+        </button>
+      </div>
     </div>
     <button class="auth-btn" id="authSignInBtn" onclick="authSignIn()">Sign in</button>
     <div class="auth-err" id="authError"></div>
@@ -1080,6 +1086,26 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       </button>
     </div>
     <div class="auth-note">Your data is protected by access rules on the server.<br>Only authorized accounts can read or write.</div>
+  </div>
+</div>
+
+<!-- Shown instead of the normal sign-in screen when the app is opened from a
+     password-reset email link (URL hash has type=recovery&access_token=…). -->
+<div id="authRecoveryOverlay" style="display:none;">
+  <div class="ov-logo">Labor</div>
+  <div class="ov-sub">Set a new password</div>
+  <div class="auth-card">
+    <div class="auth-field">
+      <label>New password</label>
+      <input type="password" id="authNewPassword" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password"/>
+    </div>
+    <div class="auth-field">
+      <label>Confirm new password</label>
+      <input type="password" id="authNewPassword2" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="new-password"
+        onkeydown="if(event.key==='Enter')authSetNewPassword()"/>
+    </div>
+    <button class="auth-btn" id="authRecoveryBtn" onclick="authSetNewPassword()">Set new password</button>
+    <div class="auth-err" id="authRecoveryError"></div>
   </div>
 </div>
 
@@ -3447,6 +3473,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.33.0', date:'2026-07-23',
+    fixes:['Added "Forgot password?" to the sign-in screen. Tap it, enter your email, and a reset link is sent — tapping that link opens the app straight to a "Set a new password" screen. No need to ask Carlos to reset it for you anymore.']
+  },
+  {
     v:'6.32.0', date:'2026-07-23',
     fixes:['Training page: added a view switcher (top right, next to "+ New Training") so you can pick how the list looks — "Large" (redesigned: a progress ring instead of the thin bar, full detail), "Small icons" (a compact grid — just the name and %, fastest to scan many at once), or "Details" (a dense list, one line of detail per training). Your choice is remembered on this device, so different managers can each use whichever view is easiest for them without changing it for anyone else.']
   },
@@ -4306,19 +4336,114 @@ async function authSignIn(){
   }catch(e){errEl.textContent='Network error. Please try again.';}
   btn.textContent='Sign in';btn.disabled=false;
 }
+/* Auth card has three modes sharing one form: 'signin' (default), 'signup',
+   and 'forgot' (email only, sends a reset link). The toggle link at the
+   bottom always returns to 'signin' from either of the other two. */
 var _authMode='signin';
-function _authToggleMode(){
-  _authMode=(_authMode==='signin')?'signup':'signin';
+function _authSetMode(mode){
+  _authMode=mode;
   var btn=document.getElementById('authSignInBtn');
   var tog=document.getElementById('authToggleBtn');
+  var forgotLink=document.getElementById('authForgotLink');
+  var pwField=document.getElementById('authPasswordField');
   var err=document.getElementById('authError');
-  if(err)err.textContent='';
-  if(_authMode==='signup'){
-    if(btn){btn.textContent='Create account';btn.onclick=authSignUp;}
+  if(err){err.textContent='';err.style.color='';}
+  if(mode==='signup'){
+    if(pwField)pwField.style.display='';
+    if(forgotLink)forgotLink.style.display='none';
+    if(btn){btn.textContent='Create account';btn.disabled=false;btn.onclick=authSignUp;}
     if(tog)tog.textContent='Already have an account? Sign in';
+  } else if(mode==='forgot'){
+    if(pwField)pwField.style.display='none';
+    if(btn){btn.textContent='Send reset link';btn.disabled=false;btn.onclick=authSendReset;}
+    if(tog)tog.textContent='Back to sign in';
   } else {
-    if(btn){btn.textContent='Sign in';btn.onclick=authSignIn;}
+    if(pwField)pwField.style.display='';
+    if(forgotLink)forgotLink.style.display='';
+    if(btn){btn.textContent='Sign in';btn.disabled=false;btn.onclick=authSignIn;}
     if(tog)tog.textContent='First time? Create account';
+  }
+}
+function _authToggleMode(){
+  _authSetMode(_authMode==='signin'?'signup':'signin');
+}
+async function authSendReset(){
+  var email=(document.getElementById('authEmail')||{}).value||'';
+  var errEl=document.getElementById('authError');
+  var btn=document.getElementById('authSignInBtn');
+  if(!email){errEl.textContent='Enter your email first.';return;}
+  btn.textContent='Sending…';btn.disabled=true;
+  try{
+    var redirectTo=window.location.origin+window.location.pathname;
+    var r=await fetch(SUPA_URL+'/auth/v1/recover?redirect_to='+encodeURIComponent(redirectTo),{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
+      body:JSON.stringify({email:email})
+    });
+    if(r.ok){
+      /* Supabase returns 200 here even for an email with no account, to avoid
+         revealing which addresses are registered — so this wording holds
+         true either way. */
+      errEl.style.color='#a5d6a7';
+      errEl.textContent='If that email has an account, a reset link is on its way. Check your inbox (and spam folder).';
+      btn.textContent='Email sent';
+    } else {
+      var d=await r.json().catch(function(){return{};});
+      errEl.textContent=d.error_description||d.msg||'Could not send the reset email.';
+      btn.textContent='Send reset link';btn.disabled=false;
+    }
+  }catch(e){
+    errEl.textContent='Network error. Please try again.';
+    btn.textContent='Send reset link';btn.disabled=false;
+  }
+}
+/* Detects arriving from a password-reset email (Supabase redirects back with
+   #access_token=…&type=recovery in the URL hash) and shows the "set new
+   password" screen instead of the normal sign-in one. Returns true if it
+   took over, so the caller can skip the usual auth check. */
+var _recoveryToken=null;
+function _checkRecoveryLink(){
+  var hash=window.location.hash||'';
+  if(hash.indexOf('type=recovery')===-1)return false;
+  var params=new URLSearchParams(hash.replace(/^#/,''));
+  var tok=params.get('access_token');
+  if(!tok)return false;
+  _recoveryToken=tok;
+  var ao=document.getElementById('authOverlay');if(ao)ao.style.display='none';
+  var ro=document.getElementById('authRecoveryOverlay');if(ro)ro.style.display='flex';
+  return true;
+}
+async function authSetNewPassword(){
+  var p1=(document.getElementById('authNewPassword')||{}).value||'';
+  var p2=(document.getElementById('authNewPassword2')||{}).value||'';
+  var errEl=document.getElementById('authRecoveryError');
+  var btn=document.getElementById('authRecoveryBtn');
+  if(!p1||!p2){errEl.textContent='Enter the new password twice.';return;}
+  if(p1.length<6){errEl.textContent='Password must be at least 6 characters.';return;}
+  if(p1!==p2){errEl.textContent='Passwords don\'t match.';return;}
+  if(!_recoveryToken){errEl.textContent='This reset link has expired. Request a new one from the sign-in screen.';return;}
+  btn.textContent='Saving…';btn.disabled=true;
+  try{
+    var r=await fetch(SUPA_URL+'/auth/v1/user',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+_recoveryToken},
+      body:JSON.stringify({password:p1})
+    });
+    var d=await r.json().catch(function(){return{};});
+    if(r.ok&&!d.error){
+      history.replaceState(null,'',window.location.pathname+window.location.search);
+      _recoveryToken=null;
+      var ro=document.getElementById('authRecoveryOverlay');if(ro)ro.style.display='none';
+      _authSetMode('signin');
+      var ao=document.getElementById('authOverlay');if(ao)ao.style.display='flex';
+      var se=document.getElementById('authError');
+      if(se){se.style.color='#a5d6a7';se.textContent='Password updated. Sign in with your new password.';}
+    } else {
+      errEl.textContent=d.error_description||d.msg||'Could not update the password. The link may have expired — request a new one.';
+      btn.textContent='Set new password';btn.disabled=false;
+    }
+  }catch(e){
+    errEl.textContent='Network error. Please try again.';
+    btn.textContent='Set new password';btn.disabled=false;
   }
 }
 async function authSignUp(){
@@ -4357,11 +4482,9 @@ async function authSignUp(){
          already exists (it hides this to prevent email enumeration). This is
          NOT a new account and no email is coming — the person already signed
          up. Send them to sign-in instead of the misleading "check your email". */
+      _authSetMode('signin');
       errEl.style.color='';
       errEl.textContent='This email already has an account — tap "Already have an account? Sign in" below and sign in with your password.';
-      _authMode='signin';
-      var _b=document.getElementById('authSignInBtn');if(_b){_b.textContent='Sign in';_b.onclick=authSignIn;}
-      var _t=document.getElementById('authToggleBtn');if(_t)_t.textContent='First time? Create account';
     } else if(d.id||d.identities){
       errEl.style.color='#a5d6a7';
       errEl.textContent='Account created. You can sign in now.';
@@ -4669,6 +4792,9 @@ function renderAuditLog(rows){
    access control), so go straight to the auth check. */
 window.addEventListener('load',function(){
   var po=document.getElementById('pinOverlay');if(po)po.style.display='none';
+  /* A password-reset email link takes over the whole screen — skip the
+     normal signed-in/signed-out check until that flow is done. */
+  if(_checkRecoveryLink())return;
   /* Restore auth header if token exists (app was just reloaded mid-session) */
   var tok=_authToken();
   if(tok&&!_authExpired())SUPA_HEADERS['Authorization']='Bearer '+tok;

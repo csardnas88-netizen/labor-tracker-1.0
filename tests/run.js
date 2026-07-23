@@ -14,6 +14,7 @@ const cases = [
   require('./cases/resume-foreground-sync'),
   require('./cases/adjusted-pace-by-position'),
   require('./cases/training-view-switcher'),
+  require('./cases/forgot-password'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
