@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.33.0"/>
+<meta name="app-version" content="6.34.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3473,6 +3473,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.34.0', date:'2026-07-23',
+    fixes:['Fixed a real gap that could silently erase a day\'s report from the cloud. If a device hadn\'t yet picked up a report someone uploaded from a different device, and then saved literally anything else on that device — even something the app does automatically, like filling in a room count — it used to push that device\'s whole (out-of-date) copy to the cloud, wiping out the day it didn\'t know about. Saving now checks what\'s actually in the cloud first and combines it with what you just changed, so a device can only add or update its own edits — it can never again erase a day another device already saved. If a report you uploaded ever looks missing, tell Carlos right away so it can be restored from that device before it opens elsewhere.']
+  },
+  {
     v:'6.33.0', date:'2026-07-23',
     fixes:['Added "Forgot password?" to the sign-in screen. Tap it, enter your email, and a reset link is sent — tapping that link opens the app straight to a "Set a new password" screen. No need to ask Carlos to reset it for you anymore.']
   },
@@ -5152,8 +5156,40 @@ function _mergeTimedDayMap(localMap,localTimes,remoteMap,remoteTimes,localExtra,
 var _origSaveMonthData=saveMonthData;
 saveMonthData=function(data,mk){
   _origSaveMonthData(data,mk);
-  supaPut("month_"+(mk||monthKey()), data);
+  _pushMonthDataMerged(data,mk||monthKey());
 };
+/* Pushing the local object straight to Supabase used to let ANY local write
+   — even something as small as auto-backfilling one room count on load —
+   silently erase every day the cloud had that this device's local copy
+   didn't (e.g. a report uploaded on a different device this device never
+   pulled yet). Confirmed 2026-07-23: a stale device's routine save
+   overwrote the whole month blob and a real uploaded day-report vanished
+   from the cloud with no edit ever touching it. Fetches the current remote
+   state first and merges (the same last-write-wins logic used on pull)
+   before pushing, so a stale device can only ever add/update its own
+   edits, never erase what's already in the cloud — and refreshes this
+   device's own local copy with whatever it was missing. Falls back to
+   pushing local as-is if the fetch fails (offline, etc.) rather than
+   blocking the save. */
+function _pushMonthDataMerged(data,mk){
+  authedFetch(SUPA_URL+"/rest/v1/labor_data?select=value&key=eq."+encodeURIComponent("month_"+mk),{method:"GET"})
+    .then(function(r){ return r.ok?r.json():[]; })
+    .then(function(rows){
+      var remote=(rows&&rows[0]&&rows[0].value)?JSON.parse(rows[0].value):null;
+      var toPush=data;
+      if(remote){
+        var daysMerge=_mergeTimedDayMap(data.days,data.daysUpdatedAt,remote.days,remote.daysUpdatedAt);
+        var roomsMerge=_mergeTimedDayMap(data.rooms,data.roomsUpdatedAt,remote.rooms,remote.roomsUpdatedAt,data.roomsSource,remote.roomsSource);
+        toPush=Object.assign({},data,{
+          days:daysMerge.map,daysUpdatedAt:daysMerge.times,
+          rooms:roomsMerge.map,roomsUpdatedAt:roomsMerge.times,roomsSource:roomsMerge.extra
+        });
+        _origSaveMonthData(toPush,mk); /* heal this device's own local copy too */
+      }
+      supaPut("month_"+mk, toPush);
+    })
+    .catch(function(){ supaPut("month_"+mk, data); });
+}
 
 /* R106 sync helpers */
 function syncR106ToSheets(mk,data){

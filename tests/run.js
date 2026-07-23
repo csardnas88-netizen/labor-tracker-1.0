@@ -15,6 +15,7 @@ const cases = [
   require('./cases/adjusted-pace-by-position'),
   require('./cases/training-view-switcher'),
   require('./cases/forgot-password'),
+  require('./cases/push-merge-protects-remote-days'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
