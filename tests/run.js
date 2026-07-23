@@ -12,6 +12,7 @@ const cases = [
   require('./cases/month-sync-conflict'),
   require('./cases/realtime-reconnect'),
   require('./cases/resume-foreground-sync'),
+  require('./cases/adjusted-pace-by-position'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

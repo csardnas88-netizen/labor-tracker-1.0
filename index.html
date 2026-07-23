@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.30.0"/>
+<meta name="app-version" content="6.31.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3414,6 +3414,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.31.0', date:'2026-07-22',
+    fixes:['Weekly Labor Pace now shows a second card — "Weekly Labor Pace Adjusted", framed in gold so it\'s never confused with the one above it — with each position\'s Variance recalculated after subtracting that position\'s own training and project hours for the week. A position that looks over budget can turn out to be under budget once its training/project time is netted out, and now you can see that at a glance, position by position, not just as one combined number at the bottom of the page. Positions with no training/project hours that week are marked "unchanged" and show the same numbers as always. Only appears on weeks that had training or project hours.']
+  },
   {
     v:'6.30.0', date:'2026-07-22',
     fixes:['Fixed the most likely real cause of "I opened the app and it looked out of date": (1) if the live connection silently dropped (common on mobile when a network blips or the OS suspends a backgrounded tab), the app had no way to tell and would never reconnect on its own — now it notices and reconnects automatically. (2) Switching back to the app after backgrounding it (or bringing the browser tab back into focus) now also pulls the latest data right away, instead of only relying on the live connection having stayed up the whole time you were away. Together these mean returning to the app — on your phone or anyone else\'s — now reliably shows what\'s actually in the cloud.']
@@ -8681,6 +8685,66 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     if(_tt>0||_pt>0){
       var _adj=netVar-_pt-_tt;
       var _adjColor=_adj>0.05?'#f87171':(_adj<-0.05?'var(--green-border)':'#fff');
+
+      /* Adjusted Weekly Pace by Position — a full parallel table (same
+         Actual/Budget columns), but Variance is recomputed per position
+         after subtracting THAT position's training + project hours. Framed
+         in gold (not a different header color) so it's unmistakably a
+         distinct card at a glance, never confused with the pace above it —
+         gold already means "training" elsewhere in this app. Positions with
+         no training/project hours that week show unchanged numbers, noted
+         "unchanged" instead of a deduction. */
+      var _adjIsOver=_adj>0.5,_adjIsUnder=_adj<-0.5;
+      html+='<div style="background:var(--white);border:1px solid var(--gold);box-shadow:inset 0 0 0 2px var(--gold);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+      html+='<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
+      html+='<div>';
+      html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Weekly Labor Pace <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--gd);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Adjusted</span></div>';
+      html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'
+        +wk.start.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+        +' – '+wk.end.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+        +' &nbsp;·  minus training &amp; project, by position</div>';
+      html+='</div>';
+      html+='<div style="text-align:right;">';
+      html+='<div style="font-size:16px;font-weight:800;color:'+(_adjIsOver?'var(--red-border)':'var(--green-border)')+'">'+(_adj>=0?'+':'')+_adj.toFixed(2)+'h</div>';
+      html+='<div style="font-size:9px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.4px;">'+(_adjIsOver?'Dept Over Budget':'Dept Under Budget')+'</div>';
+      html+='</div></div>';
+
+      html+='<div style="display:grid;grid-template-columns:minmax(110px,1fr) 58px 58px 66px;align-items:center;padding:7px 14px;background:var(--surface);border-bottom:1px solid var(--border);">';
+      html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Position</div>';
+      html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Actual</div>';
+      html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Budget</div>';
+      html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Variance</div>';
+      html+='</div>';
+
+      positions.forEach(function(p){
+        var actual=weekActual[p.key];
+        var budget=weekBudget[p.key];
+        if(actual===0&&budget===0)return;
+        var projForPos=_pw.byPos[p.key]||0;
+        var trainForPos=_tw?(_tw.byPos[p.key]||0):0;
+        var adjV=(actual-budget)-projForPos-trainForPos;
+        var pIsOver=adjV>0.5,pIsUnder=adjV<-0.5;
+        var pAccent=pIsOver?'var(--red-border)':pIsUnder?'var(--green-border)':'var(--border)';
+        var pValColor=pIsOver?'var(--red)':pIsUnder?'var(--green)':'var(--text2)';
+        var pPillBg=pIsOver?'var(--red-border)':pIsUnder?'var(--green-border)':'var(--border)';
+        var pPillColor=pIsOver?'var(--red)':pIsUnder?'var(--green)':'var(--text2)';
+        var noteParts=[];
+        if(projForPos>0)noteParts.push('-'+projForPos.toFixed(2)+'h project');
+        if(trainForPos>0)noteParts.push('-'+trainForPos.toFixed(2)+'h training');
+        var posNote=noteParts.length?noteParts.join(', '):'unchanged';
+
+        html+='<div style="display:grid;grid-template-columns:minmax(110px,1fr) 58px 58px 66px;align-items:center;padding:9px 14px;border-top:1px solid var(--border);border-left:3px solid '+pAccent+';background:var(--white);">';
+        html+='<div><div style="font-size:11.5px;font-weight:700;color:var(--text1);">'+p.label+'</div>'
+          +'<div style="font-size:9px;color:var(--text3);margin-top:1px;">'+posNote+'</div></div>';
+        html+='<div style="text-align:right;font-size:12.5px;font-weight:800;color:'+pValColor+';">'+actual.toFixed(2)+'h</div>';
+        html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);">'+budget.toFixed(2)+'h</div>';
+        html+='<div style="text-align:right;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+pPillBg+';color:'+pPillColor+';">'
+          +(adjV>=0?'+':'')+adjV.toFixed(2)+'h</span></div>';
+        html+='</div>';
+      });
+
+      html+='</div>';
+
       html+='<div style="background:var(--navy);color:#fff;border-radius:10px;margin-bottom:9px;padding:8px 13px;display:flex;flex-wrap:wrap;gap:6px 13px;align-items:baseline;font-size:9.5px;">';
       html+='<span style="font-size:8.5px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.4px;">Week summary</span>';
       html+='<span>Variance <strong>'+(netVar>=0?'+':'')+netVar.toFixed(2)+'h</strong></span>';
