@@ -13,6 +13,7 @@ const cases = [
   require('./cases/realtime-reconnect'),
   require('./cases/resume-foreground-sync'),
   require('./cases/adjusted-pace-by-position'),
+  require('./cases/training-view-switcher'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

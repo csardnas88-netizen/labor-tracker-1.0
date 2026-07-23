@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.31.0"/>
+<meta name="app-version" content="6.32.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -543,15 +543,10 @@ tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent
 .tr-meta{font-size:11px;color:rgba(255,255,255,.55);margin-top:3px;}
 .scope-badge{font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:4px 9px;border-radius:99px;background:rgba(201,162,39,.2);color:var(--gold-text);white-space:nowrap;flex-shrink:0;border:1px solid rgba(201,162,39,.3);}
 .scope-badge.pos{background:rgba(201,162,39,.2);color:var(--gold-text);}
-.tr-body{padding:var(--sp-lg);}
-.tr-prog-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
 .tr-count{font-size:13px;font-weight:700;color:var(--text2);}
 .tr-count b{color:var(--navy);}
-.tr-pct{font-size:22px;font-weight:800;letter-spacing:-.02em;}
-.tr-track{height:10px;background:var(--s3);border-radius:99px;overflow:hidden;}
-.tr-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gd));border-radius:99px;transition:width .4s ease;}
 .tr-sub{font-size:11px;color:var(--yellow);font-weight:700;margin-top:9px;}
-.dl-row{display:flex;gap:8px;margin-top:12px;}
+.dl-row{display:flex;gap:8px;margin:12px 18px 0;}
 .dl-chip{flex:1;border-radius:9px;padding:9px 11px;border:1.5px solid var(--border);background:var(--offwhite);}
 .dl-chip .dl-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:3px;}
 .dl-chip .dl-date{font-size:12px;font-weight:700;color:var(--text1);}
@@ -568,6 +563,43 @@ tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent
 .tr-btn-ghost{background:#fff;border:1.5px solid var(--border2);color:var(--text2);padding:10px 14px;}
 .tr-btn-icon{background:#fff;border:1.5px solid var(--border2);color:var(--text3);padding:10px 12px;}
 .tr-btn-icon:hover{color:var(--red);border-color:var(--red);}
+
+/* Training list — view switcher (Large / Small icons / Details). Choice is
+   remembered per device (hk_training_view) so different managers can each
+   pick what's easiest for them to scan without affecting each other. */
+.tr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.tr-view-switch{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:3px;gap:2px;}
+.tr-view-btn{background:none;border:none;padding:7px 10px;border-radius:6px;cursor:pointer;color:var(--text3);display:flex;align-items:center;}
+.tr-view-btn.active{background:var(--white);color:var(--navy);box-shadow:0 1px 2px rgba(0,0,0,.08);}
+
+/* Large view — a progress ring instead of a thin bar */
+.tr-body-lg{padding:18px;display:flex;gap:18px;align-items:center;}
+.tr-ring-wrap{flex-shrink:0;position:relative;width:84px;height:84px;}
+.tr-ring-wrap svg{transform:rotate(-90deg);display:block;}
+.tr-ring-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;letter-spacing:-.02em;}
+.tr-lg-info{flex:1;min-width:0;}
+
+/* Details view — a compact list that FLOWS (title+%, then a single wrapping
+   meta line) instead of fixed-width grid columns, so nothing gets clipped
+   on a narrow phone (e.g. "Overdue 2 days" inside a rigid 110px cell). */
+.tr-list{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.tr-row{padding:13px 16px;border-top:1px solid var(--border);cursor:pointer;}
+.tr-list .tr-row:first-child{border-top:none;}
+.tr-row-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+.tr-row-title{font-size:13px;font-weight:700;color:var(--text1);}
+.tr-row-pct{font-size:13px;font-weight:800;flex-shrink:0;white-space:nowrap;}
+.tr-mini-track{height:5px;background:var(--s3);border-radius:99px;overflow:hidden;margin:6px 0;}
+.tr-mini-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gd));border-radius:99px;}
+.tr-row-meta{font-size:10.5px;color:var(--text3);line-height:1.5;}
+.tr-row-meta b{font-weight:700;}
+
+/* Small icons view — a grid of compact tiles, name + % only */
+.tr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;}
+.tr-tile{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:14px 8px;text-align:center;cursor:pointer;}
+.tr-tile-ring{width:52px;height:52px;margin:0 auto 8px;position:relative;}
+.tr-tile-ring svg{transform:rotate(-90deg);display:block;}
+.tr-tile-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;}
+.tr-tile-name{font-size:11px;font-weight:700;color:var(--text1);line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 /* detail view progress bar (kept) */
 .prog-bar{height:9px;background:var(--s3);border-radius:99px;overflow:hidden;}
 .prog-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gd));border-radius:99px;}
@@ -3414,6 +3446,10 @@ function showToast(m){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.32.0', date:'2026-07-23',
+    fixes:['Training page: added a view switcher (top right, next to "+ New Training") so you can pick how the list looks — "Large" (redesigned: a progress ring instead of the thin bar, full detail), "Small icons" (a compact grid — just the name and %, fastest to scan many at once), or "Details" (a dense list, one line of detail per training). Your choice is remembered on this device, so different managers can each use whichever view is easiest for them without changing it for anyone else.']
+  },
   {
     v:'6.31.0', date:'2026-07-22',
     fixes:['Weekly Labor Pace now shows a second card — "Weekly Labor Pace Adjusted", framed in gold so it\'s never confused with the one above it — with each position\'s Variance recalculated after subtracting that position\'s own training and project hours for the week. A position that looks over budget can turn out to be under budget once its training/project time is netted out, and now you can see that at a glance, position by position, not just as one combined number at the bottom of the page. Positions with no training/project hours that week are marked "unchanged" and show the same numbers as always. Only appears on weeks that had training or project hours.']
@@ -10667,6 +10703,40 @@ function trProgress(t){
   return {total:total,completed:completed,inprogress:inprogress,pending:total-completed,pct:pct};
 }
 
+/* Training list view mode — 'large' (full ring cards), 'small' (icon grid),
+   or 'details' (compact flowing list). Remembered per device. */
+function getTrainingView(){
+  var v=localStorage.getItem('hk_training_view');
+  return (v==='details'||v==='small')?v:'large';
+}
+function setTrainingView(v){
+  localStorage.setItem('hk_training_view',v);
+  renderTraining();
+}
+var _TR_VIEW_ICONS={
+  large:'<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor"/><rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor"/><rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor"/></svg>',
+  small:'<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="3" height="3" rx=".5" fill="currentColor"/><rect x="6.5" y="1" width="3" height="3" rx=".5" fill="currentColor"/><rect x="12" y="1" width="3" height="3" rx=".5" fill="currentColor"/><rect x="1" y="6.5" width="3" height="3" rx=".5" fill="currentColor"/><rect x="6.5" y="6.5" width="3" height="3" rx=".5" fill="currentColor"/><rect x="12" y="6.5" width="3" height="3" rx=".5" fill="currentColor"/><rect x="1" y="12" width="3" height="3" rx=".5" fill="currentColor"/><rect x="6.5" y="12" width="3" height="3" rx=".5" fill="currentColor"/><rect x="12" y="12" width="3" height="3" rx=".5" fill="currentColor"/></svg>',
+  details:'<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2.5" rx="1" fill="currentColor"/><rect x="1" y="6.7" width="14" height="2.5" rx="1" fill="currentColor"/><rect x="1" y="11.5" width="14" height="2.5" rx="1" fill="currentColor"/></svg>'
+};
+/* A circular progress ring (SVG), used at two sizes (large card / small tile). */
+function _trRing(pct,size,stroke,color){
+  var r=(size-stroke)/2,c=2*Math.PI*r,off=c*(1-Math.max(0,Math.min(100,pct))/100);
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'
+    +'<circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="var(--s3)" stroke-width="'+stroke+'"/>'
+    +'<circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="'+stroke+'" stroke-linecap="round" stroke-dasharray="'+c.toFixed(2)+'" stroke-dashoffset="'+off.toFixed(2)+'"/>'
+    +'</svg>';
+}
+/* The more urgent of a training's two deadlines (HK/HR) — compact views
+   only have room for one deadline summary. Overdue beats any future date;
+   between two future dates, the sooner one wins. */
+function _trUrgentDeadline(t){
+  var candidates=[];
+  if(t.dlHK)candidates.push(t.dlHK);
+  if(t.dlHR)candidates.push(t.dlHR);
+  if(!candidates.length)return null;
+  candidates.sort(function(a,b){return daysUntil(a)-daysUntil(b);});
+  return candidates[0];
+}
 function renderTraining(){
   var c=document.getElementById('trainingContent');
   if(!c)return;
@@ -10683,8 +10753,54 @@ function renderTraining(){
     return;
   }
 
-  var html='<button class="btn btn-gold" style="margin-bottom:14px;" onclick="showNewTrainingModal()">+ New Training</button>';
+  var view=getTrainingView();
+  var html='<div class="tr-toolbar">'
+    +'<button class="btn btn-gold" onclick="showNewTrainingModal()">+ New Training</button>'
+    +'<div class="tr-view-switch">'
+    +'<button class="tr-view-btn'+(view==='large'?' active':'')+'" onclick="setTrainingView(\'large\')" title="Large">'+_TR_VIEW_ICONS.large+'</button>'
+    +'<button class="tr-view-btn'+(view==='small'?' active':'')+'" onclick="setTrainingView(\'small\')" title="Small icons">'+_TR_VIEW_ICONS.small+'</button>'
+    +'<button class="tr-view-btn'+(view==='details'?' active':'')+'" onclick="setTrainingView(\'details\')" title="Details">'+_TR_VIEW_ICONS.details+'</button>'
+    +'</div></div>';
 
+  if(view==='details'){
+    html+='<div class="tr-list">';
+    trainings.forEach(function(t){
+      var p=trProgress(t);
+      var scope=trScopeLabel(t.scope);
+      var pctColor=p.pct>=100?'var(--green)':'var(--navy)';
+      var dl=_trUrgentDeadline(t);
+      var dlInfo=dl?deadlineCountdown(dl):null;
+      var metaParts=[escHtml(scope)];
+      if(p.pending>0)metaParts.push('<b style="color:var(--yellow);">'+p.pending+' pending</b>');
+      else metaParts.push('<b style="color:var(--green);">&#10003; everyone completed</b>');
+      if(dlInfo)metaParts.push('<b style="color:'+(dlInfo.cls==='over'?'var(--red)':dlInfo.cls==='warn'?'var(--yellow)':'var(--green)')+';">'+escHtml(dlInfo.text.toLowerCase())+'</b>');
+      html+='<div class="tr-row" onclick="openTrainingDetail(\''+t.id+'\')">'
+        +'<div class="tr-row-top"><div class="tr-row-title">'+escHtml(t.title)+'</div><div class="tr-row-pct" style="color:'+pctColor+';">'+p.pct+'% &rsaquo;</div></div>'
+        +'<div class="tr-mini-track"><div class="tr-mini-fill" style="width:'+p.pct+'%;"></div></div>'
+        +'<div class="tr-row-meta">'+metaParts.join(' &middot; ')+'</div>'
+        +'</div>';
+    });
+    html+='</div>';
+    c.innerHTML=html;
+    return;
+  }
+
+  if(view==='small'){
+    html+='<div class="tr-grid">';
+    trainings.forEach(function(t){
+      var p=trProgress(t);
+      var ringColor=p.pct>=100?'var(--green)':'var(--navy)';
+      html+='<div class="tr-tile" onclick="openTrainingDetail(\''+t.id+'\')">'
+        +'<div class="tr-tile-ring">'+_trRing(p.pct,52,6,ringColor)+'<div class="tr-tile-pct" style="color:'+ringColor+';">'+p.pct+'%</div></div>'
+        +'<div class="tr-tile-name">'+escHtml(t.title)+'</div>'
+        +'</div>';
+    });
+    html+='</div>';
+    c.innerHTML=html;
+    return;
+  }
+
+  /* Large (default) — full card, a progress ring, deadline chips, actions. */
   trainings.forEach(function(t){
     var p=trProgress(t);
     var scope=trScopeLabel(t.scope);
@@ -10692,7 +10808,7 @@ function renderTraining(){
     var pctColor=p.pct>=100?'var(--green)':'var(--navy)';
     var subText=p.pending>0
       ? p.pending+' employee'+(p.pending===1?'':'s')+' pending'
-      : '&#10003; Todos completaron';
+      : '&#10003; Everyone completed';
     var subCls=p.pending>0?'tr-sub':'tr-sub done';
     html+='<div class="tr-card">'
       +'<div class="tr-band">'
@@ -10702,13 +10818,13 @@ function renderTraining(){
       +'</div>'
       +'<span class="scope-badge'+scopeCls+'">'+escHtml(scope)+'</span>'
       +'</div>'
-      +'<div class="tr-body">'
-      +'<div class="tr-prog-row"><span class="tr-count"><b>'+p.completed+'</b> of '+p.total+' complete</span>'
-      +'<span class="tr-pct" style="color:'+pctColor+';">'+p.pct+'%</span></div>'
-      +'<div class="tr-track"><div class="tr-fill" style="width:'+p.pct+'%;"></div></div>'
+      +'<div class="tr-body-lg">'
+      +'<div class="tr-ring-wrap">'+_trRing(p.pct,84,8,pctColor)+'<div class="tr-ring-pct" style="color:'+pctColor+';">'+p.pct+'%</div></div>'
+      +'<div class="tr-lg-info">'
+      +'<div class="tr-count"><b>'+p.completed+'</b> of '+p.total+' complete</div>'
       +'<div class="'+subCls+'">'+subText+'</div>'
+      +'</div></div>'
       +deadlineChipsHTML(t)
-      +'</div>'
       +'<div class="tr-foot">'
       +'<button class="tr-btn tr-btn-primary" onclick="openTrainingDetail(\''+t.id+'\')">View detail</button>'
       +'<button class="tr-btn tr-btn-ghost" onclick="showNewTrainingModal(\''+t.id+'\')" title="Edit">&#9998;</button>'
