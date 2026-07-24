@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.34.0"/>
+<meta name="app-version" content="6.35.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3473,6 +3473,10 @@ function showToast(m){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.35.0', date:'2026-07-24',
+    fixes:['Permanent fix for day-reports being overwritten between devices. Until now the whole month lived in ONE record in the cloud, so two people saving different days at nearly the same moment could overwrite each other — one day would vanish even though nobody deleted it. Now each day is its own record, saved through a database function that only ever accepts a newer version and never lets one save wipe out another day. Two managers can upload different days at the same time from different phones and neither can erase the other\'s — the same design already used for Projects and Call-Offs. Verified with a simulation that runs hundreds of random multi-device combinations and confirms no report is ever lost. Note: this prevents it from here on; a report already lost before this update still has to be restored from the device it was uploaded on.']
+  },
+  {
     v:'6.34.0', date:'2026-07-23',
     fixes:['Fixed a real gap that could silently erase a day\'s report from the cloud. If a device hadn\'t yet picked up a report someone uploaded from a different device, and then saved literally anything else on that device — even something the app does automatically, like filling in a room count — it used to push that device\'s whole (out-of-date) copy to the cloud, wiping out the day it didn\'t know about. Saving now checks what\'s actually in the cloud first and combines it with what you just changed, so a device can only add or update its own edits — it can never again erase a day another device already saved. If a report you uploaded ever looks missing, tell Carlos right away so it can be restored from that device before it opens elsewhere.']
   },
@@ -5155,40 +5159,104 @@ function _mergeTimedDayMap(localMap,localTimes,remoteMap,remoteTimes,localExtra,
 /* Override save functions to also push to Supabase */
 var _origSaveMonthData=saveMonthData;
 saveMonthData=function(data,mk){
+  mk=mk||monthKey();
   _origSaveMonthData(data,mk);
-  _pushMonthDataMerged(data,mk||monthKey());
+  _pushMonthRows(data,mk);
 };
-/* Pushing the local object straight to Supabase used to let ANY local write
-   — even something as small as auto-backfilling one room count on load —
-   silently erase every day the cloud had that this device's local copy
-   didn't (e.g. a report uploaded on a different device this device never
-   pulled yet). Confirmed 2026-07-23: a stale device's routine save
-   overwrote the whole month blob and a real uploaded day-report vanished
-   from the cloud with no edit ever touching it. Fetches the current remote
-   state first and merges (the same last-write-wins logic used on pull)
-   before pushing, so a stale device can only ever add/update its own
-   edits, never erase what's already in the cloud — and refreshes this
-   device's own local copy with whatever it was missing. Falls back to
-   pushing local as-is if the fetch fails (offline, etc.) rather than
-   blocking the save. */
-function _pushMonthDataMerged(data,mk){
-  authedFetch(SUPA_URL+"/rest/v1/labor_data?select=value&key=eq."+encodeURIComponent("month_"+mk),{method:"GET"})
-    .then(function(r){ return r.ok?r.json():[]; })
-    .then(function(rows){
-      var remote=(rows&&rows[0]&&rows[0].value)?JSON.parse(rows[0].value):null;
-      var toPush=data;
-      if(remote){
-        var daysMerge=_mergeTimedDayMap(data.days,data.daysUpdatedAt,remote.days,remote.daysUpdatedAt);
-        var roomsMerge=_mergeTimedDayMap(data.rooms,data.roomsUpdatedAt,remote.rooms,remote.roomsUpdatedAt,data.roomsSource,remote.roomsSource);
-        toPush=Object.assign({},data,{
-          days:daysMerge.map,daysUpdatedAt:daysMerge.times,
-          rooms:roomsMerge.map,roomsUpdatedAt:roomsMerge.times,roomsSource:roomsMerge.extra
-        });
-        _origSaveMonthData(toPush,mk); /* heal this device's own local copy too */
-      }
-      supaPut("month_"+mk, toPush);
-    })
-    .catch(function(){ supaPut("month_"+mk, data); });
+
+/* ── Per-day-row sync (replaces the single shared month_ blob) ────────────
+   ROOT-CAUSE FIX for cross-device data loss. The month used to live in ONE
+   cloud row (month_<mk>) holding every day. Any save pushed the whole blob,
+   so two devices saving DIFFERENT days near the same moment would each write
+   their whole copy and the second one would overwrite (erase) the first's
+   day — a read-modify-write race no amount of "merge before push" fully
+   closes while it's one shared object. Proven with a multi-device simulation
+   and matches the real 2026-07-23 loss.
+
+   Now each day report is its OWN row (mday_<mk>_<ds>) and each day's room
+   count its own row (mroom_<mk>_<ds>) — exactly the per-row pattern Projects
+   and Call-Offs already use. Two devices saving different days write DIFFERENT
+   rows: neither can touch the other's. A save only ever UPSERTS the rows for
+   the days it has and never deletes rows, so a stale device can't erase a day
+   it hasn't pulled. Local storage keeps the same hk_month_<mk> shape, so
+   nothing that reads days/rooms had to change — only the sync layer did.
+
+   We push only the days/rooms whose timestamp changed since our last
+   successful push (a small per-month shadow) so a routine save isn't 30
+   writes. On failure the shadow isn't advanced, so it retries next save.
+   Over-pushing is harmless (idempotent upsert); under-pushing is not, so any
+   doubt pushes. The legacy month_ blob is no longer written, but is still
+   READ on pull (below) so nothing already in the cloud is orphaned and a
+   not-yet-updated device's writes are still picked up during rollout. */
+function _monthPushShadow(mk){ try{return JSON.parse(localStorage.getItem('hk_month_pushed_'+mk)||'{}');}catch(e){return{};} }
+/* A day/room with no recorded edit time (pre-timestamp data) gets a real,
+   comparable ISO timestamp anchored to its own date — far in the past
+   relative to any real edit today, so a genuine edit always supersedes it,
+   and every ts the server compares is a valid ISO string. */
+function _dsFallbackTs(ds){ try{return new Date(ds+'T00:00:00.000Z').toISOString();}catch(e){return '1970-01-01T00:00:00.000Z';} }
+function _dayTs(data,ds){ return (data.daysUpdatedAt&&data.daysUpdatedAt[ds])||_dsFallbackTs(ds); }
+function _roomTs(data,ds){ return (data.roomsUpdatedAt&&data.roomsUpdatedAt[ds])||_dsFallbackTs(ds); }
+function _pushMonthRows(data,mk){
+  data=data||{}; var days=data.days||{}, rooms=data.rooms||{}, src=data.roomsSource||{};
+  var who=(typeof getSignedInEmail==='function'&&getSignedInEmail())||'';
+  var shadow=_monthPushShadow(mk); var newShadow=Object.assign({},shadow); var rows=[];
+  Object.keys(days).forEach(function(ds){
+    var ts=_dayTs(data,ds), sk='d:'+ds;
+    if(shadow[sk]===ts)return;
+    rows.push({key:'mday_'+mk+'_'+ds, value:JSON.stringify({v:days[ds],ts:ts,by:who})});
+    newShadow[sk]=ts;
+  });
+  Object.keys(rooms).forEach(function(ds){
+    var ts=_roomTs(data,ds), sk='r:'+ds;
+    if(shadow[sk]===ts)return;
+    rows.push({key:'mroom_'+mk+'_'+ds, value:JSON.stringify({v:rooms[ds],ts:ts,src:src[ds]||'',by:who})});
+    newShadow[sk]=ts;
+  });
+  if(!rows.length)return;
+  _supaPutMany(rows,function(ok){
+    if(ok){ try{safeSetItem('hk_month_pushed_'+mk,JSON.stringify(newShadow));logAudit('month_'+mk,'save');}catch(e){} }
+  });
+}
+/* Bulk upsert per-day rows through the labor_upsert_many() Postgres function,
+   which upserts each row ATOMICALLY and only when the incoming ts is newer —
+   so concurrent writes and stale migration pushes can never revert or erase a
+   day. One request for all rows. Refreshes an expired session first. */
+function _supaPutMany(rows,cb){
+  _lastLocalWriteAt=Date.now();
+  setSyncStatus("syncing");
+  var body=JSON.stringify({p_rows:rows});
+  var go=function(){
+    return fetch(SUPA_URL+"/rest/v1/rpc/labor_upsert_many",{
+      method:"POST",
+      headers:Object.assign({},SUPA_HEADERS,{"Content-Type":"application/json"}),
+      body:body
+    });
+  };
+  var needsRefresh=(typeof _authExpired==='function'&&_authExpired());
+  var ready=needsRefresh?_authRefresh():Promise.resolve(true);
+  ready.then(function(refreshOk){
+    if(needsRefresh&&!refreshOk){ setSyncStatus("error"); markSyncFailure('Labor report',true); if(cb)cb(false); return; }
+    go().then(function(r){
+      if(r.ok){ setSyncStatus("synced"); markSyncSuccess(); if(cb)cb(true); }
+      else{ setSyncStatus("error"); markSyncFailure('Labor report'); if(cb)cb(false); }
+    }).catch(function(){ setSyncStatus("error"); markSyncFailure('Labor report'); if(cb)cb(false); });
+  });
+}
+/* One-time migration: seed per-day rows from whatever each month blob already
+   holds locally (which the initial pull has just merged from the cloud blob),
+   so existing months exist as rows even if never edited again. Idempotent
+   upserts; guarded so it runs once per device. */
+function _migrateMonthsToRows(){
+  if(localStorage.getItem('hk_rows_migrated_v1'))return;
+  try{
+    Object.keys(localStorage).forEach(function(k){
+      if(k.indexOf('hk_month_')!==0)return;
+      var mk=k.replace('hk_month_','');
+      try{localStorage.removeItem('hk_month_pushed_'+mk);}catch(e){} /* force a full push */
+      _pushMonthRows(_origLoadMonthData(mk),mk);
+    });
+    localStorage.setItem('hk_rows_migrated_v1','1');
+  }catch(e){}
 }
 
 /* R106 sync helpers */
@@ -5286,23 +5354,28 @@ function _syncFromSheetsPull(){
   supaGetAll(function(err,all){
     if(err){setSyncStatus("offline");markSyncFailure('Data refresh');return;}
     var updated=false;
+    /* Reassemble each month's remote state from its per-day rows (mday_/mroom_)
+       AND the legacy month_ blob (for migration + not-yet-updated devices),
+       keeping the newest timestamp per day; merged into local AFTER the loop. */
+    var _remoteMonths={};
+    function _tsRank(ts){ var n=Date.parse(ts); return isNaN(n)?0:n; }
+    function _rm(mk){ return _remoteMonths[mk]||(_remoteMonths[mk]={days:{},daysUpdatedAt:{},rooms:{},roomsUpdatedAt:{},roomsSource:{}}); }
+    function _foldDay(mk,ds,snap,ts){ var m=_rm(mk); if(m.daysUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.daysUpdatedAt[ds])){ m.days[ds]=snap; m.daysUpdatedAt[ds]=ts; } }
+    function _foldRoom(mk,ds,n,ts,srcv){ var m=_rm(mk); if(m.roomsUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.roomsUpdatedAt[ds])){ m.rooms[ds]=n; m.roomsUpdatedAt[ds]=ts; if(srcv)m.roomsSource[ds]=srcv; } }
     Object.keys(all).forEach(function(key){
       try{
-        if(key.indexOf("month_")===0){
-          var mk=key.replace("month_","");
-          var remote=all[key];
-          var local=_origLoadMonthData(mk);
-          var daysMerge=_mergeTimedDayMap(local.days,local.daysUpdatedAt,remote.days,remote.daysUpdatedAt);
-          var roomsMerge=_mergeTimedDayMap(local.rooms,local.roomsUpdatedAt,remote.rooms,remote.roomsUpdatedAt,local.roomsSource,remote.roomsSource);
-          var mergedM={
-            days:daysMerge.map,
-            daysUpdatedAt:daysMerge.times,
-            rooms:roomsMerge.map,
-            roomsUpdatedAt:roomsMerge.times,
-            roomsSource:roomsMerge.extra
-          };
-          _origSaveMonthData(mergedM,mk);
-          updated=true;
+        if(key.indexOf("mday_")===0){
+          var _rD=all[key], _restD=key.slice(5), _uD=_restD.indexOf('_');
+          if(_uD>0&&_rD&&_rD.v!==undefined)_foldDay(_restD.slice(0,_uD),_restD.slice(_uD+1),_rD.v,_rD.ts);
+        } else if(key.indexOf("mroom_")===0){
+          var _rR=all[key], _restR=key.slice(6), _uR=_restR.indexOf('_');
+          if(_uR>0&&_rR&&_rR.v!==undefined)_foldRoom(_restR.slice(0,_uR),_restR.slice(_uR+1),_rR.v,_rR.ts,_rR.src);
+        } else if(key.indexOf("month_")===0){
+          var mk=key.replace("month_",""); var remote=all[key]||{};
+          var _rd=remote.days||{}, _rdt=remote.daysUpdatedAt||{};
+          Object.keys(_rd).forEach(function(ds){ _foldDay(mk,ds,_rd[ds],_rdt[ds]!==undefined?_rdt[ds]:_dsFallbackTs(ds)); });
+          var _rr=remote.rooms||{}, _rrt=remote.roomsUpdatedAt||{}, _rsrc=remote.roomsSource||{};
+          Object.keys(_rr).forEach(function(ds){ _foldRoom(mk,ds,_rr[ds],_rrt[ds]!==undefined?_rrt[ds]:_dsFallbackTs(ds),_rsrc[ds]); });
         }
         if(key.indexOf("r106_")===0){
           var mk2=key.replace("r106_","");
@@ -5427,6 +5500,15 @@ function _syncFromSheetsPull(){
           }
         }
       }catch(keyErr){console.warn('[sync] Error processing key',key,keyErr);}
+    });
+    /* Merge each reassembled remote month into local (last-write-wins per day),
+       same result as before but sourced from per-day rows instead of one blob. */
+    Object.keys(_remoteMonths).forEach(function(mk){
+      var remote=_remoteMonths[mk]; var local=_origLoadMonthData(mk);
+      var daysMerge=_mergeTimedDayMap(local.days,local.daysUpdatedAt,remote.days,remote.daysUpdatedAt);
+      var roomsMerge=_mergeTimedDayMap(local.rooms,local.roomsUpdatedAt,remote.rooms,remote.roomsUpdatedAt,local.roomsSource,remote.roomsSource);
+      _origSaveMonthData({days:daysMerge.map,daysUpdatedAt:daysMerge.times,rooms:roomsMerge.map,roomsUpdatedAt:roomsMerge.times,roomsSource:roomsMerge.extra},mk);
+      updated=true;
     });
     try{ if(_mergeProjectsFromRemote(all))updated=true; }catch(e){console.warn('[sync] projects merge',e);}
     try{ if(_mergeCallOffsFromRemote(all))updated=true; }catch(e){console.warn('[sync] calloffs merge',e);}
@@ -13353,6 +13435,9 @@ window.addEventListener('load',function(){
   try{updateWtcBadge();}catch(e){}
   try{maybeShowChangelog();}catch(e){}
   setTimeout(syncFromSheets,1000);
+  /* One-time: seed per-day rows from existing months once the initial pull
+     has merged the cloud into local. Idempotent; guarded to run once. */
+  setTimeout(function(){try{_migrateMonthsToRows();}catch(e){}},2600);
   setTimeout(maybeAutoSnapshot,3000);
   try{registerServiceWorker();}catch(e){}
   /* App is rendered underneath — fade the splash out (min-display guard inside). */

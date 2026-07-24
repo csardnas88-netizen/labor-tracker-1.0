@@ -4,7 +4,8 @@
   "private": true,
   "description": "Automated safety checks for the Housekeeping Labor Tracker (index.html).",
   "scripts": {
-    "test": "node tests/run.js"
+    "test": "node tests/run.js",
+    "sim": "node --expose-gc --max-old-space-size=4096 tests/sim/multi-device.js"
   },
   "devDependencies": {
     "jsdom": "^24.1.0"
