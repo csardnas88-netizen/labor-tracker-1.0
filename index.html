@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.43.0"/>
+<meta name="app-version" content="6.44.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3582,6 +3582,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.44.0', date:'2026-07-26',
+    fixes:['Training detail on P&L no longer needs horizontal scrolling to read. Each trainee\'s dates now show as a small Sat–Fri weekly calendar (one block per hotel week they trained in) with the hours for each day, instead of a long comma-separated list that ran off the edge of the card.']
+  },
   {
     v:'6.43.0', date:'2026-07-26',
     fixes:['The Training & Projects card on P&L is now clickable: tap any position row to see exactly who it\'s made of. Training expands to each trainee\'s name, dates, and hours; Projects expands to each person\'s hours plus the activity note describing what they actually did. Built so anyone reviewing the P&L can justify a position\'s hours on the spot, without leaving the page or digging through the Training/Projects sections separately.']
@@ -7931,13 +7935,35 @@ function renderPnl(){
       var trainRows=Object.keys(_tpTrain.byPos).sort().map(function(pos,i){
         var did='tpTrainDet_'+i;
         var emps=_tpTrainDetail[pos]||[];
+        var DOW7=['Sat','Sun','Mon','Tue','Wed','Thu','Fri'];
         var detailHtml=emps.map(function(emp){
-          var dateStr=emp.dates.map(function(dt){
+          /* Group this trainee's days into hotel weeks (Sat–Fri) so the
+             pattern reads as a mini calendar instead of a long date list
+             that forced horizontal scrolling. */
+          var byWeek={};
+          emp.dates.forEach(function(dt){
             var dd=parseLocalDate(dt.date);
-            return MONTH_NAMES[dd.getMonth()].slice(0,3)+' '+dd.getDate()+' ('+dt.hours.toFixed(2)+'h)';
-          }).join(', ');
-          return '<div style="padding:6px 0;border-top:1px solid var(--border);"><b style="font-size:11px;">'+escHtml(emp.name)+'</b> &mdash; '+emp.hours.toFixed(2)+'h<br>'
-            +'<span style="font-size:10px;color:var(--text3);">'+dateStr+'</span></div>';
+            var wkStart=getHotelWeekStart(dd);
+            var wkKey=dateStr(wkStart);
+            if(!byWeek[wkKey])byWeek[wkKey]={start:wkStart,entries:{}};
+            byWeek[wkKey].entries[dt.date]=dt.hours;
+          });
+          var calsHtml=Object.keys(byWeek).sort().map(function(wk){
+            var w=byWeek[wk],cellsHtml='';
+            for(var ci=0;ci<7;ci++){
+              var cellDate=new Date(w.start);cellDate.setDate(w.start.getDate()+ci);
+              var h=w.entries[dateStr(cellDate)];
+              var trained=h!=null;
+              cellsHtml+='<div style="text-align:center;padding:3px 2px;border-radius:4px;'
+                +(trained?'background:var(--gt);border:1px solid var(--gold);':'background:var(--surface);border:1px solid var(--border);')+'">'
+                +'<div style="font-size:8px;color:var(--text3);">'+DOW7[ci]+' '+cellDate.getDate()+'</div>'
+                +'<div style="font-size:10px;font-weight:700;color:'+(trained?'var(--gd)':'var(--text3)')+';">'+(trained?h.toFixed(2)+'h':'&mdash;')+'</div>'
+                +'</div>';
+            }
+            return '<div style="margin-top:5px;"><div style="font-size:9px;color:var(--text3);margin-bottom:3px;">Week of '+MONTH_NAMES[w.start.getMonth()].slice(0,3)+' '+w.start.getDate()+'</div>'
+              +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">'+cellsHtml+'</div></div>';
+          }).join('');
+          return '<div style="padding:8px 0;border-top:1px solid var(--border);"><b style="font-size:11px;">'+escHtml(emp.name)+'</b> &mdash; '+emp.hours.toFixed(2)+'h'+calsHtml+'</div>';
         }).join('');
         return '<tr class="pnl-clickrow" onclick="pnlToggleDetail(\''+did+'\',this)" style="cursor:pointer;">'
           +'<td><span class="pnl-caret">&#9656;</span> '+escHtml(pos)+'</td><td>'+_tpTrain.byPos[pos].toFixed(2)+'h</td></tr>'
