@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.40.0"/>
+<meta name="app-version" content="6.41.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3581,6 +3581,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.41.0', date:'2026-07-26',
+    fixes:['Fixed the Occupancy Mismatch alert reappearing right after you fix it. Confirming a room count from the "Fix Now" screen now marks that night as manually confirmed — same as typing it into the rooms field directly — so the alert doesn\'t come back for a number you already reviewed and chose to keep, even if it still differs from the R106 report. A night that was never confirmed will still show the alert if R106 disagrees with it.']
+  },
+  {
     v:'6.40.0', date:'2026-07-26',
     fixes:['The Labor Distribution confetti now plays a real fireworks recording instead of a synthesized pop — trimmed and faded to end together with the confetti animation instead of trailing on afterward. No behavior or data changed.']
   },
@@ -5967,6 +5971,32 @@ function getRoomsForDay(ds){
   if(prevMData2.rooms&&prevMData2.rooms[prevDs]!==undefined) return parseInt(prevMData2.rooms[prevDs])||0;
 
   return 0;
+}
+
+/* Mirrors getRoomsForDay's month-resolution exactly, but returns the
+   roomsSource ('manual'|'r106'|undefined) for whichever month's rooms[prevDs]
+   is the one actually in use — so a confirmed-manual night can be recognized
+   as such regardless of which month record it lives in. */
+function getRoomsSourceForDay(ds){
+  var prevDs=prevDateStr(ds);
+  var mk=ds.substring(0,7);
+  var prevMk=prevDs.substring(0,7);
+
+  if(prevMk!==mk){
+    var prevMData=loadMonthData(prevMk);
+    if(prevMData.rooms&&prevMData.rooms[prevDs]!==undefined&&parseInt(prevMData.rooms[prevDs])>0){
+      return (prevMData.roomsSource&&prevMData.roomsSource[prevDs])||null;
+    }
+  }
+
+  var mData=loadMonthData(mk);
+  if(mData.rooms&&mData.rooms[prevDs]!==undefined) return (mData.roomsSource&&mData.roomsSource[prevDs])||null;
+
+  if(prevMk===mk) return null;
+  var prevMData2=loadMonthData(prevMk);
+  if(prevMData2.rooms&&prevMData2.rooms[prevDs]!==undefined) return (prevMData2.roomsSource&&prevMData2.roomsSource[prevDs])||null;
+
+  return null;
 }
 
 /* ── Monthly Recap uses SAME NIGHT occupancy (executive view):
@@ -9302,7 +9332,11 @@ function renderDashDayAnalysis(days,rooms,today,wk){
   var r106Occ=typeof r106Raw==='object'?r106Raw.occ:r106Raw;
   var r106Comp=typeof r106Raw==='object'?r106Raw.comp:0;
   var hasR106Month=r106Val>0;
-  var hasMismatch=r>0&&r106Val>0&&r!==r106Val;
+  /* Once a night's rooms count has been confirmed manually (typed directly, or
+     saved from this very mismatch banner via Fix Now), that's the manager's
+     final word — don't keep flagging it against R106 just because R106 still
+     disagrees. Only nights that have NOT been confirmed show the alert. */
+  var hasMismatch=r>0&&r106Val>0&&r!==r106Val&&getRoomsSourceForDay(ds)!=='manual';
   var isFutureDay=parseLocalDate(ds)>new Date();
 
   /* Mismatch alert banner - Option A */
@@ -10065,7 +10099,8 @@ function renderRecap(){
       var manual=parseInt(roomsCheck[nightDs])||0;
       var r106Raw=r106Data[nightDs];
       var r106Net=typeof r106Raw==='object'?r106Raw.net:(r106Raw||0);
-      if(manual>0&&r106Net>0&&manual!==r106Net){
+      var isConfirmedManual=!!(mDataCheck.roomsSource&&mDataCheck.roomsSource[nightDs]==='manual');
+      if(manual>0&&r106Net>0&&manual!==r106Net&&!isConfirmedManual){
         mismatchDays.push({ds:laborDs,nightDs:nightDs,manual:manual,r106:r106Net,diff:manual-r106Net});
       }
     });
@@ -10487,10 +10522,17 @@ function saveOccupancyRoom(ds,val){
   var mk=monthKey(d);
   var mData=loadMonthData(mk);
   if(!mData.rooms)mData.rooms={};
+  if(!mData.roomsSource)mData.roomsSource={};
   /* rooms[prevDs] drives ds budget — so we store under prevDs */
   var prevDs=prevDateStr(ds);
   if(val>0){mData.rooms[prevDs]=val;}
   else{delete mData.rooms[prevDs];}
+  /* Confirming a value here — whether it matches R106 or overrides it —
+     is a deliberate manual decision, same as typing it into the day's rooms
+     field directly. Marking it 'manual' protects it from R106 auto-fill AND
+     tells the mismatch check this day is resolved, so the alert doesn't
+     reappear for a number the manager already confirmed on purpose. */
+  mData.roomsSource[prevDs]='manual';
   mData.roomsUpdatedAt=mData.roomsUpdatedAt||{};
   mData.roomsUpdatedAt[prevDs]=new Date().toISOString();
   saveMonthData(mData,mk);
