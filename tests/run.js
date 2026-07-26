@@ -8,6 +8,7 @@ const cases = [
   require('./cases/labor-pace-projects'),
   require('./cases/presence'),
   require('./cases/r106-backfill'),
+  require('./cases/r106-backfill-refresh'),
   require('./cases/resume-session-sync'),
   require('./cases/month-sync-conflict'),
   require('./cases/realtime-reconnect'),

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.46.0"/>
+<meta name="app-version" content="6.47.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3583,6 +3583,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.47.0', date:'2026-07-26',
+    fixes:['Fixed Occupancy Mismatch showing up for nights nobody ever confirmed by hand. Until now, once R106 filled in a night automatically, that number stayed frozen even if R106 was later corrected — so an updated R106 would look like it "disagreed" with a number that was really just its own old snapshot. Now, as long as nobody has manually confirmed that night, the app keeps it in sync with R106 automatically instead of flagging a mismatch. A night you\'ve manually confirmed is still never touched or overwritten.']
+  },
+  {
     v:'6.46.0', date:'2026-07-26',
     fixes:['Project hours detail on P&L now shows the date each entry happened (e.g. "Vanessa Barragan — 8.28h (Jul 14)"), not just the hours and activity note — so you can tell exactly which day a project entry belongs to without guessing.']
   },
@@ -6345,7 +6349,13 @@ function applyR106ToEmptyRooms(mk){
     if(!(net>0))return;                              /* only real occupancy */
     if(mData.roomsSource[ds]==='manual')return;      /* never overwrite a hand-entered value */
     var cur=mData.rooms[ds];
-    if(cur===undefined||cur===null||parseInt(cur)===0){
+    var isEmpty=(cur===undefined||cur===null||parseInt(cur)===0);
+    /* Nobody ever confirmed this number by hand — it's just a snapshot of
+       what R106 said last time. If R106 has since been corrected/updated
+       (more check-ins, a re-run report), keep this in sync automatically
+       instead of flagging a "mismatch" between two auto-generated numbers. */
+    var isStaleR106=(!isEmpty&&mData.roomsSource[ds]==='r106'&&parseInt(cur)!==net);
+    if(isEmpty||isStaleR106){
       mData.rooms[ds]=net;
       mData.roomsSource[ds]='r106';
       mData.roomsUpdatedAt=mData.roomsUpdatedAt||{};
