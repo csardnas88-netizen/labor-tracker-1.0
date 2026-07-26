@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.45.0"/>
+<meta name="app-version" content="6.46.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3582,6 +3582,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.46.0', date:'2026-07-26',
+    fixes:['Project hours detail on P&L now shows the date each entry happened (e.g. "Vanessa Barragan — 8.28h (Jul 14)"), not just the hours and activity note — so you can tell exactly which day a project entry belongs to without guessing.']
+  },
   {
     v:'6.45.0', date:'2026-07-26',
     fixes:['Project detail on P&L no longer needs horizontal scrolling either — the activity notes (e.g. "Vanessa assisted with completing and setting up the guest rooms...") now wrap within the card instead of running off the edge.']
@@ -7977,7 +7981,12 @@ function renderPnl(){
         var did='tpProjDet_'+i;
         var items=_tpProjDetail[pos]||[];
         var detailHtml=items.map(function(it){
-          return '<div style="padding:6px 0;border-top:1px solid var(--border);"><b style="font-size:11px;">'+escHtml(it.name)+'</b> &mdash; '+it.hours.toFixed(2)+'h<br>'
+          var dateLabel=(it.dates||[]).map(function(dt){
+            var dd=parseLocalDate(dt.date);
+            return MONTH_NAMES[dd.getMonth()].slice(0,3)+' '+dd.getDate();
+          }).join(', ');
+          return '<div style="padding:6px 0;border-top:1px solid var(--border);"><b style="font-size:11px;">'+escHtml(it.name)+'</b> &mdash; '+it.hours.toFixed(2)+'h'
+            +(dateLabel?' <span style="font-size:10px;font-weight:400;color:var(--text3);">('+dateLabel+')</span>':'')+'<br>'
             +'<span style="font-size:10px;color:var(--text3);">'+escHtml(it.project)+(it.note?': '+escHtml(it.note):'')+'</span></div>';
         }).join('');
         return '<tr class="pnl-clickrow" onclick="pnlToggleDetail(\''+did+'\',this)" style="cursor:pointer;">'
@@ -12349,8 +12358,9 @@ function getProjectDetailForMonth(yr,mo){
       var pos=e.pos||'Unknown';
       var key=(e.empId||e.empName||'?')+'|'+(e.note||'');
       if(!byPos[pos])byPos[pos]={};
-      if(!byPos[pos][key])byPos[pos][key]={name:e.empName||'Unknown',project:p.name,note:e.note||'',hours:0};
+      if(!byPos[pos][key])byPos[pos][key]={name:e.empName||'Unknown',project:p.name,note:e.note||'',hours:0,dates:[]};
       byPos[pos][key].hours+=h;
+      byPos[pos][key].dates.push({date:e.date,hours:h});
     });
   });
   var out={};
