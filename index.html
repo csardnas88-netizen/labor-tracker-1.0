@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.39.0"/>
+<meta name="app-version" content="6.40.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3540,41 +3540,37 @@ function fireConfetti(){
   burstDown(w/2,6,-40,40,150, w*0.20,h*0.60,h*0.30);              /* top-center */
 }
 
-/* Classic pop — a noise burst swept through a closing low-pass filter, plus a
-   pitch-dropping thump — synthesized with Web Audio, no sound file to ship or
-   load. Fails silently if the browser blocks/lacks audio; never blocks the save. */
+/* Plays confetti-fireworks.mp3 (a real recording, not synthesized) trimmed to
+   2.85s with a short fade-out — matching the confetti burst's own max lifetime
+   (see fireConfetti's burstDown: 2.7s duration + 0.15s delay) so the sound
+   ends together with the last piece instead of trailing on for another ~3s.
+   Picked and tuned interactively with Carlos before this was wired in.
+   Fails silently if audio is blocked/unavailable; never blocks the save. */
+var _confettiAudioEl=null, _confettiGainNode=null, _confettiAudioCtx=null;
 function playConfettiSound(){
   try{
+    var TARGET_DUR=2.85, FADE_START=2.45;
+    if(!_confettiAudioEl){
+      _confettiAudioEl=new Audio('./confetti-fireworks.mp3');
+      _confettiAudioEl.preload='auto';
+    }
     var Ctx=window.AudioContext||window.webkitAudioContext;
-    if(!Ctx)return;
-    var ctx=new Ctx();
-    var t0=ctx.currentTime;
-
-    var noiseBuf=ctx.createBuffer(1,Math.floor(ctx.sampleRate*0.14),ctx.sampleRate);
-    var nd=noiseBuf.getChannelData(0);
-    for(var i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
-    var src=ctx.createBufferSource();src.buffer=noiseBuf;
-    var filt=ctx.createBiquadFilter();
-    filt.type='lowpass';
-    filt.frequency.setValueAtTime(3200,t0);
-    filt.frequency.exponentialRampToValueAtTime(250,t0+0.14);
-    var ng=ctx.createGain();
-    ng.gain.setValueAtTime(0.7,t0);
-    ng.gain.exponentialRampToValueAtTime(0.001,t0+0.14);
-    src.connect(filt);filt.connect(ng);ng.connect(ctx.destination);
-    src.start(t0);src.stop(t0+0.14);
-
-    var osc=ctx.createOscillator();
-    osc.type='sine';
-    osc.frequency.setValueAtTime(190,t0);
-    osc.frequency.exponentialRampToValueAtTime(45,t0+0.13);
-    var og=ctx.createGain();
-    og.gain.setValueAtTime(0.55,t0);
-    og.gain.exponentialRampToValueAtTime(0.001,t0+0.13);
-    osc.connect(og);og.connect(ctx.destination);
-    osc.start(t0);osc.stop(t0+0.13);
-
-    setTimeout(function(){try{ctx.close();}catch(e){}},600);
+    if(!Ctx){ _confettiAudioEl.currentTime=0; _confettiAudioEl.play().catch(function(){}); return; }
+    if(!_confettiAudioCtx) _confettiAudioCtx=new Ctx();
+    if(!_confettiGainNode){
+      var srcNode=_confettiAudioCtx.createMediaElementSource(_confettiAudioEl);
+      _confettiGainNode=_confettiAudioCtx.createGain();
+      srcNode.connect(_confettiGainNode);
+      _confettiGainNode.connect(_confettiAudioCtx.destination);
+    }
+    _confettiAudioEl.currentTime=0;
+    var g=_confettiGainNode.gain, t0=_confettiAudioCtx.currentTime;
+    g.cancelScheduledValues(t0);
+    g.setValueAtTime(1,t0);
+    g.setValueAtTime(1,t0+FADE_START);
+    g.linearRampToValueAtTime(0.0001,t0+TARGET_DUR);
+    _confettiAudioEl.play().catch(function(){});
+    setTimeout(function(){ try{_confettiAudioEl.pause();}catch(e){} },TARGET_DUR*1000+60);
   }catch(e){}
 }
 
@@ -3584,6 +3580,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.40.0', date:'2026-07-26',
+    fixes:['The Labor Distribution confetti now plays a real fireworks recording instead of a synthesized pop — trimmed and faded to end together with the confetti animation instead of trailing on afterward. No behavior or data changed.']
+  },
   {
     v:'6.39.0', date:'2026-07-26',
     fixes:['Confetti now reaches much further on large screens. It used to travel a fixed number of pixels from each edge, which barely got past the corners on a big monitor. Now each burst travels a percentage of the actual screen size, so the cannons reach in toward the middle the same way on any screen, small or large.']

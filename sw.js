@@ -10,13 +10,14 @@
 
    Bump CACHE_VERSION on every deploy so users get the new build.
    ══════════════════════════════════════════════════════ */
-var CACHE_VERSION = 'labor-v6.39.0';
+var CACHE_VERSION = 'labor-v6.40.0';
 
 /* Same-origin shell. Relative paths keep this working under the
    /labor-tracker-1.0/ sub-path GitHub Pages serves from. */
 var SHELL = [
   './',
-  './index.html'
+  './index.html',
+  './confetti-fireworks.mp3'
 ];
 
 /* Third-party libraries. These URLs are version-pinned and immutable,
