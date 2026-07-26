@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.41.0"/>
+<meta name="app-version" content="6.42.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1868,6 +1868,8 @@ Supervisor 3</textarea>
       <div id="pnlRoomsBar" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:9px 14px;font-size:12px;color:var(--text2);margin-bottom:12px;gap:20px;flex-wrap:wrap;align-items:center;"></div>
       <div id="pnlRateNotice"></div>
       <div class="lm-scroll" id="pnlBody"></div>
+      <div id="pnlAdjustedSection"></div>
+      <div id="pnlTrainProjSection"></div>
       <div id="pnlWeeklySection"></div>
 
       <!-- Paychex Reconciliation -->
@@ -3580,6 +3582,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.42.0', date:'2026-07-26',
+    fixes:['P&L now shows the full month picture on one screen. The main table has a "Real" badge and its total variance up top (same treatment as the Adjusted card below it, so the two are easy to tell apart). A new gold "P&L — Adjusted" card shows what each position\'s hours and cost look like after subtracting its training and project hours (regular hours only — overtime is untouched), in both hours and dollars, only appearing on months that had training or project activity. Below that, a "Training & Projects" card lists total hours by position for each, plus which projects were worked that month — the detail behind the Adjusted numbers, without leaving the P&L page.']
+  },
   {
     v:'6.41.0', date:'2026-07-26',
     fixes:['Fixed the Occupancy Mismatch alert reappearing right after you fix it. Confirming a room count from the "Fix Now" screen now marks that night as manually confirmed — same as typing it into the rooms field directly — so the alert doesn\'t come back for a number you already reviewed and chose to keep, even if it still differs from the R106 report. A night that was never confirmed will still show the alert if R106 disagrees with it.']
@@ -7750,6 +7756,7 @@ function renderPnl(){
 
   var rows='';
   var tBud=0,tActH=0,tOtH=0,tBudC=0,tRegC=0,tOtC=0,tActC=0;
+  var posData=[]; /* feeds the Adjusted card below — same numbers, no recompute */
   LM_ORDER.forEach(function(pos){
     /* Budget: accounting method — monthly total rooms × factor, or fixed × days in month */
     var std=LABOR_STD[pos];
@@ -7772,6 +7779,7 @@ function renderPnl(){
     var hasOT=otHrs>=0.01;
     var budC=budHrs*rate, regC=regHrs*rate, otC=otHrs*rate*1.5, actC=regC+otC, varc=actC-budC;
     tBud+=budHrs;tActH+=actHrs;tOtH+=otHrs;tBudC+=budC;tRegC+=regC;tOtC+=otC;tActC+=actC;
+    posData.push({pos:pos,budHrs:budHrs,actHrs:actHrs,otHrs:otHrs,regHrs:regHrs,rate:rate,hasRate:hasRate,budC:budC,regC:regC,otC:otC,actC:actC,varc:varc});
     var pxBadge=otIsPx?'<span style="font-size:9px;font-weight:700;opacity:.6;margin-left:3px;vertical-align:middle;">PX</span>':'';
     var otHrsCell=hasOT?'<span class="pnl-ot">'+pnl_fmtHrs(otHrs)+'h'+pxBadge+'</span>':'<span class="pnl-muted">&mdash;</span>';
     rows+='<tr>'
@@ -7803,11 +7811,21 @@ function renderPnl(){
     +'<td>'+(anyRate?pnl_fmtUsd(tActC):'&mdash;')+'</td>'
     +'<td>'+(anyRate?(Math.abs(tVar)<0.005?'$0.00':((tVar<0?'−$':'+$')+Math.abs(tVar).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}))):'&mdash;')+'</td>'
     +'</tr>';
-  box.innerHTML='<div class="tbl-wrap"><table class="pnl-table">'
+  var _mainIsOver=tVar>0.5,_mainIsUnder=tVar<-0.5;
+  box.innerHTML='<div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">'
+    +'<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+    +'<div><div style="font-size:13px;font-weight:700;color:#fff;">&#128202; P&amp;L <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:#fff;background:rgba(255,255,255,.18);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Real</span></div>'
+    +'<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+MONTH_NAMES[mo2]+' '+yr2+' &nbsp;&middot;&nbsp; as reported, before training &amp; project hours are netted out</div></div>'
+    +'<div style="text-align:right;">'
+    +(anyRate?'<div style="font-size:16px;font-weight:800;color:'+(_mainIsOver?'var(--red-border)':'var(--green-border)')+'">'+(tVar>=0?'+$':'−$')+Math.abs(tVar).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>':'')
+    +'<div style="font-size:9px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.4px;">'+(_mainIsOver?'Over Budget':'Under Budget')+'</div>'
+    +'</div></div>'
+    +'<div class="tbl-wrap"><table class="pnl-table">'
     +'<thead><tr><th>Position</th><th>Budget hrs</th><th>Actual hrs</th><th>OT hrs</th><th>Rate</th><th>Budget $</th><th>Regular $</th><th>OT $</th><th>Actual $</th><th>Variance $</th></tr></thead>'
     +'<tbody>'+rows+'</tbody>'
     +'<tfoot>'+foot+'</tfoot></table></div>'
-    +'<div style="font-size:10px;color:var(--text3);margin-top:8px;padding:0 2px;">&#8505; Budget: '+(totalMonthRooms>0?totalMonthRooms.toLocaleString()+' rooms sold × factor':'no rooms recorded')+' &middot; fixed hours × '+pnlEffectiveDays+' days loaded (of '+daysInMonth+')</div>';
+    +'<div style="font-size:10px;color:var(--text3);padding:8px 16px 12px;">&#8505; Budget: '+(totalMonthRooms>0?totalMonthRooms.toLocaleString()+' rooms sold × factor':'no rooms recorded')+' &middot; fixed hours × '+pnlEffectiveDays+' days loaded (of '+daysInMonth+')</div>'
+    +'</div>';
 
   /* ── Rooms bar ── */
   var rBar=document.getElementById('pnlRoomsBar');
@@ -7820,6 +7838,105 @@ function renderPnl(){
         +'<span style="color:var(--border2);">|</span>'
         +'<span><b>Days loaded:</b> '+pnlEffectiveDays+' / '+daysInMonth+'</span>';
     } else { rBar.style.display='none'; }
+  }
+
+  /* ── P&L Adjusted (training + project hours netted out, regular hours
+     only — same idea as the Weekly Labor Pace Adjusted card, applied here
+     as a monthly $ + hrs view instead of a weekly hrs-only one). Uses
+     calendar-month totals (getTrainingHoursForMonth/getProjectHoursForMonth),
+     not a sum of hotel-week buckets, so boundary weeks aren't misattributed
+     to the wrong month. Only appears on months that had training or project
+     hours, same conditional as the weekly card. ── */
+  var adjSec=document.getElementById('pnlAdjustedSection');
+  if(adjSec){
+    var _mTrain=getTrainingHoursForMonth(yr2,mo2);
+    var _mProj=getProjectHoursForMonth(yr2,mo2);
+    if(_mTrain.total>0||_mProj.total>0){
+      var adjRows='',tAdjActH=0,tAdjActC=0,tAdjVarC=0,tTrainC=0,tProjC=0;
+      posData.forEach(function(p){
+        var trainH=_mTrain.byPos[p.pos]||0, projH=_mProj.byPos[p.pos]||0;
+        if(p.hasRate){tTrainC+=trainH*p.rate;tProjC+=projH*p.rate;}
+        var adjRegHrs=Math.max(0,p.regHrs-trainH-projH);
+        var adjActHrs=adjRegHrs+p.otHrs;
+        var adjRegC=adjRegHrs*p.rate, adjActC=adjRegC+p.otC;
+        var adjVarC=adjActC-p.budC;
+        tAdjActH+=adjActHrs;tAdjActC+=adjActC;tAdjVarC+=adjVarC;
+        if(p.actHrs===0&&p.budHrs===0&&trainH===0&&projH===0)return;
+        var noteParts=[];
+        if(projH>0)noteParts.push('-'+projH.toFixed(2)+'h project');
+        if(trainH>0)noteParts.push('-'+trainH.toFixed(2)+'h training');
+        var posNote=noteParts.length?noteParts.join(', '):'unchanged';
+        adjRows+='<tr>'
+          +'<td>'+LM_LABELS[p.pos]+'<div style="font-size:9px;color:var(--text3);font-weight:400;">'+posNote+'</div></td>'
+          +'<td>'+pnl_fmtHrs(adjActHrs)+'h</td>'
+          +'<td>'+(p.hasRate?'<b>'+pnl_fmtUsd(adjActC)+'</b>':'<span class="pnl-muted">&mdash;</span>')+'</td>'
+          +'<td>'+(p.hasRate?pnl_varCell(adjVarC):'<span class="pnl-muted">&mdash;</span>')+'</td>'
+          +'</tr>';
+      });
+      var adjFoot='<tr><td>Total</td><td>'+pnl_fmtHrs(tAdjActH)+'h</td>'
+        +'<td>'+(anyRate?'<b>'+pnl_fmtUsd(tAdjActC)+'</b>':'&mdash;')+'</td>'
+        +'<td>'+(anyRate?(Math.abs(tAdjVarC)<0.005?'$0.00':((tAdjVarC<0?'−$':'+$')+Math.abs(tAdjVarC).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}))):'&mdash;')+'</td></tr>';
+      var _adjCIsOver=tAdjVarC>0.5,_adjCIsUnder=tAdjVarC<-0.5;
+      adjSec.innerHTML='<div style="background:var(--white);border:1px solid var(--gold);box-shadow:inset 0 0 0 2px var(--gold);border-radius:var(--radius);overflow:hidden;margin-top:16px;">'
+        +'<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+        +'<div><div style="font-size:13px;font-weight:700;color:#fff;">&#128202; P&amp;L <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--gd);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Adjusted</span></div>'
+        +'<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+MONTH_NAMES[mo2]+' '+yr2+' &nbsp;&middot;&nbsp; minus training &amp; project hours (regular hours only), by position</div></div>'
+        +'<div style="text-align:right;">'
+        +(anyRate?'<div style="font-size:16px;font-weight:800;color:'+(_adjCIsOver?'var(--red-border)':'var(--green-border)')+'">'+(tAdjVarC>=0?'+$':'−$')+Math.abs(tAdjVarC).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>':'')
+        +'<div style="font-size:9px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.4px;">'+(_adjCIsOver?'Over Budget':'Under Budget')+'</div>'
+        +'</div></div>'
+        +'<div class="tbl-wrap"><table class="pnl-table">'
+        +'<thead><tr><th>Position</th><th>Adjusted hrs</th><th>Adjusted $</th><th>Adjusted variance</th></tr></thead>'
+        +'<tbody>'+adjRows+'</tbody><tfoot>'+adjFoot+'</tfoot></table></div>'
+        +(anyRate?('<div style="background:var(--navy);color:#fff;margin:12px;border-radius:10px;padding:8px 13px;display:flex;flex-wrap:wrap;gap:6px 13px;align-items:baseline;font-size:9.5px;">'
+          +'<span style="font-size:8.5px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.4px;">Month summary</span>'
+          +'<span>Variance <strong>'+(tVar>=0?'+$':'−$')+Math.abs(tVar).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</strong></span>'
+          +'<span style="opacity:.85;">&minus; Project <strong>$'+tProjC.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</strong></span>'
+          +'<span style="opacity:.85;">&minus; Training <strong>$'+tTrainC.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</strong></span>'
+          +'<span style="margin-left:auto;">= Adjusted <strong>'+(tAdjVarC>=0?'+$':'−$')+Math.abs(tAdjVarC).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</strong></span>'
+          +'</div>'):'')
+        +'</div>';
+    } else {
+      adjSec.innerHTML='';
+    }
+  }
+
+  /* ── Training & Projects summary — the full detail behind what the
+     Adjusted card subtracted, all on one screen: hours by position for
+     training and for projects, plus which projects were worked this month. ── */
+  var tpSec=document.getElementById('pnlTrainProjSection');
+  if(tpSec){
+    var _tpTrain=getTrainingHoursForMonth(yr2,mo2);
+    var _tpProj=getProjectHoursForMonth(yr2,mo2);
+    if(_tpTrain.total>0||_tpProj.total>0){
+      var trainRows=Object.keys(_tpTrain.byPos).sort().map(function(pos){
+        return '<tr><td>'+escHtml(pos)+'</td><td>'+_tpTrain.byPos[pos].toFixed(2)+'h</td></tr>';
+      }).join('');
+      var projRows=Object.keys(_tpProj.byPos).sort().map(function(pos){
+        return '<tr><td>'+escHtml(pos)+'</td><td>'+_tpProj.byPos[pos].toFixed(2)+'h</td></tr>';
+      }).join('');
+      var projListRows=_tpProj.projects.map(function(p){
+        return '<tr><td>'+escHtml(p.name)+'</td><td>'+p.hours.toFixed(2)+'h</td></tr>';
+      }).join('');
+      tpSec.innerHTML='<div class="card" style="margin-top:16px;padding:0;">'
+        +'<div style="padding:14px 16px;border-bottom:1px solid var(--border);">'
+        +'<div style="font-weight:800;font-size:14px;color:var(--text1);">&#127891; Training &amp; Projects</div>'
+        +'<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+MONTH_NAMES[mo2]+' '+yr2+' &middot; the detail behind the Adjusted numbers above</div>'
+        +'</div>'
+        +'<div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">'
+        +(_tpTrain.total>0?('<div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gd);margin-bottom:6px;">&#127891; Training hours by position &middot; '+_tpTrain.total.toFixed(2)+'h total</div>'
+          +'<div class="tbl-wrap"><table class="pnl-table"><tbody>'+trainRows+'</tbody></table></div></div>'):'')
+        +(_tpProj.total>0?('<div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--navy);margin-bottom:6px;">&#128203; Project hours by position &middot; '+_tpProj.total.toFixed(2)+'h total</div>'
+          +'<div class="tbl-wrap"><table class="pnl-table"><tbody>'+projRows+'</tbody></table></div></div>'):'')
+        +'</div>'
+        +(_tpProj.projects.length>0?('<div style="padding:0 16px 16px;">'
+          +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px;">Projects worked this month</div>'
+          +'<div class="tbl-wrap"><table class="pnl-table"><thead><tr><th>Project</th><th>Hours</th></tr></thead><tbody>'+projListRows+'</tbody></table></div>'
+          +'</div>'):'')
+        +'</div>';
+    } else {
+      tpSec.innerHTML='';
+    }
   }
 
   /* ── Weekly breakdown ── */
@@ -12081,6 +12198,44 @@ function getProjectHoursForWeek(weekKey){
     return {name:pr.name,hours:pr.hours,items:items};
   });
   return {total:total,byPos:byPos,projects:projList};
+}
+/* By-position training/project hours for a CALENDAR MONTH — used by the P&L
+   Adjusted card. Filters log entries by their own date directly, rather than
+   summing getTrainingSummary()/getProjectHoursForWeek()'s hotel-week buckets,
+   because a hotel week can straddle two calendar months and a week-bucket sum
+   would misattribute those boundary days to the wrong month. */
+function getTrainingHoursForMonth(yr,mo){
+  var trainees=loadTrainees(), byPos={}, total=0;
+  trainees.forEach(function(x){
+    (x.t.log||[]).forEach(function(e){
+      if(e.pending||e.off)return;
+      var h=e.hours||0; if(!h)return;
+      var d=parseLocalDate(e.date);
+      if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
+      var pos=e.pos||'Unknown';
+      byPos[pos]=(byPos[pos]||0)+h; total+=h;
+    });
+  });
+  return {total:total,byPos:byPos};
+}
+function getProjectHoursForMonth(yr,mo){
+  var projects=loadProjects(), byPos={}, byProject={}, total=0;
+  projects.forEach(function(p){
+    if(p.kind==='training')return;
+    (p.log||[]).forEach(function(e){
+      if(e.pending||e.off)return;
+      var h=e.hours||0; if(!h)return;
+      var d=parseLocalDate(e.date);
+      if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
+      var pos=e.pos||'Unknown';
+      byPos[pos]=(byPos[pos]||0)+h; total+=h;
+      if(!byProject[p.name])byProject[p.name]=0;
+      byProject[p.name]+=h;
+    });
+  });
+  var projectList=Object.keys(byProject).sort().map(function(n){return {name:n,hours:byProject[n]};})
+    .sort(function(a,b){return b.hours-a.hours;});
+  return {total:total,byPos:byPos,projects:projectList};
 }
 /* Report-style renderers for the Weekly Labor Pace "extra hours" strips
    (Training + Projects). Shared so the two blocks read as a consistent pair:
