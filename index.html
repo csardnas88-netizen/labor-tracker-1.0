@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.44.0"/>
+<meta name="app-version" content="6.45.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3582,6 +3582,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.45.0', date:'2026-07-26',
+    fixes:['Project detail on P&L no longer needs horizontal scrolling either — the activity notes (e.g. "Vanessa assisted with completing and setting up the guest rooms...") now wrap within the card instead of running off the edge.']
+  },
   {
     v:'6.44.0', date:'2026-07-26',
     fixes:['Training detail on P&L no longer needs horizontal scrolling to read. Each trainee\'s dates now show as a small Sat–Fri weekly calendar (one block per hotel week they trained in) with the hours for each day, instead of a long comma-separated list that ran off the edge of the card.']
@@ -7967,7 +7971,7 @@ function renderPnl(){
         }).join('');
         return '<tr class="pnl-clickrow" onclick="pnlToggleDetail(\''+did+'\',this)" style="cursor:pointer;">'
           +'<td><span class="pnl-caret">&#9656;</span> '+escHtml(pos)+'</td><td>'+_tpTrain.byPos[pos].toFixed(2)+'h</td></tr>'
-          +'<tr id="'+did+'" style="display:none;"><td colspan="2" style="background:var(--surface);">'+detailHtml+'</td></tr>';
+          +'<tr id="'+did+'" style="display:none;"><td colspan="2" style="background:var(--surface);white-space:normal;text-align:left;">'+detailHtml+'</td></tr>';
       }).join('');
       var projRows=Object.keys(_tpProj.byPos).sort().map(function(pos,i){
         var did='tpProjDet_'+i;
@@ -7978,7 +7982,7 @@ function renderPnl(){
         }).join('');
         return '<tr class="pnl-clickrow" onclick="pnlToggleDetail(\''+did+'\',this)" style="cursor:pointer;">'
           +'<td><span class="pnl-caret">&#9656;</span> '+escHtml(pos)+'</td><td>'+_tpProj.byPos[pos].toFixed(2)+'h</td></tr>'
-          +'<tr id="'+did+'" style="display:none;"><td colspan="2" style="background:var(--surface);">'+detailHtml+'</td></tr>';
+          +'<tr id="'+did+'" style="display:none;"><td colspan="2" style="background:var(--surface);white-space:normal;text-align:left;">'+detailHtml+'</td></tr>';
       }).join('');
       var projListRows=_tpProj.projects.map(function(p){
         return '<tr><td>'+escHtml(p.name)+'</td><td>'+p.hours.toFixed(2)+'h</td></tr>';
