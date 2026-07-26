@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.42.0"/>
+<meta name="app-version" content="6.43.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3582,6 +3582,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.43.0', date:'2026-07-26',
+    fixes:['The Training & Projects card on P&L is now clickable: tap any position row to see exactly who it\'s made of. Training expands to each trainee\'s name, dates, and hours; Projects expands to each person\'s hours plus the activity note describing what they actually did. Built so anyone reviewing the P&L can justify a position\'s hours on the spot, without leaving the page or digging through the Training/Projects sections separately.']
+  },
   {
     v:'6.42.0', date:'2026-07-26',
     fixes:['P&L now shows the full month picture on one screen. The main table has a "Real" badge and its total variance up top (same treatment as the Adjusted card below it, so the two are easy to tell apart). A new gold "P&L — Adjusted" card shows what each position\'s hours and cost look like after subtracting its training and project hours (regular hours only — overtime is untouched), in both hours and dollars, only appearing on months that had training or project activity. Below that, a "Training & Projects" card lists total hours by position for each, plus which projects were worked that month — the detail behind the Adjusted numbers, without leaving the P&L page.']
@@ -7647,6 +7651,19 @@ function pnl_varCell(v){
   var sign=under?'−$':'+$';
   return '<span class="'+cls+'">'+sign+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span>';
 }
+/* Expands/collapses a position's per-employee detail row in the Training &
+   Projects card, so someone can justify a position's hours (who, when, and
+   for projects what) without leaving the P&L page. */
+function pnlToggleDetail(id,rowEl){
+  var el=document.getElementById(id);
+  if(!el)return;
+  var open=el.style.display!=='none';
+  el.style.display=open?'none':'table-row';
+  if(rowEl){
+    var caret=rowEl.querySelector('.pnl-caret');
+    if(caret)caret.innerHTML=open?'&#9656;':'&#9662;';
+  }
+}
 function pnl_changeMonth(delta){
   viewMonth=new Date(viewMonth.getFullYear(),viewMonth.getMonth()+delta,1);
   renderPnl();renderPaychexRecon();
@@ -7909,11 +7926,33 @@ function renderPnl(){
     var _tpTrain=getTrainingHoursForMonth(yr2,mo2);
     var _tpProj=getProjectHoursForMonth(yr2,mo2);
     if(_tpTrain.total>0||_tpProj.total>0){
-      var trainRows=Object.keys(_tpTrain.byPos).sort().map(function(pos){
-        return '<tr><td>'+escHtml(pos)+'</td><td>'+_tpTrain.byPos[pos].toFixed(2)+'h</td></tr>';
+      var _tpTrainDetail=getTrainingDetailForMonth(yr2,mo2);
+      var _tpProjDetail=getProjectDetailForMonth(yr2,mo2);
+      var trainRows=Object.keys(_tpTrain.byPos).sort().map(function(pos,i){
+        var did='tpTrainDet_'+i;
+        var emps=_tpTrainDetail[pos]||[];
+        var detailHtml=emps.map(function(emp){
+          var dateStr=emp.dates.map(function(dt){
+            var dd=parseLocalDate(dt.date);
+            return MONTH_NAMES[dd.getMonth()].slice(0,3)+' '+dd.getDate()+' ('+dt.hours.toFixed(2)+'h)';
+          }).join(', ');
+          return '<div style="padding:6px 0;border-top:1px solid var(--border);"><b style="font-size:11px;">'+escHtml(emp.name)+'</b> &mdash; '+emp.hours.toFixed(2)+'h<br>'
+            +'<span style="font-size:10px;color:var(--text3);">'+dateStr+'</span></div>';
+        }).join('');
+        return '<tr class="pnl-clickrow" onclick="pnlToggleDetail(\''+did+'\',this)" style="cursor:pointer;">'
+          +'<td><span class="pnl-caret">&#9656;</span> '+escHtml(pos)+'</td><td>'+_tpTrain.byPos[pos].toFixed(2)+'h</td></tr>'
+          +'<tr id="'+did+'" style="display:none;"><td colspan="2" style="background:var(--surface);">'+detailHtml+'</td></tr>';
       }).join('');
-      var projRows=Object.keys(_tpProj.byPos).sort().map(function(pos){
-        return '<tr><td>'+escHtml(pos)+'</td><td>'+_tpProj.byPos[pos].toFixed(2)+'h</td></tr>';
+      var projRows=Object.keys(_tpProj.byPos).sort().map(function(pos,i){
+        var did='tpProjDet_'+i;
+        var items=_tpProjDetail[pos]||[];
+        var detailHtml=items.map(function(it){
+          return '<div style="padding:6px 0;border-top:1px solid var(--border);"><b style="font-size:11px;">'+escHtml(it.name)+'</b> &mdash; '+it.hours.toFixed(2)+'h<br>'
+            +'<span style="font-size:10px;color:var(--text3);">'+escHtml(it.project)+(it.note?': '+escHtml(it.note):'')+'</span></div>';
+        }).join('');
+        return '<tr class="pnl-clickrow" onclick="pnlToggleDetail(\''+did+'\',this)" style="cursor:pointer;">'
+          +'<td><span class="pnl-caret">&#9656;</span> '+escHtml(pos)+'</td><td>'+_tpProj.byPos[pos].toFixed(2)+'h</td></tr>'
+          +'<tr id="'+did+'" style="display:none;"><td colspan="2" style="background:var(--surface);">'+detailHtml+'</td></tr>';
       }).join('');
       var projListRows=_tpProj.projects.map(function(p){
         return '<tr><td>'+escHtml(p.name)+'</td><td>'+p.hours.toFixed(2)+'h</td></tr>';
@@ -12236,6 +12275,60 @@ function getProjectHoursForMonth(yr,mo){
   var projectList=Object.keys(byProject).sort().map(function(n){return {name:n,hours:byProject[n]};})
     .sort(function(a,b){return b.hours-a.hours;});
   return {total:total,byPos:byPos,projects:projectList};
+}
+/* Per-employee detail behind getTrainingHoursForMonth's by-position totals —
+   who was in training for that position, on which dates, for how many hours
+   each — so a position's total can be justified without leaving the P&L page. */
+function getTrainingDetailForMonth(yr,mo){
+  var trainees=loadTrainees(), byPos={};
+  trainees.forEach(function(x){
+    var t=x.t;
+    (t.log||[]).forEach(function(e){
+      if(e.pending||e.off)return;
+      var h=e.hours||0; if(!h)return;
+      var d=parseLocalDate(e.date);
+      if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
+      var pos=e.pos||'Unknown';
+      var eid=e.empId||t.empId||t.id, ename=e.empName||t.name||'Unknown';
+      if(!byPos[pos])byPos[pos]={};
+      if(!byPos[pos][eid])byPos[pos][eid]={name:ename,hours:0,dates:[]};
+      byPos[pos][eid].hours+=h;
+      byPos[pos][eid].dates.push({date:e.date,hours:h});
+    });
+  });
+  var out={};
+  Object.keys(byPos).forEach(function(pos){
+    out[pos]=Object.keys(byPos[pos]).map(function(id){return byPos[pos][id];})
+      .sort(function(a,b){return b.hours-a.hours;});
+    out[pos].forEach(function(emp){emp.dates.sort(function(a,b){return a.date<b.date?-1:(a.date>b.date?1:0);});});
+  });
+  return out;
+}
+/* Per-employee (+ activity note) detail behind getProjectHoursForMonth's
+   by-position totals — same idea as training's detail, but projects also
+   carry a note describing what was actually done. */
+function getProjectDetailForMonth(yr,mo){
+  var projects=loadProjects(), byPos={};
+  projects.forEach(function(p){
+    if(p.kind==='training')return;
+    (p.log||[]).forEach(function(e){
+      if(e.pending||e.off)return;
+      var h=e.hours||0; if(!h)return;
+      var d=parseLocalDate(e.date);
+      if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
+      var pos=e.pos||'Unknown';
+      var key=(e.empId||e.empName||'?')+'|'+(e.note||'');
+      if(!byPos[pos])byPos[pos]={};
+      if(!byPos[pos][key])byPos[pos][key]={name:e.empName||'Unknown',project:p.name,note:e.note||'',hours:0};
+      byPos[pos][key].hours+=h;
+    });
+  });
+  var out={};
+  Object.keys(byPos).forEach(function(pos){
+    out[pos]=Object.keys(byPos[pos]).map(function(k){return byPos[pos][k];})
+      .sort(function(a,b){return b.hours-a.hours;});
+  });
+  return out;
 }
 /* Report-style renderers for the Weekly Labor Pace "extra hours" strips
    (Training + Projects). Shared so the two blocks read as a consistent pair:
