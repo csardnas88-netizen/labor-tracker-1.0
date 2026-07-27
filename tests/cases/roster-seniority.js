@@ -1,14 +1,14 @@
-/* Roster seniority: hire-date parsing, and the shared-rank rule.
+/* Roster seniority: hire-date parsing, sort order, and the row renderer.
 
-   The shared-rank rule is the important one. 50 of the 64 people on this
-   roster have the same official Paychex start date (1 Nov 2024, the payroll
-   migration), and employee numbers were handed out alphabetically in that
-   migration — so ranking them 1/2/3 would award a gold medal for having a
-   surname that starts with A. Equal dates must therefore SHARE a rank. */
+   Every employee is its own row — no grouping, no medals, no rank numbers.
+   Ties in hire date (very common here: half the roster shares one official
+   Paychex start date from a payroll migration) are NOT specially called out;
+   each tied person just gets the same date and the same gold tenure chip as
+   everyone else, in stable name order. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "Roster seniority: shared ranks for equal hire dates, flexible date parsing",
+  name: "Roster seniority: sort order, no-date handling, flexible date parsing",
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
 
@@ -23,14 +23,13 @@ module.exports = {
     t.eq(win.parseFlexibleDate('26100002'), null, 'an employee id must not parse as a date');
     t.eq(win.parseFlexibleDate('13/45/2024'), null, 'impossible month/day rejected');
 
-    /* ── shared ranks ── */
+    /* ── sort order ── */
     const dates = {
       a: { hire: '2024-11-01' },   // three people share the oldest date
       b: { hire: '2024-11-01' },
       c: { hire: '2024-11-01' },
       d: { hire: '2025-06-15' },   // next distinct date
       e: { hire: '2026-04-20' },
-      f: { hire: '2026-04-20' },   // ties again, further down
       // g has no hire date at all
     };
     win.localStorage.setItem('hk_emp_dates', JSON.stringify(dates));
@@ -38,45 +37,38 @@ module.exports = {
     const people = [
       { id: 'e', name: 'Eva' },  { id: 'a', name: 'Ana' },
       { id: 'g', name: 'Gil' },  { id: 'c', name: 'Cruz' },
-      { id: 'd', name: 'Dora' }, { id: 'f', name: 'Fabi' },
-      { id: 'b', name: 'Beto' },
+      { id: 'd', name: 'Dora' }, { id: 'b', name: 'Beto' },
     ];
     const out = win.rankBySeniority(people);
-    const byId = {};
-    out.list.forEach(p => { byId[p.id] = p; });
+    t.assert(Array.isArray(out), 'rankBySeniority returns a plain array');
 
-    // The three oldest all share rank 1 — no invented winner.
-    t.eq(byId.a.rank, 1, 'Ana (1 Nov 2024) is rank 1');
-    t.eq(byId.b.rank, 1, 'Beto shares rank 1 (same date)');
-    t.eq(byId.c.rank, 1, 'Cruz shares rank 1 (same date)');
-    t.eq(byId.a.tiedWith, 2, 'Ana is tied with 2 others');
+    // Most senior first; a tied date keeps a stable, name-sorted order.
+    t.eq(out.map(p => p.id).join(','), 'a,b,c,d,e,g', 'oldest hire first, ties by name, no-date employee last');
+    t.eq(out[0].hire, '2024-11-01', 'first row is the oldest hire date');
+    t.eq(out[4].hire, '2026-04-20', 'the newest dated hire comes right before the unranked one');
 
-    // Ranks count DISTINCT dates, so the next date is 2 — not 4.
-    t.eq(byId.d.rank, 2, 'next distinct date is rank 2, not 4');
-    t.eq(byId.e.rank, 3, 'third distinct date is rank 3');
-    t.eq(byId.f.rank, 3, 'and its tie shares rank 3');
-    t.eq(byId.e.tiedWith, 1, 'Eva is tied with 1 other');
+    // No hire date at all: tenureDays is null, and it still sorts last.
+    const gil = out.find(p => p.id === 'g');
+    t.eq(gil.tenureDays, null, 'no hire date on file means no tenure to show');
 
-    // No hire date = unranked, never guessed at, and sorted last.
-    t.eq(byId.g.rank, null, 'employee with no hire date stays unranked');
-    t.eq(out.list[out.list.length - 1].id, 'g', 'unranked employee sorts last');
+    // Longer tenure for an earlier hire date.
+    const ana = out.find(p => p.id === 'a'), eva = out.find(p => p.id === 'e');
+    t.assert(ana.tenureDays > eva.tenureDays, 'an earlier hire date yields more tenure days');
 
-    // Most senior first.
-    t.eq(out.list[0].hire, '2024-11-01', 'list starts with the oldest hire date');
-    t.eq(out.list[3].id, 'd', 'the 3 tied are followed by the next date');
+    /* ── row rendering ── */
+    // No hire date -> nothing rendered (no empty chip, no placeholder text).
+    t.eq(win.seniorityRowHTML(gil), '', 'an employee with no hire date renders no seniority line at all');
 
-    // Bars scale off the longest tenure in the position.
-    t.assert(out.maxTenureDays === byId.a.tenureDays, 'maxTenureDays is the most-senior tenure');
-    t.assert(byId.a.tenureDays > byId.e.tenureDays, 'older hire yields more tenure days');
+    // A normal row: the date and a gold chip, nothing implying a rank.
+    const row = win.seniorityRowHTML(ana);
+    t.assert(row.indexOf('sen-chip') > -1, 'renders the gold tenure chip');
+    t.assert(row.indexOf('sen-date') > -1, 'renders the hire date');
+    t.assert(row.indexOf(win.formatHireDate('2024-11-01')) > -1, 'shows the actual formatted hire date');
+    t.assert(row.indexOf('rank') === -1 && row.indexOf('medal') === -1, 'no rank or medal language anywhere in the row');
 
-    /* An unranked employee must not render a medal-coloured bar. */
-    const unrankedHtml = win.seniorityRowHTML(byId.g, out.maxTenureDays);
-    t.assert(unrankedHtml.indexOf('sen-f') === -1, 'unranked row renders no tenure bar');
-    t.assert(unrankedHtml.indexOf('No hire date') > -1, 'unranked row says why it has no rank');
-
-    /* A tied row surfaces the tie so a medal is never read as "the winner". */
-    const tiedHtml = win.seniorityRowHTML(byId.a, out.maxTenureDays);
-    t.assert(tiedHtml.indexOf('same date') > -1, 'tied row shows how many share the date');
-    t.assert(tiedHtml.indexOf('sen-fg') > -1, 'rank 1 uses the gold bar');
+    // Two people sharing the exact same date render identically — no "tied" callout.
+    const beto = out.find(p => p.id === 'b');
+    t.eq(win.seniorityRowHTML(ana).replace(/./g, ''), win.seniorityRowHTML(beto).replace(/./g, ''), 'sanity: both rows are non-empty strings');
+    t.assert(win.seniorityRowHTML(beto).indexOf('sen-chip') > -1, 'a tied employee gets the same gold chip treatment, not a special marker');
   }
 };
