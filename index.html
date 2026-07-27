@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.55.0"/>
+<meta name="app-version" content="6.56.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1404,6 +1404,11 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <div id="page-breaks" style="display:none;">
       <div class="page-title">&#9749; Break Compliance</div>
       <div class="page-sub">All employees must take 30 minutes unpaid break</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="changeBcMonth(-1)">&#8592; Prev Month</button>
+        <span id="bcMonthLabel" style="font-size:14px;font-weight:700;min-width:110px;text-align:center;"></span>
+        <button class="btn btn-ghost btn-sm" onclick="changeBcMonth(1)">Next Month &#8594;</button>
+      </div>
       <div class="filter-bar" style="margin-bottom:14px;">
         <button class="fbtn on" data-bf2="all">All Exceptions</button>
         <button class="fbtn" data-bf2="none">No Break</button>
@@ -4147,6 +4152,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.56.0', date:'2026-07-27',
+    features:['Break Compliance redesigned the same way as Overtime: a "Who" ranking for the selected month (with its own month nav) instead of an all-time table sitting on top of a week-by-week list you had to open one at a time. Click an employee to see their exact hotel week — every day worked, not just the flagged ones — so a real pattern (like breaks that are consistently 1 minute over 30, a very different problem than actually skipping a break) is visible instead of buried in the scroll.']
+  },
   {
     v:'6.55.0', date:'2026-07-27',
     features:['Overtime\'s Trend chart now has a By Month / By Week toggle, defaulting to By Month — a cleaner starting view than 13+ weekly points, with By Week still there when you want the finer-grained shape.']
@@ -10397,241 +10406,200 @@ function renderDashDayAnalysis(days,rooms,today,wk){
 /* ═══════════════════════════════════════════
    BREAK COMPLIANCE PAGE
    ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   BREAK COMPLIANCE — redone on the same pattern as Overtime and Position
+   Check: a ranked "Who" list for the selected month instead of a week-by-
+   week list you had to open one at a time. Per Carlos's explicit call,
+   this one does NOT get a "Where" (by position) or a Trend section —
+   just Who, plus the same click-to-expand full hotel-week calendar so a
+   pattern (e.g. someone's breaks are consistently 1 minute over 30, which
+   is a very different problem than actually skipping a break) is visible
+   at a glance instead of buried across the whole scrolling history.
+   ═══════════════════════════════════════════ */
+var bcViewMonth=new Date();bcViewMonth.setDate(1);
+var bcExpanded={};
+
+function changeBcMonth(delta){
+  bcViewMonth=new Date(bcViewMonth.getFullYear(),bcViewMonth.getMonth()+delta,1);
+  renderBreaksPage();
+}
+function bcToggleEmp(empId){
+  bcExpanded[empId]=!bcExpanded[empId];
+  renderBreaksPage();
+}
+
+/* Per-employee break-exception counts for one month. 'ok' days (took a
+   compliant break) don't count toward anything here. */
+function getMonthBreakData(mk){
+  var mData=loadMonthData(mk);
+  var days=mData.days||{};
+  var byEmp={};
+  Object.keys(days).forEach(function(ds){
+    (days[ds].emps||[]).forEach(function(e){
+      var st=breakStatus(toMins(e.unpaid||0),e.pos||'',e.id);
+      if(st==='ok')return;
+      var key=e.id||e.name;
+      if(!byEmp[key])byEmp[key]={id:key,name:e.name,pos:e.pos,none:0,short:0,long:0};
+      if(st==='none')byEmp[key].none++;
+      else if(st==='long')byEmp[key].long++;
+      else byEmp[key].short++; /* short or over */
+    });
+  });
+  Object.keys(byEmp).forEach(function(k){byEmp[k].total=byEmp[k].none+byEmp[k].short+byEmp[k].long;});
+  return byEmp;
+}
+
+/* Every hotel week (within the loaded data) where this employee had a
+   break exception this month, with the full 7-day picture — every day
+   worked shows its actual break length and status, not just the days
+   that were flagged. */
+function getEmployeeBreakWeeks(mk,empId){
+  var mData=loadMonthData(mk);
+  var days=mData.days||{};
+  var wantedWeeks={};
+  Object.keys(days).forEach(function(ds){
+    var mine=(days[ds].emps||[]).filter(function(e){return String(e.id||e.name)===String(empId);});
+    var hasEx=mine.some(function(e){return breakStatus(toMins(e.unpaid||0),e.pos||'',e.id)!=='ok';});
+    if(hasEx){
+      var wkStart=getHotelWeekStart(parseLocalDate(ds));
+      wantedWeeks[dateStr(wkStart)]=wkStart;
+    }
+  });
+  var dayIdx=wtc_buildDayIndex();
+  return Object.keys(wantedWeeks).sort().map(function(wkKey){
+    var wkStart=wantedWeeks[wkKey];
+    var wkEnd=new Date(wkStart);wkEnd.setDate(wkStart.getDate()+6);
+    var label='Week of '+MONTH_NAMES[wkStart.getMonth()].slice(0,3)+' '+wkStart.getDate()+' – '+MONTH_NAMES[wkEnd.getMonth()].slice(0,3)+' '+wkEnd.getDate();
+    var cells=[];
+    for(var i=0;i<7;i++){
+      var d=new Date(wkStart);d.setDate(wkStart.getDate()+i);
+      var snap2=dayIdx[dateStr(d)];
+      var e=snap2?(snap2.emps||[]).find(function(x){return String(x.id||x.name)===String(empId);}):null;
+      if(!e){cells.push({date:d.getDate(),off:true});continue;}
+      cells.push({date:d.getDate(),mins:toMins(e.unpaid||0),status:breakStatus(toMins(e.unpaid||0),e.pos||'',e.id)});
+    }
+    return {label:label,cells:cells};
+  });
+}
+
+function bcStatusStyle(st){
+  if(st==='none')return{bg:'rgba(192,57,43,.09)',border:'var(--red)',text:'var(--red)'};
+  if(st==='short'||st==='over')return{bg:'rgba(230,126,34,.09)',border:'var(--yellow)',text:'var(--yellow)'};
+  if(st==='long')return{bg:'rgba(91,33,182,.09)',border:'var(--purple)',text:'var(--purple)'};
+  return{bg:'var(--white)',border:'var(--border)',text:'var(--text1)'};
+}
+function bcCalendarHtml(weeks){
+  var DOW=['Sat','Sun','Mon','Tue','Wed','Thu','Fri'];
+  if(!weeks.length)return '<div style="font-size:11px;color:var(--text3);">No days loaded for this week.</div>';
+  return weeks.map(function(wk){
+    var cells='';
+    wk.cells.forEach(function(c,i){
+      if(c.off){
+        cells+='<div style="text-align:center;padding:4px 2px;border-radius:4px;background:var(--surface);border:1px solid var(--border);">'
+          +'<div style="font-size:8px;color:var(--text3);">'+DOW[i]+' '+c.date+'</div>'
+          +'<div style="font-size:10px;color:var(--text3);">off</div></div>';
+        return;
+      }
+      var s=bcStatusStyle(c.status);
+      var label=c.status==='none'?'No break':c.mins+' min';
+      cells+='<div style="text-align:center;padding:4px 2px;border-radius:4px;background:'+s.bg+';border:1px solid '+s.border+';">'
+        +'<div style="font-size:8px;color:var(--text3);">'+DOW[i]+' '+c.date+'</div>'
+        +'<div style="font-size:9.5px;font-weight:700;color:'+s.text+';">'+label+'</div></div>';
+    });
+    return '<div style="margin-top:8px;">'
+      +'<div style="font-size:9.5px;color:var(--text3);margin-bottom:3px;">'+wk.label+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">'+cells+'</div></div>';
+  }).join('');
+}
+
 function renderBreaksPage(){
   var el=document.getElementById('breaksPageContent');
   if(!el)return;
+  var lbl=document.getElementById('bcMonthLabel');
+  if(lbl)lbl.textContent=MONTH_NAMES[bcViewMonth.getMonth()]+' '+bcViewMonth.getFullYear();
 
-  /* Collect all month data from localStorage */
-  var allDays={};
-  for(var i=0;i<localStorage.length;i++){
-    var key=localStorage.key(i);
-    if(key&&key.startsWith('hk_month_')){
-      try{
-        var mData=JSON.parse(localStorage.getItem(key));
-        if(mData&&mData.days){
-          Object.keys(mData.days).forEach(function(ds){
-            allDays[ds]=mData.days[ds];
-          });
-        }
-      }catch(e){}
-    }
-  }
+  var mk=monthKey(bcViewMonth);
+  var hasDays=Object.keys(loadMonthData(mk).days||{}).length>0;
+  var byEmp=getMonthBreakData(mk);
+  var empIds=Object.keys(byEmp);
 
-  if(Object.keys(allDays).length===0){
-    el.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);">Upload a daily PDF to see break compliance data</div>';
+  if(!empIds.length){
+    el.innerHTML='<div class="empty-state"><div class="es-icon">'+(hasDays?'&#10003;':'&#9749;')+'</div>'
+      +'<div class="es-title">'+(hasDays?'No break exceptions this month':'No reports uploaded yet')+'</div>'
+      +'<div class="es-desc">'+(hasDays?'Every employee loaded for '+MONTH_NAMES[bcViewMonth.getMonth()]+' took a compliant break.':'Upload a Labor Distribution Report to see break compliance here.')+'</div></div>';
     return;
   }
 
-  /* Group days into hotel weeks (Sat→Fri) */
-  var allDatesSorted=Object.keys(allDays).sort();
-  var weeks=[];/* [{label, days:[{ds,snap}]} ] */
-  var weekMap={};
-  var DNAMES_FULL=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  var MNAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var totalNone=0,totalShort=0,totalLong=0;
+  empIds.forEach(function(id){totalNone+=byEmp[id].none;totalShort+=byEmp[id].short;totalLong+=byEmp[id].long;});
 
-  /* ── Top Offenders: aggregate across ALL loaded days ── */
-  var offenders={}; /* key: id|name -> {name,pos,none,short,long} */
-  allDatesSorted.forEach(function(ds){
-    var snap=allDays[ds];
-    (snap.emps||[]).forEach(function(e){
-      var m=toMins(e.unpaid||0);
-      var st=breakStatus(m,e.pos||'',e.id);
-      if(st==='none'||st==='short'||st==='over'||st==='long'){
-        var key=(e.id||'')+'|'+e.name;
-        if(!offenders[key])offenders[key]={name:e.name,pos:e.pos,none:0,short:0,long:0};
-        if(st==='none')offenders[key].none++;
-        else if(st==='long')offenders[key].long++;
-        else offenders[key].short++; /* short or over */
-      }
-    });
+  var filtered=empIds.filter(function(id){
+    if(BPF==='none')return byEmp[id].none>0;
+    if(BPF==='short')return byEmp[id].short>0;
+    if(BPF==='long')return byEmp[id].long>0;
+    return true;
   });
-  var topOffenders=Object.keys(offenders).map(function(k){
-    var o=offenders[k];o.total=o.none+o.short+o.long;return o;
-  }).filter(function(o){return o.total>0;})
-    .sort(function(a,b){return b.total-a.total;})
-    .slice(0,10);
-
-  allDatesSorted.forEach(function(ds){
-    var d=parseLocalDate(ds);
-    var wStart=getHotelWeekStart(d);
-    var wKey=dateStr(wStart);
-    if(!weekMap[wKey]){
-      var wEnd=new Date(wStart);wEnd.setDate(wStart.getDate()+6);
-      weekMap[wKey]={
-        key:wKey,
-        label:MNAMES[wStart.getMonth()]+' '+wStart.getDate()+' – '+MNAMES[wEnd.getMonth()]+' '+wEnd.getDate(),
-        days:[],
-        totalNB:0,totalSB:0,totalLB:0
-      };
-      weeks.push(weekMap[wKey]);
-    }
-    var snap=allDays[ds];
-    var snapE=snap.emps||[];
-    var dayNB=snapE.length?snapE.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='none';}).length:(snap.noBreak||0);
-    var daySB=snapE.length?snapE.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos,e.id);return st==='short'||st==='over';}).length:(snap.shortBreak||0);
-    var dayLB=snapE.length?snapE.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='long';}).length:0;
-    weekMap[wKey].days.push({ds:ds,snap:snap,d:d});
-    weekMap[wKey].totalNB+=dayNB;
-    weekMap[wKey].totalSB+=daySB;
-    weekMap[wKey].totalLB+=dayLB;
+  filtered.sort(function(a,b){
+    var av=BPF==='none'?byEmp[a].none:BPF==='short'?byEmp[a].short:BPF==='long'?byEmp[a].long:byEmp[a].total;
+    var bv=BPF==='none'?byEmp[b].none:BPF==='short'?byEmp[b].short:BPF==='long'?byEmp[b].long:byEmp[b].total;
+    return bv-av;
   });
-
-  /* Sort weeks newest first */
-  weeks.sort(function(a,b){return b.key<a.key?-1:1;});
 
   var html='';
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">'
+    +'<div style="background:var(--red-bg);border-radius:10px;padding:12px 14px;text-align:center;">'
+      +'<div style="font-size:22px;font-weight:800;color:var(--red);">'+totalNone+'</div>'
+      +'<div style="font-size:10px;font-weight:700;color:var(--red);">&#128308; NO BREAK — '+MONTH_NAMES[bcViewMonth.getMonth()].toUpperCase()+'</div></div>'
+    +'<div style="background:var(--yellow-bg);border-radius:10px;padding:12px 14px;text-align:center;">'
+      +'<div style="font-size:22px;font-weight:800;color:var(--yellow);">'+totalShort+'</div>'
+      +'<div style="font-size:10px;font-weight:700;color:var(--yellow);">&#128992; SHORT/OVER — '+MONTH_NAMES[bcViewMonth.getMonth()].toUpperCase()+'</div></div>'
+    +'<div style="background:var(--purple-bg);border-radius:10px;padding:12px 14px;text-align:center;">'
+      +'<div style="font-size:22px;font-weight:800;color:var(--purple);">'+totalLong+'</div>'
+      +'<div style="font-size:10px;font-weight:700;color:var(--purple);">&#128995; LONG (+40) — '+MONTH_NAMES[bcViewMonth.getMonth()].toUpperCase()+'</div></div>'
+    +'</div>';
 
-  /* ── Top Offenders table ── */
-  if(topOffenders.length){
-    html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px;">';
-    html+='<div style="background:var(--navy);color:#fff;padding:11px 16px;">';
-    html+='<div style="font-size:13px;font-weight:700;">🏆 Top Offenders — All Time</div>';
-    html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">Employees with the most break exceptions across all loaded days</div>';
-    html+='</div>';
-    html+='<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Position</th><th style="text-align:center;">🔴 No Break</th><th style="text-align:center;">🟠 Short Break</th><th style="text-align:center;">🟣 Long Break (+40)</th><th style="text-align:center;">Total</th></tr></thead><tbody>';
-    topOffenders.forEach(function(o){
-      var posShort=(o.pos||'').replace(/^\d+-/,'');
-      html+='<tr>'
-        +'<td><b>'+o.name+'</b></td>'
-        +'<td>'+posShort+'</td>'
-        +'<td style="text-align:center;'+(o.none>0?'color:var(--red);font-weight:700;':'color:var(--text3);')+'">'+o.none+'</td>'
-        +'<td style="text-align:center;'+(o.short>0?'color:var(--yellow);font-weight:700;':'color:var(--text3);')+'">'+o.short+'</td>'
-        +'<td style="text-align:center;'+(o.long>0?'color:var(--purple);font-weight:700;':'color:var(--text3);')+'">'+o.long+'</td>'
-        +'<td style="text-align:center;font-weight:800;">'+o.total+'</td>'
-        +'</tr>';
-    });
-    html+='</tbody></table></div></div>';
+  if(!filtered.length){
+    html+='<div class="empty-state"><div class="es-icon">&#128269;</div><div class="es-title">No records match filter</div></div>';
+    el.innerHTML=html;
+    return;
   }
 
-  /* Grand total bar */
-  var grandNB=0,grandSB=0,grandLB=0;
-  weeks.forEach(function(w){grandNB+=w.totalNB;grandSB+=w.totalSB;grandLB+=w.totalLB;});
-  html+='<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">';
-  html+='<div style="flex:1;min-width:120px;background:var(--red-bg);border-radius:10px;padding:12px 16px;text-align:center;">'
-    +'<div style="font-size:26px;font-weight:800;color:var(--red);">'+grandNB+'</div>'
-    +'<div style="font-size:11px;font-weight:700;color:var(--red);">🔴 No Break MTD</div></div>';
-  html+='<div style="flex:1;min-width:120px;background:var(--yellow-bg);border-radius:10px;padding:12px 16px;text-align:center;">'
-    +'<div style="font-size:26px;font-weight:800;color:var(--yellow);">'+grandSB+'</div>'
-    +'<div style="font-size:11px;font-weight:700;color:var(--yellow);">🟠 Short Break MTD</div></div>';
-  html+='<div style="flex:1;min-width:120px;background:var(--purple-bg);border-radius:10px;padding:12px 16px;text-align:center;">'
-    +'<div style="font-size:26px;font-weight:800;color:var(--purple);">'+grandLB+'</div>'
-    +'<div style="font-size:11px;font-weight:700;color:var(--purple);">🟣 Long Break MTD (+40)</div></div>';
-  html+='</div>';
-
-  /* One card per week */
-  weeks.forEach(function(wk,wi){
-    var hasEx=wk.totalNB>0||wk.totalSB>0||wk.totalLB>0;
-    html+='<div style="margin-bottom:16px;border:1.5px solid '+(hasEx?'var(--border)':'var(--border)')
-      +';border-radius:12px;overflow:hidden;">';
-
-    /* Week header */
-    html+='<div style="background:var(--navy);color:#fff;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" '
-      +'onclick="(function(el){var b=el.nextElementSibling;b.style.display=b.style.display===\'none\'?\'block\':\'none\';})(this)">';
-    html+='<div style="font-size:13px;font-weight:700;">📅 Week of '+wk.label+'</div>';
-    html+='<div style="display:flex;gap:10px;align-items:center;">';
-    if(wk.totalNB>0)html+='<span style="background:var(--red-bg);color:var(--red);font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;">🔴 '+wk.totalNB+' No Brk</span>';
-    if(wk.totalSB>0)html+='<span style="background:var(--yellow-bg);color:var(--yellow);font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;">🟠 '+wk.totalSB+' Short</span>';
-    if(wk.totalLB>0)html+='<span style="background:var(--purple-bg);color:var(--purple);font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;">🟣 '+wk.totalLB+' Long</span>';
-    if(!hasEx)html+='<span style="color:var(--green-border);font-size:11px;font-weight:700;">✓ All OK</span>';
-    html+='<span style="font-size:12px;opacity:.7;">▼</span>';
-    html+='</div></div>';
-
-    /* Week body - days */
-    html+='<div style="display:'+(wi===0?'block':'none')+';">';
-
-    /* Sort days within week chronologically */
-    wk.days.sort(function(a,b){return a.ds<b.ds?-1:1;});
-
-    var anyDayShown=false;
-
-    wk.days.forEach(function(dayObj){
-      var snap=dayObj.snap;
-      var d=dayObj.d;
-      var emps=snap.emps||[];
-      var hasEmpData=emps.length>0;
-
-      /* Calculate counts — use snap.emps if available, else fallback to stored counters */
-      var dayNB,daySB,dayLB;
-      var nbEmps=[],sbEmps=[],lbEmps=[];
-      if(hasEmpData){
-        nbEmps=emps.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='none';});
-        sbEmps=emps.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos,e.id);return st==='short'||st==='over';});
-        lbEmps=emps.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='long';});
-        dayNB=nbEmps.length;daySB=sbEmps.length;dayLB=lbEmps.length;
-      }else{
-        dayNB=snap.noBreak||0;daySB=snap.shortBreak||0;dayLB=0;
-      }
-      var dayHasEx=dayNB>0||daySB>0||dayLB>0;
-      if(!dayHasEx)return;
-
-      /* Apply page filter (All / No Break / Short Break / Long Break) */
-      var shownNB=BPF==='all'||BPF==='none'?nbEmps:[];
-      var shownSB=BPF==='all'||BPF==='short'?sbEmps:[];
-      var shownLB=BPF==='all'||BPF==='long'?lbEmps:[];
-      var shownCount=(BPF==='all'?dayNB+daySB+dayLB:BPF==='none'?dayNB:BPF==='short'?daySB:dayLB);
-      if(shownCount===0)return; /* nothing matches the active filter for this day */
-      anyDayShown=true;
-
-      var dName=DNAMES_FULL[d.getDay()];
-      var dLabel=dName+', '+MNAMES[d.getMonth()]+' '+d.getDate();
-
-      html+='<div style="border-top:1px solid var(--border);padding:12px 16px;">';
-      html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
-      html+='<div style="font-size:12px;font-weight:700;color:var(--text1);">'+dLabel+'</div>';
-      html+='<div style="display:flex;gap:8px;">';
-      if(shownNB.length>0)html+='<span style="background:var(--red-bg);color:var(--red);font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px;">🔴 '+shownNB.length+'</span>';
-      if(shownSB.length>0)html+='<span style="background:var(--yellow-bg);color:var(--yellow);font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px;">🟠 '+shownSB.length+'</span>';
-      if(shownLB.length>0)html+='<span style="background:var(--purple-bg);color:var(--purple);font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px;">🟣 '+shownLB.length+'</span>';
-      html+='</div></div>';
-
-      if(!hasEmpData){
-        /* Old snapshot — no employee names saved */
-        html+='<div style="background:var(--ad);border:1px dashed var(--yellow);border-radius:8px;padding:10px 12px;'
-          +'display:flex;align-items:center;gap:10px;">'
-          +'<span style="font-size:16px;">⚠️</span>'
-          +'<div style="font-size:11px;color:var(--yellow);">'
-          +'<strong>'+( dayNB+daySB)+' exception'+(dayNB+daySB>1?'s':'')+' recorded</strong> — '
-          +'Re-upload this day\'s PDF to see employee names</div></div>';
-      }else{
-        /* Show employee list, filtered */
-        var allEx=shownNB.concat(shownSB).concat(shownLB);
-        allEx.sort(function(a,b){return toMins(a.unpaid||0)-toMins(b.unpaid||0);});
-        allEx.forEach(function(emp){
-          var mins=toMins(emp.unpaid||0);
-          var st=breakStatus(mins,emp.pos||'',emp.id);
-          var isNB=st==='none';
-          var isLong=st==='long';
-          var isOver=st==='over';
-          var icon=isNB?'🔴':isLong?'🟣':'🟠';
-          var posShort=(emp.pos||'').replace(/^\d+-/,'');
-          var timeLabel=isNB?'No Break':isLong?'Long — '+mins+' min':(isOver?'Over '+mins+' min':mins+' min');
-          var timeColor=isNB?'var(--red)':isLong?'var(--purple)':'var(--yellow)';
-          html+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed var(--border);">';
-          html+='<span style="font-size:16px;">'+icon+'</span>';
-          html+='<div style="flex:1;min-width:0;">';
-          html+='<div style="font-size:12px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+emp.name+'</div>';
-          html+='<div style="font-size:10px;color:var(--text3);">'+posShort+'</div>';
-          html+='</div>';
-          html+='<div style="font-size:11px;font-weight:700;color:'+timeColor+';">'+timeLabel+'</div>';
-          html+='</div>';
-        });
-      }
-
-      html+='</div>';
-    });
-
-    /* If no days had exceptions matching the current filter in this week */
-    if(!anyDayShown){
-      html+='<div style="padding:16px;text-align:center;color:var(--green);font-size:12px;font-weight:700;">'
-        +(hasEx?'No exceptions match this filter for this week':'✓ No break exceptions this week')+'</div>';
-    }
-
-    html+='</div></div>';
+  var maxTotal=0;
+  filtered.forEach(function(id){
+    var v=BPF==='none'?byEmp[id].none:BPF==='short'?byEmp[id].short:BPF==='long'?byEmp[id].long:byEmp[id].total;
+    if(v>maxTotal)maxTotal=v;
   });
+  if(!maxTotal)maxTotal=1;
+
+  html+='<div style="background:var(--white);border-radius:12px;padding:14px 16px;">'
+    +'<div style="display:grid;grid-template-columns:1fr 34px 34px 34px 16px;gap:8px;margin-bottom:8px;">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);">Who</div>'
+    +'<div style="text-align:center;font-size:13px;">&#128308;</div>'
+    +'<div style="text-align:center;font-size:13px;">&#128992;</div>'
+    +'<div style="text-align:center;font-size:13px;">&#128995;</div><div></div></div>'
+    +filtered.map(function(id,i){
+      var e=byEmp[id];
+      var v=BPF==='none'?e.none:BPF==='short'?e.short:BPF==='long'?e.long:e.total;
+      var pct=Math.round((v/maxTotal)*100);
+      var expanded=!!bcExpanded[id];
+      var safeId=String(id).replace(/'/g,"\\'");
+      var row='<div style="padding:8px 0;'+(i>0?'border-top:1px solid var(--border);':'')+'">'
+        +'<div style="display:grid;grid-template-columns:1fr 34px 34px 34px 16px;align-items:center;gap:8px;cursor:pointer;" onclick="bcToggleEmp(\''+safeId+'\')">'
+        +'<div><div style="font-size:12.5px;font-weight:700;color:var(--text1);">'+escHtml(e.name)+'</div><div style="font-size:10px;color:var(--text3);">'+escHtml((e.pos||'').replace(/^\d+-/,''))+'</div>'
+        +'<div style="background:var(--surface);border-radius:99px;height:8px;margin-top:4px;"><div style="width:'+pct+'%;height:8px;border-radius:99px;background:var(--navy);"></div></div></div>'
+        +'<div style="text-align:center;font-size:12px;font-weight:700;color:'+(e.none>0?'var(--red)':'var(--text3)')+';">'+e.none+'</div>'
+        +'<div style="text-align:center;font-size:12px;font-weight:700;color:'+(e.short>0?'var(--yellow)':'var(--text3)')+';">'+e.short+'</div>'
+        +'<div style="text-align:center;font-size:12px;font-weight:700;color:'+(e.long>0?'var(--purple)':'var(--text3)')+';">'+e.long+'</div>'
+        +'<div style="text-align:center;color:var(--text3);font-size:11px;transform:rotate('+(expanded?90:0)+'deg);transition:transform .15s;">▸</div>'
+        +'</div>';
+      if(expanded)row+='<div style="padding-top:8px;">'+bcCalendarHtml(getEmployeeBreakWeeks(mk,id))+'</div>';
+      row+='</div>';
+      return row;
+    }).join('')
+    +'</div>';
 
   el.innerHTML=html;
 
-  /* Wire up filter buttons */
   document.querySelectorAll('[data-bf2]').forEach(function(b){
     b.onclick=function(){
       document.querySelectorAll('[data-bf2]').forEach(function(x){x.classList.remove('on')});

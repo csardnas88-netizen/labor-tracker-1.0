@@ -23,6 +23,7 @@ const cases = [
   require('./cases/position-check-month'),
   require('./cases/wtc-otherdept-hours'),
   require('./cases/overtime-redesign'),
+  require('./cases/break-compliance-redesign'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
