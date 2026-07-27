@@ -18,6 +18,7 @@ const cases = [
   require('./cases/forgot-password'),
   require('./cases/push-merge-protects-remote-days'),
   require('./cases/occupancy-mismatch-manual-confirm'),
+  require('./cases/pnl-calendar-date-rooms'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

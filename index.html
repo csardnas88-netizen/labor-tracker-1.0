@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.47.0"/>
+<meta name="app-version" content="6.48.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3583,6 +3583,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.48.0', date:'2026-07-27',
+    fixes:['P&L\'s "Rooms sold" (main table, weekly breakdown, and Excel export) now uses each day\'s own calendar-date occupancy, matching how accounting books room revenue. Labor is unchanged — it still uses the previous night\'s occupancy to size each day\'s staffing, since that\'s a different, correct question. The two totals can differ slightly at month boundaries; that\'s expected, not an error.']
+  },
+  {
     v:'6.47.0', date:'2026-07-26',
     fixes:['Fixed Occupancy Mismatch showing up for nights nobody ever confirmed by hand. Until now, once R106 filled in a night automatically, that number stayed frozen even if R106 was later corrected — so an updated R106 would look like it "disagreed" with a number that was really just its own old snapshot. Now, as long as nobody has manually confirmed that night, the app keeps it in sync with R106 automatically instead of flagging a mismatch. A night you\'ve manually confirmed is still never touched or overwritten.']
   },
@@ -6748,10 +6752,13 @@ function exportPnlExcel(){
   });
   var effectiveDays=_latestDay>0?_latestDay:dim;
 
-  /* total rooms — accounting method: rooms on same day as labor (day 1 → effectiveDays) */
+  /* total rooms — calendar-date method: each day's OWN occupancy (day 1 → effectiveDays),
+     matching how accounting books room revenue to the date it happened. Deliberately NOT
+     getRoomsForDay, which shifts to the previous night for staffing purposes — that shift
+     is correct for Labor's day-to-day budget, but P&L needs to agree with accounting. */
   var totRooms=0;
   for(var _xdi=1;_xdi<=effectiveDays;_xdi++){
-    totRooms+=getRoomsForDay(dateStr(new Date(yr,mo,_xdi)))||0;
+    totRooms+=parseInt(roomsData[dateStr(new Date(yr,mo,_xdi))])||0;
   }
 
   /* ── Build per-position P&L data ── */
@@ -6785,7 +6792,7 @@ function exportPnlExcel(){
     var pByPos={};LM_ORDER.forEach(function(pos){pByPos[pos]={act:0,ot:0};});
     inMo.forEach(function(dd){
       var ds=dateStr(dd);var sn=days[ds];
-      pR+=getRoomsForDay(ds)||0;
+      pR+=parseInt(roomsData[ds])||0; /* calendar-date, same reasoning as totRooms above */
       if(sn){pP+=sn.totalPaid||0;pO+=sn.totalOT||0;pL++;
         if(sn.byPosition)LM_ORDER.forEach(function(pos){
           if(sn.byPosition[pos]){pByPos[pos].act+=sn.byPosition[pos].paid||0;pByPos[pos].ot+=sn.byPosition[pos].ot1||0;}
@@ -7767,7 +7774,9 @@ function renderPnl(){
   /* accounting method: count rooms on same day as labor (day 1 → last loaded day) */
   var totalMonthRooms=0;
   for(var _pdi=1;_pdi<=pnlEffectiveDays;_pdi++){
-    totalMonthRooms+=getRoomsForDay(dateStr(new Date(yr2,mo2,_pdi)))||0;
+    /* Calendar-date, not getRoomsForDay's previous-night shift — P&L must
+       agree with accounting's rooms-sold-by-date, Labor keeps the shift. */
+    totalMonthRooms+=parseInt(roomsData[dateStr(new Date(yr2,mo2,_pdi))])||0;
   }
 
   /* Empty state */
@@ -8043,12 +8052,12 @@ function renderPnl(){
     if(inMo.length===7){
       /* Full hotel week */
       var wR=0,wP=0,wO=0,wL=0;
-      inMo.forEach(function(dd){var ds=dateStr(dd);wR+=getRoomsForDay(ds)||0;var sn=days[ds];if(sn){wP+=sn.totalPaid;wO+=sn.totalOT;wL++;}});
+      inMo.forEach(function(dd){var ds=dateStr(dd);wR+=parseInt(roomsData[ds])||0;var sn=days[ds];if(sn){wP+=sn.totalPaid;wO+=sn.totalOT;wL++;}});
       periods.push({type:'week',first:inMo[0],last:inMo[6],rooms:wR,paid:wP,ot:wO,loaded:wL,days:7});
     } else if(inMo.length>0){
       /* Partial period — one grouped row */
       var pR=0,pP=0,pO=0,pL=0;
-      inMo.forEach(function(dd){var ds=dateStr(dd);pR+=getRoomsForDay(ds)||0;var sn=days[ds];if(sn){pP+=sn.totalPaid;pO+=sn.totalOT;pL++;}});
+      inMo.forEach(function(dd){var ds=dateStr(dd);pR+=parseInt(roomsData[ds])||0;var sn=days[ds];if(sn){pP+=sn.totalPaid;pO+=sn.totalOT;pL++;}});
       periods.push({type:'partial',first:inMo[0],last:inMo[inMo.length-1],rooms:pR,paid:pP,ot:pO,loaded:pL,days:inMo.length});
     }
   });
