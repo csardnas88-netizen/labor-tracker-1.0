@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.50.0"/>
+<meta name="app-version" content="6.51.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1423,7 +1423,12 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <!-- ══ POSITION CHECK ══ -->
     <div id="page-position" style="display:none;">
       <div class="page-title">&#128260; Position Check</div>
-      <div class="page-sub">Employees clocked under a different position than their primary assignment</div>
+      <div class="page-sub">Housekeeping employees clocked under a different position — or a different department entirely — than their primary assignment, across the whole month</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="changePosCheckMonth(-1)">&#8592; Prev Month</button>
+        <span id="posCheckMonthLabel" style="font-size:14px;font-weight:700;min-width:110px;text-align:center;"></span>
+        <button class="btn btn-ghost btn-sm" onclick="changePosCheckMonth(1)">Next Month &#8594;</button>
+      </div>
       <div class="filter-bar" style="margin-bottom:14px;">
         <button class="fbtn on" data-pf2="all">Show All</button>
         <button class="fbtn" data-pf2="mismatch">Mismatches Only</button>
@@ -3293,6 +3298,119 @@ function renderOther(f){
     return'<tr><td>'+e.id+'</td><td><b>'+e.name+'</b></td><td><span class="badge b-purple">'+e.pos+'</span></td><td>'+e.paid.toFixed(2)+'</td><td>'+(pp?'<span class="badge b-gold">'+pp+"</span>":'<i style="color:var(--text3)">Not in HK roster</i>')+'</td><td>'+sb+'</td><td><div class="rev-wrap"><button class="btn btn-green btn-sm" onclick="setORev(\''+ ek +'\',\'approved\')">&#10003; Approve</button><button class="btn btn-ghost btn-sm" onclick="setORev(\''+ ek +'\',\'ignore\')">Not HK</button></div></td><td>'+noteH+'</td></tr>';
   }).join("");
 }
+
+/* ═══════════════════════════════════════════
+   POSITION CHECK (monthly nav page)
+   Unlike the single-day "Position"/"Other Depts" tabs above (which only
+   ever look at whatever PDF is currently loaded into DATA), this page
+   scans every day already saved into the selected month and surfaces two
+   kinds of issue, per employee, one row per occurrence:
+     kind:"hk"    — clocked into a DIFFERENT Housekeeping position than
+                    their roster one (or an employee ID/name the roster
+                    doesn't recognize at all: status "unknown").
+     kind:"other" — clocked into a non-HK department entirely (e.g.
+                    Banquet) while their roster position IS Housekeeping.
+                    This is the case the old page silently missed: those
+                    days were only ever visible in "Other Depts", and only
+                    until the next PDF upload overwrote DATA.
+   Decisions/notes are keyed per employee+date (not just employee), so
+   marking one day's occurrence "Correct" can't bleed into another day's
+   for the same person. ═══════════════════════════════════════════ */
+var posCheckViewMonth=new Date();posCheckViewMonth.setDate(1);
+var PCF='all';
+function changePosCheckMonth(delta){
+  posCheckViewMonth=new Date(posCheckViewMonth.getFullYear(),posCheckViewMonth.getMonth()+delta,1);
+  renderPositionCheckPage();
+}
+function getMonthPositionIssues(mk){
+  var mData=loadMonthData(mk);
+  var days=mData.days||{};
+  var out=[];
+  Object.keys(days).sort().forEach(function(ds){
+    var snap=days[ds];
+    (snap.emps||[]).forEach(function(e){
+      var pp=primaryPos(e.name,e.id);
+      var st=!pp?"unknown":(pp===e.pos?"match":"mismatch");
+      if(st==="match")return;
+      out.push({ds:ds,id:e.id,name:e.name,clockedAs:e.pos,primary:pp,status:st,paid:e.paid,kind:"hk"});
+    });
+    (snap.otherEmps||[]).forEach(function(e){
+      var pp=primaryPos(e.name,e.id);
+      if(!pp)return; /* genuinely not an HK employee — that's Other Depts' job, not this page's */
+      out.push({ds:ds,id:e.id,name:e.name,clockedAs:e.pos,primary:pp,status:"mismatch",paid:e.paid,kind:"other"});
+    });
+  });
+  return out;
+}
+function pcNotes(){try{var s=localStorage.getItem("hk_poscheck_notes");if(s)return JSON.parse(s);}catch(e){}return{};}
+function pcSaveNotes(d){safeSetItem("hk_poscheck_notes",JSON.stringify(d));if(typeof supaPut==="function"){try{supaPut("hk_poscheck_notes",d);}catch(e){}}}
+function setPosCheckDecision(key,val){
+  var d=pcNotes();if(!d[key])d[key]={decision:"",note:""};
+  d[key].decision=val;pcSaveNotes(d);renderPositionCheckPage();
+}
+function setPosCheckNote(key,val){
+  var d=pcNotes();if(!d[key])d[key]={decision:"",note:""};
+  d[key].note=val;pcSaveNotes(d);
+}
+function renderPositionCheckPage(){
+  var lbl=document.getElementById("posCheckMonthLabel");
+  if(lbl)lbl.textContent=MONTH_NAMES[posCheckViewMonth.getMonth()]+" "+posCheckViewMonth.getFullYear();
+  var el=document.getElementById("positionContent");
+  if(!el)return;
+  var mk=monthKey(posCheckViewMonth);
+  var issues=getMonthPositionIssues(mk);
+  if(!issues.length){
+    var mData=loadMonthData(mk);
+    var hasDays=mData.days&&Object.keys(mData.days).length>0;
+    el.innerHTML='<div class="empty-state"><div class="es-icon">'+(hasDays?"&#10003;":"&#128203;")+'</div>'
+      +'<div class="es-title">'+(hasDays?"No position issues this month":"No reports uploaded yet")+'</div>'
+      +'<div class="es-desc">'+(hasDays?"Every employee worked their primary position, in their primary department, all month.":"Upload a Labor Distribution Report to see position checks here.")+'</div></div>';
+    return;
+  }
+  var filtered=issues.filter(function(r){
+    if(PCF==="mismatch")return r.status==="mismatch";
+    if(PCF==="unknown")return r.status==="unknown";
+    return true;
+  });
+  if(!filtered.length){
+    el.innerHTML='<div class="empty-state"><div class="es-icon">&#128269;</div><div class="es-title">No records match filter</div></div>';
+    return;
+  }
+  var byEmp={};
+  filtered.forEach(function(r){(byEmp[r.id]=byEmp[r.id]||[]).push(r);});
+  var empIds=Object.keys(byEmp).sort(function(a,b){return byEmp[a][0].name.localeCompare(byEmp[b][0].name);});
+  var notesAll=pcNotes();
+  var html="";
+  empIds.forEach(function(id){
+    var rows=byEmp[id],name=rows[0].name;
+    html+='<div class="roster-pos-card" style="margin-bottom:14px;">'
+      +'<div class="roster-pos-hdr"><span><b>'+name+'</b> <span style="font-weight:400;color:var(--text3);font-size:11px;">ID: '+id+'</span></span><span class="cnt">'+rows.length+'</span></div>'
+      +'<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Clocked As</th><th>Primary</th><th>Status</th><th>Paid</th><th>Decision</th><th>Note</th></tr></thead><tbody>';
+    rows.forEach(function(r){
+      var key=r.id+"_"+r.ds,d=notesAll[key]||{decision:"",note:""};
+      var dLabel=parseLocalDate(r.ds).toLocaleDateString("en-US",{month:"short",day:"numeric"});
+      var stBadge=r.status==="unknown"?'<span class="badge b-gray">? Unknown</span>'
+        :(r.kind==="other"?'<span class="badge b-red">&#9888; Other Dept</span>':'<span class="badge b-red">&#9888; Mismatch</span>');
+      var ek=key.replace(/'/g,"\\'");
+      var noteList=r.kind==="other"?OTHER_NOTES:POS_NOTES;
+      html+='<tr><td>'+dLabel+'</td><td><span class="badge b-navy">'+r.clockedAs+'</span></td>'
+        +'<td>'+(r.primary?'<span class="badge b-gold">'+r.primary+'</span>':'<i style="color:var(--text3)">Not in roster</i>')+'</td><td>'+stBadge+'</td><td>'+r.paid.toFixed(2)+'</td>'
+        +'<td><div class="rev-wrap"><button class="btn btn-green btn-sm" onclick="setPosCheckDecision(\''+ek+'\',\'correct\')">&#10003; Correct</button><button class="btn btn-red btn-sm" onclick="setPosCheckDecision(\''+ek+'\',\'incorrect\')">&#10007; Wrong</button><button class="btn btn-ghost btn-sm" onclick="setPosCheckDecision(\''+ek+'\',\'approved\')">Approved</button></div>'
+        +(d.decision?'<span class="badge '+(d.decision==="correct"?"b-green":d.decision==="incorrect"?"b-red":"b-navy")+'" style="margin-top:4px;display:inline-block">'+d.decision+"</span>":"")+'</td>'
+        +'<td><select class="note-sel" onchange="setPosCheckNote(\''+ek+'\',this.value)"><option value="">Note...</option>'+noteList.map(function(n){return'<option'+(d.note===n?' selected':'')+'>'+n+'</option>'}).join("")+'</select></td>'
+        +'</tr>';
+    });
+    html+='</tbody></table></div></div>';
+  });
+  el.innerHTML=html;
+  document.querySelectorAll('[data-pf2]').forEach(function(b){
+    b.onclick=function(){
+      document.querySelectorAll('[data-pf2]').forEach(function(x){x.classList.remove("on")});
+      b.classList.add("on");PCF=b.dataset.pf2;renderPositionCheckPage();
+    };
+  });
+}
+
 function renderRoster(){
   /* Load overrides: position changes and inactive flags */
   var overrides=loadOverrides();
@@ -3868,6 +3986,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.51.0', date:'2026-07-27',
+    features:['Position Check now actually works, and covers the full month. Until now the page in the menu was empty — its filters weren\'t wired up. Now it lists every day this month where someone clocked under a different Housekeeping position than their roster one, grouped by employee, with the same Correct / Wrong / Approved review you already use elsewhere. It also now catches an HK employee who worked a non-Housekeeping department entirely (e.g. Banquet) — that used to only show up quietly in Other Depts and was easy to miss.'],
+    fixes:['Decisions and notes on Position Check are now saved per employee and date, and sync to the cloud — marking one day\'s occurrence never affects another day for the same person.']
+  },
   {
     v:'6.50.0', date:'2026-07-27',
     fixes:['Roster seniority redesigned based on feedback: dropped the gold/silver/bronze medal ranking (with so many employees sharing the same official hire date, it read as an arbitrary winner). Every employee is now their own row, most-senior-first, with the hire date and a solid gold "time with company" chip — the same treatment for everyone, tied dates and all.']
@@ -5294,6 +5417,7 @@ var KEY_LABELS={
   'hk_roster_overrides':'Roster','hk_trainings':'Trainings',
   'hk_labor_model':'Labor Model','hk_staffing_actual':'Staffing',
   'hk_staffing_input':'Staffing','hk_emp_dates':'Employee Dates',
+  'hk_poscheck_notes':'Position Check',
   'hk_paychex_report':'Paychex Report','hk_wtc_report':'WTC Report'
 };
 function _friendlyKeyLabel(key){
@@ -5934,6 +6058,19 @@ function _syncFromSheetsPull(){
             updated=true;
           }
         }
+        if(key==="hk_poscheck_notes"){
+          var remotePC=all[key];
+          if(remotePC&&typeof remotePC==='object'){
+            var localPC={};
+            try{var lpc=localStorage.getItem('hk_poscheck_notes');if(lpc)localPC=JSON.parse(lpc);}catch(e){}
+            /* Local wins per-occurrence conflicts (this device just made the
+               decision it's syncing); remote fills in anything local hasn't
+               touched yet — same shallow-merge approach as break notes. */
+            var mergedPC=Object.assign({},remotePC,localPC);
+            safeSetItem('hk_poscheck_notes',JSON.stringify(mergedPC));
+            updated=true;
+          }
+        }
         if(key==="hk_labor_model"){
           var remoteLM=all[key];
           if(remoteLM&&remoteLM.positions){
@@ -6039,6 +6176,9 @@ function forceSyncToSupabase(){
     }
     if(k==="hk_emp_dates"){
       try{ supaPut("hk_emp_dates", JSON.parse(localStorage[k])); pushed++; }catch(e){}
+    }
+    if(k==="hk_poscheck_notes"){
+      try{ supaPut("hk_poscheck_notes", JSON.parse(localStorage[k])); pushed++; }catch(e){}
     }
     if(k==="hk_paychex_report"){
       try{ supaPut("hk_paychex_report", JSON.parse(localStorage[k])); pushed++; }catch(e){}
@@ -6425,7 +6565,8 @@ function saveDayToMonth(pdfDate){
     shortBreak:DATA.emps.filter(function(e){var st=breakStatus(toMins(e.unpaid),e.pos,e.id);return st==='short'||st==='over'||st==='long';}).length,
     mismatch:DATA.emps.filter(function(e){var p=primaryPos(e.name,e.id);return p&&p!==e.pos;}).length,
     byPosition:{},
-    emps:DATA.emps /* ← GUARDAR lista completa de empleados */
+    emps:DATA.emps, /* ← GUARDAR lista completa de empleados */
+    otherEmps:DATA.otherEmps /* HK roster employees clocked in a non-HK dept this day — feeds monthly Position Check */
   };
   HK_POS_LIST.forEach(function(pos){
     var emps=DATA.emps.filter(function(e){return e.pos===pos;});
@@ -7634,6 +7775,7 @@ function showPage(page){
   if(page==='wtc')renderWtc();
   if(page==='breaks')renderBreaksPage();
   if(page==='overtime')renderOvertime();
+  if(page==='position')renderPositionCheckPage();
   if(page==='roster')renderRoster();
   if(page==='recap')renderRecap();
   if(page==='occupancy')renderOccupancy();

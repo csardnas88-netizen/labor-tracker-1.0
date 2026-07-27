@@ -20,6 +20,7 @@ const cases = [
   require('./cases/occupancy-mismatch-manual-confirm'),
   require('./cases/pnl-calendar-date-rooms'),
   require('./cases/roster-seniority'),
+  require('./cases/position-check-month'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
