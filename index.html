@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.53.0"/>
+<meta name="app-version" content="6.54.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1416,7 +1416,12 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <!-- ══ OVERTIME ══ -->
     <div id="page-overtime" style="display:none;">
       <div class="page-title">&#8987; Overtime</div>
-      <div class="page-sub">Employees with overtime this period</div>
+      <div class="page-sub">Who is driving it, where it is coming from, and which way it is heading</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="changeOtMonth(-1)">&#8592; Prev Month</button>
+        <span id="otMonthLabel" style="font-size:14px;font-weight:700;min-width:110px;text-align:center;"></span>
+        <button class="btn btn-ghost btn-sm" onclick="changeOtMonth(1)">Next Month &#8594;</button>
+      </div>
       <div id="overtimeContent"><div class="empty-state"><div class="es-icon">&#9203;</div><div class="es-title">No overtime data</div><div class="es-desc">Upload a PDF report to see overtime hours for this period.</div></div></div>
     </div>
 
@@ -3114,154 +3119,257 @@ function renderBreaks(f){
     console.warn("[renderBreaks] Elemento breaksPageContent no encontrado");
   }
 }
-function renderOvertime(){
-  var el=document.getElementById("overtimeContent");
-  if(!el)return;
+/* ═══════════════════════════════════════════
+   OVERTIME
+   Who is driving OT this month, which position it's coming from, and the
+   trend across all loaded weeks. Clicking an employee expands their exact
+   hotel-week(s) as a mini calendar — not just the isolated OT day, but
+   every day that week (worked, off, or OT) — since the reason OT happens
+   is almost always "this week had too few days off", which only shows up
+   once you can see the whole week's shifts side by side.
+   ═══════════════════════════════════════════ */
+var otViewMonth=new Date();otViewMonth.setDate(1);
+var otExpanded={};
+var otTrendChartObj=null;
 
-  /* Collect all month data */
+function changeOtMonth(delta){
+  otViewMonth=new Date(otViewMonth.getFullYear(),otViewMonth.getMonth()+delta,1);
+  renderOvertime();
+}
+function otToggleEmp(empId){
+  otExpanded[empId]=!otExpanded[empId];
+  renderOvertime();
+}
+
+/* Per-employee and per-position OT hours + $ cost for one month. otherEmps
+   is folded in (credited to the employee's real HK position) so a day spent
+   in a non-HK department doesn't silently vanish from these totals — the
+   same gap already fixed in Position Check and Time Card Check. */
+function getMonthOvertimeData(mk){
+  var mData=loadMonthData(mk);
+  var days=mData.days||{};
+  var lm=loadLaborModel();
+  var byEmp={},byPos={},totalHours=0,totalCost=0;
+  function fold(e,pos){
+    var ot=Number(e.ot1)||0;
+    if(!(ot>0))return;
+    var rate=(lm.positions[pos]&&lm.positions[pos].rate>0)?lm.positions[pos].rate:0;
+    var cost=ot*rate*1.5;
+    if(!byEmp[e.id])byEmp[e.id]={id:e.id,name:e.name,pos:pos,hours:0,cost:0};
+    byEmp[e.id].hours+=ot;byEmp[e.id].cost+=cost;
+    if(!byPos[pos])byPos[pos]={hours:0,cost:0};
+    byPos[pos].hours+=ot;byPos[pos].cost+=cost;
+    totalHours+=ot;totalCost+=cost;
+  }
+  Object.keys(days).forEach(function(ds){
+    var snap=days[ds];
+    (snap.emps||[]).forEach(function(e){fold(e,e.pos);});
+    (snap.otherEmps||[]).forEach(function(e){
+      var pp=primaryPos(e.name,e.id);
+      if(pp)fold(e,pp);
+    });
+  });
+  return {byEmp:byEmp,byPos:byPos,totalHours:totalHours,totalCost:totalCost};
+}
+
+/* Every hotel week (within the loaded data, possibly crossing into the
+   prior/next month) where this employee had any OT this month, with the
+   FULL 7-day picture — paid hours every day worked, "off" for days not
+   worked, OT called out separately within the days that had it. */
+function getEmployeeOvertimeWeeks(mk,empId){
+  var mData=loadMonthData(mk);
+  var days=mData.days||{};
+  var wantedWeeks={};
+  Object.keys(days).forEach(function(ds){
+    var snap=days[ds];
+    var all=(snap.emps||[]).concat(snap.otherEmps||[]);
+    var mine=all.filter(function(e){return String(e.id)===String(empId);});
+    if(mine.some(function(e){return(Number(e.ot1)||0)>0;})){
+      var wkStart=getHotelWeekStart(parseLocalDate(ds));
+      wantedWeeks[dateStr(wkStart)]=wkStart;
+    }
+  });
+  var dayIdx=wtc_buildDayIndex();
+  return Object.keys(wantedWeeks).sort().map(function(wkKey){
+    var wkStart=wantedWeeks[wkKey];
+    var wkEnd=new Date(wkStart);wkEnd.setDate(wkStart.getDate()+6);
+    var label='Week of '+MONTH_NAMES[wkStart.getMonth()].slice(0,3)+' '+wkStart.getDate()+' – '+MONTH_NAMES[wkEnd.getMonth()].slice(0,3)+' '+wkEnd.getDate();
+    var cells=[];
+    for(var i=0;i<7;i++){
+      var d=new Date(wkStart);d.setDate(wkStart.getDate()+i);
+      var snap2=dayIdx[dateStr(d)];
+      var all2=snap2?(snap2.emps||[]).concat(snap2.otherEmps||[]):[];
+      var e=all2.find(function(x){return String(x.id)===String(empId);});
+      cells.push(e?{date:d.getDate(),paid:Number(e.paid)||0,ot:Number(e.ot1)||0}:{date:d.getDate(),off:true});
+    }
+    return {label:label,cells:cells};
+  });
+}
+
+/* OT hours per hotel week across EVERY loaded month, for the trend chart —
+   deliberately not scoped to the month being viewed, so the chart always
+   shows the same rolling history regardless of which month's leaderboard
+   is on screen. */
+function getAllLoadedWeeksOT(){
   var allDays={};
   for(var i=0;i<localStorage.length;i++){
     var key=localStorage.key(i);
-    if(key&&key.startsWith('hk_month_')){
+    if(key&&key.indexOf('hk_month_')===0){
       try{
         var mData=JSON.parse(localStorage.getItem(key));
-        if(mData&&mData.days){
-          Object.keys(mData.days).forEach(function(ds){allDays[ds]=mData.days[ds];});
-        }
+        if(mData&&mData.days)Object.keys(mData.days).forEach(function(ds){allDays[ds]=mData.days[ds];});
       }catch(e){}
     }
   }
-
-  if(Object.keys(allDays).length===0){
-    el.innerHTML='<div class="empty-state"><div class="es-icon">&#9203;</div><div class="es-title">No overtime data</div><div class="es-desc">Upload a PDF report to see overtime hours for this period.</div></div>';
-    return;
-  }
-
-  /* Group into hotel weeks Sat→Fri */
-  var MNAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var DNAMES_FULL=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  var weeks=[];
   var weekMap={};
-
   Object.keys(allDays).sort().forEach(function(ds){
     var d=parseLocalDate(ds);
     var wStart=getHotelWeekStart(d);
     var wKey=dateStr(wStart);
-    if(!weekMap[wKey]){
-      var wEnd=new Date(wStart);wEnd.setDate(wStart.getDate()+6);
-      weekMap[wKey]={
-        key:wKey,
-        label:MNAMES[wStart.getMonth()]+' '+wStart.getDate()+' – '+MNAMES[wEnd.getMonth()]+' '+wEnd.getDate(),
-        days:[],
-        totalOT:0
-      };
-      weeks.push(weekMap[wKey]);
-    }
-    weekMap[wKey].days.push({ds:ds,snap:allDays[ds],d:d});
+    if(!weekMap[wKey])weekMap[wKey]={label:MONTH_NAMES[wStart.getMonth()].slice(0,3)+' '+wStart.getDate(),totalOT:0};
+    var snap=allDays[ds];
+    (snap.emps||[]).forEach(function(e){if(e.ot1>0)weekMap[wKey].totalOT+=e.ot1;});
+    (snap.otherEmps||[]).forEach(function(e){if(e.ot1>0&&primaryPos(e.name,e.id))weekMap[wKey].totalOT+=e.ot1;});
   });
+  return Object.keys(weekMap).sort().map(function(k){return weekMap[k];});
+}
 
-  /* Sort weeks newest first */
-  weeks.sort(function(a,b){return b.key<a.key?-1:1;});
-
-  /* Calculate OT totals per week */
-  weeks.forEach(function(wk){
-    wk.days.forEach(function(dayObj){
-      var snap=dayObj.snap;
-      var emps=snap.emps||[];
-      emps.forEach(function(e){if(e.ot1>0)wk.totalOT+=e.ot1;});
-    });
-  });
-
-  /* Grand total (all loaded weeks) + current-month MTD */
-  var grandOT=0,mtdOT=0;
-  var curMK=monthKey();
-  weeks.forEach(function(w){
-    grandOT+=w.totalOT;
-    w.days.forEach(function(dayObj){
-      if(dayObj.ds.substring(0,7)===curMK){
-        var emps=dayObj.snap.emps||[];
-        emps.forEach(function(e){if(e.ot1>0)mtdOT+=e.ot1;});
+function otCalendarHtml(weeks){
+  var DOW=['Sat','Sun','Mon','Tue','Wed','Thu','Fri'];
+  if(!weeks.length)return '<div style="font-size:11px;color:var(--text3);">No days loaded for this week.</div>';
+  return weeks.map(function(wk){
+    var cells='',wkPaid=0,wkOt=0;
+    wk.cells.forEach(function(c,i){
+      if(c.off){
+        cells+='<div style="text-align:center;padding:4px 2px;border-radius:4px;background:var(--surface);border:1px solid var(--border);">'
+          +'<div style="font-size:8px;color:var(--text3);">'+DOW[i]+' '+c.date+'</div>'
+          +'<div style="font-size:10px;color:var(--text3);">off</div></div>';
+        return;
       }
+      wkPaid+=c.paid;wkOt+=c.ot;
+      var hasOt=c.ot>0;
+      cells+='<div style="text-align:center;padding:4px 2px;border-radius:4px;'
+        +(hasOt?'background:rgba(30,45,74,.09);border:1px solid var(--navy);':'background:var(--white);border:1px solid var(--border);')+'">'
+        +'<div style="font-size:8px;color:var(--text3);">'+DOW[i]+' '+c.date+'</div>'
+        +'<div style="font-size:10.5px;font-weight:700;color:var(--text1);">'+c.paid.toFixed(2)+'h</div>'
+        +(hasOt?'<div style="font-size:8px;font-weight:700;color:var(--navy);">&#9201;+'+c.ot.toFixed(2)+'</div>':'')
+        +'</div>';
     });
+    return '<div style="margin-top:8px;">'
+      +'<div style="font-size:9.5px;color:var(--text3);margin-bottom:3px;">'+wk.label+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;">'+cells+'</div>'
+      +'<div style="font-size:9.5px;color:var(--text2);">Week total: '+wkPaid.toFixed(2)+'h — '+(wkPaid-wkOt).toFixed(2)+'h regular + '+wkOt.toFixed(2)+'h OT</div>'
+      +'</div>';
+  }).join('');
+}
+
+function renderOtTrendChart(){
+  var canvas=document.getElementById('otTrendCanvas');
+  if(!canvas)return;
+  if(otTrendChartObj){otTrendChartObj.destroy();otTrendChartObj=null;}
+  var weeks=getAllLoadedWeeksOT();
+  otTrendChartObj=new Chart(canvas,{
+    type:'line',
+    data:{
+      labels:weeks.map(function(w){return w.label;}),
+      datasets:[{
+        data:weeks.map(function(w){return +w.totalOT.toFixed(2);}),
+        borderColor:'#1E2D4A',backgroundColor:'rgba(30,45,74,0.08)',
+        fill:true,tension:.25,pointRadius:3,pointBackgroundColor:'#1E2D4A',borderWidth:2
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y.toFixed(2)+'h OT';}}}},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#8C8680',font:{size:9},maxRotation:0,autoSkip:true}},
+        y:{grid:{color:'#E4DDD1'},ticks:{color:'#8C8680',font:{size:10}}}
+      }
+    }
   });
+}
+
+function renderOvertime(){
+  var el=document.getElementById("overtimeContent");
+  if(!el)return;
+  var lbl=document.getElementById("otMonthLabel");
+  if(lbl)lbl.textContent=MONTH_NAMES[otViewMonth.getMonth()]+' '+otViewMonth.getFullYear();
+
+  var mk=monthKey(otViewMonth);
+  var data=getMonthOvertimeData(mk);
+  var empIds=Object.keys(data.byEmp);
+
+  if(!empIds.length){
+    el.innerHTML='<div class="empty-state"><div class="es-icon">&#10003;</div><div class="es-title">No overtime this month</div><div class="es-desc">Every day loaded for '+MONTH_NAMES[otViewMonth.getMonth()]+' stayed within regular hours.</div></div>';
+    if(otTrendChartObj){otTrendChartObj.destroy();otTrendChartObj=null;}
+    return;
+  }
+
+  empIds.sort(function(a,b){return data.byEmp[b].hours-data.byEmp[a].hours;});
+  var posIds=Object.keys(data.byPos).sort(function(a,b){return data.byPos[b].hours-data.byPos[a].hours;});
+  var topPos=posIds[0];
+  var anyRate=posIds.some(function(p){return data.byPos[p].cost>0;});
+  var maxEmpH=data.byEmp[empIds[0]].hours;
+  var maxPosH=data.byPos[posIds[0]].hours;
 
   var html='';
 
-  /* MTD + All-Time totals */
-  html+='<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;">';
-  html+='<div style="flex:1;min-width:130px;background:var(--red-bg);border-radius:10px;padding:12px 16px;text-align:center;">'
-    +'<div style="font-size:26px;font-weight:800;color:var(--red);">'+mtdOT.toFixed(2)+'h</div>'
-    +'<div style="font-size:11px;font-weight:700;color:var(--red);">⏱ OT — '+MONTH_NAMES[viewMonth.getMonth()]+' (MTD)</div></div>';
-  html+='<div style="flex:1;min-width:130px;background:var(--surface);border-radius:10px;padding:12px 16px;text-align:center;">'
-    +'<div style="font-size:26px;font-weight:800;color:var(--text2);">'+grandOT.toFixed(2)+'h</div>'
-    +'<div style="font-size:11px;font-weight:700;color:var(--text2);">⏱ OT — All Loaded Weeks</div></div>';
-  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">'
+    +'<div style="background:var(--navy);border-radius:10px;padding:12px 14px;">'
+      +'<div style="font-size:22px;font-weight:800;color:var(--gl);">'+(anyRate?pnl_fmtUsd(data.totalCost):'—')+'</div>'
+      +'<div style="font-size:10.5px;font-weight:700;color:rgba(255,255,255,.75);">OT COST — '+MONTH_NAMES[otViewMonth.getMonth()].toUpperCase()+'</div></div>'
+    +'<div style="background:var(--white);border-radius:10px;padding:12px 14px;">'
+      +'<div style="font-size:22px;font-weight:800;color:var(--navy);">'+data.totalHours.toFixed(2)+'h</div>'
+      +'<div style="font-size:10.5px;font-weight:700;color:var(--text2);">OT HOURS — '+MONTH_NAMES[otViewMonth.getMonth()].toUpperCase()+'</div></div>'
+    +'<div style="background:var(--white);border-radius:10px;padding:12px 14px;">'
+      +'<div style="font-size:15px;font-weight:800;color:var(--navy);line-height:1.25;">'+escHtml(topPos)+'</div>'
+      +'<div style="font-size:10.5px;font-weight:700;color:var(--text2);">TOP POSITION · '+data.byPos[topPos].hours.toFixed(2)+'h</div></div>'
+    +'</div>';
 
-  /* One card per week */
-  weeks.forEach(function(wk,wi){
-    if(wk.totalOT===0)return;
-    html+='<div style="margin-bottom:16px;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;">';
-
-    /* Week header */
-    html+='<div style="background:var(--navy);color:#fff;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" '
-      +'onclick="(function(el){var b=el.nextElementSibling;b.style.display=b.style.display===\'none\'?\'block\':\'none\';})(this)">';
-    html+='<div style="font-size:13px;font-weight:700;">📅 Week of '+wk.label+'</div>';
-    html+='<div style="display:flex;gap:10px;align-items:center;">';
-    html+='<span style="background:var(--red-border);color:var(--red);font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;">⏱ '+wk.totalOT.toFixed(2)+'h OT</span>';
-    html+='<span style="font-size:12px;opacity:.7;">▼</span>';
-    html+='</div></div>';
-
-    /* Week body */
-    html+='<div style="display:'+(wi===0?'block':'none')+';">';
-
-    wk.days.sort(function(a,b){return a.ds<b.ds?-1:1;});
-
-    wk.days.forEach(function(dayObj){
-      var snap=dayObj.snap;
-      var emps=snap.emps||[];
-      var otEmps=emps.filter(function(e){return e.ot1>0;});
-      if(otEmps.length===0)return;
-
-      var dName=DNAMES_FULL[dayObj.d.getDay()];
-      var dLabel=dName+', '+MNAMES[dayObj.d.getMonth()]+' '+dayObj.d.getDate();
-      var dayOT=otEmps.reduce(function(s,e){return s+e.ot1;},0);
-
-      html+='<div style="border-top:1px solid var(--border);padding:12px 16px;">';
-      /* Day header */
-      html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
-      html+='<div style="font-size:12px;font-weight:700;color:var(--text1);">'+dLabel+'</div>';
-      html+='<span style="background:var(--red-bg);color:var(--red);font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px;">⏱ '+dayOT.toFixed(2)+'h</span>';
-      html+='</div>';
-
-      /* Sort by OT descending */
-      otEmps.sort(function(a,b){return b.ot1-a.ot1;});
-
-      otEmps.forEach(function(emp){
-        var posShort=(emp.pos||'').replace(/^\d+-/,'');
-        var otLevel=emp.ot1>=4?'var(--red)':emp.ot1>=2?'var(--yellow)':'var(--yellow)';
-        html+='<div style="display:flex;align-items:center;gap:10px;background:var(--white);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow-sm);margin-bottom:6px;">';
-        html+='<div style="width:8px;height:8px;border-radius:50%;background:'+otLevel+';flex-shrink:0;"></div>';
-        html+='<div style="flex:1;min-width:0;">';
-        html+='<div style="font-size:12.5px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+emp.name+'</div>';
-        html+='<div style="font-size:10px;color:var(--text3);">'+posShort+'</div>';
-        html+='</div>';
-        html+='<div style="text-align:right;flex-shrink:0;">';
-        html+='<div style="font-size:14px;font-weight:800;color:'+otLevel+';">+'+emp.ot1.toFixed(2)+'h</div>';
-        html+='</div>';
-        html+='</div>';
-      });
-
-      html+='</div>';
-    });
-
-    html+='</div></div>';
-  });
-
-  if(!html.includes('border-top')){
-    html='<div class="empty">✓ No overtime this period</div>';
+  if(!anyRate){
+    html+='<div style="background:var(--gt);border:1px solid var(--gold);border-radius:9px;padding:10px 14px;font-size:12px;color:var(--gd);margin-bottom:14px;">No rates set yet — showing hours only. Add rates in the Labor Model to see OT cost.</div>';
   }
 
+  html+='<div style="background:var(--white);border-radius:12px;padding:14px 16px;margin-bottom:14px;">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Who</div>'
+    +empIds.map(function(id,i){
+      var e=data.byEmp[id];
+      var pct=Math.round((e.hours/maxEmpH)*100);
+      var expanded=!!otExpanded[id];
+      var safeId=String(id).replace(/'/g,"\\'");
+      var row='<div style="padding:8px 0;'+(i>0?'border-top:1px solid var(--border);':'')+'">'
+        +'<div style="display:grid;grid-template-columns:1fr 90px 70px 16px;align-items:center;gap:10px;cursor:pointer;" onclick="otToggleEmp(\''+safeId+'\')">'
+        +'<div><div style="font-size:12.5px;font-weight:700;color:var(--text1);">'+escHtml(e.name)+'</div><div style="font-size:10px;color:var(--text3);">'+escHtml(e.pos)+'</div>'
+        +'<div style="background:var(--surface);border-radius:99px;height:8px;margin-top:4px;"><div style="width:'+pct+'%;height:8px;border-radius:99px;background:var(--navy);"></div></div></div>'
+        +'<div style="text-align:right;font-size:13px;font-weight:800;color:var(--navy);">'+e.hours.toFixed(2)+'h</div>'
+        +'<div style="text-align:right;font-size:11.5px;color:var(--text2);">'+(e.cost>0?pnl_fmtUsd(e.cost):'—')+'</div>'
+        +'<div style="text-align:center;color:var(--text3);font-size:11px;transform:rotate('+(expanded?90:0)+'deg);transition:transform .15s;">▸</div>'
+        +'</div>';
+      if(expanded)row+='<div style="padding-top:8px;">'+otCalendarHtml(getEmployeeOvertimeWeeks(mk,id))+'</div>';
+      row+='</div>';
+      return row;
+    }).join('')
+    +'</div>';
+
+  html+='<div style="background:var(--white);border-radius:12px;padding:14px 16px;margin-bottom:14px;">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Where</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;">'
+    +posIds.map(function(pos){
+      var p=data.byPos[pos];
+      var pct=Math.round((p.hours/maxPosH)*100);
+      return '<div style="display:grid;grid-template-columns:120px 1fr 56px;align-items:center;gap:8px;">'
+        +'<span style="font-size:12px;color:var(--text1);">'+escHtml(pos)+'</span>'
+        +'<div style="background:var(--surface);border-radius:99px;height:10px;"><div style="width:'+pct+'%;height:10px;border-radius:99px;background:var(--navy);"></div></div>'
+        +'<span style="font-size:11.5px;font-weight:700;color:var(--text1);text-align:right;">'+p.hours.toFixed(1)+'h</span></div>';
+    }).join('')
+    +'</div></div>';
+
+  html+='<div style="background:var(--white);border-radius:12px;padding:14px 16px 6px;">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Trend — all loaded weeks</div>'
+    +'<div style="position:relative;height:170px;"><canvas id="otTrendCanvas"></canvas></div></div>';
+
   el.innerHTML=html;
+  renderOtTrendChart();
 }
 function renderPosition(f){
   f=f||PF;PF=f;
@@ -4001,6 +4109,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.54.0', date:'2026-07-27',
+    features:['Overtime redesigned around three questions: who is driving it, which position it\'s coming from, and which way the trend is heading — replacing the old week-by-week list you had to open one at a time. "Who" ranks every employee with OT this month (hours and estimated cost, using your Labor Model rates); click one to see the exact hotel week(s) it happened in, full daily hours side by side — not just the isolated OT day, but the whole week\'s shifts, so a pattern like "always short a day off by Thursday" is visible instead of hidden.']
+  },
   {
     v:'6.53.0', date:'2026-07-27',
     fixes:['Time Card Check no longer permanently shows a day as "Changed" when an HK employee worked a non-Housekeeping department that day (e.g. Banquet). Paychex\'s Weekly Time Card still counts those hours under Housekeeping, but the app\'s daily total was silently dropping them — no amount of re-uploading that day\'s PDF could ever fix it, since the comparison never looked at that data. It now does, for both the day total and the employee-by-employee breakdown.']
