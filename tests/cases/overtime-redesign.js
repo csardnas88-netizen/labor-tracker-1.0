@@ -104,5 +104,19 @@ module.exports = {
     html = win.document.getElementById('overtimeContent').innerHTML;
     t.assert(html.indexOf('9.50h') > -1, 'expanding Heidy reveals her Tuesday total');
     t.assert(html.indexOf('off') > -1, 'and her day off that week');
+
+    /* ── trend: defaults to month, can switch to week ── */
+    t.eq(win.otTrendMode, 'month', 'trend defaults to By Month');
+    const monthPoints = win.getAllLoadedMonthsOT();
+    t.eq(monthPoints.length, 1, 'only July has any loaded days in this fixture');
+    t.assert(Math.abs(monthPoints[0].totalOT - 6.5) < 0.001, `the single month point totals all OT this month (6.5h), got ${monthPoints[0].totalOT}`);
+
+    const weekPoints = win.getAllLoadedWeeksOT();
+    t.assert(weekPoints.length >= 1, 'week-level points still work as the alternate view');
+
+    win.setOtTrendMode('week');
+    t.eq(win.otTrendMode, 'week', 'setOtTrendMode switches the mode');
+    win.setOtTrendMode('month');
+    t.eq(win.otTrendMode, 'month', 'and switches back');
   }
 };

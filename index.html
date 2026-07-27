@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.54.0"/>
+<meta name="app-version" content="6.55.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3263,17 +3263,50 @@ function otCalendarHtml(weeks){
   }).join('');
 }
 
+/* OT hours per calendar month across EVERY loaded hk_month_* key — the
+   default trend view (coarser, easier to read at a glance than 13+ weekly
+   points). Only months that actually have a loaded day are included. */
+function getAllLoadedMonthsOT(){
+  var monthMap={};
+  for(var i=0;i<localStorage.length;i++){
+    var key=localStorage.key(i);
+    if(key&&key.indexOf('hk_month_')===0){
+      var mk=key.replace('hk_month_','');
+      try{
+        var mData=JSON.parse(localStorage.getItem(key));
+        var days=mData&&mData.days||{};
+        if(!Object.keys(days).length)continue;
+        var total=0;
+        Object.keys(days).forEach(function(ds){
+          var snap=days[ds];
+          (snap.emps||[]).forEach(function(e){if(e.ot1>0)total+=e.ot1;});
+          (snap.otherEmps||[]).forEach(function(e){if(e.ot1>0&&primaryPos(e.name,e.id))total+=e.ot1;});
+        });
+        var parts=mk.split('-'),mo=parseInt(parts[1],10)-1,yr=parts[0];
+        monthMap[mk]={label:MONTH_NAMES[mo].slice(0,3)+' '+yr,totalOT:total};
+      }catch(e){}
+    }
+  }
+  return Object.keys(monthMap).sort().map(function(k){return monthMap[k];});
+}
+
+var otTrendMode='month';
+function setOtTrendMode(mode){
+  otTrendMode=mode;
+  document.querySelectorAll('[data-ottrend]').forEach(function(b){b.classList.toggle('on',b.dataset.ottrend===mode);});
+  renderOtTrendChart();
+}
 function renderOtTrendChart(){
   var canvas=document.getElementById('otTrendCanvas');
   if(!canvas)return;
   if(otTrendChartObj){otTrendChartObj.destroy();otTrendChartObj=null;}
-  var weeks=getAllLoadedWeeksOT();
+  var points=otTrendMode==='week'?getAllLoadedWeeksOT():getAllLoadedMonthsOT();
   otTrendChartObj=new Chart(canvas,{
     type:'line',
     data:{
-      labels:weeks.map(function(w){return w.label;}),
+      labels:points.map(function(w){return w.label;}),
       datasets:[{
-        data:weeks.map(function(w){return +w.totalOT.toFixed(2);}),
+        data:points.map(function(w){return +w.totalOT.toFixed(2);}),
         borderColor:'#1E2D4A',backgroundColor:'rgba(30,45,74,0.08)',
         fill:true,tension:.25,pointRadius:3,pointBackgroundColor:'#1E2D4A',borderWidth:2
       }]
@@ -3365,7 +3398,12 @@ function renderOvertime(){
     +'</div></div>';
 
   html+='<div style="background:var(--white);border-radius:12px;padding:14px 16px 6px;">'
-    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Trend — all loaded weeks</div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);">Trend</div>'
+    +'<div style="display:flex;gap:6px;">'
+    +'<button class="fbtn'+(otTrendMode==='month'?' on':'')+'" data-ottrend="month" onclick="setOtTrendMode(\'month\')" style="padding:3px 11px;font-size:10.5px;">By Month</button>'
+    +'<button class="fbtn'+(otTrendMode==='week'?' on':'')+'" data-ottrend="week" onclick="setOtTrendMode(\'week\')" style="padding:3px 11px;font-size:10.5px;">By Week</button>'
+    +'</div></div>'
     +'<div style="position:relative;height:170px;"><canvas id="otTrendCanvas"></canvas></div></div>';
 
   el.innerHTML=html;
@@ -4109,6 +4147,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.55.0', date:'2026-07-27',
+    features:['Overtime\'s Trend chart now has a By Month / By Week toggle, defaulting to By Month — a cleaner starting view than 13+ weekly points, with By Week still there when you want the finer-grained shape.']
+  },
   {
     v:'6.54.0', date:'2026-07-27',
     features:['Overtime redesigned around three questions: who is driving it, which position it\'s coming from, and which way the trend is heading — replacing the old week-by-week list you had to open one at a time. "Who" ranks every employee with OT this month (hours and estimated cost, using your Labor Model rates); click one to see the exact hotel week(s) it happened in, full daily hours side by side — not just the isolated OT day, but the whole week\'s shifts, so a pattern like "always short a day off by Thursday" is visible instead of hidden.']
