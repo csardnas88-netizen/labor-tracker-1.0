@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.51.0"/>
+<meta name="app-version" content="6.52.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1433,6 +1433,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <button class="fbtn on" data-pf2="all">Show All</button>
         <button class="fbtn" data-pf2="mismatch">Mismatches Only</button>
         <button class="fbtn" data-pf2="unknown">Unknown Only</button>
+        <button class="fbtn" data-pf2="reviewed">Reviewed</button>
       </div>
       <div id="positionContent"></div>
     </div>
@@ -3367,19 +3368,33 @@ function renderPositionCheckPage(){
       +'<div class="es-desc">'+(hasDays?"Every employee worked their primary position, in their primary department, all month.":"Upload a Labor Distribution Report to see position checks here.")+'</div></div>';
     return;
   }
+  var notesAll=pcNotes();
+  /* Once an occurrence has ANY decision, it's done — it drops out of Show
+     All / Mismatches / Unknown so the working list only ever shows what's
+     still left to check against the schedule. Nothing is deleted: the
+     Reviewed filter lists everything that's been decided, so a "Wrong"
+     one needing a Paychex correction (or any decision made by mistake)
+     is never actually lost. */
   var filtered=issues.filter(function(r){
+    var key=r.id+"_"+r.ds;
+    var reviewed=!!(notesAll[key]&&notesAll[key].decision);
+    if(PCF==="reviewed")return reviewed;
+    if(reviewed)return false;
     if(PCF==="mismatch")return r.status==="mismatch";
     if(PCF==="unknown")return r.status==="unknown";
     return true;
   });
   if(!filtered.length){
-    el.innerHTML='<div class="empty-state"><div class="es-icon">&#128269;</div><div class="es-title">No records match filter</div></div>';
+    var allDone=issues.length>0&&PCF!=="reviewed";
+    el.innerHTML='<div class="empty-state"><div class="es-icon">'+(allDone?"&#10003;":"&#128269;")+'</div>'
+      +'<div class="es-title">'+(allDone?"All caught up":"No records match filter")+'</div>'
+      +(allDone?'<div class="es-desc">Everything matching this filter has a decision already. Check the Reviewed filter to see it.</div>':'')
+      +'</div>';
     return;
   }
   var byEmp={};
   filtered.forEach(function(r){(byEmp[r.id]=byEmp[r.id]||[]).push(r);});
   var empIds=Object.keys(byEmp).sort(function(a,b){return byEmp[a][0].name.localeCompare(byEmp[b][0].name);});
-  var notesAll=pcNotes();
   var html="";
   empIds.forEach(function(id){
     var rows=byEmp[id],name=rows[0].name;
@@ -3986,6 +4001,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.52.0', date:'2026-07-27',
+    features:['Position Check now clears itself as you work through it. Mark an occurrence Correct, Wrong, or Approved and it drops out of Show All / Mismatches Only / Unknown Only — so the list only ever shows what you still need to check against the schedule. Nothing is deleted: a new "Reviewed" filter lists every decision you\'ve made, so a "Wrong" one that still needs a Paychex correction is never lost.']
+  },
   {
     v:'6.51.0', date:'2026-07-27',
     features:['Position Check now actually works, and covers the full month. Until now the page in the menu was empty — its filters weren\'t wired up. Now it lists every day this month where someone clocked under a different Housekeeping position than their roster one, grouped by employee, with the same Correct / Wrong / Approved review you already use elsewhere. It also now catches an HK employee who worked a non-Housekeeping department entirely (e.g. Banquet) — that used to only show up quietly in Other Depts and was easy to miss.'],

@@ -67,18 +67,7 @@ module.exports = {
     t.assert(!issues.some(r => r.id === '26100005'), 'an employee correctly matching their primary position is never flagged');
     t.assert(!issues.some(r => r.id === '99999902'), 'an outside contractor with no HK primary position is excluded (Other Depts\' job, not this page\'s)');
 
-    /* ── decisions/notes are scoped per employee+date ── */
-    win.setPosCheckDecision('26100002_2026-07-05', 'correct');
-    let notes = win.pcNotes();
-    t.eq(notes['26100002_2026-07-05'].decision, 'correct', 'the July 5 occurrence is marked correct');
-    t.assert(!notes['26100002_2026-07-06'], 'marking July 5 does not touch July 6\'s occurrence for the same person');
-
-    win.setPosCheckDecision('26100002_2026-07-06', 'incorrect');
-    notes = win.pcNotes();
-    t.eq(notes['26100002_2026-07-05'].decision, 'correct', 'July 5\'s decision is unchanged after July 6 is set');
-    t.eq(notes['26100002_2026-07-06'].decision, 'incorrect', 'July 6 got its own, different decision');
-
-    /* ── rendering ── */
+    /* ── rendering, before anything has been reviewed ── */
     win.showPage('position');
     const html = win.document.getElementById('positionContent').innerHTML;
     t.assert(html.indexOf('Susan Karina Aguilar Ambrocio') > -1, 'Susan appears in the rendered page');
@@ -93,5 +82,34 @@ module.exports = {
     const unknownHtml = win.document.getElementById('positionContent').innerHTML;
     t.assert(unknownHtml.indexOf('Nobody On File') > -1, 'the unknown employee shows under the Unknown filter');
     t.assert(unknownHtml.indexOf('Susan Karina Aguilar Ambrocio') === -1, 'Susan\'s mismatches are hidden under the Unknown filter');
+    win.PCF = 'all';
+
+    /* ── decisions/notes are scoped per employee+date ── */
+    win.setPosCheckDecision('26100002_2026-07-05', 'correct');
+    let notes = win.pcNotes();
+    t.eq(notes['26100002_2026-07-05'].decision, 'correct', 'the July 5 occurrence is marked correct');
+    t.assert(!notes['26100002_2026-07-06'], 'marking July 5 does not touch July 6\'s occurrence for the same person');
+
+    win.setPosCheckDecision('26100002_2026-07-06', 'incorrect');
+    notes = win.pcNotes();
+    t.eq(notes['26100002_2026-07-05'].decision, 'correct', 'July 5\'s decision is unchanged after July 6 is set');
+    t.eq(notes['26100002_2026-07-06'].decision, 'incorrect', 'July 6 got its own, different decision');
+
+    /* ── a decided occurrence drops out of the working filters, so the list
+       shrinks as each one gets compared against the schedule and resolved ── */
+    win.PCF = 'all';
+    win.renderPositionCheckPage();
+    const afterDecided = win.document.getElementById('positionContent').innerHTML;
+    t.assert(afterDecided.indexOf('Susan Karina Aguilar Ambrocio') === -1, 'Susan is gone from Show All once both her occurrences have a decision — "Wrong" hides just like "Correct"');
+    t.assert(afterDecided.indexOf('Heidy Ajsoc') > -1, 'Heidy, still undecided, keeps showing under Show All');
+
+    /* ── the Reviewed filter is where decided occurrences go to live, so
+       nothing is actually lost — including the "Wrong" one that still
+       needs a real Paychex correction ── */
+    win.PCF = 'reviewed';
+    win.renderPositionCheckPage();
+    const reviewedHtml = win.document.getElementById('positionContent').innerHTML;
+    t.assert(reviewedHtml.indexOf('Susan Karina Aguilar Ambrocio') > -1, 'Susan\'s two decided occurrences show up under Reviewed');
+    t.assert(reviewedHtml.indexOf('Heidy Ajsoc') === -1, 'Heidy, still undecided, is not under Reviewed yet');
   }
 };
