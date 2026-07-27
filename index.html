@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.48.0"/>
+<meta name="app-version" content="6.49.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -534,7 +534,26 @@ tbody tr:hover td{background:var(--offwhite);}
 .roster-emp-row.newhire{background:linear-gradient(90deg,rgba(212,175,55,.10),rgba(212,175,55,0));border-left:3px solid var(--gl);margin-left:-14px;margin-right:-14px;padding-left:11px;padding-right:14px;}
 .newhire-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;background:linear-gradient(135deg,var(--gl),var(--gd));color:#fff;padding:2px 7px;border-radius:99px;margin-left:7px;box-shadow:0 1px 2px rgba(184,148,31,.4);vertical-align:middle;white-space:nowrap;}
 .days-pill{display:inline-block;font-size:10px;font-weight:700;color:var(--gd);background:var(--gt);border:1px solid var(--yellow-border);border-radius:99px;padding:1px 8px;margin-left:6px;white-space:nowrap;vertical-align:middle;}
+/* Was referenced by the roster row but never defined, so it rendered as bare
+   text jammed against the employee's name. */
+.pos-change-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--blue);background:rgba(21,101,192,.10);border:1px solid rgba(21,101,192,.28);border-radius:99px;padding:1px 7px;margin-left:6px;white-space:nowrap;vertical-align:middle;}
 tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent);}
+/* Seniority ranking (Roster) — medal + tenure bar. Employees sharing a hire
+   date share a rank and a medal, so the colour never implies a winner the
+   data can't actually justify. */
+.sen-medal{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;align-self:flex-start;margin-top:3px;}
+.sen-g{background:linear-gradient(145deg,#f6e7a8 0%,#d4af37 45%,#a8842a 100%);color:#3a2c05;box-shadow:inset 0 1px 1px rgba(255,255,255,.65);}
+.sen-s{background:linear-gradient(145deg,#f0f0f5 0%,#b6b6c0 45%,#8b8b96 100%);color:#33333a;box-shadow:inset 0 1px 1px rgba(255,255,255,.7);}
+.sen-b{background:linear-gradient(145deg,#e2b088 0%,#a97142 45%,#7d5230 100%);color:#fff;box-shadow:inset 0 1px 1px rgba(255,255,255,.5);}
+.sen-n{background:rgba(28,43,74,.09);color:var(--text2);font-size:10px;font-weight:600;}
+.sen-track{height:7px;background:rgba(28,43,74,.08);border-radius:4px;margin-top:5px;overflow:hidden;}
+.sen-fill{height:100%;border-radius:4px;}
+.sen-fg{background:linear-gradient(90deg,#a8842a,#d4af37 40%,#f6e7a8 75%,#d4af37);}
+.sen-fs{background:linear-gradient(90deg,#8b8b96,#b6b6c0 40%,#f0f0f5 75%,#b6b6c0);}
+.sen-fb{background:linear-gradient(90deg,#7d5230,#a97142 40%,#e2b088 75%,#a97142);}
+.sen-fn{background:rgba(28,43,74,.22);}
+.sen-meta{font-size:9.5px;color:var(--text3);margin-top:2px;}
+.sen-tie{font-size:9px;color:var(--gd);background:var(--gt);border-radius:4px;padding:1px 5px;margin-left:4px;white-space:nowrap;}
 /* Policy Training Tracker — card (Option B: navy band) */
 .tr-card{background:var(--white);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,37,68,.06),0 8px 24px rgba(15,37,68,.04);margin-bottom:14px;}
 .tr-band{background:var(--navy);padding:15px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;position:relative;}
@@ -1428,6 +1447,8 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <div class="page-sub">Employees are saved across sessions</div>
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <button class="btn btn-gold btn-sm" onclick="showAddModal()">+ Add Employee</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('senImportFile').click()">&#8657; Import Hire Dates</button>
+        <input type="file" id="senImportFile" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleSeniorityImport(event)"/>
         <button class="btn btn-ghost btn-sm" onclick="exportRoster()">&#8659; Export Roster</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);" onclick="resetRoster()">&#8635; Reset Default</button>
       </div>
@@ -2244,6 +2265,81 @@ function newHireBadgeHTML(empId){
   if(!st.isNew)return '';
   return '<span class="newhire-badge">&#9733; New</span>'
     +'<span class="days-pill">'+st.days+' '+(st.days===1?'d\u00eda':'d\u00edas')+'</span>';
+}
+
+/* \u2500\u2500 SENIORITY \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+   Hire dates come from the Paychex seniority report (imported on the Roster
+   page) and live in hk_emp_dates[id].hire, which already syncs to the cloud.
+
+   Ranking is competition-style: employees sharing a hire date SHARE a rank
+   and a medal. That is deliberate \u2014 50 of the 64 people on this roster have
+   the same official start date (1 Nov 2024, when the property migrated
+   payroll), and employee numbers were handed out alphabetically in that
+   migration, so any "tie-break" would just be alphabetical order wearing a
+   badge. Sharing the rank tells the truth instead of inventing a winner. */
+function hireDateFor(empId){
+  var rec=loadEmpDates()[empId];
+  return (rec&&rec.hire)?rec.hire:null;
+}
+/* "1y 8m" / "8m" / "12d" \u2014 compact enough for a narrow roster card. */
+function tenureLabel(hire){
+  var dn=daysSince(hire);
+  if(dn===null||dn<0)return '';
+  var months=Math.floor(dn/30.44);
+  if(months<1)return dn+'d';
+  var y=Math.floor(months/12), mo=months%12;
+  if(y<1)return mo+'m';
+  return mo>0?(y+'y '+mo+'m'):(y+'y');
+}
+function formatHireDate(hire){
+  var d=parseLocalDate(hire);
+  if(!d||isNaN(d.getTime()))return '';
+  return MONTH_NAMES[d.getMonth()].slice(0,3)+' '+d.getDate()+', '+d.getFullYear();
+}
+/* Orders one position's employees most-senior-first and assigns shared ranks.
+   Anyone with no hire date sorts last and stays unranked (rank null) rather
+   than being guessed at. Returns the same objects with .hire/.rank/.tenureDays
+   /.tiedWith added, plus maxTenureDays for scaling the bars. */
+function rankBySeniority(list){
+  var withDate=[],without=[];
+  list.forEach(function(e){
+    var h=hireDateFor(e.id);
+    var dn=h?daysSince(h):null;
+    e.hire=h; e.tenureDays=(dn!==null&&dn>=0)?dn:null;
+    (e.hire&&e.tenureDays!==null?withDate:without).push(e);
+  });
+  /* Oldest hire date first; same date keeps a stable name order. */
+  withDate.sort(function(a,b){
+    if(a.hire!==b.hire)return a.hire<b.hire?-1:1;
+    return a.name.localeCompare(b.name);
+  });
+  without.sort(function(a,b){return a.name.localeCompare(b.name);});
+
+  var counts={};
+  withDate.forEach(function(e){counts[e.hire]=(counts[e.hire]||0)+1;});
+  var rank=0,prevHire=null;
+  withDate.forEach(function(e){
+    if(e.hire!==prevHire){rank++;prevHire=e.hire;}
+    e.rank=rank;
+    e.tiedWith=counts[e.hire]-1;   /* how many others share this exact date */
+  });
+  without.forEach(function(e){e.rank=null;e.tiedWith=0;});
+
+  var maxTenureDays=withDate.length?withDate[0].tenureDays:0;
+  return {list:withDate.concat(without),maxTenureDays:maxTenureDays};
+}
+/* Medal + tenure bar for one row. rank 1/2/3 get gold/silver/bronze. */
+function seniorityRowHTML(emp,maxTenureDays){
+  if(emp.rank===null){
+    return '<div class="sen-meta">No hire date on file</div>';
+  }
+  var cls=emp.rank===1?'g':(emp.rank===2?'s':(emp.rank===3?'b':'n'));
+  var pct=maxTenureDays>0?Math.max(3,Math.round((emp.tenureDays/maxTenureDays)*100)):0;
+  var tie=emp.tiedWith>0
+    ?'<span class="sen-tie">+'+emp.tiedWith+' same date</span>'
+    :'';
+  return '<div class="sen-track"><div class="sen-fill sen-f'+cls+'" style="width:'+pct+'%"></div></div>'
+    +'<div class="sen-meta">'+tenureLabel(emp.hire)+' &middot; hired '+formatHireDate(emp.hire)+tie+'</div>';
 }
 /* Returns list of {id,name,pos,days} for employees inactive >= INACTIVE_DAYS, excluding already-terminated. */
 function getInactiveEmployees(){
@@ -3280,7 +3376,10 @@ function renderRoster(){
   var posOrder=["Housekeeping Supervisor","Room Attendant","House Attendant","Public Area Attendant","Turndown Attendant","Laundry Attendant"];
   var html="";
   posOrder.forEach(function(pos){
-    var list=(byPos[pos]||[]).sort(function(a,b){return a.name.localeCompare(b.name);});
+    /* Rank the WHOLE position first, then filter — so searching for one person
+       still shows their true rank instead of making them look like #1. */
+    var ranked=rankBySeniority(byPos[pos]||[]);
+    var list=ranked.list, maxTen=ranked.maxTenureDays;
     /* Apply search filter */
     if(search){
       list=list.filter(function(e){
@@ -3299,7 +3398,9 @@ function renderRoster(){
       var safeName=emp.name.replace(/"/g,"&quot;");
       var safePos=emp.pos.replace(/"/g,"&quot;");
       var safeOrig=emp.origPos.replace(/"/g,"&quot;");
+      var medalCls=emp.rank===1?'sen-g':(emp.rank===2?'sen-s':(emp.rank===3?'sen-b':'sen-n'));
       html+='<div class="'+rowClass+'">'
+        +'<span class="sen-medal '+medalCls+'">'+(emp.rank===null?'&ndash;':emp.rank)+'</span>'
         +'<div style="line-height:1.5;min-width:0;flex:1;">'
         +'<span style="font-weight:600;">'+(isInactive?"<s>":"")+emp.name+(isInactive?"</s>":"")+''
         +newHireBadgeHTML(emp.id)
@@ -3307,6 +3408,7 @@ function renderRoster(){
         +'</span>'
         +(!emp.isManual?'<br><span style="font-size:10px;color:var(--text3);">ID: '+emp.id+'</span>':'')
         +(emp.note?'<br><span style="font-size:10px;color:var(--amber);">&#128221; '+emp.note+'</span>':'')
+        +seniorityRowHTML(emp,maxTen)
         +'</div>'
         +'<div class="roster-emp-actions">'
         +'<button class="edit-btn" data-eid="'+safeId+'" data-ename="'+safeName+'" data-epos="'+safePos+'" data-eorig="'+safeOrig+'" data-estatus="'+(emp.status||"active")+'" data-enote="'+(emp.note||"").replace(/"/g,"&quot;")+'" onclick="showEditModal(this)">&#9998; Edit</button>'
@@ -3411,6 +3513,221 @@ function resetRoster(){
   if(!confirm("Reset roster to default? All manually added employees will be removed."))return;
   ROSTER=JSON.parse(JSON.stringify(DEFAULT_ROSTER));EMP_META={};
   saveRoster();saveEmpMeta();renderRoster();showToast("Roster reset to default");
+}
+
+/* ══ HIRE-DATE IMPORT (Paychex seniority report) ═══════════════════════════
+   Built against the real report: a "First Name | Last Name | Start Date"
+   sheet with dates as M/D/YYYY text. Column positions are detected rather
+   than hard-coded, and a single combined name column also works, so a future
+   export with shuffled or renamed columns still imports.
+   Nothing is written until the review modal is confirmed. */
+
+/* Accepts M/D/YYYY, MM/DD/YYYY, YYYY-MM-DD, and raw Excel serial numbers
+   (what you get when a cell is date-formatted rather than text).
+   Returns YYYY-MM-DD, or null when the value isn't a plausible date. */
+function parseFlexibleDate(v){
+  if(v===null||v===undefined)return null;
+  if(v instanceof Date&&!isNaN(v.getTime()))return dateStr(v);
+  var s=String(v).trim();
+  if(!s)return null;
+  /* Excel serial: days since 1899-12-30. Bounds keep plain numbers like an
+     employee id or an hour count from being read as a date. */
+  if(/^\d+(\.\d+)?$/.test(s)){
+    var n=parseFloat(s);
+    if(n<20000||n>60000)return null;           /* ~1954 to ~2064 */
+    var d=new Date(Date.UTC(1899,11,30)+Math.round(n)*86400000);
+    return isNaN(d.getTime())?null:dateStr(new Date(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()));
+  }
+  var iso=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(iso)return dateStr(new Date(+iso[1],+iso[2]-1,+iso[3]));
+  var us=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(us){
+    var yr=+us[3]; if(yr<100)yr+=(yr<70?2000:1900);
+    var mo=+us[1], dy=+us[2];
+    if(mo<1||mo>12||dy<1||dy>31)return null;
+    return dateStr(new Date(yr,mo-1,dy));
+  }
+  return null;
+}
+
+/* name (normalized) -> {id,name} for every active roster employee, using the
+   same override-aware names the Roster page displays. */
+function seniorityRosterMap(){
+  var overrides=loadOverrides(), map={};
+  Object.keys(ROSTER_BY_ID).forEach(function(id){
+    var ov=overrides[id]||{};
+    if((ov.status||'active')==='terminated')return;
+    var nm=ov.name||ROSTER_BY_ID[id].name;
+    map[normalizeName(nm)]={id:id,name:nm};
+  });
+  return map;
+}
+
+function handleSeniorityImport(event){
+  var file=event.target.files&&event.target.files[0];
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+      processSeniorityImport(rows);
+    }catch(err){
+      showToast('Could not read that file');
+      console.error('[seniority import]',err);
+    }
+    event.target.value='';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* Figures out which columns hold the name(s) and the hire date, pairs each
+   row with a roster employee, and hands the result to the review modal. */
+function processSeniorityImport(rows){
+  if(!rows||!rows.length){showToast('That file has no rows');return;}
+  var rmap=seniorityRosterMap();
+  var maxCols=0;
+  rows.forEach(function(r){if(r&&r.length>maxCols)maxCols=r.length;});
+
+  /* Header row: the first row whose cells look like labels, not data. */
+  var hdrIdx=-1,hdr=[];
+  for(var i=0;i<Math.min(rows.length,10);i++){
+    var joined=(rows[i]||[]).join(' ').toLowerCase();
+    if(/first\s*name|last\s*name|start\s*date|hire\s*date|employee|name/.test(joined)){hdrIdx=i;hdr=rows[i]||[];break;}
+  }
+  var colFirst=-1,colLast=-1,colFull=-1,colDate=-1;
+  if(hdrIdx>=0){
+    hdr.forEach(function(h,ci){
+      var t=String(h||'').toLowerCase().trim();
+      if(/^first\s*name$|^first$/.test(t))colFirst=ci;
+      else if(/^last\s*name$|^last$|surname/.test(t))colLast=ci;
+      else if(/(hire|start|seniority|original).*date|^date$/.test(t))colDate=ci;
+      else if(/^(employee|associate|worker|full)?\s*name$/.test(t))colFull=ci;
+    });
+  }
+  var dataRows=rows.slice(hdrIdx>=0?hdrIdx+1:0);
+
+  /* Fallbacks when headers are missing or unrecognised: the date column is
+     whichever parses as a date most often; the name column is whichever
+     matches the roster most often. */
+  if(colDate<0){
+    var bestD=-1,bestDHits=0;
+    for(var c=0;c<maxCols;c++){
+      var hits=0;
+      dataRows.forEach(function(r){if(r&&parseFlexibleDate(r[c]))hits++;});
+      if(hits>bestDHits){bestDHits=hits;bestD=c;}
+    }
+    if(bestDHits>0)colDate=bestD;
+  }
+  if(colFirst<0&&colLast<0&&colFull<0){
+    var bestN=-1,bestNHits=-1;
+    for(var c2=0;c2<maxCols;c2++){
+      if(c2===colDate)continue;
+      var h2=0;
+      dataRows.forEach(function(r){
+        if(!r)return;
+        var v=String(r[c2]||'').trim(); if(!v)return;
+        if(rmap[normalizeName(v)])h2++;
+      });
+      if(h2>bestNHits){bestNHits=h2;bestN=c2;}
+    }
+    colFull=bestN;
+  }
+  if(colDate<0){showToast('No date column found in that file');return;}
+
+  var matched=[],unmatchedRows=[],seen={};
+  dataRows.forEach(function(r){
+    if(!r)return;
+    var nameRaw=(colFirst>=0||colLast>=0)
+      ? [colFirst>=0?r[colFirst]:'',colLast>=0?r[colLast]:''].join(' ').trim()
+      : String(r[colFull>=0?colFull:0]||'').trim();
+    if(!nameRaw)return;
+    var hire=parseFlexibleDate(r[colDate]);
+    if(!hire)return;                       /* skip header echoes / blank dates */
+    var key=normalizeName(nameRaw);
+    if(!key||seen[key])return;
+    seen[key]=true;
+    var emp=rmap[key];
+    if(emp)matched.push({id:emp.id,name:emp.name,hire:hire});
+    else unmatchedRows.push({name:nameRaw,hire:hire});
+  });
+
+  if(!matched.length&&!unmatchedRows.length){showToast('No usable rows found in that file');return;}
+  window._senImportMatched=matched;
+  showSeniorityImportReview(matched,unmatchedRows);
+}
+
+function showSeniorityImportReview(matched,unmatchedRows){
+  var existing=document.getElementById('senReviewModal');
+  if(existing)existing.remove();
+  var dates=loadEmpDates();
+
+  var changed=matched.filter(function(m){var r=dates[m.id];return !r||r.hire!==m.hire;});
+  var rowsHtml=matched.map(function(m){
+    var cur=(dates[m.id]||{}).hire||null;
+    var isNew=!cur, isChange=cur&&cur!==m.hire;
+    var tag=isNew?'<span style="font-size:9px;color:var(--green);font-weight:700;">NEW</span>'
+      :(isChange?'<span style="font-size:9px;color:var(--amber);font-weight:700;">CHANGED</span>':'');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">'
+      +'<span style="font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(m.name)+'</span>'
+      +tag
+      +'<span style="font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;">'+formatHireDate(m.hire)+'</span>'
+      +(isChange?'<span style="font-size:9.5px;color:var(--text3);text-decoration:line-through;">'+formatHireDate(cur)+'</span>':'')
+      +'</div>';
+  }).join('')||'<div style="font-size:12px;color:var(--text3);padding:8px 0;">Nobody in this file matched the roster.</div>';
+
+  var unmatchedHtml='';
+  if(unmatchedRows.length){
+    unmatchedHtml='<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin:14px 0 6px;">Not on the roster ('+unmatchedRows.length+')</div>'
+      +'<div style="background:var(--offwhite);border:1px solid var(--border);border-radius:8px;padding:6px 12px;max-height:130px;overflow-y:auto;">'
+      +unmatchedRows.map(function(u){
+        return '<div style="display:flex;gap:8px;padding:5px 0;font-size:11.5px;color:var(--text2);">'
+          +'<span style="flex:1;">'+escHtml(u.name)+'</span>'
+          +'<span style="color:var(--text3);">'+formatHireDate(u.hire)+'</span></div>';
+      }).join('')
+      +'</div>'
+      +'<div style="font-size:10.5px;color:var(--text3);margin-top:5px;">These are skipped. Add them with <b>+ Add Employee</b> first, then import again.</div>';
+  }
+
+  var ov=document.createElement('div');
+  ov.id='senReviewModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">Import hire dates</div>'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:16px;">'
+      +matched.length+' matched the roster &middot; '+changed.length+' will change'
+    +'</div>'
+    +'<div style="flex:1;overflow-y:auto;">'
+    +'<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--green);margin-bottom:6px;">Matched ('+matched.length+')</div>'
+    +'<div style="background:var(--offwhite);border:1px solid var(--border);border-radius:8px;padding:6px 12px;max-height:240px;overflow-y:auto;">'+rowsHtml+'</div>'
+    +unmatchedHtml
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin:14px 0 8px;">Sets each matched employee\'s hire date, which drives the seniority order and medals. Nothing else on the roster changes.</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button onclick="document.getElementById(\'senReviewModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="applySeniorityImport()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;'+(matched.length===0?'opacity:.5;':'')+'"'+(matched.length===0?' disabled':'')+'>Apply '+matched.length+' hire date'+(matched.length===1?'':'s')+'</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
+}
+
+function applySeniorityImport(){
+  var matched=window._senImportMatched||[];
+  var m=document.getElementById('senReviewModal');
+  if(!matched.length){if(m)m.remove();return;}
+  var dates=loadEmpDates();
+  matched.forEach(function(x){
+    dates[x.id]=dates[x.id]||{};
+    dates[x.id].hire=x.hire;
+  });
+  saveEmpDates(dates);          /* persists locally AND pushes to the cloud */
+  try{logAudit('hk_emp_dates','save');}catch(e){}
+  if(m)m.remove();
+  window._senImportMatched=null;
+  renderRoster();
+  showToast('&#10003; '+matched.length+' hire date'+(matched.length===1?'':'s')+' imported');
 }
 function updateTabCounts(){
   var nb=DATA.emps.filter(function(x){return isBreakException(x);}).length;
@@ -3582,6 +3899,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.49.0', date:'2026-07-27',
+    features:['Roster now shows seniority. Each position lists its people most-senior-first, with a gold, silver or bronze bar and a rank number, plus how long they have been here and their hire date. People who share the same official hire date share the same rank and the same medal — the roster shows "+N same date" instead of picking a winner, because most of the team has the same start date and any tie-break would really just be alphabetical order.'],
+    fixes:['New "Import Hire Dates" button on Roster reads the Paychex seniority Excel directly (First Name / Last Name / Start Date), matches each person to your roster, and shows you exactly what will change before anything is saved. Anyone in the file who is not on the roster yet is listed and skipped rather than guessed at. Also fixed the "Position Changed" tag on the roster, which had no styling and ran into the employee\'s name.']
+  },
   {
     v:'6.48.0', date:'2026-07-27',
     fixes:['P&L\'s "Rooms sold" (main table, weekly breakdown, and Excel export) now uses each day\'s own calendar-date occupancy, matching how accounting books room revenue. Labor is unchanged — it still uses the previous night\'s occupancy to size each day\'s staffing, since that\'s a different, correct question. The two totals can differ slightly at month boundaries; that\'s expected, not an error.']
