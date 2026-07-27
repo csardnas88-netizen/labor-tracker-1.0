@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.52.0"/>
+<meta name="app-version" content="6.53.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4001,6 +4001,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.53.0', date:'2026-07-27',
+    fixes:['Time Card Check no longer permanently shows a day as "Changed" when an HK employee worked a non-Housekeeping department that day (e.g. Banquet). Paychex\'s Weekly Time Card still counts those hours under Housekeeping, but the app\'s daily total was silently dropping them — no amount of re-uploading that day\'s PDF could ever fix it, since the comparison never looked at that data. It now does, for both the day total and the employee-by-employee breakdown.']
+  },
   {
     v:'6.52.0', date:'2026-07-27',
     features:['Position Check now clears itself as you work through it. Mark an occurrence Correct, Wrong, or Approved and it drops out of Show All / Mismatches Only / Unknown Only — so the list only ever shows what you still need to check against the schedule. Nothing is deleted: a new "Reviewed" filter lists every decision you\'ve made, so a "Wrong" one that still needs a Paychex correction is never lost.']
@@ -8943,10 +8947,28 @@ function wtc_computeDays(report){
     if(snap){
       hasSnap=true;
       var list=(snap.emps&&snap.emps.length)?snap.emps:null;
-      if(list){
+      var otherList=(snap.otherEmps&&snap.otherEmps.length)?snap.otherEmps:null;
+      if(list||otherList){
         appHasEmps=true;appSum=0;appOtSum=0;
-        list.forEach(function(emp){
+        (list||[]).forEach(function(emp){
           var pid=String(emp.id);
+          var paid=Number(emp.paid)||0;
+          var ot1=Number(emp.ot1)||0;
+          appSum+=paid;appOtSum+=ot1;
+          if(appEmps[pid]){appEmps[pid].paid+=paid;appEmps[pid].ot+=ot1;}
+          else{appEmps[pid]={name:emp.name||(ROSTER_BY_ID[pid]?ROSTER_BY_ID[pid].name:''),paid:paid,ot:ot1};}
+        });
+        /* An HK-roster employee who worked a non-HK department that day
+           (e.g. Banquet) still shows up under Housekeeping in Paychex's
+           Weekly Time Card total — fold their hours in too, or a day like
+           that shows "Changed" forever, no matter how many times its daily
+           PDF gets re-uploaded, since those hours never had anywhere to
+           go on the app side of the comparison. A genuine outside
+           contractor (no HK primary position) is excluded — they were
+           never counted here before, and shouldn't start now. */
+        (otherList||[]).forEach(function(emp){
+          var pid=String(emp.id);
+          if(!primaryPos(emp.name,pid))return;
           var paid=Number(emp.paid)||0;
           var ot1=Number(emp.ot1)||0;
           appSum+=paid;appOtSum+=ot1;

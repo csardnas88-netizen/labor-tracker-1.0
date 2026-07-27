@@ -21,6 +21,7 @@ const cases = [
   require('./cases/pnl-calendar-date-rooms'),
   require('./cases/roster-seniority'),
   require('./cases/position-check-month'),
+  require('./cases/wtc-otherdept-hours'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
