@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.58.0"/>
+<meta name="app-version" content="6.59.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1582,6 +1582,26 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div id="auditLogResults" style="padding:0 16px 16px;"></div>
       </div>
 
+      <!-- Owner-only: sets the shared PIN gating Labor Model and P&L for everyone, owner included. -->
+      <div class="card" id="pinSettingCard" style="margin-bottom:14px;display:none;">
+        <div class="card-head"><div class="card-title">Section PIN</div></div>
+        <div style="padding:12px 16px 0;font-size:11.5px;color:var(--text3);line-height:1.55;">
+          A 4-digit code required to open Labor Model and P&amp;L — asked every time, for everyone including you.
+          This is a soft deterrent only: anyone with browser dev-tools access can bypass it, since there's no server enforcing it.
+        </div>
+        <div style="padding:12px 16px;">
+          <div id="pinSettingStatus" style="font-size:12.5px;font-weight:700;color:var(--text1);margin-bottom:10px;">—</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input id="pinSettingNew" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="New PIN"
+              style="width:110px;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:14px;letter-spacing:4px;"/>
+            <input id="pinSettingConfirm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="Confirm"
+              style="width:110px;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:14px;letter-spacing:4px;"/>
+            <button class="btn btn-navy" onclick="saveSectionPinFromSettings()">Save PIN</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);" onclick="removeSectionPin()">Remove PIN</button>
+          </div>
+        </div>
+      </div>
+
       <div class="card" style="margin-bottom:14px;">
         <div class="card-head"><div class="card-title">Data Management</div></div>
         <div class="settings-row" onclick="forceSyncToSupabase()">
@@ -2018,6 +2038,21 @@ Supervisor 3</textarea>
   </div>
 </div>
 
+<div class="modal-overlay" id="pinGateOverlay" style="display:none;" onclick="if(event.target===this)cancelPinGate()">
+  <div class="modal-box" style="max-width:320px;text-align:center;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div class="modal-title" style="margin:0;">&#128274; Enter PIN</div>
+      <button onclick="cancelPinGate()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3);line-height:1;">&#215;</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">This section is protected — enter the 4-digit code to continue.</div>
+    <input id="pinGateInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off"
+      style="width:100%;padding:14px;border:1.5px solid var(--border2);border-radius:10px;font-size:26px;letter-spacing:14px;text-align:center;font-weight:700;"
+      onkeydown="if(event.key==='Enter')submitPinGate()"/>
+    <div id="pinGateError" style="display:none;color:var(--red);font-size:12px;font-weight:600;margin-top:8px;">Incorrect PIN — try again.</div>
+    <button class="btn btn-navy" style="margin-top:16px;width:100%;" onclick="submitPinGate()">Unlock</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="uploadOverlay" style="display:none;" onclick="if(event.target===this)hideUploadModal()">
   <div class="modal-box" style="max-width:440px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
@@ -2243,6 +2278,19 @@ function loadEmpDates(){try{var s=localStorage.getItem("hk_emp_dates");if(s)retu
 function saveEmpDates(d){
   safeSetItem("hk_emp_dates",JSON.stringify(d));
   if(typeof supaPut==='function'){try{supaPut('hk_emp_dates',d);}catch(_){}}
+}
+
+/* 4-digit PIN gate for Labor Model / P&L. A soft deterrent, not real
+   security — this is a single client-side HTML file, so anyone with
+   dev-tools access can read or bypass it. Shared across every signed-in
+   user (owner included, by explicit choice), stored in Supabase like
+   everything else so it's the same on every device. Only the owner can
+   set/change it (see refreshOwnerOnlyUI's pinSettingCard); everyone,
+   owner included, is asked for it on every navigation to either page. */
+function loadSectionPin(){try{var s=localStorage.getItem("hk_section_pin");if(s)return JSON.parse(s);}catch(e){}return null;}
+function saveSectionPin(pin){
+  safeSetItem("hk_section_pin",JSON.stringify(pin));
+  if(typeof supaPut==='function'){try{supaPut('hk_section_pin',pin);}catch(_){}}
 }
 var NEW_HIRE_DAYS=90;
 var INACTIVE_DAYS=90;
@@ -4153,6 +4201,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.59.0', date:'2026-07-27',
+    features:['Labor Model and P&L can now be protected with a 4-digit PIN, set from Settings (owner only). Once set, it\'s asked every time anyone — including the owner — navigates to either page. This is a soft deterrent, not real security: it\'s enforced in the browser, not a server, so it stops a casual glance but not someone who opens dev tools. Leave it unset (the default) and both pages work exactly as before.']
+  },
+  {
     v:'6.58.0', date:'2026-07-27',
     fixes:['Break Compliance no longer flags a day as "No Break" when an employee has more than one row for that day in the report — e.g. a Holiday amount coded under their home department, plus their real worked shift coded under a different department they covered. Real case: Jorge Gonzalez, 2026-07-03 — his Holiday row (0 break minutes, since there was no shift) was flagging the day even though his real-shift row showed a genuine, compliant 30-minute break. Same person, same day, now counted as one.']
   },
@@ -5435,10 +5487,11 @@ function accessErrorMessage(e,verb){
 var _isOwnerCached=null;
 function refreshOwnerOnlyUI(){
   var show=function(isOwner){
-    ['teamAccessCard','activityLogCard'].forEach(function(id){
+    ['teamAccessCard','activityLogCard','pinSettingCard'].forEach(function(id){
       var c=document.getElementById(id);
       if(c)c.style.display=isOwner?'':'none';
     });
+    if(isOwner)try{refreshPinSettingStatus();}catch(e){}
   };
   if(!_authToken()){show(false);return;}
   if(_isOwnerCached!==null){show(_isOwnerCached);return;}
@@ -5449,6 +5502,31 @@ function refreshOwnerOnlyUI(){
       show(_isOwnerCached);
       try{updateProfileAvatar();}catch(e){} /* fill Owner/Manager once known */
     }).catch(function(){show(false);});
+}
+function refreshPinSettingStatus(){
+  var el=document.getElementById('pinSettingStatus');
+  if(!el)return;
+  var pin=loadSectionPin();
+  el.innerHTML=pin
+    ? '<span style="color:var(--green);">&#10003; PIN is set</span> — Labor Model and P&amp;L require it'
+    : '<span style="color:var(--red);">No PIN set</span> — Labor Model and P&amp;L are open to everyone';
+}
+function saveSectionPinFromSettings(){
+  var a=(document.getElementById('pinSettingNew')||{}).value||'';
+  var b=(document.getElementById('pinSettingConfirm')||{}).value||'';
+  if(!/^\d{4}$/.test(a)){showToast('PIN must be exactly 4 digits');return;}
+  if(a!==b){showToast('PINs don\'t match');return;}
+  saveSectionPin(a);
+  document.getElementById('pinSettingNew').value='';
+  document.getElementById('pinSettingConfirm').value='';
+  refreshPinSettingStatus();
+  showToast('&#128274; Section PIN saved');
+}
+function removeSectionPin(){
+  if(!confirm('Remove the PIN? Labor Model and P&L will be open to everyone again.'))return;
+  saveSectionPin(null);
+  refreshPinSettingStatus();
+  showToast('PIN removed — sections are open again');
 }
 
 function loadAllowedUsers(){
@@ -5612,6 +5690,7 @@ var KEY_LABELS={
   'hk_labor_model':'Labor Model','hk_staffing_actual':'Staffing',
   'hk_staffing_input':'Staffing','hk_emp_dates':'Employee Dates',
   'hk_poscheck_notes':'Position Check',
+  'hk_section_pin':'Section PIN',
   'hk_paychex_report':'Paychex Report','hk_wtc_report':'WTC Report'
 };
 function _friendlyKeyLabel(key){
@@ -6252,6 +6331,13 @@ function _syncFromSheetsPull(){
             updated=true;
           }
         }
+        if(key==="hk_section_pin"){
+          var remotePin=all[key];
+          if(remotePin){
+            safeSetItem('hk_section_pin',JSON.stringify(remotePin));
+            updated=true;
+          }
+        }
         if(key==="hk_poscheck_notes"){
           var remotePC=all[key];
           if(remotePC&&typeof remotePC==='object'){
@@ -6370,6 +6456,9 @@ function forceSyncToSupabase(){
     }
     if(k==="hk_emp_dates"){
       try{ supaPut("hk_emp_dates", JSON.parse(localStorage[k])); pushed++; }catch(e){}
+    }
+    if(k==="hk_section_pin"){
+      try{ supaPut("hk_section_pin", JSON.parse(localStorage[k])); pushed++; }catch(e){}
     }
     if(k==="hk_poscheck_notes"){
       try{ supaPut("hk_poscheck_notes", JSON.parse(localStorage[k])); pushed++; }catch(e){}
@@ -7954,7 +8043,16 @@ function toggleSidebarSmart(){
 
 /* ── Navigation ── */
 var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','labormodel','pnl','staffing','projects','trainhours','training','calloffs','assignments','tutorial','settings'];
+var _pinGateBypass=false;
+var pendingGatePage=null;
+var PIN_GATED_PAGES=['labormodel','pnl'];
 function showPage(page){
+  if(PIN_GATED_PAGES.indexOf(page)!==-1&&!_pinGateBypass&&loadSectionPin()){
+    requestPinGate(page);
+    return; /* stay on whatever page is already showing — nothing about the
+               gated page is ever touched until the correct PIN is entered */
+  }
+  _pinGateBypass=false;
   PAGES.forEach(function(p){
     var el=document.getElementById('page-'+p);
     if(el)el.style.display=(p===page)?'block':'none';
@@ -7992,6 +8090,37 @@ function showPage(page){
     try{refreshOwnerOnlyUI();}catch(e){}
     try{if(_isOwnerCached)loadAllowedUsers();}catch(e){}
   }
+}
+
+/* ── Section PIN gate (Labor Model / P&L) ── */
+function requestPinGate(page){
+  pendingGatePage=page;
+  var ov=document.getElementById('pinGateOverlay');
+  if(!ov)return;
+  ov.style.display='flex';
+  var inp=document.getElementById('pinGateInput');
+  if(inp){inp.value='';setTimeout(function(){inp.focus();},50);}
+  var err=document.getElementById('pinGateError');
+  if(err)err.style.display='none';
+}
+function submitPinGate(){
+  var inp=document.getElementById('pinGateInput');
+  var val=inp?inp.value.trim():'';
+  var pin=loadSectionPin();
+  if(val&&val===pin){
+    document.getElementById('pinGateOverlay').style.display='none';
+    var p=pendingGatePage;pendingGatePage=null;
+    _pinGateBypass=true;
+    showPage(p);
+  }else{
+    var err=document.getElementById('pinGateError');
+    if(err)err.style.display='block';
+    if(inp){inp.value='';inp.focus();}
+  }
+}
+function cancelPinGate(){
+  document.getElementById('pinGateOverlay').style.display='none';
+  pendingGatePage=null;
 }
 
 /* ── Upload modal ── */

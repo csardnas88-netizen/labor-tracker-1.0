@@ -26,6 +26,7 @@ const cases = [
   require('./cases/break-compliance-redesign'),
   require('./cases/break-compliance-wtc-nonworked'),
   require('./cases/break-compliance-multirow-day'),
+  require('./cases/section-pin-gate'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
