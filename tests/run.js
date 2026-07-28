@@ -28,6 +28,7 @@ const cases = [
   require('./cases/break-compliance-multirow-day'),
   require('./cases/section-pin-gate'),
   require('./cases/add-employee-modal'),
+  require('./cases/auto-logout-timeout'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

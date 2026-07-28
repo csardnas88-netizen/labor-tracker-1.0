@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.60.0"/>
+<meta name="app-version" content="6.61.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4200,6 +4200,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.61.0', date:'2026-07-28',
+    fixes:['Reduced the automatic sign-out time from 45 minutes of inactivity down to 10, per request. The screen and message shown after being signed out already adjust to whatever this is set to.']
+  },
+  {
     v:'6.60.0', date:'2026-07-28',
     fixes:['Fixed "+ Add Employee" on Roster doing nothing when clicked — it was silently crashing on a leftover reference to a Notes field that no longer exists in that form. Now opens and saves correctly.',
       'Renamed "R106" to "OCC" everywhere it appeared on screen (Occupancy page, upload buttons, mismatch banners, toasts). Purely a label change — nothing about how the report is read or matched was touched.']
@@ -5351,7 +5355,7 @@ function authSignOut(){
    returns. Uses a timestamp checked on an interval + on tab focus (a plain
    setTimeout doesn't fire reliably while a mobile tab is backgrounded), so
    a device left open overnight is signed out even if the timer was frozen. */
-var AUTO_LOGOUT_MS=45*60*1000; /* 45 min — middle of Carlos's 30–60 min */
+var AUTO_LOGOUT_MS=10*60*1000; /* 10 min, per Carlos's explicit request 2026-07-28 (was 45) */
 var _lastActivity=Date.now();
 function _bumpActivity(){ _lastActivity=Date.now(); }
 ['click','keydown','touchstart','mousedown'].forEach(function(ev){
