@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.59.0"/>
+<meta name="app-version" content="6.60.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1481,7 +1481,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <div id="page-occupancy" style="display:none;">
       <div class="page-header">
         <div class="page-title">&#127963; Occupancy</div>
-        <div class="page-sub">Daily rooms sold · R106 verification</div>
+        <div class="page-sub">Daily rooms sold · OCC verification</div>
       </div>
       <div id="occupancyContent"></div>
     </div>
@@ -1632,7 +1632,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
           <div class="settings-row-icon" style="background:var(--yellow-bg);color:var(--yellow);">&#127963;</div>
           <div class="settings-row-text">
             <div class="settings-row-title">Reset Occupancy</div>
-            <div class="settings-row-desc">Clears rooms/R106 data only — PDF labor reports stay intact</div>
+            <div class="settings-row-desc">Clears rooms/OCC data only — PDF labor reports stay intact</div>
           </div>
           <div class="settings-row-arrow">&#8250;</div>
         </div>
@@ -3785,7 +3785,7 @@ function removeEmp(key){
 }
 function showAddModal(){
   document.getElementById("newEmpName").value="";document.getElementById("newEmpPos").value="";
-  document.getElementById("newEmpId").value="";document.getElementById("newEmpNote").value="";
+  document.getElementById("newEmpId").value="";
   var moEl=document.getElementById("modalOverlay");if(moEl)moEl.style.display="flex";document.getElementById("addEmpOverlay").style.display="flex";
 }
 function closeModal(){var moEl2=document.getElementById("modalOverlay");if(moEl2)moEl2.style.display="none";var aeEl=document.getElementById("addEmpOverlay");if(aeEl)aeEl.style.display="none";}
@@ -3793,13 +3793,12 @@ function saveNewEmp(){
   var name=document.getElementById("newEmpName").value.trim();
   var pos=document.getElementById("newEmpPos").value;
   var id=document.getElementById("newEmpId").value.trim();
-  var note=document.getElementById("newEmpNote").value.trim();
   if(!name){showToast("Enter employee name");return}
   if(!pos){showToast("Select a position");return}
   if(!ROSTER[pos])ROSTER[pos]=[];
   if(ROSTER[pos].indexOf(name)!==-1){showToast(name+" already exists in "+pos);return}
   ROSTER[pos].push(name);
-  EMP_META[pos+"|"+name]={added:new Date().toISOString(),id:id,note:note};
+  EMP_META[pos+"|"+name]={added:new Date().toISOString(),id:id,note:""};
   saveRoster();saveEmpMeta();closeModal();renderRoster();showToast("&#10003; "+name+" added to "+pos);
 }
 function exportRoster(){
@@ -4201,6 +4200,11 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.60.0', date:'2026-07-28',
+    fixes:['Fixed "+ Add Employee" on Roster doing nothing when clicked — it was silently crashing on a leftover reference to a Notes field that no longer exists in that form. Now opens and saves correctly.',
+      'Renamed "R106" to "OCC" everywhere it appeared on screen (Occupancy page, upload buttons, mismatch banners, toasts). Purely a label change — nothing about how the report is read or matched was touched.']
+  },
+  {
     v:'6.59.0', date:'2026-07-27',
     features:['Labor Model and P&L can now be protected with a 4-digit PIN, set from Settings (owner only). Once set, it\'s asked every time anyone — including the owner — navigates to either page. This is a soft deterrent, not real security: it\'s enforced in the browser, not a server, so it stops a casual glance but not someone who opens dev tools. Leave it unset (the default) and both pages work exactly as before.']
   },
@@ -4252,7 +4256,7 @@ var CHANGELOG=[
   },
   {
     v:'6.47.0', date:'2026-07-26',
-    fixes:['Fixed Occupancy Mismatch showing up for nights nobody ever confirmed by hand. Until now, once R106 filled in a night automatically, that number stayed frozen even if R106 was later corrected — so an updated R106 would look like it "disagreed" with a number that was really just its own old snapshot. Now, as long as nobody has manually confirmed that night, the app keeps it in sync with R106 automatically instead of flagging a mismatch. A night you\'ve manually confirmed is still never touched or overwritten.']
+    fixes:['Fixed Occupancy Mismatch showing up for nights nobody ever confirmed by hand. Until now, once OCC filled in a night automatically, that number stayed frozen even if OCC was later corrected — so an updated OCC would look like it "disagreed" with a number that was really just its own old snapshot. Now, as long as nobody has manually confirmed that night, the app keeps it in sync with OCC automatically instead of flagging a mismatch. A night you\'ve manually confirmed is still never touched or overwritten.']
   },
   {
     v:'6.46.0', date:'2026-07-26',
@@ -4276,7 +4280,7 @@ var CHANGELOG=[
   },
   {
     v:'6.41.0', date:'2026-07-26',
-    fixes:['Fixed the Occupancy Mismatch alert reappearing right after you fix it. Confirming a room count from the "Fix Now" screen now marks that night as manually confirmed — same as typing it into the rooms field directly — so the alert doesn\'t come back for a number you already reviewed and chose to keep, even if it still differs from the R106 report. A night that was never confirmed will still show the alert if R106 disagrees with it.']
+    fixes:['Fixed the Occupancy Mismatch alert reappearing right after you fix it. Confirming a room count from the "Fix Now" screen now marks that night as manually confirmed — same as typing it into the rooms field directly — so the alert doesn\'t come back for a number you already reviewed and chose to keep, even if it still differs from the OCC report. A night that was never confirmed will still show the alert if OCC disagrees with it.']
   },
   {
     v:'6.40.0', date:'2026-07-26',
@@ -4324,7 +4328,7 @@ var CHANGELOG=[
   },
   {
     v:'6.29.0', date:'2026-07-22',
-    fixes:['Strengthened multi-device sync for day reports and room counts (the numbers behind your Labor Pace budget). Two fixes: (1) A manually-entered room count ("manual" — protected from being overwritten by R106) is now correctly preserved through every sync; before, a sync could silently drop that protection, leaving the day open to being overwritten later. (2) Syncing day reports and room counts now keeps whichever edit is actually more recent, the same protection Projects and Call-Offs already had since an earlier version — instead of always letting the last device to sync win, even if its data was older. This only matters in the rare case of two people editing the same day around the same time; nothing about your existing data changes.']
+    fixes:['Strengthened multi-device sync for day reports and room counts (the numbers behind your Labor Pace budget). Two fixes: (1) A manually-entered room count ("manual" — protected from being overwritten by OCC) is now correctly preserved through every sync; before, a sync could silently drop that protection, leaving the day open to being overwritten later. (2) Syncing day reports and room counts now keeps whichever edit is actually more recent, the same protection Projects and Call-Offs already had since an earlier version — instead of always letting the last device to sync win, even if its data was older. This only matters in the rare case of two people editing the same day around the same time; nothing about your existing data changes.']
   },
   {
     v:'6.28.0', date:'2026-07-22',
@@ -4336,7 +4340,7 @@ var CHANGELOG=[
   },
   {
     v:'6.26.0', date:'2026-07-21',
-    fixes:['Fixed rooms/budget showing blank ("—") for recent days even though the R106 had the numbers. The R106 occupancy and the per-day rooms that drive the budget are stored separately, and the last day or two (and days synced from another device) could be left empty — so the budget couldn\'t calculate and you had to re-enter or re-upload. The app now fills any empty day automatically from the R106 whenever you open Labor or sync, so budgets show up on their own. Days you typed by hand are never overwritten. Your R106 data was always safe — this just applies it. Note: nothing was lost; all of July\'s occupancy was intact in the cloud.']
+    fixes:['Fixed rooms/budget showing blank ("—") for recent days even though the OCC had the numbers. The OCC occupancy and the per-day rooms that drive the budget are stored separately, and the last day or two (and days synced from another device) could be left empty — so the budget couldn\'t calculate and you had to re-enter or re-upload. The app now fills any empty day automatically from the OCC whenever you open Labor or sync, so budgets show up on their own. Days you typed by hand are never overwritten. Your OCC data was always safe — this just applies it. Note: nothing was lost; all of July\'s occupancy was intact in the cloud.']
   },
   {
     v:'6.25.0', date:'2026-07-20',
@@ -5696,7 +5700,7 @@ var KEY_LABELS={
 function _friendlyKeyLabel(key){
   if(KEY_LABELS[key])return KEY_LABELS[key];
   if(key.indexOf('month_')===0)return 'Report for '+key.replace('month_','');
-  if(key.indexOf('r106_')===0)return 'R106';
+  if(key.indexOf('r106_')===0)return 'OCC';
   if(key.indexOf('snapshot_')===0)return 'Backup';
   if(key.indexOf('project_')===0)return 'Projects';
   if(key.indexOf('calloff_')===0)return 'Call-Offs';
@@ -6576,7 +6580,7 @@ function renderSnapshotList(rows){
 
 function restoreSnapshot(key){
   var ds=key.replace("snapshot_","");
-  if(!confirm("This will REPLACE all your current data (this month, R106, roster, projects) with the backup from "+ds+". This cannot be undone. Continue?"))return;
+  if(!confirm("This will REPLACE all your current data (this month, OCC, roster, projects) with the backup from "+ds+". This cannot be undone. Continue?"))return;
   authedFetch(SUPA_URL+"/rest/v1/labor_data?select=value&key=eq."+encodeURIComponent(key),{method:"GET"})
     .then(function(r){return r.json();})
     .then(function(rows){
@@ -6908,7 +6912,7 @@ function clearMonth(){
 
 function resetOccupancy(){
   var mk=monthKey();
-  if(!confirm("Reset occupancy/rooms data for "+MONTH_NAMES[viewMonth.getMonth()]+" "+viewMonth.getFullYear()+"? Your uploaded PDF labor reports will NOT be affected — you can re-upload the R106 right after."))return;
+  if(!confirm("Reset occupancy/rooms data for "+MONTH_NAMES[viewMonth.getMonth()]+" "+viewMonth.getFullYear()+"? Your uploaded PDF labor reports will NOT be affected — you can re-upload the OCC right after."))return;
   var mData=loadMonthData(mk);
   mData.rooms={};
   mData.roomsSource={};
@@ -6917,7 +6921,7 @@ function resetOccupancy(){
   renderMonthDashboard();
   renderLaborDash();
   if(currentPage==='occupancy')renderOccupancy();
-  showToast("✓ Occupancy reset — now re-upload the R106");
+  showToast("✓ Occupancy reset — now re-upload the OCC");
 }
 
 /* ═══════════════════════════════════════════
@@ -10337,7 +10341,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     html+='<span style="font-size:22px;flex-shrink:0;">🚨</span>';
     html+='<div style="flex:1;">';
     html+='<div style="font-size:13px;font-weight:800;color:var(--red);">Occupancy Mismatch</div>';
-    html+='<div style="font-size:11px;color:var(--red);margin-top:2px;">Manual: <strong>'+r+' rooms</strong> &nbsp;·&nbsp; R106: <strong>'+r106Val+' rooms</strong>'+(r106Comp>0?' ('+r106Occ+' occ − '+r106Comp+' comp)':'')+' &nbsp;·&nbsp; Diff: '+(r-r106Val>0?'+':'')+(r-r106Val)+'</div>';
+    html+='<div style="font-size:11px;color:var(--red);margin-top:2px;">Manual: <strong>'+r+' rooms</strong> &nbsp;·&nbsp; OCC: <strong>'+r106Val+' rooms</strong>'+(r106Comp>0?' ('+r106Occ+' occ − '+r106Comp+' comp)':'')+' &nbsp;·&nbsp; Diff: '+(r-r106Val>0?'+':'')+(r-r106Val)+'</div>';
     html+='</div>';
     html+='<button onclick="showOccupancyFixModal(\''+ds+'\','+r+','+r106Val+')" '
       +'style="padding:8px 14px;background:var(--red);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer;">Fix Now →</button>';
@@ -10353,7 +10357,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     /* R106 button - prominent if no R106 loaded, subtle if loaded */
     +'<button onclick="document.getElementById(\'r106InputDash\').click();" '
     +'style="padding:'+(hasR106Month?'4px 10px':'7px 14px')+';background:'+(hasR106Month?'rgba(15,37,68,.08)':'var(--navy)')+';color:'+(hasR106Month?'var(--navy)':'#fff')+';border:'+(hasR106Month?'1px solid var(--navy)':'none')+';border-radius:7px;font-size:'+(hasR106Month?'10px':'12px')+';font-weight:700;cursor:pointer;white-space:nowrap;">'
-    +(hasR106Month?'📋 R106 ✓':'📋 Upload R106')+'</button>'
+    +(hasR106Month?'📋 OCC ✓':'📋 Upload OCC')+'</button>'
     +'<input type="file" id="r106InputDash" accept=".pdf" style="display:none;" onchange="handleR106Upload(this)">'
     +'</div>'
     +'<div class="rdc-body">'
@@ -10364,9 +10368,9 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
     +(r>0?'<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:6px;">'
       +r+' rooms = '+dayBudget(r).toFixed(2)+'h budget'
-      +(r106Val>0&&!hasMismatch?' &nbsp;<span style="font-size:10px;color:var(--text3);">(R106 ✓)</span>':'')
+      +(r106Val>0&&!hasMismatch?' &nbsp;<span style="font-size:10px;color:var(--text3);">(OCC ✓)</span>':'')
       +'</div>':'')
-    +(r106Val>0&&r===0?'<div style="font-size:11px;color:var(--yellow);font-weight:600;margin-top:6px;">R106 shows '+r106Val+' rooms — enter manually or re-upload R106</div>':'')
+    +(r106Val>0&&r===0?'<div style="font-size:11px;color:var(--yellow);font-weight:600;margin-top:6px;">OCC shows '+r106Val+' rooms — enter manually or re-upload OCC</div>':'')
     +'<div class="rdc-note">Change rooms to recalculate budget</div>'
     +'</div></div>';
 
@@ -11139,7 +11143,7 @@ function renderRecap(){
       var d=parseLocalDate(m.ds);
       html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-top:1px dashed '+(isUrgent?'var(--red-border)':'var(--yellow-border)')+';font-size:12px;">';
       html+='<span style="color:var(--text1);font-weight:600;">'+d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</span>';
-      html+='<span style="color:var(--text2);">Manual: <b>'+m.manual+'</b> · R106: <b>'+m.r106+'</b></span>';
+      html+='<span style="color:var(--text2);">Manual: <b>'+m.manual+'</b> · OCC: <b>'+m.r106+'</b></span>';
       html+='<button onclick="showOccupancyFixModal(\''+m.ds+'\','+m.manual+','+m.r106+')" '
         +'style="padding:3px 10px;background:'+(isUrgent?'var(--red)':'var(--yellow)')+';color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Fix</button>';
       html+='</div>';
@@ -11615,8 +11619,8 @@ function renderOccupancy(){
   html+='</div>';
   /* R106 upload button */
   html+='<div style="display:flex;align-items:center;gap:8px;">';
-  if(hasR106)html+='<span style="font-size:11px;color:var(--green);font-weight:700;">✓ R106 loaded</span>';
-  html+='<button onclick="document.getElementById(\'r106Input\').click();" style="padding:8px 16px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📄 Upload R106</button>';
+  if(hasR106)html+='<span style="font-size:11px;color:var(--green);font-weight:700;">✓ OCC loaded</span>';
+  html+='<button onclick="document.getElementById(\'r106Input\').click();" style="padding:8px 16px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📄 Upload OCC</button>';
   html+='<input type="file" id="r106Input" accept=".pdf" style="display:none;" onchange="handleR106Upload(this)">';
   html+='</div></div>';
 
@@ -11625,7 +11629,7 @@ function renderOccupancy(){
     html+='<div style="background:var(--ad);border:1px solid var(--yellow-border);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">';
     html+='<span style="font-size:20px;">⚠️</span>';
     html+='<div><div style="font-size:13px;font-weight:700;color:var(--yellow);">'+totalMismatch+' day'+(totalMismatch>1?'s':'')+' with occupancy mismatch</div>';
-    html+='<div style="font-size:11px;color:var(--yellow);margin-top:2px;">Manual entry doesn\'t match R106 — review and correct highlighted days</div></div></div>';
+    html+='<div style="font-size:11px;color:var(--yellow);margin-top:2px;">Manual entry doesn\'t match OCC — review and correct highlighted days</div></div></div>';
   }
 
   /* Summary cards */
@@ -11659,7 +11663,7 @@ function renderOccupancy(){
   html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;"></div>';
   html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Date</div>';
   html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;text-align:center;">Manual Entry</div>';
-  if(hasR106)html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;text-align:center;">R106</div>';
+  if(hasR106)html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;text-align:center;">OCC</div>';
   html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;text-align:right;">Budget</div>';
   html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding-left:12px;">Occ %</div>';
   html+='</div>';
@@ -11698,7 +11702,7 @@ function renderOccupancy(){
         if(dayObj.mismatch){
           html+='<div style="font-size:9px;color:var(--yellow);font-weight:700;">⚠ diff '+(dayObj.rooms-dayObj.r106>0?'+':'')+(dayObj.rooms-dayObj.r106)+'</div>';
           html+='<button onclick="saveOccupancyRoom(\''+dayObj.ds+'\','+dayObj.r106+')" '
-            +'style="font-size:9px;padding:2px 6px;background:var(--yellow);color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:2px;">Use R106</button>';
+            +'style="font-size:9px;padding:2px 6px;background:var(--yellow);color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:2px;">Use OCC</button>';
         }
       }else{
         html+='<div style="font-size:12px;color:var(--text3);">—</div>';
@@ -11738,7 +11742,7 @@ function showOccupancyFixModal(ds,manual,r106){
     +'<div style="font-size:15px;font-weight:700;color:var(--text1);margin-bottom:6px;">Fix Occupancy Mismatch</div>'
     +'<div style="font-size:13px;color:var(--text3);margin-bottom:16px;line-height:1.5;"><strong>'+dLabel+'</strong><br>'
     +'Manual entry: <strong>'+manual+'</strong> rooms<br>'
-    +'R106: <strong>'+r106+'</strong> rooms</div>'
+    +'OCC: <strong>'+r106+'</strong> rooms</div>'
     +'<div style="margin-bottom:16px;">'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);display:block;margin-bottom:6px;">Correct rooms count:</label>'
     +'<input id="fixRoomsInput" type="number" min="0" max="999" value="'+r106+'" '
@@ -11751,7 +11755,7 @@ function showOccupancyFixModal(ds,manual,r106){
     +'style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-size:13px;font-weight:700;cursor:pointer;color:var(--text2);">Cancel</button>'
     +'</div>'
     +'<button onclick="(function(){saveOccupancyRoom(\''+ds+'\','+r106+');document.body.removeChild(document.getElementById(\'occFixModal\'));renderLaborDash();})()" '
-    +'style="width:100%;padding:10px;background:var(--s3);color:var(--navy);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📋 Use R106 value ('+r106+' rooms)</button>'
+    +'style="width:100%;padding:10px;background:var(--s3);color:var(--navy);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📋 Use OCC value ('+r106+' rooms)</button>'
     +'</div>';
   modal.id='occFixModal';
   document.body.appendChild(modal);
@@ -11761,7 +11765,7 @@ function showOccupancyFixModal(ds,manual,r106){
 function handleR106Upload(input){
   var file=input.files[0];
   if(!file)return;
-  showToast('⏳ Reading R106...');
+  showToast('⏳ Reading OCC...');
   var reader=new FileReader();
   reader.onload=function(e){
     var typedarray=new Uint8Array(e.target.result);
@@ -11790,7 +11794,7 @@ function handleR106Upload(input){
       Promise.all(pagePromises).then(function(){
         var parsed=parseR106(allText);
         var count=Object.keys(parsed).length;
-        if(count===0){showToast('❌ No occupancy data found in R106');return;}
+        if(count===0){showToast('❌ No occupancy data found in OCC');return;}
 
         /* R106 se guarda como referencia, y AUTO-LLENA los cuartos */
         /* salvo en días que Carlos haya editado manualmente (protegidos) */
@@ -11826,12 +11830,12 @@ function handleR106Upload(input){
           autoFilled++;
         });
 
-        showToast('✓ R106 loaded — '+autoFilled+' days auto-filled'+(kept>0?' · '+kept+' protected (manual)':''));
+        showToast('✓ OCC loaded — '+autoFilled+' days auto-filled'+(kept>0?' · '+kept+' protected (manual)':''));
         renderLaborDash();
         if(currentPage==='occupancy')renderOccupancy();
       });
     }).catch(function(err){
-      showToast('❌ Error reading R106: '+err.message);
+      showToast('❌ Error reading OCC: '+err.message);
     });
   };
   reader.readAsArrayBuffer(file);
