@@ -24,6 +24,7 @@ const cases = [
   require('./cases/wtc-otherdept-hours'),
   require('./cases/overtime-redesign'),
   require('./cases/break-compliance-redesign'),
+  require('./cases/break-compliance-wtc-nonworked'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

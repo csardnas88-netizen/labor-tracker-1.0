@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.56.0"/>
+<meta name="app-version" content="6.57.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4152,6 +4152,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.57.0', date:'2026-07-27',
+    fixes:['Break Compliance no longer flags Holiday, Vacation, or Flex Time days as "No Break". The daily Labor Distribution Report has no way to tell a paid non-worked day from a real shift, so a Holiday day with 0 unpaid minutes looked identical to someone skipping their break. Now, whenever a Weekly Time Card Report has been uploaded and covers that day, it\'s used to detect this and the day shows its actual type (Holiday, Vacation, etc.) instead of a break violation. Only covers days a Time Card Report actually includes — a day never covered by one still works as before.']
+  },
   {
     v:'6.56.0', date:'2026-07-27',
     features:['Break Compliance redesigned the same way as Overtime: a "Who" ranking for the selected month (with its own month nav) instead of an all-time table sitting on top of a week-by-week list you had to open one at a time. Click an employee to see their exact hotel week — every day worked, not just the flagged ones — so a real pattern (like breaks that are consistently 1 minute over 30, a very different problem than actually skipping a break) is visible instead of buried in the scroll.']
@@ -10430,12 +10434,41 @@ function bcToggleEmp(empId){
 
 /* Per-employee break-exception counts for one month. 'ok' days (took a
    compliant break) don't count toward anything here. */
+/* The daily Labor Distribution Report has no concept of Holiday/Vacation/
+   Flex Time — it's just Work/Meal/Regular/OT1/Paid/Unpaid, so a paid day
+   with no actual shift shows unpaid=0 and gets flagged as "No Break",
+   which is meaningless when there was no shift to take a break from. The
+   Weekly Time Card Report DOES carry this distinction per day (reg/ot/
+   nonwkd/types) — real example that motivated this: Olga Ajpacaja,
+   2026-07-03, {reg:0, nonwkd:8, unpaid:0, types:['Holiday']}. When a
+   Weekly Time Card Report has been uploaded and covers a given employee's
+   day, and it shows zero actual worked hours that day, break compliance
+   doesn't apply — regardless of what the daily report's unpaid minutes
+   say. Only covers days within whichever Time Card Report is currently
+   loaded (each upload replaces the last one); a day never covered by an
+   uploaded Time Card Report still falls back to the old behavior. */
+function wtcDayFor(empId,ds){
+  var report=loadWtcReport();
+  if(!report||!report.byId)return null;
+  var emp=report.byId[String(empId)];
+  if(!emp||!emp.days)return null;
+  return emp.days[ds]||null;
+}
+function wtcNonWorkedLabel(empId,ds){
+  var d=wtcDayFor(empId,ds);
+  if(!d)return null;
+  if(((Number(d.reg)||0)+(Number(d.ot)||0))>0)return null;
+  var types=(d.types||[]).filter(function(t){return t!=='Work';});
+  return types.length?types[0]:'Non-worked';
+}
+
 function getMonthBreakData(mk){
   var mData=loadMonthData(mk);
   var days=mData.days||{};
   var byEmp={};
   Object.keys(days).forEach(function(ds){
     (days[ds].emps||[]).forEach(function(e){
+      if(wtcNonWorkedLabel(e.id,ds))return; /* Holiday/Vacation/Flex — no shift, no break rule */
       var st=breakStatus(toMins(e.unpaid||0),e.pos||'',e.id);
       if(st==='ok')return;
       var key=e.id||e.name;
@@ -10452,14 +10485,18 @@ function getMonthBreakData(mk){
 /* Every hotel week (within the loaded data) where this employee had a
    break exception this month, with the full 7-day picture — every day
    worked shows its actual break length and status, not just the days
-   that were flagged. */
+   that were flagged. A day the Weekly Time Card Report confirms was
+   Holiday/Vacation/Flex shows that label instead of a break status. */
 function getEmployeeBreakWeeks(mk,empId){
   var mData=loadMonthData(mk);
   var days=mData.days||{};
   var wantedWeeks={};
   Object.keys(days).forEach(function(ds){
     var mine=(days[ds].emps||[]).filter(function(e){return String(e.id||e.name)===String(empId);});
-    var hasEx=mine.some(function(e){return breakStatus(toMins(e.unpaid||0),e.pos||'',e.id)!=='ok';});
+    var hasEx=mine.some(function(e){
+      if(wtcNonWorkedLabel(e.id,ds))return false;
+      return breakStatus(toMins(e.unpaid||0),e.pos||'',e.id)!=='ok';
+    });
     if(hasEx){
       var wkStart=getHotelWeekStart(parseLocalDate(ds));
       wantedWeeks[dateStr(wkStart)]=wkStart;
@@ -10473,9 +10510,12 @@ function getEmployeeBreakWeeks(mk,empId){
     var cells=[];
     for(var i=0;i<7;i++){
       var d=new Date(wkStart);d.setDate(wkStart.getDate()+i);
-      var snap2=dayIdx[dateStr(d)];
+      var ds2=dateStr(d);
+      var snap2=dayIdx[ds2];
       var e=snap2?(snap2.emps||[]).find(function(x){return String(x.id||x.name)===String(empId);}):null;
       if(!e){cells.push({date:d.getDate(),off:true});continue;}
+      var nwLabel=wtcNonWorkedLabel(e.id,ds2);
+      if(nwLabel){cells.push({date:d.getDate(),nonworked:true,label:nwLabel});continue;}
       cells.push({date:d.getDate(),mins:toMins(e.unpaid||0),status:breakStatus(toMins(e.unpaid||0),e.pos||'',e.id)});
     }
     return {label:label,cells:cells};
@@ -10498,6 +10538,12 @@ function bcCalendarHtml(weeks){
         cells+='<div style="text-align:center;padding:4px 2px;border-radius:4px;background:var(--surface);border:1px solid var(--border);">'
           +'<div style="font-size:8px;color:var(--text3);">'+DOW[i]+' '+c.date+'</div>'
           +'<div style="font-size:10px;color:var(--text3);">off</div></div>';
+        return;
+      }
+      if(c.nonworked){
+        cells+='<div style="text-align:center;padding:4px 2px;border-radius:4px;background:var(--gt);border:1px solid var(--gold);">'
+          +'<div style="font-size:8px;color:var(--text3);">'+DOW[i]+' '+c.date+'</div>'
+          +'<div style="font-size:9px;font-weight:700;color:var(--gd);">'+escHtml(c.label)+'</div></div>';
         return;
       }
       var s=bcStatusStyle(c.status);
