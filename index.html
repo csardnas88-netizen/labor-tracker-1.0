@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.57.0"/>
+<meta name="app-version" content="6.58.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4152,6 +4152,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.58.0', date:'2026-07-27',
+    fixes:['Break Compliance no longer flags a day as "No Break" when an employee has more than one row for that day in the report — e.g. a Holiday amount coded under their home department, plus their real worked shift coded under a different department they covered. Real case: Jorge Gonzalez, 2026-07-03 — his Holiday row (0 break minutes, since there was no shift) was flagging the day even though his real-shift row showed a genuine, compliant 30-minute break. Same person, same day, now counted as one.']
+  },
   {
     v:'6.57.0', date:'2026-07-27',
     fixes:['Break Compliance no longer flags Holiday, Vacation, or Flex Time days as "No Break". The daily Labor Distribution Report has no way to tell a paid non-worked day from a real shift, so a Holiday day with 0 unpaid minutes looked identical to someone skipping their break. Now, whenever a Weekly Time Card Report has been uploaded and covers that day, it\'s used to detect this and the day shows its actual type (Holiday, Vacation, etc.) instead of a break violation. Only covers days a Time Card Report actually includes — a day never covered by one still works as before.']
@@ -10462,16 +10466,44 @@ function wtcNonWorkedLabel(empId,ds){
   return types.length?types[0]:'Non-worked';
 }
 
+/* An employee can appear MORE THAN ONCE in a single day's emps[] — e.g. a
+   flat Holiday/PTO amount coded under their home department, plus their
+   real worked shift coded under a different department they covered that
+   day (real case: Jorge Gonzalez, 2026-07-03 — a House Attendant Holiday
+   row with unpaid=0 sitting next to a Laundry Attendant real-shift row
+   with unpaid=0.5, a compliant break). Evaluating each row on its own
+   flags the Holiday row as "No Break", even though the same person took
+   a real, compliant break that same day on the other row. A person only
+   takes one actual break regardless of how many rows their pay splits
+   across, so combine same-id rows and use the longest unpaid time found —
+   if any row shows a real break, the day is covered. */
+function combineDayEntries(empsArr,empId){
+  var matches=(empsArr||[]).filter(function(e){return String(e.id||e.name)===String(empId);});
+  if(!matches.length)return null;
+  var maxMins=0,best=matches[0];
+  matches.forEach(function(e){
+    var m=toMins(e.unpaid||0);
+    if(m>maxMins)maxMins=m;
+    if((Number(e.paid)||0)>(Number(best.paid)||0))best=e;
+  });
+  return{unpaidMin:maxMins,pos:best.pos,name:best.name,id:best.id};
+}
+
 function getMonthBreakData(mk){
   var mData=loadMonthData(mk);
   var days=mData.days||{};
   var byEmp={};
   Object.keys(days).forEach(function(ds){
-    (days[ds].emps||[]).forEach(function(e){
-      if(wtcNonWorkedLabel(e.id,ds))return; /* Holiday/Vacation/Flex — no shift, no break rule */
-      var st=breakStatus(toMins(e.unpaid||0),e.pos||'',e.id);
-      if(st==='ok')return;
+    var emps=days[ds].emps||[];
+    var seen={};
+    emps.forEach(function(e){
       var key=e.id||e.name;
+      if(seen[key])return;
+      seen[key]=true;
+      if(wtcNonWorkedLabel(e.id,ds))return; /* Holiday/Vacation/Flex — no shift, no break rule */
+      var combined=combineDayEntries(emps,key);
+      var st=breakStatus(combined.unpaidMin,combined.pos||'',e.id);
+      if(st==='ok')return;
       if(!byEmp[key])byEmp[key]={id:key,name:e.name,pos:e.pos,none:0,short:0,long:0};
       if(st==='none')byEmp[key].none++;
       else if(st==='long')byEmp[key].long++;
@@ -10492,12 +10524,11 @@ function getEmployeeBreakWeeks(mk,empId){
   var days=mData.days||{};
   var wantedWeeks={};
   Object.keys(days).forEach(function(ds){
-    var mine=(days[ds].emps||[]).filter(function(e){return String(e.id||e.name)===String(empId);});
-    var hasEx=mine.some(function(e){
-      if(wtcNonWorkedLabel(e.id,ds))return false;
-      return breakStatus(toMins(e.unpaid||0),e.pos||'',e.id)!=='ok';
-    });
-    if(hasEx){
+    var emps=days[ds].emps||[];
+    var combined=combineDayEntries(emps,empId);
+    if(!combined)return;
+    if(wtcNonWorkedLabel(empId,ds))return;
+    if(breakStatus(combined.unpaidMin,combined.pos||'',empId)!=='ok'){
       var wkStart=getHotelWeekStart(parseLocalDate(ds));
       wantedWeeks[dateStr(wkStart)]=wkStart;
     }
@@ -10512,11 +10543,11 @@ function getEmployeeBreakWeeks(mk,empId){
       var d=new Date(wkStart);d.setDate(wkStart.getDate()+i);
       var ds2=dateStr(d);
       var snap2=dayIdx[ds2];
-      var e=snap2?(snap2.emps||[]).find(function(x){return String(x.id||x.name)===String(empId);}):null;
-      if(!e){cells.push({date:d.getDate(),off:true});continue;}
-      var nwLabel=wtcNonWorkedLabel(e.id,ds2);
+      var combined2=snap2?combineDayEntries(snap2.emps||[],empId):null;
+      if(!combined2){cells.push({date:d.getDate(),off:true});continue;}
+      var nwLabel=wtcNonWorkedLabel(empId,ds2);
       if(nwLabel){cells.push({date:d.getDate(),nonworked:true,label:nwLabel});continue;}
-      cells.push({date:d.getDate(),mins:toMins(e.unpaid||0),status:breakStatus(toMins(e.unpaid||0),e.pos||'',e.id)});
+      cells.push({date:d.getDate(),mins:combined2.unpaidMin,status:breakStatus(combined2.unpaidMin,combined2.pos||'',empId)});
     }
     return {label:label,cells:cells};
   });
