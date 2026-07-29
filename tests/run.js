@@ -29,6 +29,7 @@ const cases = [
   require('./cases/section-pin-gate'),
   require('./cases/add-employee-modal'),
   require('./cases/auto-logout-timeout'),
+  require('./cases/no-self-signup'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

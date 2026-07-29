@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.61.0"/>
+<meta name="app-version" content="6.62.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1091,11 +1091,11 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <div class="auth-err" id="authError"></div>
     <div style="text-align:center;margin-top:14px;">
       <button onclick="_authToggleMode()" id="authToggleBtn"
-        style="background:none;border:none;color:rgba(255,255,255,.4);font-size:11px;cursor:pointer;text-decoration:underline;padding:4px;">
-        First time? Create account
+        style="background:none;border:none;color:rgba(255,255,255,.4);font-size:11px;cursor:pointer;text-decoration:underline;padding:4px;display:none;">
+        Back to sign in
       </button>
     </div>
-    <div class="auth-note">Your data is protected by access rules on the server.<br>Only authorized accounts can read or write.</div>
+    <div class="auth-note">Your data is protected by access rules on the server.<br>Only authorized accounts can read or write.<br>Need an account? Ask Carlos for an invite.</div>
   </div>
 </div>
 
@@ -4200,6 +4200,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.62.0', date:'2026-07-28',
+    fixes:['Account creation is now invite-only. Removed the public "Create account" option from the sign-in screen — anyone could previously register any email address instantly, with no verification that they actually owned it. New accounts now come only from Carlos sending a direct invite (Supabase dashboard), same as before for granting them actual access under Team Access. Signing in and "Forgot password?" both work exactly as before.']
+  },
+  {
     v:'6.61.0', date:'2026-07-28',
     fixes:['Reduced the automatic sign-out time from 45 minutes of inactivity down to 10, per request. The screen and message shown after being signed out already adjust to whatever this is set to.']
   },
@@ -5178,36 +5182,32 @@ async function authSignIn(){
   }catch(e){errEl.textContent='Network error. Please try again.';}
   btn.textContent='Sign in';btn.disabled=false;
 }
-/* Auth card has three modes sharing one form: 'signin' (default), 'signup',
-   and 'forgot' (email only, sends a reset link). The toggle link at the
-   bottom always returns to 'signin' from either of the other two. */
+/* Auth card has two modes sharing one form: 'signin' (default) and 'forgot'
+   (email only, sends a reset link). There is no self-service signup —
+   accounts are created only by Carlos inviting someone directly (Supabase
+   dashboard → Authentication → Users → Invite), then adding their email to
+   Team Access. The toggle link only appears in 'forgot' mode, to return to
+   'signin'. */
 var _authMode='signin';
 function _authSetMode(mode){
   _authMode=mode;
   var btn=document.getElementById('authSignInBtn');
   var tog=document.getElementById('authToggleBtn');
-  var forgotLink=document.getElementById('authForgotLink');
   var pwField=document.getElementById('authPasswordField');
   var err=document.getElementById('authError');
   if(err){err.textContent='';err.style.color='';}
-  if(mode==='signup'){
-    if(pwField)pwField.style.display='';
-    if(forgotLink)forgotLink.style.display='none';
-    if(btn){btn.textContent='Create account';btn.disabled=false;btn.onclick=authSignUp;}
-    if(tog)tog.textContent='Already have an account? Sign in';
-  } else if(mode==='forgot'){
+  if(mode==='forgot'){
     if(pwField)pwField.style.display='none';
     if(btn){btn.textContent='Send reset link';btn.disabled=false;btn.onclick=authSendReset;}
-    if(tog)tog.textContent='Back to sign in';
+    if(tog){tog.style.display='';tog.textContent='Back to sign in';}
   } else {
     if(pwField)pwField.style.display='';
-    if(forgotLink)forgotLink.style.display='';
     if(btn){btn.textContent='Sign in';btn.disabled=false;btn.onclick=authSignIn;}
-    if(tog)tog.textContent='First time? Create account';
+    if(tog)tog.style.display='none';
   }
 }
 function _authToggleMode(){
-  _authSetMode(_authMode==='signin'?'signup':'signin');
+  _authSetMode('signin');
 }
 async function authSendReset(){
   var email=(document.getElementById('authEmail')||{}).value||'';
@@ -5288,54 +5288,10 @@ async function authSetNewPassword(){
     btn.textContent='Set new password';btn.disabled=false;
   }
 }
-async function authSignUp(){
-  var email=(document.getElementById('authEmail')||{}).value||'';
-  var pass=(document.getElementById('authPassword')||{}).value||'';
-  var errEl=document.getElementById('authError');
-  var btn=document.getElementById('authSignInBtn');
-  if(!email||!pass){errEl.textContent='Enter your email and password.';return;}
-  if(pass.length<6){errEl.textContent='Password must be at least 6 characters.';return;}
-  btn.textContent='Creating account…';btn.disabled=true;
-  try{
-    var r=await fetch(SUPA_URL+'/auth/v1/signup',{
-      method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
-      body:JSON.stringify({email:email,password:pass})
-    });
-    var d=await r.json();
-    if(d.access_token){
-      /* Email confirmation is OFF on this project, so a brand-new signup is
-         logged in immediately — no email step. */
-      _authStore(d);
-      var allowed=await isCurrentUserAllowed();
-      if(!allowed){
-        localStorage.removeItem(_SA_TOK);localStorage.removeItem(_SA_REF);localStorage.removeItem(_SA_EXP);
-        SUPA_HEADERS['Authorization']='Bearer '+SUPA_KEY;_isOwnerCached=null;
-        errEl.style.color='';
-        errEl.textContent='Account created, but it doesn\'t have access yet. Ask Carlos to add '+email+' under Settings → Team Access, then sign in.';
-        btn.textContent='Create account';btn.disabled=false;
-        return;
-      }
-      document.getElementById('authOverlay').style.display='none';
-      _authUpdateUI();setTimeout(syncFromSheets,400);
-      setTimeout(function(){try{startRealtime();}catch(e){}},1200);
-      errEl.textContent='';
-    } else if(Array.isArray(d.identities)&&d.identities.length===0){
-      /* Supabase returns a user with an EMPTY identities array when the email
-         already exists (it hides this to prevent email enumeration). This is
-         NOT a new account and no email is coming — the person already signed
-         up. Send them to sign-in instead of the misleading "check your email". */
-      _authSetMode('signin');
-      errEl.style.color='';
-      errEl.textContent='This email already has an account — tap "Already have an account? Sign in" below and sign in with your password.';
-    } else if(d.id||d.identities){
-      errEl.style.color='#a5d6a7';
-      errEl.textContent='Account created. You can sign in now.';
-    } else {
-      errEl.textContent=d.error_description||d.msg||'Could not create the account.';
-    }
-  }catch(e){errEl.textContent='Network error. Please try again.';}
-  btn.textContent=_authMode==='signin'?'Sign in':'Create account';btn.disabled=false;
-}
+/* No self-service signup: posting straight to /auth/v1/signup would create
+   a real, immediately-usable account with no email verification. Accounts
+   come only from Carlos inviting someone in the Supabase dashboard
+   (Authentication → Users → Invite), then adding their email to Team Access. */
 function _clearSession(){
   try{stopRealtime();}catch(e){}
   localStorage.removeItem(_SA_TOK);localStorage.removeItem(_SA_REF);localStorage.removeItem(_SA_EXP);
