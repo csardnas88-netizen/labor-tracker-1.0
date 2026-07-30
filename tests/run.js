@@ -30,6 +30,7 @@ const cases = [
   require('./cases/add-employee-modal'),
   require('./cases/auto-logout-timeout'),
   require('./cases/no-self-signup'),
+  require('./cases/training-autofill-refresh'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.62.0"/>
+<meta name="app-version" content="6.63.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4199,6 +4199,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.63.0', date:'2026-07-28',
+    fixes:['Fixed Training Hours not updating when you re-upload a corrected Labor Distribution Report for a day that already auto-filled. Previously, once a day filled in, a later report for that same date was ignored and the old number stuck around — now it refreshes to match the latest report, the same way R106/Occupancy already did. Days marked "Off" are still never touched.']
+  },
   {
     v:'6.62.0', date:'2026-07-28',
     fixes:['Account creation is now invite-only. Removed the public "Create account" option from the sign-in screen — anyone could previously register any email address instantly, with no verification that they actually owned it. New accounts now come only from Carlos sending a direct invite (Supabase dashboard), same as before for granting them actual access under Team Access. Signing in and "Forgot password?" both work exactly as before.']
@@ -11868,7 +11872,11 @@ function autofillAllPendingProjectEntries(){
   var mdCache={};
   projects.forEach(function(proj){
     (proj.log||[]).forEach(function(entry){
-      if(!entry.pending||!entry.date)return;
+      /* Off is the only terminal state. A day that's already auto-filled
+         stays eligible too, so re-uploading a corrected Labor Distribution
+         Report for a past date refreshes it instead of leaving it stuck at
+         whatever the first upload said. */
+      if(entry.off||!entry.date)return;
       var mk=entry.date.substring(0,7);
       if(!mdCache.hasOwnProperty(mk))mdCache[mk]=loadMonthData(mk);
       var mData=mdCache[mk];
@@ -11876,31 +11884,27 @@ function autofillAllPendingProjectEntries(){
       if(!day||!day.emps)return;
       var entries=day.emps.filter(function(e){return e.id===entry.empId&&e.paid>0;});
       if(entries.length===0)return;
+      var newHours,newPos;
       if(entries.length===1){
-        entry.hours=entries[0].paid;
-        entry.pos=entries[0].pos;
-        entry.pending=false;
-        entry.autoFilled=true;
-        entry.autoFilledAt=new Date().toISOString();
-        changed=true;filled++;
+        newHours=entries[0].paid;
+        newPos=entries[0].pos;
       } else {
         var match=entries.filter(function(e){return e.pos===entry.pos;})[0];
         if(match){
-          entry.hours=match.paid;
-          entry.pending=false;
-          entry.autoFilled=true;
-          entry.autoFilledAt=new Date().toISOString();
-          changed=true;filled++;
+          newHours=match.paid;
+          newPos=entry.pos;
         } else {
-          var total=entries.reduce(function(s,e){return s+e.paid;},0);
-          entry.hours=total;
-          entry.pos='Multiple positions';
-          entry.pending=false;
-          entry.autoFilled=true;
-          entry.autoFilledAt=new Date().toISOString();
-          changed=true;filled++;
+          newHours=entries.reduce(function(s,e){return s+e.paid;},0);
+          newPos='Multiple positions';
         }
       }
+      if(!entry.pending&&entry.hours===newHours&&entry.pos===newPos)return;
+      entry.hours=newHours;
+      entry.pos=newPos;
+      entry.pending=false;
+      entry.autoFilled=true;
+      entry.autoFilledAt=new Date().toISOString();
+      changed=true;filled++;
     });
   });
   if(changed){
