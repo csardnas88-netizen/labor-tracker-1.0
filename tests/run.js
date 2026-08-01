@@ -31,6 +31,7 @@ const cases = [
   require('./cases/auto-logout-timeout'),
   require('./cases/no-self-signup'),
   require('./cases/training-autofill-refresh'),
+  require('./cases/pdf-name-orphan-digit'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
