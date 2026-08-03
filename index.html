@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.66.0"/>
+<meta name="app-version" content="6.67.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1582,11 +1582,11 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div id="auditLogResults" style="padding:0 16px 16px;"></div>
       </div>
 
-      <!-- Owner-only: sets the shared PIN gating Labor Model and P&L for everyone, owner included. -->
+      <!-- Owner-only: sets the shared PIN gating Labor Model, P&L, and Settings for everyone, owner included. -->
       <div class="card" id="pinSettingCard" style="margin-bottom:14px;display:none;">
         <div class="card-head"><div class="card-title">Section PIN</div></div>
         <div style="padding:12px 16px 0;font-size:11.5px;color:var(--text3);line-height:1.55;">
-          A 4-digit code required to open Labor Model and P&amp;L — asked every time, for everyone including you.
+          A 4-digit code required to open Labor Model, P&amp;L, and Settings — asked every time, for everyone including you.
           This is a soft deterrent only: anyone with browser dev-tools access can bypass it, since there's no server enforcing it.
         </div>
         <div style="padding:12px 16px;">
@@ -4206,6 +4206,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.67.0', date:'2026-08-03',
+    features:['Settings is now protected by the same 4-digit PIN as Labor Model and P&L — asked every time, same code, so only whoever knows it can reach Settings too.']
+  },
   {
     v:'6.66.0', date:'2026-08-03',
     improvements:['New Call-Off\'s employee field is now a type-to-search box instead of a long dropdown. Start typing any part of a name (accents optional) and the list narrows to matches, so finding one person in a growing roster no longer means scrolling through all of them.']
@@ -8032,7 +8036,7 @@ function toggleSidebarSmart(){
 var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','labormodel','pnl','staffing','projects','trainhours','training','calloffs','assignments','tutorial','settings'];
 var _pinGateBypass=false;
 var pendingGatePage=null;
-var PIN_GATED_PAGES=['labormodel','pnl'];
+var PIN_GATED_PAGES=['labormodel','pnl','settings'];
 function showPage(page){
   if(PIN_GATED_PAGES.indexOf(page)!==-1&&!_pinGateBypass&&loadSectionPin()){
     requestPinGate(page);
@@ -8079,7 +8083,7 @@ function showPage(page){
   }
 }
 
-/* ── Section PIN gate (Labor Model / P&L) ── */
+/* ── Section PIN gate (Labor Model / P&L / Settings) ── */
 function requestPinGate(page){
   pendingGatePage=page;
   var ov=document.getElementById('pinGateOverlay');

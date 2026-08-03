@@ -1,19 +1,25 @@
-/* A 4-digit PIN gate in front of Labor Model and P&L, per Carlos's explicit
-   request — applies to everyone including the owner, and is asked every
-   single navigation (not just once per session). Soft deterrent only (a
+/* A 4-digit PIN gate in front of Labor Model, P&L, and Settings, per Carlos's
+   explicit request — applies to everyone including the owner, and is asked
+   every single navigation (not just once per session). Settings was added
+   later (same PIN, same mechanism — Carlos asked to extend the existing
+   gate rather than build a separate one) so only he can reach the app's
+   settings, same as the other two sections. Soft deterrent only (a
    client-side single-file app can't truly enforce this), but it must still
    behave correctly: no page content should ever render without the correct
    PIN, and entering it wrong must not unlock anything. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "Section PIN gate: blocks Labor Model/P&L until the correct PIN is entered, every time",
+  name: "Section PIN gate: blocks Labor Model/P&L/Settings until the correct PIN is entered, every time",
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
 
     /* ── no PIN set: pages open normally, exactly like before ── */
     win.showPage('labormodel');
     t.eq(win.currentPage, 'labormodel', 'with no PIN configured, Labor Model opens with no gate at all');
+    win.showPage('dashboard');
+    win.showPage('settings');
+    t.eq(win.currentPage, 'settings', 'with no PIN configured, Settings opens with no gate at all');
     win.showPage('dashboard');
 
     /* ── set a PIN ── */
@@ -53,14 +59,40 @@ module.exports = {
     t.eq(win.currentPage, 'dashboard', 'going back to Labor Model asks again — the earlier unlock was not remembered');
     t.eq(win.document.getElementById('pinGateOverlay').style.display, 'flex', 'gate is back up for Labor Model too');
 
-    /* ── ungated pages are unaffected ── */
+    /* ── Settings is gated exactly the same way, with the same shared PIN ── */
     win.cancelPinGate();
+    win.showPage('dashboard');
+    win.showPage('settings');
+    t.eq(win.currentPage, 'dashboard', 'Settings is blocked too, independently of the other two sections having just been unlocked');
+    t.eq(win.document.getElementById('pinGateOverlay').style.display, 'flex', 'the gate appears for Settings');
+    t.eq(win.document.getElementById('page-settings').style.display, 'none', 'Settings content is never revealed pre-PIN — not even the version number or owner-only cards');
+
+    win.document.getElementById('pinGateInput').value = '0000';
+    win.submitPinGate();
+    t.eq(win.currentPage, 'dashboard', 'a wrong PIN does not unlock Settings either');
+
+    win.document.getElementById('pinGateInput').value = '1234';
+    win.submitPinGate();
+    t.eq(win.currentPage, 'settings', 'the same PIN used for Labor Model/P&L unlocks Settings too — one shared code, not a separate one');
+    t.eq(win.document.getElementById('page-settings').style.display, 'block', 'Settings content renders once unlocked');
+
+    win.showPage('dashboard');
+    win.showPage('settings');
+    t.eq(win.currentPage, 'dashboard', 'going back to Settings asks again — same "every time" behavior as the other two sections');
+
+    win.document.getElementById('pinGateInput').value = '1234';
+    win.submitPinGate();
+
+    /* ── ungated pages are unaffected ── */
     win.showPage('overtime');
     t.eq(win.currentPage, 'overtime', 'a page that was never gated navigates normally even while a PIN is configured');
 
-    /* ── removing the PIN reopens both sections ── */
+    /* ── removing the PIN reopens all three sections ── */
     win.saveSectionPin(null);
     win.showPage('pnl');
     t.eq(win.currentPage, 'pnl', 'with the PIN removed, P&L opens with no gate again');
+    win.showPage('dashboard');
+    win.showPage('settings');
+    t.eq(win.currentPage, 'settings', 'with the PIN removed, Settings opens with no gate again too');
   }
 };
