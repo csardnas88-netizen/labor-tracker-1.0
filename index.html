@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.65.0"/>
+<meta name="app-version" content="6.66.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4206,6 +4206,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.66.0', date:'2026-08-03',
+    improvements:['New Call-Off\'s employee field is now a type-to-search box instead of a long dropdown. Start typing any part of a name (accents optional) and the list narrows to matches, so finding one person in a growing roster no longer means scrolling through all of them.']
+  },
   {
     v:'6.65.0', date:'2026-08-02',
     fixes:['Fixed New Call-Off\'s employee list dropping anyone who hadn\'t had a report uploaded yet for the month you were viewing (e.g. Gady Gonzalez). It now uses the same full active-roster list Training Hours and Log Hours already use, so every active employee is selectable, not just ones already showing hours this month.']
@@ -14450,15 +14454,13 @@ function exportCallOffsPDF(){
   setTimeout(function(){win.print();},500);
 }
 
+var _coEmpAll=[]; /* cached roster for the New Call-Off search box, set on modal open */
 function showNewCallOffModal(){
   /* Full active roster (+ anyone known only from a PDF), not just people
      with a paid>0 entry already reported this month — otherwise an
      employee with no hours logged yet this month (new month, report not
      uploaded yet, etc.) silently can't be picked for a call-off. */
-  var emps=getProjectEmployeeOptions();
-  var empOptions=emps.length>0
-    ? emps.map(function(e){return '<option value="'+e.id+'|'+escHtml(e.name)+'|'+escHtml(e.pos||'')+'">'+escHtml(e.name)+' ('+escHtml(e.pos||'')+')</option>';}).join('')
-    : '<option value="">No employees found — upload a PDF first</option>';
+  _coEmpAll=getProjectEmployeeOptions();
 
   var today=dateStr(new Date());
 
@@ -14474,9 +14476,11 @@ function showNewCallOffModal(){
     +'</div>'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee *</label>'
-    +'<select id="coEmp" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;">'
-    +'<option value="">— Select employee —</option>'+empOptions
-    +'</select>'
+    +'<div style="position:relative;">'
+    +'<input id="coEmpSearch" type="text" autocomplete="off" placeholder="&#128269; Search employee by name…" oninput="coEmpFilter()" onfocus="coEmpOpenList()" onblur="setTimeout(coEmpCloseList,150)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">'
+    +'<input type="hidden" id="coEmp" value="">'
+    +'<div id="coEmpList" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.15);"></div>'
+    +'</div>'
     +'</div>'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Reason *</label>'
@@ -14490,6 +14494,47 @@ function showNewCallOffModal(){
     +'</div>';
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+
+/* New Call-Off employee search box: type-to-filter combobox over _coEmpAll,
+   accent-insensitive (same strip() approach as trFilterDetail). The visible
+   input is free text; the actual selection lives in the hidden #coEmp input
+   (id|name|pos, same format saveNewCallOff() already expected from the old
+   <select>). Any further typing after a pick clears the hidden value so a
+   half-edited search can't masquerade as a confirmed selection. */
+function coEmpRenderList(query){
+  var list=document.getElementById('coEmpList');
+  if(!list)return;
+  function strip(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();}
+  if(_coEmpAll.length===0){
+    list.innerHTML='<div style="padding:9px 12px;font-size:13px;color:var(--text3);">No employees found — upload a PDF first</div>';
+  }else{
+    var q=strip(query);
+    var matches=_coEmpAll.filter(function(e){return !q||strip(e.name).indexOf(q)!==-1;});
+    list.innerHTML=matches.length>0
+      ? matches.map(function(e){
+          return '<div data-id="'+e.id+'" data-name="'+escHtml(e.name)+'" data-pos="'+escHtml(e.pos||'')+'" onmousedown="selectCoEmpOption(this)" style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);">'+escHtml(e.name)+' <span style="color:var(--text3);">('+escHtml(e.pos||'')+')</span></div>';
+        }).join('')
+      : '<div style="padding:9px 12px;font-size:13px;color:var(--text3);">No matches</div>';
+  }
+  list.style.display='block';
+}
+function coEmpOpenList(){
+  coEmpRenderList(document.getElementById('coEmpSearch').value);
+}
+function coEmpFilter(){
+  document.getElementById('coEmp').value='';
+  coEmpRenderList(document.getElementById('coEmpSearch').value);
+}
+function selectCoEmpOption(el){
+  var id=el.getAttribute('data-id'),name=el.getAttribute('data-name'),pos=el.getAttribute('data-pos');
+  document.getElementById('coEmp').value=id+'|'+name+'|'+pos;
+  document.getElementById('coEmpSearch').value=name+(pos?' ('+pos+')':'');
+  coEmpCloseList();
+}
+function coEmpCloseList(){
+  var list=document.getElementById('coEmpList');
+  if(list)list.style.display='none';
 }
 
 function saveNewCallOff(){
