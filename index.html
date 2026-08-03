@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.64.0"/>
+<meta name="app-version" content="6.65.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4206,6 +4206,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.65.0', date:'2026-08-02',
+    fixes:['Fixed New Call-Off\'s employee list dropping anyone who hadn\'t had a report uploaded yet for the month you were viewing (e.g. Gady Gonzalez). It now uses the same full active-roster list Training Hours and Log Hours already use, so every active employee is selectable, not just ones already showing hours this month.']
+  },
   {
     v:'6.64.0', date:'2026-07-29',
     fixes:['Fixed new-hire names sometimes showing a stray "8" at the end (e.g. "Lascuc Garcia, 8"). Caused by how the Labor Distribution Report PDF occasionally splits an hours value like 8.13 into two pieces — the whole-number half was surviving the name cleanup and sticking to the end of the name. Cleaned up the 3 existing names on file affected by this (Lascuc Garcia, Ocheita Sindi, Martinez Diana) — their training hours history is untouched.']
@@ -14447,7 +14451,11 @@ function exportCallOffsPDF(){
 }
 
 function showNewCallOffModal(){
-  var emps=getKnownEmployees();
+  /* Full active roster (+ anyone known only from a PDF), not just people
+     with a paid>0 entry already reported this month — otherwise an
+     employee with no hours logged yet this month (new month, report not
+     uploaded yet, etc.) silently can't be picked for a call-off. */
+  var emps=getProjectEmployeeOptions();
   var empOptions=emps.length>0
     ? emps.map(function(e){return '<option value="'+e.id+'|'+escHtml(e.name)+'|'+escHtml(e.pos||'')+'">'+escHtml(e.name)+' ('+escHtml(e.pos||'')+')</option>';}).join('')
     : '<option value="">No employees found — upload a PDF first</option>';

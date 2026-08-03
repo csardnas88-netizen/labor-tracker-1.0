@@ -32,6 +32,7 @@ const cases = [
   require('./cases/no-self-signup'),
   require('./cases/training-autofill-refresh'),
   require('./cases/pdf-name-orphan-digit'),
+  require('./cases/call-off-employee-list'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
