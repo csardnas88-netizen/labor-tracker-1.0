@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.74.0"/>
+<meta name="app-version" content="6.75.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.75.0', date:'2026-08-04',
+    fixes:['Fixed Turndown Attendant\'s Unifocus number using the wrong night\'s occupancy. Every other position\'s Rooms-driven Unifocus component uses the night before (same as the existing Budget column) — but turndown service happens in the evening, for guests staying that same night, so it now uses that day\'s own occupancy instead. Laundry Attendant (which shares the same band tables) is unaffected — it still correctly uses the night before.']
+  },
+  {
     v:'6.74.0', date:'2026-08-03',
     features:['The Unifocus labor standard now also covers Laundry Attendant and Turndown Attendant (they share the same standard). By Position\'s Unifocus columns now populate for 4 of the 6 HK positions.']
   },
@@ -6714,6 +6718,12 @@ try{applyLaborModelToStd();}catch(e){}
    the Unifocus columns. Keyed by the app's own position name (HK_POS_LIST),
    not whatever label Unifocus itself uses (e.g. its "Hskpg Supervisor" is
    this app's "Housekeeping Supervisor").
+   driver is one of 'departures' (getDeparturesForDay, same-day), 'rooms'
+   (getRoomsForDay, the existing night-before convention), or
+   'rooms_sameday' (getSameDayRoomsForDay) — Turndown is the only position
+   on 'rooms_sameday' so far (turndown service happens in the evening for
+   guests staying THAT night, unlike morning cleaning which responds to who
+   stayed the night before). Confirm with Carlos per position, don't assume.
    Per position, only the shifts Carlos has actually shared band tables for
    are included (e.g. House Attendant's 1700-2300 shift is still skipped).
    Each array entry is one task-driven component, NOT necessarily one
@@ -6737,8 +6747,12 @@ var UNIFOCUS_STANDARDS={
     { name:'1430-2300', driver:'rooms',
       bands:[[1,Infinity,8]] }
   ],
-  /* Carlos confirmed Laundry Attendant and Turndown Attendant share this
-     exact same standard (one shared Unifocus report page covers both). */
+  /* Carlos confirmed Laundry Attendant and Turndown Attendant share the same
+     band VALUES (one shared Unifocus report page covers both) — but NOT the
+     same Rooms date convention: Turndown's Rooms components use SAME-DAY
+     occupancy (driver:'rooms_sameday'), Laundry's use the standard
+     night-before convention (driver:'rooms'), same as every other position
+     above. See getSameDayRoomsForDay for why. */
   'Laundry Attendant':[
     { name:'0815-1645 (rooms)', driver:'rooms',
       bands:[[1,Infinity,40]] },
@@ -6748,11 +6762,11 @@ var UNIFOCUS_STANDARDS={
       bands:[[1,90,16],[91,135,24],[136,180,32],[181,290,40],[291,Infinity,48]] }
   ],
   'Turndown Attendant':[
-    { name:'0815-1645 (rooms)', driver:'rooms',
+    { name:'0815-1645 (rooms, same-day)', driver:'rooms_sameday',
       bands:[[1,Infinity,40]] },
     { name:'0815-1645 (departures, 175+ only)', driver:'departures',
       bands:[[175,Infinity,8]] },
-    { name:'1700-2300', driver:'rooms',
+    { name:'1700-2300 (rooms, same-day)', driver:'rooms_sameday',
       bands:[[1,90,16],[91,135,24],[136,180,32],[181,290,40],[291,Infinity,48]] }
   ]
 };
@@ -6799,15 +6813,36 @@ function saveDeparturesForDate(ds,val){
   mData.departuresSource[ds]='manual';
   saveMonthData(mData,mk);
 }
+/* Turndown's Hotel-Rooms-driven components use SAME-DAY occupancy, unlike
+   every other Rooms-driven component in this app (which uses the night
+   BEFORE, via getRoomsForDay's prevDateStr offset — the existing
+   morning-cleanup-of-last-night's-stay logic). Confirmed by Carlos:
+   turndown service happens in the evening, for guests staying THAT night,
+   so it should respond to tonight's occupancy, not last night's.
+   mData.rooms[ds] already holds the same-day figure with no extra work —
+   R106's auto-fill (applyR106ToEmptyRooms) writes it keyed by the raw
+   report date, unoffset; the prevDs offset only happens inside
+   getRoomsForDay's own lookup, not in how the data is stored. Same-day
+   also means no cross-month boundary handling is needed here, unlike
+   getRoomsForDay (an offset date can fall in the previous month; ds
+   itself never does relative to its own mk). */
+function getSameDayRoomsForDay(ds){
+  var mk=ds.substring(0,7);
+  var mData=loadMonthData(mk);
+  if(mData.rooms&&mData.rooms[ds]!==undefined)return parseInt(mData.rooms[ds])||0;
+  return 0;
+}
 function unifocusHoursForPosition(pos,ds){
   var shifts=UNIFOCUS_STANDARDS[pos];
   if(!shifts)return null; /* no Unifocus standard shared for this position yet */
   var dep=getDeparturesForDay(ds);
   if(dep===null)return null;
   var rooms=getRoomsForDay(ds); /* same day, same existing prevDs-offset convention as today's Rooms-based budget */
+  var roomsSameDay=getSameDayRoomsForDay(ds); /* Turndown only — see getSameDayRoomsForDay */
   var total=0;
   shifts.forEach(function(shift){
-    total+=unifocusBandLookup(shift.bands, shift.driver==='departures'?dep:rooms);
+    var vol=shift.driver==='departures'?dep:(shift.driver==='rooms_sameday'?roomsSameDay:rooms);
+    total+=unifocusBandLookup(shift.bands, vol);
   });
   return total;
 }
