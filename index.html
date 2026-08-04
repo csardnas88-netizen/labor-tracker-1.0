@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.68.0"/>
+<meta name="app-version" content="6.69.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.69.0', date:'2026-08-03',
+    improvements:['Unifocus for Houseperson, round 2: the "By Position" table now groups Budget/Variance under clearly labeled "Current Standard" and "Unifocus" headers (gold-tinted) instead of one bare extra column, with its own Unifocus Variance next to the existing one. Added a Paid vs. Unifocus bar right under the table for House Attendant. The Rooms card on Labor\'s day view now also shows the departures count driving that day\'s Unifocus number, with the shift-by-shift math (departures band + rooms band) spelled out — and its own date, since departures uses the day itself while Rooms uses the night before.']
+  },
+  {
     v:'6.68.0', date:'2026-08-03',
     features:['Added the new Unifocus labor standard for Houseperson, shown as a "Unifocus" column right next to the existing Budget on Labor\'s daily By Position table — a reference number to compare against, not a replacement. Covers the two shifts Unifocus defines so far (one driven by same-day departures, one a flat 8h by occupied rooms); a third shift will be added once its numbers are available. Reads departures straight from the OCC/R106 report you already upload — no new upload needed.']
   },
@@ -6726,6 +6730,29 @@ function unifocusHousepersonHours(ds){
     total+=unifocusBandLookup(shift.bands, shift.driver==='departures'?dep:rooms);
   });
   return total;
+}
+/* Small read-only block for the Labor day view's Rooms card, showing the
+   departures count the Unifocus figure is based on — and its own date
+   (ds, the day itself), right next to Rooms' date (the NIGHT before ds),
+   so the two different date bases are never mistaken for each other. */
+function buildUnifocusDeparturesHTML(ds,dayLabel,rooms){
+  var dep=getDeparturesForDay(ds);
+  var depH=unifocusBandLookup(UNIFOCUS_HOUSEPERSON_SHIFTS[0].bands,dep===null?0:dep);
+  var roomsH=unifocusBandLookup(UNIFOCUS_HOUSEPERSON_SHIFTS[1].bands,rooms);
+  var html='<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--gd);">&#129529; Departures &#8212; '+dayLabel+'</div>'
+    +'<div style="font-size:10px;color:var(--text3);margin-top:1px;">&#8594; drives Unifocus only, not the Rooms budget above</div>';
+  if(dep!==null){
+    html+='<div style="font-size:12px;color:var(--text2);margin-top:6px;">'
+      +'<strong style="color:var(--text1);font-size:14px;">'+dep+'</strong> rooms &nbsp;&#8594;&nbsp; '
+      +depH.toFixed(2)+'h (0815-1645 shift) + '+roomsH.toFixed(2)+'h (1430-2300, flat) = '
+      +'<strong style="color:var(--gd);">'+(depH+roomsH).toFixed(2)+'h</strong> Unifocus budget'
+      +'</div>';
+  }else{
+    html+='<div style="font-size:11px;color:var(--text3);margin-top:6px;">No departures data for this date yet — re-upload OCC to fill it in.</div>';
+  }
+  html+='</div>';
+  return html;
 }
 
 /* Current viewing month */
@@ -10328,13 +10355,21 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     html+='<div class="day-summary-card"><div class="dsc-head"><div class="dsc-title">By Position</div></div>'
       +'<div style="overflow-x:auto;">'
       +'<table style="width:100%;border-collapse:collapse;font-size:11.5px;">'
-      +'<thead><tr style="background:var(--surface);">'
-      +'<th style="padding:6px 10px;text-align:left;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;">Position</th>'
-      +'<th style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;">Paid</th>'
-      +'<th style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;">Budget</th>'
-      +'<th style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;">Variance</th>'
-      +'<th style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;">Unifocus</th>'
-      +'</tr></thead><tbody>';
+      +'<thead>'
+      +'<tr>'
+      +'<th rowspan="2" style="padding:6px 10px;text-align:left;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;vertical-align:bottom;background:var(--surface);">Position</th>'
+      +'<th rowspan="2" style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;vertical-align:bottom;background:var(--surface);">Paid</th>'
+      +'<th colspan="2" style="padding:5px 10px 3px;color:var(--text2);background:var(--surface);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);">Current Standard</th>'
+      +'<th colspan="2" style="padding:5px 10px 3px;color:var(--gd);background:var(--gold-soft);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);">Unifocus</th>'
+      +'</tr>'
+      +'<tr>'
+      +'<th style="padding:4px 10px 6px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Budget</th>'
+      +'<th style="padding:4px 10px 6px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Variance</th>'
+      +'<th style="padding:4px 10px 6px;color:var(--gd);border-bottom:1px solid var(--border);font-size:10px;background:var(--gold-soft);">Budget</th>'
+      +'<th style="padding:4px 10px 6px;color:var(--gd);border-bottom:1px solid var(--border);font-size:10px;background:var(--gold-soft);">Variance</th>'
+      +'</tr>'
+      +'</thead><tbody>';
+    var houseUfPaid=null,houseUfBudget=null;
     if(snap.byPosition){
       HK_POS_LIST.forEach(function(pos){
         var p=snap.byPosition[pos];if(!p)return;
@@ -10344,8 +10379,12 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         var short=pos.replace(' Attendant','').replace('Housekeeping ','Sup.');
         /* Read-only reference figure, House Attendant only for now — see
            UNIFOCUS_HOUSEPERSON_SHIFTS. Does not affect Variance, which still
-           judges against the LABOR_STD budget above. */
+           judges against the LABOR_STD budget above — this is its OWN
+           variance, against the Unifocus number, shown as its own column
+           so the two standards are never averaged or conflated. */
         var uf=(pos==='House Attendant')?unifocusHousepersonHours(ds):null;
+        var ufv=(uf!==null)?p.paid-uf:null;
+        if(pos==='House Attendant'&&uf!==null){houseUfPaid=p.paid;houseUfBudget=uf;}
         html+='<tr>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+'</td>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);">'+p.paid.toFixed(2)+'</td>'
@@ -10353,10 +10392,34 @@ function renderDashDayAnalysis(days,rooms,today,wk){
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:700;color:'
           +(pv!==null?(pv>0?'var(--red)':'var(--green)'):'inherit')+'">'
           +(pv!==null?(pv>=0?'+':'')+pv.toFixed(2):'&#8212;')+'</td>'
-          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text3);">'+(uf!==null?uf.toFixed(2):'&#8212;')+'</td></tr>';
+          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);background:rgba(201,168,76,.07);color:var(--text3);">'+(uf!==null?uf.toFixed(2):'&#8212;')+'</td>'
+          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);background:rgba(201,168,76,.07);font-weight:700;color:'
+          +(ufv!==null?(ufv>0?'var(--red)':'var(--green)'):'inherit')+'">'
+          +(ufv!==null?(ufv>=0?'+':'')+ufv.toFixed(2):'&#8212;')+'</td></tr>';
       });
     }
-    html+='</tbody></table></div></div>';
+    html+='</tbody></table></div>';
+    /* Paid vs Unifocus comparison bar — House Attendant only, right under
+       the table, only when there's both paid hours AND a Unifocus number
+       to compare (guards mirror the table row logic above). */
+    if(houseUfBudget!==null){
+      var ufScaleMax=Math.max(houseUfPaid,houseUfBudget,1)*1.15;
+      var ufPaidPct=Math.min(100,houseUfPaid/ufScaleMax*100);
+      var ufMarkerPct=Math.min(100,houseUfBudget/ufScaleMax*100);
+      var ufOver=houseUfPaid>houseUfBudget;
+      html+='<div style="padding:12px 16px 14px;border-top:1px solid var(--border);">'
+        +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:4px;">'
+        +'<span style="font-size:10px;font-weight:800;color:var(--gd);text-transform:uppercase;letter-spacing:.4px;">&#128202; Paid vs Unifocus — House</span>'
+        +'<span style="font-size:10.5px;color:var(--text2);">Paid <strong style="color:var(--text1);">'+houseUfPaid.toFixed(2)+'h</strong> &nbsp;·&nbsp; Unifocus <strong style="color:var(--text1);">'+houseUfBudget.toFixed(2)+'h</strong></span>'
+        +'</div>'
+        +'<div style="position:relative;height:11px;background:var(--s3);border-radius:99px;">'
+        +'<div style="height:100%;width:'+ufPaidPct+'%;background:linear-gradient(90deg,'+(ufOver?'var(--red-border),var(--red)':'var(--green-border),var(--green)')+');border-radius:99px;"></div>'
+        +'<div style="position:absolute;top:-3px;bottom:-3px;left:calc('+ufMarkerPct+'% - 1px);width:2px;background:var(--navy);"></div>'
+        +'</div>'
+        +'<div style="font-size:9.5px;color:var(--text3);margin-top:4px;">Navy line = Unifocus budget target</div>'
+        +'</div>';
+    }
+    html+='</div>'; /* end day-summary-card */
     html+='</div>'; /* end analysis-2col */
   }
 
@@ -10422,7 +10485,9 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       +'</div>':'')
     +(r106Val>0&&r===0?'<div style="font-size:11px;color:var(--yellow);font-weight:600;margin-top:6px;">OCC shows '+r106Val+' rooms — enter manually or re-upload OCC</div>':'')
     +'<div class="rdc-note">Change rooms to recalculate budget</div>'
-    +'</div></div>';
+    +'</div>'
+    +buildUnifocusDeparturesHTML(ds,dayLabel,r)
+    +'</div>';
 
   /* ── Weekly Pace ── */
   html+=buildWeeklyPaceHTML(days,rooms,wk);
