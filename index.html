@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.73.0"/>
+<meta name="app-version" content="6.74.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.74.0', date:'2026-08-03',
+    features:['The Unifocus labor standard now also covers Laundry Attendant and Turndown Attendant (they share the same standard). By Position\'s Unifocus columns now populate for 4 of the 6 HK positions.']
+  },
+  {
     v:'6.73.0', date:'2026-08-03',
     features:['The Unifocus labor standard now also covers Housekeeping Supervisor, alongside House Attendant — same two shifts and band tables from Unifocus\'s own report for that position. Both show independently in By Position\'s Unifocus columns; any position without a Unifocus standard on file still shows "—", same as before.']
   },
@@ -6712,6 +6716,12 @@ try{applyLaborModelToStd();}catch(e){}
    this app's "Housekeeping Supervisor").
    Per position, only the shifts Carlos has actually shared band tables for
    are included (e.g. House Attendant's 1700-2300 shift is still skipped).
+   Each array entry is one task-driven component, NOT necessarily one
+   distinct shift — Unifocus sometimes assigns two components (different
+   drivers) to the SAME shift window (e.g. Laundry's 0815-1645 has both a
+   flat Hotel Rooms component and a Hotel Departures threshold component);
+   both entries just get summed the same way regardless, so the code never
+   needed to know shift boundaries as anything more than a label.
    Hardcoded for v1 (mirrors how LABOR_STD/LABOR_MODEL_DEFAULTS started
    hardcoded before growing an editable Settings UI) — no edit UI yet. */
 var UNIFOCUS_STANDARDS={
@@ -6726,6 +6736,24 @@ var UNIFOCUS_STANDARDS={
       bands:[[1,70,16],[71,140,24],[141,180,32],[181,220,40],[221,Infinity,48]] },
     { name:'1430-2300', driver:'rooms',
       bands:[[1,Infinity,8]] }
+  ],
+  /* Carlos confirmed Laundry Attendant and Turndown Attendant share this
+     exact same standard (one shared Unifocus report page covers both). */
+  'Laundry Attendant':[
+    { name:'0815-1645 (rooms)', driver:'rooms',
+      bands:[[1,Infinity,40]] },
+    { name:'0815-1645 (departures, 175+ only)', driver:'departures',
+      bands:[[175,Infinity,8]] },
+    { name:'1700-2300', driver:'rooms',
+      bands:[[1,90,16],[91,135,24],[136,180,32],[181,290,40],[291,Infinity,48]] }
+  ],
+  'Turndown Attendant':[
+    { name:'0815-1645 (rooms)', driver:'rooms',
+      bands:[[1,Infinity,40]] },
+    { name:'0815-1645 (departures, 175+ only)', driver:'departures',
+      bands:[[175,Infinity,8]] },
+    { name:'1700-2300', driver:'rooms',
+      bands:[[1,90,16],[91,135,24],[136,180,32],[181,290,40],[291,Infinity,48]] }
   ]
 };
 function unifocusBandLookup(bands,volume){
