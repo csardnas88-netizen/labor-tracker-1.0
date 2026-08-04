@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.77.0"/>
+<meta name="app-version" content="6.78.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4206,6 +4206,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.78.0', date:'2026-08-04',
+    features:['Weekly Labor Pace now shows the Unifocus standard too, as its own Budget and Variance pair next to the existing ones — same side-by-side layout already used on the daily By Position table. The weekly Unifocus budget adds up each reported day on its own, so day-of-week differences (like Public Area\'s Wednesday) are counted correctly. Positions without a Unifocus standard on file show "—" there, and nothing about the existing Budget/Variance columns changed.']
+  },
   {
     v:'6.77.0', date:'2026-08-04',
     features:['The Unifocus labor standard now also covers Public Area Attendant — 5 of 6 HK positions now have one. Its hours don\'t depend on how busy the hotel is, only on which day of the week it is (e.g. the overnight shift is 16h every night except Wednesday, which is 24h).']
@@ -10216,7 +10220,14 @@ function buildWeeklyPaceHTML(days,rooms,wk){
 
   var weekActual={};var weekBudget={};var dailyActual={};var dayLabels=[];var dayLabelsDow=[];var dayLabelsShort=[];var dayHasData=[];
   var daysLoaded=0;var daysTotal=0;
-  positions.forEach(function(p){weekActual[p.key]=0;weekBudget[p.key]=0;dailyActual[p.key]=[];});
+  /* Unifocus runs alongside the LABOR_STD budget above, never replacing it —
+     its own budget total and its own variance, so the two standards are
+     never averaged or conflated. weekUfDays counts only the reported days
+     that actually produced a Unifocus number, so a position whose standard
+     exists but whose days lack departures data reads as "no data" (—)
+     rather than a misleadingly small total. */
+  var weekUnifocus={};var weekUfDays={};
+  positions.forEach(function(p){weekActual[p.key]=0;weekBudget[p.key]=0;dailyActual[p.key]=[];weekUnifocus[p.key]=0;weekUfDays[p.key]=0;});
 
   for(var d=0;d<7;d++){
     var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
@@ -10244,6 +10255,10 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       }
       weekActual[p.key]+=posActual;
       dailyActual[p.key].push(posActual);
+      /* Unifocus budget for this day, if this position has a standard on
+         file and the day has the driver data it needs. */
+      var uf=unifocusHoursForPosition(p.key,ds);
+      if(uf!==null){weekUnifocus[p.key]+=uf;weekUfDays[p.key]++;}
       /* Budget using LABOR_STD */
       var std=LABOR_STD[p.key];
       if(!std)return;
@@ -10283,12 +10298,26 @@ function buildWeeklyPaceHTML(days,rooms,wk){
 
   var activeDayIdx=[];
   for(var di=0;di<7;di++){if(dayHasData[di])activeDayIdx.push(di);}
-  var gridCols='minmax(128px,1fr) '+activeDayIdx.map(function(){return '40px';}).join(' ')+' 58px 58px 66px';
-  var rowMinW=128+activeDayIdx.length*40+58+58+66;
+  /* Two extra columns for Unifocus (budget + its own variance), marked off
+     by a gold divider on the first of them — same visual language as the
+     daily By Position table's Unifocus group. */
+  var gridCols='minmax(128px,1fr) '+activeDayIdx.map(function(){return '40px';}).join(' ')+' 58px 58px 74px 66px 66px';
+  var rowMinW=128+activeDayIdx.length*40+58+58+74+66+66;
+  /* padding-left keeps the gold rule off the neighbouring variance pill,
+     which would otherwise sit flush against it. */
+  var UF_DIV='border-left:1px solid var(--gold);padding-left:8px;';
 
   html+='<div style="overflow-x:auto;">';
 
-  html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;padding:7px 14px;border-left:3px solid transparent;background:var(--surface);border-bottom:1px solid var(--border);width:100%;min-width:'+rowMinW+'px;">';
+  /* Group header: blank over Position/days/Actual, then one label spanning
+     each standard's own Budget+Variance pair. */
+  html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:end;padding:6px 14px 3px;border-left:3px solid transparent;background:var(--surface);width:100%;min-width:'+rowMinW+'px;">';
+  html+='<div style="grid-column:span '+(2+activeDayIdx.length)+';"></div>';
+  html+='<div style="grid-column:span 2;text-align:center;font-size:9px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;">Current standard</div>';
+  html+='<div style="grid-column:span 2;text-align:center;font-size:9px;font-weight:800;color:var(--gd);text-transform:uppercase;letter-spacing:.4px;'+UF_DIV+'">Unifocus</div>';
+  html+='</div>';
+
+  html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;padding:0 14px 7px;border-left:3px solid transparent;background:var(--surface);border-bottom:1px solid var(--border);width:100%;min-width:'+rowMinW+'px;">';
   html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Position</div>';
   activeDayIdx.forEach(function(di){
     html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);line-height:1.3;">'+dayLabelsDow[di]
@@ -10296,7 +10325,9 @@ function buildWeeklyPaceHTML(days,rooms,wk){
   });
   html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Actual</div>';
   html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Budget</div>';
-  html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Variance</div>';
+  html+='<div style="text-align:right;padding-right:8px;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Variance</div>';
+  html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;'+UF_DIV+'">Budget</div>';
+  html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;">Variance</div>';
   html+='</div>';
 
   positions.forEach(function(p){
@@ -10320,8 +10351,23 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     });
     html+='<div style="text-align:right;font-size:12.5px;font-weight:800;color:'+valColor+';">'+actual.toFixed(2)+'h</div>';
     html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);">'+budget.toFixed(2)+'h</div>';
-    html+='<div style="text-align:right;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'
+    html+='<div style="text-align:right;padding-right:8px;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'
       +(variance>=0?'+':'')+variance.toFixed(2)+'h</span></div>';
+    /* Unifocus pair — em-dash for positions with no standard on file yet,
+       or whose reported days lack the driver data it needs. */
+    var ufBudget=weekUfDays[p.key]>0?weekUnifocus[p.key]:null;
+    if(ufBudget===null){
+      html+='<div style="text-align:right;font-size:12.5px;color:var(--text3);'+UF_DIV+'">—</div>';
+      html+='<div style="text-align:right;font-size:12.5px;color:var(--text3);">—</div>';
+    }else{
+      var ufVar=actual-ufBudget;
+      var ufOver=ufVar>0.5,ufUnder=ufVar<-0.5;
+      var ufPillBg=ufOver?'var(--red-border)':ufUnder?'var(--green-border)':'var(--border)';
+      var ufPillColor=ufOver?'var(--red)':ufUnder?'var(--green)':'var(--text2)';
+      html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);'+UF_DIV+'">'+ufBudget.toFixed(2)+'h</div>';
+      html+='<div style="text-align:right;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+ufPillBg+';color:'+ufPillColor+';">'
+        +(ufVar>=0?'+':'')+ufVar.toFixed(2)+'h</span></div>';
+    }
     html+='</div>';
   });
 
