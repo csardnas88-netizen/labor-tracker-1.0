@@ -1,49 +1,39 @@
 /* Third and fourth positions added to the Unifocus Labor Standard: Laundry
-   Attendant and Turndown Attendant. Two new patterns beyond House
-   Attendant/Housekeeping Supervisor:
-   1) A single shift window can have TWO components (Laundry/Turndown's
-      0815-1645 has both a flat Hotel Rooms component and a Hotel
-      Departures component that only kicks in from 175+ departures, no
-      lower band at all) — needed no code changes, every array entry is
-      just summed regardless of how many nominally share a shift window.
-   2) Laundry and Turndown share identical band VALUES (one Unifocus report
-      page covers both) but NOT the same Rooms date convention: Carlos
-      clarified turndown service happens in the evening for guests staying
-      THAT night, so ALL of Turndown's Rooms-driven components use
-      SAME-DAY occupancy (driver:'rooms_sameday' / getSameDayRoomsForDay),
-      unlike every other position (including Laundry), which uses the
-      standard night-before convention (driver:'rooms' / getRoomsForDay).
+   Attendant and Turndown Attendant. Initially misattributed as ONE shared
+   standard (both report pages arrived in the same message, same Planner
+   Settings block, easy to conflate) — corrected after Carlos clarified
+   they're two SEPARATE, unrelated standards on different shifts:
+   - Laundry Attendant (0815-1645 only): a flat 40h Hotel Rooms component
+     (night-before, the standard convention) PLUS a Hotel Departures
+     component that only kicks in from 175+ departures (same-day, no lower
+     band at all below 175).
+   - Turndown Attendant (1700-2300 only): a single 5-band Hotel Rooms
+     component, but using SAME-DAY occupancy (not night-before) — turndown
+     service happens that evening, for guests staying that night. No
+     departures component at all for Turndown.
    See unifocus-houseperson.js / unifocus-supervisor.js for the shared
    mechanics (band lookup basics, departures manual-entry, null-propagation)
    this file doesn't re-test. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "Unifocus Labor Standard: Laundry/Turndown share band values but Turndown's Rooms components use same-day occupancy, not the night before",
+  name: "Unifocus Labor Standard: Laundry (flat + departures threshold) and Turndown (same-day banded rooms only) are separate standards, not a shared one",
   async run(t) {
     const seed = Object.assign(fakeSession(), {
       // Skips migrateRoomsData() (index.html:7919), a one-time legacy
       // migration that runs on every app load and — if a rooms[ds] entry's
       // date ALSO has a days[ds] snapshot — reinterprets it as pre-migration
-      // data and silently shifts its key back a day. This fixture
-      // deliberately seeds rooms on dates that also have days snapshots (to
-      // test the night-before-vs-same-day distinction), which would
-      // otherwise collide with that migration and reshuffle the very values
-      // being tested. See [[labor-tracker-tests]] for this as a general
-      // fixture-writing gotcha, not just a Unifocus-specific one.
+      // data and silently shifts its key back a day. See
+      // [[labor-tracker-tests]] for this as a general fixture gotcha.
       'hk_rooms_migrated_v2': '1',
       'hk_month_2026-07': {
         days: {
-          '2026-07-11': { totalPaid: 100, byPosition: { 'Laundry Attendant': { paid: 50 }, 'Turndown Attendant': { paid: 75 } } },
-          '2026-07-12': { totalPaid: 100, byPosition: { 'Laundry Attendant': { paid: 80 }, 'Turndown Attendant': { paid: 85 } } }
+          '2026-07-11': { totalPaid: 100, byPosition: { 'Laundry Attendant': { paid: 35 }, 'Turndown Attendant': { paid: 42 } } },
+          '2026-07-12': { totalPaid: 100, byPosition: { 'Laundry Attendant': { paid: 44 }, 'Turndown Attendant': { paid: 38 } } }
         },
-        // Deliberately DIFFERENT values on the two adjacent dates, so a
-        // night-before lookup and a same-day lookup for Jul 11 land on
-        // clearly different numbers (50 vs 200) — proves the two
-        // conventions are actually wired to different data, not
-        // coincidentally equal. Jul 11 and Jul 12 are set EQUAL (200) so
-        // the separate threshold check below isn't also tangled up in the
-        // date-offset question.
+        // Deliberately DIFFERENT prevDs-vs-same-day values on Jul 11, so
+        // Laundry (night-before) and Turndown (same-day) clearly read
+        // different rooms numbers for the same date.
         rooms: { '2026-07-10': 50, '2026-07-11': 200, '2026-07-12': 200 }
       },
       'hk_r106_2026-07': {
@@ -53,43 +43,40 @@ module.exports = {
     });
     const { win } = await loadApp({ seed });
 
-    // ── Jul 11: departures (100) below threshold, so only the Rooms
-    // components matter — and Laundry vs Turndown now read DIFFERENT
-    // rooms values for the exact same date. ──
-    t.eq(win.getRoomsForDay('2026-07-11'), 50, "Laundry's rooms driver: the night before (Jul 10's 50), the existing convention");
-    t.eq(win.getSameDayRoomsForDay('2026-07-11'), 200, "Turndown's rooms driver: Jul 11 itself (200), not the night before");
+    // ── Laundry: flat 40h (rooms, night-before) + departures threshold. ──
+    t.eq(win.getRoomsForDay('2026-07-11'), 50, "Laundry's rooms driver: the night before (Jul 10's 50)");
+    t.eq(win.unifocusHoursForPosition('Laundry Attendant', '2026-07-11'), 40, '40h flat (rooms=50>0) + 0h (100 departures, below the 175 threshold) = 40h');
+    t.eq(win.unifocusHoursForPosition('Laundry Attendant', '2026-07-12'), 48, '40h flat + 8h (175 departures hits the threshold) = 48h');
 
-    t.eq(win.unifocusHoursForPosition('Laundry Attendant', '2026-07-11'), 56, '40h flat + 0h (100 departures, below threshold) + 16h (rooms=50 -> 1-90 band) = 56h');
-    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-07-11'), 80, '40h flat + 0h (same departures check) + 40h (rooms=200 SAME-DAY -> 181-290 band) = 80h, genuinely different from Laundry');
+    // ── Turndown: ONLY the same-day banded Rooms component — no flat 40h,
+    // no departures component at all. Crossing the 175-departures threshold
+    // (Jul 11 -> Jul 12) must NOT change Turndown's total, unlike Laundry's. ──
+    t.eq(win.getSameDayRoomsForDay('2026-07-11'), 200, "Turndown's rooms driver: Jul 11 itself (200), not the night before (which was 50)");
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-07-11'), 40, 'rooms=200 same-day -> 181-290 band -> 40h (no flat component, no departures component)');
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-07-12'), 40, 'same 40h even though departures hit 175 here — Turndown has no departures component to react to it, unlike Laundry (which went 40h -> 48h on this same date)');
 
-    // ── Jul 12: rooms are equal (200) under either convention, isolating
-    // just the departures-threshold behavior — confirms it's identical
-    // machinery for both positions, only the Rooms date differs. ──
-    t.eq(win.unifocusHoursForPosition('Laundry Attendant', '2026-07-12'), 88, '40h flat + 8h (175 departures hits the threshold) + 40h (rooms=200 -> 181-290 band) = 88h');
-    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-07-12'), 88, 'same 88h here since Jul 11 and Jul 12 rooms happen to be equal — the threshold logic itself is shared, only the date convention differs');
-
-    // ── Confirm the departures threshold has no lower band at all
-    // (Unifocus's own data — not a bug). ──
+    // ── Confirm the departures threshold itself has no lower band at all
+    // (Unifocus's own data for Laundry — not a bug). ──
     const depBands = win.UNIFOCUS_STANDARDS['Laundry Attendant'].find((c) => c.driver === 'departures').bands;
     t.eq(win.unifocusBandLookup(depBands, 174), 0, 'one below the threshold contributes zero hours, not a partial band');
     t.eq(win.unifocusBandLookup(depBands, 175), 8, 'exactly at the threshold contributes the full 8h');
 
-    // ── Laundry and Turndown are distinct array objects (not a shared
-    // reference) with the same band VALUES but different driver names on
-    // the Rooms components. ──
-    t.assert(win.UNIFOCUS_STANDARDS['Laundry Attendant'] !== win.UNIFOCUS_STANDARDS['Turndown Attendant'], 'Laundry and Turndown have their own separate arrays, not a shared reference');
-    t.assert(win.UNIFOCUS_STANDARDS['Laundry Attendant'].every((c) => c.driver !== 'rooms_sameday'), "Laundry has no same-day component — it uses the standard night-before convention throughout");
-    t.assert(win.UNIFOCUS_STANDARDS['Turndown Attendant'].filter((c) => c.driver === 'rooms_sameday').length === 2, 'both of Turndown\'s Rooms components (not just one) use the same-day convention');
+    // ── Structural check: each position has exactly the components it
+    // should, nothing borrowed from the other. ──
+    t.eq(win.UNIFOCUS_STANDARDS['Laundry Attendant'].length, 2, "Laundry has exactly 2 components (flat rooms + departures threshold), no 1700-2300 shift");
+    t.eq(win.UNIFOCUS_STANDARDS['Turndown Attendant'].length, 1, 'Turndown has exactly 1 component (the same-day banded Rooms shift), no flat/departures components');
+    t.assert(win.UNIFOCUS_STANDARDS['Laundry Attendant'].every((c) => c.driver !== 'rooms_sameday'), 'Laundry uses no same-day driver at all — it stays on the standard night-before convention throughout');
+    t.assert(win.UNIFOCUS_STANDARDS['Turndown Attendant'].every((c) => c.driver === 'rooms_sameday'), "Turndown's only component uses the same-day convention");
 
     // ── By Position table: both positions' Unifocus columns are populated
-    // on a real render, with their (now different) computed totals. ──
+    // on a real render, with their independent computed totals. ──
     win.dashSelectedDate = new Date(2026, 6, 11);
     win.showPage('labor');
     const html = win.document.getElementById('dashDayAnalysis').innerHTML;
     const rows = html.split('<tr>');
     const laundryRow = rows.find((r) => />Laundry</.test(r)) || '';
     const turndownRow = rows.find((r) => />Turndown</.test(r)) || '';
-    t.assert(/56\.00/.test(laundryRow), "Laundry's row shows its computed Unifocus total (56.00h)");
-    t.assert(/80\.00/.test(turndownRow), "Turndown's row shows its own, different total (80.00h)");
+    t.assert(/40\.00/.test(laundryRow), "Laundry's row shows its computed Unifocus total (40.00h)");
+    t.assert(/40\.00/.test(turndownRow), "Turndown's row shows its own, independently-computed total (also 40.00h here, coincidentally)");
   }
 };

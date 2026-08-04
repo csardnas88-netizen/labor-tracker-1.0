@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.75.0"/>
+<meta name="app-version" content="6.76.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.76.0', date:'2026-08-04',
+    fixes:['Fixed Laundry Attendant and Turndown Attendant\'s Unifocus numbers — they were incorrectly combined into one shared standard. They\'re actually two separate standards on two separate shifts: Laundry (0815-1645) is a flat 40h plus 8h more once departures hit 175+; Turndown (1700-2300) is its own 5-band number driven only by that evening\'s occupancy, with no departures component at all. Neither position\'s number affects the other anymore.']
+  },
+  {
     v:'6.75.0', date:'2026-08-04',
     fixes:['Fixed Turndown Attendant\'s Unifocus number using the wrong night\'s occupancy. Every other position\'s Rooms-driven Unifocus component uses the night before (same as the existing Budget column) — but turndown service happens in the evening, for guests staying that same night, so it now uses that day\'s own occupancy instead. Laundry Attendant (which shares the same band tables) is unaffected — it still correctly uses the night before.']
   },
@@ -6747,25 +6751,22 @@ var UNIFOCUS_STANDARDS={
     { name:'1430-2300', driver:'rooms',
       bands:[[1,Infinity,8]] }
   ],
-  /* Carlos confirmed Laundry Attendant and Turndown Attendant share the same
-     band VALUES (one shared Unifocus report page covers both) — but NOT the
-     same Rooms date convention: Turndown's Rooms components use SAME-DAY
-     occupancy (driver:'rooms_sameday'), Laundry's use the standard
-     night-before convention (driver:'rooms'), same as every other position
-     above. See getSameDayRoomsForDay for why. */
+  /* Laundry and Turndown are SEPARATE standards, on separate shifts —
+     initially misattributed as one shared standard when Carlos sent both
+     positions' report pages in one message; corrected once he clarified
+     the 1700-2300 page was Turndown's, not a second Laundry shift. */
   'Laundry Attendant':[
     { name:'0815-1645 (rooms)', driver:'rooms',
       bands:[[1,Infinity,40]] },
     { name:'0815-1645 (departures, 175+ only)', driver:'departures',
-      bands:[[175,Infinity,8]] },
-    { name:'1700-2300', driver:'rooms',
-      bands:[[1,90,16],[91,135,24],[136,180,32],[181,290,40],[291,Infinity,48]] }
+      bands:[[175,Infinity,8]] }
   ],
+  /* Turndown's only shift is the evening one, and its Rooms driver is
+     SAME-DAY occupancy (driver:'rooms_sameday') — turndown service happens
+     that evening, for guests staying that night, unlike the morning
+     night-before convention every other position above uses. Confirmed by
+     Carlos. See getSameDayRoomsForDay for why. */
   'Turndown Attendant':[
-    { name:'0815-1645 (rooms, same-day)', driver:'rooms_sameday',
-      bands:[[1,Infinity,40]] },
-    { name:'0815-1645 (departures, 175+ only)', driver:'departures',
-      bands:[[175,Infinity,8]] },
     { name:'1700-2300 (rooms, same-day)', driver:'rooms_sameday',
       bands:[[1,90,16],[91,135,24],[136,180,32],[181,290,40],[291,Infinity,48]] }
   ]
