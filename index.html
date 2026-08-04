@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.69.0"/>
+<meta name="app-version" content="6.70.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.70.0', date:'2026-08-03',
+    improvements:['Unifocus for Houseperson, cleanup pass: "By Position" now right-aligns every number and centers the "Current Standard"/"Unifocus" group headers — the grouped header row exposed that the table was left-aligned throughout, which read fine with one header row but looked off once a second row was added. Swapped the tinted Unifocus columns for a single gold divider line (cleaner than a background wash on every row) and removed the Paid vs. Unifocus bar — didn\'t earn its place under the table. The Rooms card\'s Departures block was rebuilt as a proper number-plus-breakdown card (matching the Rooms number above it) instead of a run-on sentence.']
+  },
+  {
     v:'6.69.0', date:'2026-08-03',
     improvements:['Unifocus for Houseperson, round 2: the "By Position" table now groups Budget/Variance under clearly labeled "Current Standard" and "Unifocus" headers (gold-tinted) instead of one bare extra column, with its own Unifocus Variance next to the existing one. Added a Paid vs. Unifocus bar right under the table for House Attendant. The Rooms card on Labor\'s day view now also shows the departures count driving that day\'s Unifocus number, with the shift-by-shift math (departures band + rooms band) spelled out — and its own date, since departures uses the day itself while Rooms uses the night before.']
   },
@@ -6739,14 +6743,21 @@ function buildUnifocusDeparturesHTML(ds,dayLabel,rooms){
   var dep=getDeparturesForDay(ds);
   var depH=unifocusBandLookup(UNIFOCUS_HOUSEPERSON_SHIFTS[0].bands,dep===null?0:dep);
   var roomsH=unifocusBandLookup(UNIFOCUS_HOUSEPERSON_SHIFTS[1].bands,rooms);
-  var html='<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--gd);">&#129529; Departures &#8212; '+dayLabel+'</div>'
-    +'<div style="font-size:10px;color:var(--text3);margin-top:1px;">&#8594; drives Unifocus only, not the Rooms budget above</div>';
+  var html='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.3px;">&#129529; Departures &#8212; '+dayLabel+'</div>'
+    +'<div style="font-size:10.5px;color:var(--text3);margin-top:2px;margin-bottom:10px;">Drives Unifocus only — not the Rooms budget above</div>';
   if(dep!==null){
-    html+='<div style="font-size:12px;color:var(--text2);margin-top:6px;">'
-      +'<strong style="color:var(--text1);font-size:14px;">'+dep+'</strong> rooms &nbsp;&#8594;&nbsp; '
-      +depH.toFixed(2)+'h (0815-1645 shift) + '+roomsH.toFixed(2)+'h (1430-2300, flat) = '
-      +'<strong style="color:var(--gd);">'+(depH+roomsH).toFixed(2)+'h</strong> Unifocus budget'
+    html+='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px;">'
+      +'<span style="font-size:26px;font-weight:800;color:var(--text1);">'+dep+'</span>'
+      +'<span style="font-size:12px;color:var(--text3);">departure rooms</span>'
+      +'</div>'
+      +'<div style="background:var(--surface);border-radius:8px;padding:10px 12px;font-size:12px;">'
+      +'<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text2);">'
+      +'<span>0815&#8211;1645 shift</span><span style="font-weight:600;">'+depH.toFixed(2)+'h</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text2);">'
+      +'<span>1430&#8211;2300 shift (flat)</span><span style="font-weight:600;">'+roomsH.toFixed(2)+'h</span></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border2);font-weight:800;color:var(--gd);">'
+      +'<span>Unifocus budget</span><span>'+(depH+roomsH).toFixed(2)+'h</span></div>'
       +'</div>';
   }else{
     html+='<div style="font-size:11px;color:var(--text3);margin-top:6px;">No departures data for this date yet — re-upload OCC to fill it in.</div>';
@@ -10351,25 +10362,34 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     html+='<div class="dsc-row"><div class="dsc-label">Employees</div><div class="dsc-val">'+(snap.totalEmps!=null?snap.totalEmps:(snap.emps||[]).length)+'</div></div>';
     html+='</div></div>';
 
-    /* By position table */
+    /* By position table. Numeric columns are right-aligned (standard for a
+       data table — the original single-header version left everything
+       left-aligned, which looked fine with one header row but read as
+       sloppy/unfinished once a second, grouped header row was added and
+       drew more scrutiny). Group headers are centered over their span. The
+       Unifocus group is marked by a single gold divider border on its
+       first column rather than a background tint on every data cell —
+       tinting every row read as messy/unintentional at low opacity;
+       a clean vertical rule is the more standard way to mark a table
+       section boundary. */
+    var UF_DIV='border-left:1px solid var(--gold);';
     html+='<div class="day-summary-card"><div class="dsc-head"><div class="dsc-title">By Position</div></div>'
       +'<div style="overflow-x:auto;">'
       +'<table style="width:100%;border-collapse:collapse;font-size:11.5px;">'
       +'<thead>'
       +'<tr>'
       +'<th rowspan="2" style="padding:6px 10px;text-align:left;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;vertical-align:bottom;background:var(--surface);">Position</th>'
-      +'<th rowspan="2" style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;vertical-align:bottom;background:var(--surface);">Paid</th>'
-      +'<th colspan="2" style="padding:5px 10px 3px;color:var(--text2);background:var(--surface);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);">Current Standard</th>'
-      +'<th colspan="2" style="padding:5px 10px 3px;color:var(--gd);background:var(--gold-soft);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);">Unifocus</th>'
+      +'<th rowspan="2" style="padding:6px 10px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;vertical-align:bottom;background:var(--surface);">Paid</th>'
+      +'<th colspan="2" style="padding:5px 10px 3px;text-align:center;color:var(--text2);background:var(--surface);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);">Current Standard</th>'
+      +'<th colspan="2" style="padding:5px 10px 3px;text-align:center;color:var(--gd);background:var(--gold-soft);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);'+UF_DIV+'">Unifocus</th>'
       +'</tr>'
       +'<tr>'
-      +'<th style="padding:4px 10px 6px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Budget</th>'
-      +'<th style="padding:4px 10px 6px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Variance</th>'
-      +'<th style="padding:4px 10px 6px;color:var(--gd);border-bottom:1px solid var(--border);font-size:10px;background:var(--gold-soft);">Budget</th>'
-      +'<th style="padding:4px 10px 6px;color:var(--gd);border-bottom:1px solid var(--border);font-size:10px;background:var(--gold-soft);">Variance</th>'
+      +'<th style="padding:4px 10px 6px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Budget</th>'
+      +'<th style="padding:4px 10px 6px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Variance</th>'
+      +'<th style="padding:4px 10px 6px;text-align:right;color:var(--gd);border-bottom:1px solid var(--border);font-size:10px;background:var(--gold-soft);'+UF_DIV+'">Budget</th>'
+      +'<th style="padding:4px 10px 6px;text-align:right;color:var(--gd);border-bottom:1px solid var(--border);font-size:10px;background:var(--gold-soft);">Variance</th>'
       +'</tr>'
       +'</thead><tbody>';
-    var houseUfPaid=null,houseUfBudget=null;
     if(snap.byPosition){
       HK_POS_LIST.forEach(function(pos){
         var p=snap.byPosition[pos];if(!p)return;
@@ -10384,41 +10404,20 @@ function renderDashDayAnalysis(days,rooms,today,wk){
            so the two standards are never averaged or conflated. */
         var uf=(pos==='House Attendant')?unifocusHousepersonHours(ds):null;
         var ufv=(uf!==null)?p.paid-uf:null;
-        if(pos==='House Attendant'&&uf!==null){houseUfPaid=p.paid;houseUfBudget=uf;}
         html+='<tr>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+'</td>'
-          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);">'+p.paid.toFixed(2)+'</td>'
-          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text3);">'+(pb>0?pb.toFixed(2):'&#8212;')+'</td>'
-          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:700;color:'
+          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);">'+p.paid.toFixed(2)+'</td>'
+          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);color:var(--text3);">'+(pb>0?pb.toFixed(2):'&#8212;')+'</td>'
+          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:'
           +(pv!==null?(pv>0?'var(--red)':'var(--green)'):'inherit')+'">'
           +(pv!==null?(pv>=0?'+':'')+pv.toFixed(2):'&#8212;')+'</td>'
-          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);background:rgba(201,168,76,.07);color:var(--text3);">'+(uf!==null?uf.toFixed(2):'&#8212;')+'</td>'
-          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);background:rgba(201,168,76,.07);font-weight:700;color:'
+          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);color:var(--text3);'+UF_DIV+'">'+(uf!==null?uf.toFixed(2):'&#8212;')+'</td>'
+          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:'
           +(ufv!==null?(ufv>0?'var(--red)':'var(--green)'):'inherit')+'">'
           +(ufv!==null?(ufv>=0?'+':'')+ufv.toFixed(2):'&#8212;')+'</td></tr>';
       });
     }
     html+='</tbody></table></div>';
-    /* Paid vs Unifocus comparison bar — House Attendant only, right under
-       the table, only when there's both paid hours AND a Unifocus number
-       to compare (guards mirror the table row logic above). */
-    if(houseUfBudget!==null){
-      var ufScaleMax=Math.max(houseUfPaid,houseUfBudget,1)*1.15;
-      var ufPaidPct=Math.min(100,houseUfPaid/ufScaleMax*100);
-      var ufMarkerPct=Math.min(100,houseUfBudget/ufScaleMax*100);
-      var ufOver=houseUfPaid>houseUfBudget;
-      html+='<div style="padding:12px 16px 14px;border-top:1px solid var(--border);">'
-        +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:4px;">'
-        +'<span style="font-size:10px;font-weight:800;color:var(--gd);text-transform:uppercase;letter-spacing:.4px;">&#128202; Paid vs Unifocus — House</span>'
-        +'<span style="font-size:10.5px;color:var(--text2);">Paid <strong style="color:var(--text1);">'+houseUfPaid.toFixed(2)+'h</strong> &nbsp;·&nbsp; Unifocus <strong style="color:var(--text1);">'+houseUfBudget.toFixed(2)+'h</strong></span>'
-        +'</div>'
-        +'<div style="position:relative;height:11px;background:var(--s3);border-radius:99px;">'
-        +'<div style="height:100%;width:'+ufPaidPct+'%;background:linear-gradient(90deg,'+(ufOver?'var(--red-border),var(--red)':'var(--green-border),var(--green)')+');border-radius:99px;"></div>'
-        +'<div style="position:absolute;top:-3px;bottom:-3px;left:calc('+ufMarkerPct+'% - 1px);width:2px;background:var(--navy);"></div>'
-        +'</div>'
-        +'<div style="font-size:9.5px;color:var(--text3);margin-top:4px;">Navy line = Unifocus budget target</div>'
-        +'</div>';
-    }
     html+='</div>'; /* end day-summary-card */
     html+='</div>'; /* end analysis-2col */
   }
