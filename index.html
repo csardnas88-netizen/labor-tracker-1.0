@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.71.0"/>
+<meta name="app-version" content="6.72.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.72.0', date:'2026-08-03',
+    improvements:['Removed the redundant "X rooms → Y hours Unifocus budget" line under the Departures field — that number already shows in the Unifocus column on By Position right below, so it doesn\'t need repeating.']
+  },
+  {
     v:'6.71.0', date:'2026-08-03',
     improvements:['Departures on Labor\'s day view is now an editable field, same as Rooms: auto-filled from the OCC/R106 upload, but you can type over it by hand — a manual entry always wins over R106, so a later OCC re-upload can\'t silently overwrite a hand-corrected count. Simplified down to one summary line (count → Unifocus hours) instead of the shift-by-shift breakdown from the previous version, and made it explicit that Departures uses the day itself, not the night before like Rooms.']
   },
@@ -6763,14 +6767,13 @@ function unifocusHousepersonHours(ds){
 /* Departures input for the Labor day view's Rooms card — mirrors the Rooms
    input right above it (same rdc-input box, same auto-fill-then-editable
    behavior, same "filled" state), at Carlos's explicit request ("lo mismo
-   que hacemos con la ocupancia"). Deliberately kept to ONE summary line
-   (count -> Unifocus hours), not a shift-by-shift breakdown — an earlier
-   version showed that math and Carlos said it was more detail than the
-   section needed. Its own date is called out because it uses the day
-   itself (ds), not the night before like Rooms uses. */
-function buildUnifocusDeparturesHTML(ds,dayLabel,rooms){
+   que hacemos con la ocupancia"). No summary line here — the resulting
+   Unifocus hours already show in By Position's Unifocus column right
+   below, and repeating it here was redundant (Carlos's feedback). Its own
+   date is called out because it uses the day itself (ds), not the night
+   before like Rooms uses. */
+function buildUnifocusDeparturesHTML(ds,dayLabel){
   var dep=getDeparturesForDay(ds);
-  var total=(dep!==null)?unifocusHousepersonHours(ds):null;
   var html='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">'
     +'<div style="font-size:12px;font-weight:700;color:var(--gd);">&#129529; Departures &#8212; '+dayLabel+'</div>'
     +'<div style="font-size:10.5px;color:var(--text3);margin-top:1px;margin-bottom:8px;">For '+dayLabel+' itself — not the night before, unlike Rooms above</div>'
@@ -6779,9 +6782,7 @@ function buildUnifocusDeparturesHTML(ds,dayLabel,rooms){
     +'onchange="saveDeparturesForDate(this.dataset.ds,this.value);'
     +'if(this.value.trim())this.classList.add(\'filled\');'
     +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
-    +(dep>0?'<div style="font-size:12px;color:var(--gd);font-weight:600;margin-top:6px;">'
-      +dep+' rooms &#8594; '+total.toFixed(2)+'h Unifocus budget</div>':'')
-    +'<div class="rdc-note">Change departures to recalculate the Unifocus number</div>'
+    +'<div class="rdc-note">See the Unifocus column in By Position below for the resulting hours</div>'
     +'</div>';
   return html;
 }
@@ -10505,7 +10506,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     +(r106Val>0&&r===0?'<div style="font-size:11px;color:var(--yellow);font-weight:600;margin-top:6px;">OCC shows '+r106Val+' rooms — enter manually or re-upload OCC</div>':'')
     +'<div class="rdc-note">Change rooms to recalculate budget</div>'
     +'</div>'
-    +buildUnifocusDeparturesHTML(ds,dayLabel,r)
+    +buildUnifocusDeparturesHTML(ds,dayLabel)
     +'</div>';
 
   /* ── Weekly Pace ── */
