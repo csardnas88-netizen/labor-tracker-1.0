@@ -33,6 +33,8 @@ const cases = [
   require('./cases/training-autofill-refresh'),
   require('./cases/pdf-name-orphan-digit'),
   require('./cases/call-off-employee-list'),
+  require('./cases/r106-departures-parse'),
+  require('./cases/unifocus-houseperson'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

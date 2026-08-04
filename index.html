@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.67.0"/>
+<meta name="app-version" content="6.68.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.68.0', date:'2026-08-03',
+    features:['Added the new Unifocus labor standard for Houseperson, shown as a "Unifocus" column right next to the existing Budget on Labor\'s daily By Position table — a reference number to compare against, not a replacement. Covers the two shifts Unifocus defines so far (one driven by same-day departures, one a flat 8h by occupied rooms); a third shift will be added once its numbers are available. Reads departures straight from the OCC/R106 report you already upload — no new upload needed.']
+  },
+  {
     v:'6.67.0', date:'2026-08-03',
     features:['Settings is now protected by the same 4-digit PIN as Labor Model and P&L — asked every time, same code, so only whoever knows it can reach Settings too.']
   },
@@ -6670,6 +6674,59 @@ function applyLaborModelToStd(){
 }
 /* Apply at load so the model is authoritative from the start */
 try{applyLaborModelToStd();}catch(e){}
+
+/* ════════════════════════════════════════════
+   UNIFOCUS LABOR STANDARD — Houseperson (House Attendant) only, for now.
+   Source: Unifocus "Labor Standards Report", JW Marriott Houston, Standard
+   Set "Master". Structurally different from LABOR_STD above (one flat
+   percent-of-rooms or fixed-$/day per position): Unifocus defines per-SHIFT
+   standards, each driven by a different daily volume metric, looked up in a
+   stepped band table rather than a smooth formula — so this intentionally
+   lives as its own thing rather than being forced into LABOR_STD's shape.
+   Shown as a read-only reference column next to the existing budget, not a
+   replacement — the existing Variance column still judges against LABOR_STD.
+   The 1700-2300 shift is skipped until Carlos shares its band table.
+   Hardcoded for v1 (mirrors how LABOR_STD/LABOR_MODEL_DEFAULTS started
+   hardcoded before growing an editable Settings UI) — no edit UI yet.
+   ════════════════════════════════════════════ */
+var UNIFOCUS_HOUSEPERSON_SHIFTS=[
+  { name:'0815-1645', driver:'departures',
+    bands:[[1,70,16],[71,140,24],[141,180,32],[181,220,40],[221,Infinity,48]] },
+  { name:'1430-2300', driver:'rooms',
+    bands:[[1,Infinity,8]] }
+];
+function unifocusBandLookup(bands,volume){
+  if(!(volume>0))return 0;
+  for(var i=0;i<bands.length;i++){
+    if(volume>=bands[i][0]&&volume<=bands[i][1])return bands[i][2];
+  }
+  return 0;
+}
+/* Departures use the SAME calendar date as the shift they drive — a checkout
+   on Aug 3 creates cleaning work on Aug 3 — unlike Rooms/Occupancy below,
+   which is intentionally offset one night (see getRoomsForDay). Confirmed
+   with Carlos; getting this backwards would silently shift every Unifocus
+   number by a day. */
+function getDeparturesForDay(ds){
+  var mk=ds.substring(0,7);
+  var r106Data={};
+  try{var s=localStorage.getItem('hk_r106_'+mk);if(s)r106Data=JSON.parse(s);}catch(e){}
+  var rec=r106Data[ds];
+  return (rec&&typeof rec==='object'&&typeof rec.dep==='number')?rec.dep:null;
+}
+/* null = "no data yet" (this day's R106 upload predates departures parsing,
+   or the day isn't in it at all) — distinct from a legitimate 0, so the UI
+   can render "no data" differently from "zero hours". */
+function unifocusHousepersonHours(ds){
+  var dep=getDeparturesForDay(ds);
+  if(dep===null)return null;
+  var rooms=getRoomsForDay(ds); /* same day, same existing prevDs-offset convention as today's Rooms-based budget */
+  var total=0;
+  UNIFOCUS_HOUSEPERSON_SHIFTS.forEach(function(shift){
+    total+=unifocusBandLookup(shift.bands, shift.driver==='departures'?dep:rooms);
+  });
+  return total;
+}
 
 /* Current viewing month */
 var viewMonth=new Date();viewMonth.setDate(1);
@@ -10276,6 +10333,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       +'<th style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;">Paid</th>'
       +'<th style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;">Budget</th>'
       +'<th style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;">Variance</th>'
+      +'<th style="padding:6px 10px;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;">Unifocus</th>'
       +'</tr></thead><tbody>';
     if(snap.byPosition){
       HK_POS_LIST.forEach(function(pos){
@@ -10284,13 +10342,18 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         var pb=std?(std.type==='fixed'?std.daily:(r>0?r*std.factor:0)):0;
         var pv=(pb>0)?p.paid-pb:null;
         var short=pos.replace(' Attendant','').replace('Housekeeping ','Sup.');
+        /* Read-only reference figure, House Attendant only for now — see
+           UNIFOCUS_HOUSEPERSON_SHIFTS. Does not affect Variance, which still
+           judges against the LABOR_STD budget above. */
+        var uf=(pos==='House Attendant')?unifocusHousepersonHours(ds):null;
         html+='<tr>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+'</td>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);">'+p.paid.toFixed(2)+'</td>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text3);">'+(pb>0?pb.toFixed(2):'&#8212;')+'</td>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:700;color:'
           +(pv!==null?(pv>0?'var(--red)':'var(--green)'):'inherit')+'">'
-          +(pv!==null?(pv>=0?'+':'')+pv.toFixed(2):'&#8212;')+'</td></tr>';
+          +(pv!==null?(pv>=0?'+':'')+pv.toFixed(2):'&#8212;')+'</td>'
+          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text3);">'+(uf!==null?uf.toFixed(2):'&#8212;')+'</td></tr>';
       });
     }
     html+='</tbody></table></div></div>';
@@ -11521,7 +11584,19 @@ function parseR106(text){
          Total Occ | Arr Rooms | Comp Rooms */
       var comp=nums.length>=3?parseInt(nums[2]):0;
       var net=Math.max(0,occ-comp);
-      result[ds]={occ:occ,comp:comp,net:net};
+      /* Dep. Rooms (departures) sits further right in the row, past Occ.% /
+         Room Revenue / Average Rate. Those are %- and comma/decimal-formatted,
+         so a plain \d+ sweep fragments them into multiple entries (e.g.
+         "52,574.29" -> "52","574","29") and shifts every index after them —
+         a fixed index into `nums` is not reliable that far in. Strip those
+         three fields out by their distinctive format first; what's left is a
+         clean run of plain integers where Dep. Rooms is always index 8
+         (Total Occ, Arr Rooms, Comp Rooms, House Use, Deduct Indiv,
+         Non-Ded Indiv, Deduct Group, Non-Ded Group, Dep. Rooms, ...). */
+      var cleaned=rest.replace(/\d+\.\d+%/,'').replace(/[\d,]+\.\d{2}/,'').replace(/\d+\.\d{2}/,'');
+      var cleanNums=cleaned.match(/\d+/g);
+      var dep=(cleanNums&&cleanNums.length>=9)?parseInt(cleanNums[8]):0;
+      result[ds]={occ:occ,comp:comp,net:net,dep:dep};
     }
   }
   return result;
