@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.72.0"/>
+<meta name="app-version" content="6.73.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.73.0', date:'2026-08-03',
+    features:['The Unifocus labor standard now also covers Housekeeping Supervisor, alongside House Attendant — same two shifts and band tables from Unifocus\'s own report for that position. Both show independently in By Position\'s Unifocus columns; any position without a Unifocus standard on file still shows "—", same as before.']
+  },
+  {
     v:'6.72.0', date:'2026-08-03',
     improvements:['Removed the redundant "X rooms → Y hours Unifocus budget" line under the Departures field — that number already shows in the Unifocus column on By Position right below, so it doesn\'t need repeating.']
   },
@@ -6692,25 +6696,38 @@ function applyLaborModelToStd(){
 try{applyLaborModelToStd();}catch(e){}
 
 /* ════════════════════════════════════════════
-   UNIFOCUS LABOR STANDARD — Houseperson (House Attendant) only, for now.
-   Source: Unifocus "Labor Standards Report", JW Marriott Houston, Standard
-   Set "Master". Structurally different from LABOR_STD above (one flat
-   percent-of-rooms or fixed-$/day per position): Unifocus defines per-SHIFT
-   standards, each driven by a different daily volume metric, looked up in a
-   stepped band table rather than a smooth formula — so this intentionally
-   lives as its own thing rather than being forced into LABOR_STD's shape.
+   UNIFOCUS LABOR STANDARD — one entry per position that Carlos has shared
+   a Unifocus "Labor Standards Report" page for (JW Marriott Houston,
+   Standard Set "Master"). Structurally different from LABOR_STD above (one
+   flat percent-of-rooms or fixed-$/day per position): Unifocus defines
+   per-SHIFT standards, each driven by a different daily volume metric,
+   looked up in a stepped band table rather than a smooth formula — so this
+   intentionally lives as its own thing rather than being forced into
+   LABOR_STD's shape.
    Shown as a read-only reference column next to the existing budget, not a
    replacement — the existing Variance column still judges against LABOR_STD.
-   The 1700-2300 shift is skipped until Carlos shares its band table.
+   Positions not listed here (no report page shared yet) simply show "—" in
+   the Unifocus columns. Keyed by the app's own position name (HK_POS_LIST),
+   not whatever label Unifocus itself uses (e.g. its "Hskpg Supervisor" is
+   this app's "Housekeeping Supervisor").
+   Per position, only the shifts Carlos has actually shared band tables for
+   are included (e.g. House Attendant's 1700-2300 shift is still skipped).
    Hardcoded for v1 (mirrors how LABOR_STD/LABOR_MODEL_DEFAULTS started
-   hardcoded before growing an editable Settings UI) — no edit UI yet.
-   ════════════════════════════════════════════ */
-var UNIFOCUS_HOUSEPERSON_SHIFTS=[
-  { name:'0815-1645', driver:'departures',
-    bands:[[1,70,16],[71,140,24],[141,180,32],[181,220,40],[221,Infinity,48]] },
-  { name:'1430-2300', driver:'rooms',
-    bands:[[1,Infinity,8]] }
-];
+   hardcoded before growing an editable Settings UI) — no edit UI yet. */
+var UNIFOCUS_STANDARDS={
+  'House Attendant':[
+    { name:'0815-1645', driver:'departures',
+      bands:[[1,70,16],[71,140,24],[141,180,32],[181,220,40],[221,Infinity,48]] },
+    { name:'1430-2300', driver:'rooms',
+      bands:[[1,Infinity,8]] }
+  ],
+  'Housekeeping Supervisor':[
+    { name:'0830-1700', driver:'departures',
+      bands:[[1,70,16],[71,140,24],[141,180,32],[181,220,40],[221,Infinity,48]] },
+    { name:'1430-2300', driver:'rooms',
+      bands:[[1,Infinity,8]] }
+  ]
+};
 function unifocusBandLookup(bands,volume){
   if(!(volume>0))return 0;
   for(var i=0;i<bands.length;i++){
@@ -6754,12 +6771,14 @@ function saveDeparturesForDate(ds,val){
   mData.departuresSource[ds]='manual';
   saveMonthData(mData,mk);
 }
-function unifocusHousepersonHours(ds){
+function unifocusHoursForPosition(pos,ds){
+  var shifts=UNIFOCUS_STANDARDS[pos];
+  if(!shifts)return null; /* no Unifocus standard shared for this position yet */
   var dep=getDeparturesForDay(ds);
   if(dep===null)return null;
   var rooms=getRoomsForDay(ds); /* same day, same existing prevDs-offset convention as today's Rooms-based budget */
   var total=0;
-  UNIFOCUS_HOUSEPERSON_SHIFTS.forEach(function(shift){
+  shifts.forEach(function(shift){
     total+=unifocusBandLookup(shift.bands, shift.driver==='departures'?dep:rooms);
   });
   return total;
@@ -10418,12 +10437,13 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         var pb=std?(std.type==='fixed'?std.daily:(r>0?r*std.factor:0)):0;
         var pv=(pb>0)?p.paid-pb:null;
         var short=pos.replace(' Attendant','').replace('Housekeeping ','Sup.');
-        /* Read-only reference figure, House Attendant only for now — see
-           UNIFOCUS_HOUSEPERSON_SHIFTS. Does not affect Variance, which still
-           judges against the LABOR_STD budget above — this is its OWN
-           variance, against the Unifocus number, shown as its own column
-           so the two standards are never averaged or conflated. */
-        var uf=(pos==='House Attendant')?unifocusHousepersonHours(ds):null;
+        /* Read-only reference figure, populated only for positions with a
+           Unifocus standard on file — see UNIFOCUS_STANDARDS. Does not
+           affect Variance, which still judges against the LABOR_STD budget
+           above — this is its OWN variance, against the Unifocus number,
+           shown as its own column so the two standards are never averaged
+           or conflated. */
+        var uf=unifocusHoursForPosition(pos,ds);
         var ufv=(uf!==null)?p.paid-uf:null;
         html+='<tr>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+'</td>'

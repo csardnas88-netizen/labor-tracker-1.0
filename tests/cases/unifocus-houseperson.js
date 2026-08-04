@@ -3,7 +3,10 @@
    replacement for it. Two shifts for now (0815-1645 driven by same-day
    departures, banded; 1430-2300 driven by occupied rooms, flat 8h) — the
    1700-2300 shift is intentionally skipped until Carlos shares its band
-   table. See UNIFOCUS_HOUSEPERSON_SHIFTS in index.html. */
+   table. See UNIFOCUS_STANDARDS in index.html (this file covers House
+   Attendant plus all the shared mechanics — band lookup, manual-entry
+   departures, date alignment; see unifocus-supervisor.js for the
+   position-generalization coverage once a 2nd position was added). */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
@@ -48,11 +51,15 @@ module.exports = {
     // ── Full per-day calculation: departures band (90 -> 71-140 -> 24h) + rooms flat band (150>0 -> 8h) ──
     t.eq(win.getDeparturesForDay('2026-07-15'), 90, 'departures read from the SAME date (no prevDs offset, unlike Rooms)');
     t.eq(win.getRoomsForDay('2026-07-15'), 150, 'rooms still uses the existing previous-night convention, unaffected');
-    t.eq(win.unifocusHousepersonHours('2026-07-15'), 32, '24h (departures band) + 8h (flat rooms band) = 32h total');
+    t.eq(win.unifocusHoursForPosition('House Attendant', '2026-07-15'), 32, '24h (departures band) + 8h (flat rooms band) = 32h total');
 
     // ── No R106 data at all for a date -> null, not a false zero ──
     t.eq(win.getDeparturesForDay('2026-07-16'), null, 'no R106 record for this date at all -> null');
-    t.eq(win.unifocusHousepersonHours('2026-07-16'), null, 'propagates to null so the UI can show "no data" instead of a misleading 0');
+    t.eq(win.unifocusHoursForPosition('House Attendant', '2026-07-16'), null, 'propagates to null so the UI can show "no data" instead of a misleading 0');
+
+    // A position with no Unifocus standard on file at all -> null, distinct
+    // from "standard exists but no data for this day yet".
+    t.eq(win.unifocusHoursForPosition('Laundry Attendant', '2026-07-15'), null, 'a position with no Unifocus standard defined returns null, not 0');
 
     // ── By Position table: Unifocus column present, populated only for House Attendant ──
     win.dashSelectedDate = new Date(2026, 6, 15);
@@ -72,7 +79,7 @@ module.exports = {
     // R106 re-upload, mirroring saveRoomsForDate/roomsSource exactly. ──
     win.saveDeparturesForDate('2026-07-15', '55');
     t.eq(win.getDeparturesForDay('2026-07-15'), 55, 'a manual entry overrides the R106-derived value (90 -> 55)');
-    t.eq(win.unifocusHousepersonHours('2026-07-15'), 24, '55 departures -> 1-70 band -> 16h, + 8h flat rooms band = 24h');
+    t.eq(win.unifocusHoursForPosition('House Attendant', '2026-07-15'), 24, '55 departures -> 1-70 band -> 16h, + 8h flat rooms band = 24h');
 
     // R106 still says 90 underneath — re-uploading must NOT clobber the
     // manual 55, same protection Rooms already has via roomsSource.
