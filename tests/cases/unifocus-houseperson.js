@@ -59,7 +59,7 @@ module.exports = {
 
     // A position with no Unifocus standard on file at all -> null, distinct
     // from "standard exists but no data for this day yet".
-    t.eq(win.unifocusHoursForPosition('Public Area Attendant', '2026-07-15'), null, 'a position with no Unifocus standard defined returns null, not 0');
+    t.eq(win.unifocusHoursForPosition('Room Attendant', '2026-07-15'), null, 'a position with no Unifocus standard defined returns null, not 0');
 
     // ── By Position table: Unifocus column present, populated only for House Attendant ──
     win.dashSelectedDate = new Date(2026, 6, 15);

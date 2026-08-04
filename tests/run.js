@@ -37,6 +37,7 @@ const cases = [
   require('./cases/unifocus-houseperson'),
   require('./cases/unifocus-supervisor'),
   require('./cases/unifocus-laundry-turndown'),
+  require('./cases/unifocus-public-area'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.76.0"/>
+<meta name="app-version" content="6.77.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.77.0', date:'2026-08-04',
+    features:['The Unifocus labor standard now also covers Public Area Attendant — 5 of 6 HK positions now have one. Its hours don\'t depend on how busy the hotel is, only on which day of the week it is (e.g. the overnight shift is 16h every night except Wednesday, which is 24h).']
+  },
+  {
     v:'6.76.0', date:'2026-08-04',
     fixes:['Fixed Laundry Attendant and Turndown Attendant\'s Unifocus numbers — they were incorrectly combined into one shared standard. They\'re actually two separate standards on two separate shifts: Laundry (0815-1645) is a flat 40h plus 8h more once departures hit 175+; Turndown (1700-2300) is its own 5-band number driven only by that evening\'s occupancy, with no departures component at all. Neither position\'s number affects the other anymore.']
   },
@@ -6769,12 +6773,41 @@ var UNIFOCUS_STANDARDS={
   'Turndown Attendant':[
     { name:'1700-2300 (rooms, same-day)', driver:'rooms_sameday',
       bands:[[1,90,16],[91,135,24],[136,180,32],[181,290,40],[291,Infinity,48]] }
+  ],
+  /* Public Area Attendant: no Departures component at all (all 3 shifts are
+     Hotel Rooms only) — and each shift's ONLY volume band is 1-Infinity,
+     i.e. hours don't scale with occupancy level at all (confirmed with
+     Carlos: "no depende de la ocupacion"), they just need occupancy to be
+     nonzero. What actually varies is the DAY OF WEEK — e.g. the overnight
+     shift is 16h every night except Wednesday (24h). A band's hours value
+     can be a plain number (every day the same, like every other position
+     so far) or a 7-element array [Sun,Mon,Tue,Wed,Thu,Fri,Sat] (matches
+     Unifocus's own column order, and JS's Date.getDay()) — see
+     unifocusBandLookup. Rooms driver left as the standard night-before
+     convention (Carlos confirmed the exact date doesn't matter here, since
+     hours don't scale with the occupancy number itself — only whether
+     it's nonzero, which is true most/every night in practice). */
+  'Public Area Attendant':[
+    { name:'0700-1530', driver:'rooms',
+      bands:[[1,Infinity,[8,16,16,16,16,16,8]]] },
+    { name:'1430-2300', driver:'rooms',
+      bands:[[1,Infinity,8]] },
+    { name:'2200-0630', driver:'rooms',
+      bands:[[1,Infinity,[16,16,16,24,16,16,16]]] }
   ]
 };
-function unifocusBandLookup(bands,volume){
+/* A band's hours value is either a plain number (every day the same, every
+   position before Public Area Attendant) or a 7-element
+   [Sun,Mon,Tue,Wed,Thu,Fri,Sat] array — Unifocus's own column order, which
+   also happens to match JS's Date.getDay(). dow is unused (and safely
+   ignored) for positions/shifts that only ever use plain numbers. */
+function unifocusBandLookup(bands,volume,dow){
   if(!(volume>0))return 0;
   for(var i=0;i<bands.length;i++){
-    if(volume>=bands[i][0]&&volume<=bands[i][1])return bands[i][2];
+    if(volume>=bands[i][0]&&volume<=bands[i][1]){
+      var h=bands[i][2];
+      return Array.isArray(h)?h[dow]:h;
+    }
   }
   return 0;
 }
@@ -6836,14 +6869,20 @@ function getSameDayRoomsForDay(ds){
 function unifocusHoursForPosition(pos,ds){
   var shifts=UNIFOCUS_STANDARDS[pos];
   if(!shifts)return null; /* no Unifocus standard shared for this position yet */
-  var dep=getDeparturesForDay(ds);
-  if(dep===null)return null;
+  /* Only fetch/require departures if some component actually uses it —
+     Turndown and Public Area Attendant have none, and previously bailed to
+     null unnecessarily on any date whose R106 upload predated departures
+     parsing, even though their Rooms-only math never needed that field. */
+  var needsDep=shifts.some(function(s){return s.driver==='departures';});
+  var dep=needsDep?getDeparturesForDay(ds):null;
+  if(needsDep&&dep===null)return null;
   var rooms=getRoomsForDay(ds); /* same day, same existing prevDs-offset convention as today's Rooms-based budget */
   var roomsSameDay=getSameDayRoomsForDay(ds); /* Turndown only — see getSameDayRoomsForDay */
+  var dow=parseLocalDate(ds).getDay(); /* Public Area Attendant only — see UNIFOCUS_STANDARDS */
   var total=0;
   shifts.forEach(function(shift){
     var vol=shift.driver==='departures'?dep:(shift.driver==='rooms_sameday'?roomsSameDay:rooms);
-    total+=unifocusBandLookup(shift.bands, vol);
+    total+=unifocusBandLookup(shift.bands, vol, dow);
   });
   return total;
 }
