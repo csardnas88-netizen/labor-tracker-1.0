@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.70.0"/>
+<meta name="app-version" content="6.71.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.71.0', date:'2026-08-03',
+    improvements:['Departures on Labor\'s day view is now an editable field, same as Rooms: auto-filled from the OCC/R106 upload, but you can type over it by hand — a manual entry always wins over R106, so a later OCC re-upload can\'t silently overwrite a hand-corrected count. Simplified down to one summary line (count → Unifocus hours) instead of the shift-by-shift breakdown from the previous version, and made it explicit that Departures uses the day itself, not the night before like Rooms.']
+  },
+  {
     v:'6.70.0', date:'2026-08-03',
     improvements:['Unifocus for Houseperson, cleanup pass: "By Position" now right-aligns every number and centers the "Current Standard"/"Unifocus" group headers — the grouped header row exposed that the table was left-aligned throughout, which read fine with one header row but looked off once a second row was added. Swapped the tinted Unifocus columns for a single gold divider line (cleaner than a background wash on every row) and removed the Paid vs. Unifocus bar — didn\'t earn its place under the table. The Rooms card\'s Departures block was rebuilt as a proper number-plus-breakdown card (matching the Rooms number above it) instead of a run-on sentence.']
   },
@@ -6714,9 +6718,19 @@ function unifocusBandLookup(bands,volume){
    on Aug 3 creates cleaning work on Aug 3 — unlike Rooms/Occupancy below,
    which is intentionally offset one night (see getRoomsForDay). Confirmed
    with Carlos; getting this backwards would silently shift every Unifocus
-   number by a day. */
+   number by a day.
+
+   Auto-filled from the R106/OCC upload (hk_r106_<mk>[ds].dep) by default,
+   same as Rooms — but also manually editable, same as Rooms: a manual entry
+   is marked in mData.departuresSource[ds] and always wins over R106, so a
+   later OCC re-upload can never silently overwrite a hand-corrected count. */
 function getDeparturesForDay(ds){
   var mk=ds.substring(0,7);
+  var mData=loadMonthData(mk);
+  if(mData.departuresSource&&mData.departuresSource[ds]==='manual'){
+    var mv=mData.departures&&mData.departures[ds];
+    return (typeof mv==='number')?mv:null;
+  }
   var r106Data={};
   try{var s=localStorage.getItem('hk_r106_'+mk);if(s)r106Data=JSON.parse(s);}catch(e){}
   var rec=r106Data[ds];
@@ -6725,6 +6739,17 @@ function getDeparturesForDay(ds){
 /* null = "no data yet" (this day's R106 upload predates departures parsing,
    or the day isn't in it at all) — distinct from a legitimate 0, so the UI
    can render "no data" differently from "zero hours". */
+function saveDeparturesForDate(ds,val){
+  var d=parseLocalDate(ds);
+  var mk=monthKey(d);
+  var mData=loadMonthData(mk);
+  if(!mData.departures)mData.departures={};
+  if(!mData.departuresSource)mData.departuresSource={};
+  var n=parseInt(val)||0;
+  if(n>0)mData.departures[ds]=n;else delete mData.departures[ds];
+  mData.departuresSource[ds]='manual';
+  saveMonthData(mData,mk);
+}
 function unifocusHousepersonHours(ds){
   var dep=getDeparturesForDay(ds);
   if(dep===null)return null;
@@ -6735,34 +6760,29 @@ function unifocusHousepersonHours(ds){
   });
   return total;
 }
-/* Small read-only block for the Labor day view's Rooms card, showing the
-   departures count the Unifocus figure is based on — and its own date
-   (ds, the day itself), right next to Rooms' date (the NIGHT before ds),
-   so the two different date bases are never mistaken for each other. */
+/* Departures input for the Labor day view's Rooms card — mirrors the Rooms
+   input right above it (same rdc-input box, same auto-fill-then-editable
+   behavior, same "filled" state), at Carlos's explicit request ("lo mismo
+   que hacemos con la ocupancia"). Deliberately kept to ONE summary line
+   (count -> Unifocus hours), not a shift-by-shift breakdown — an earlier
+   version showed that math and Carlos said it was more detail than the
+   section needed. Its own date is called out because it uses the day
+   itself (ds), not the night before like Rooms uses. */
 function buildUnifocusDeparturesHTML(ds,dayLabel,rooms){
   var dep=getDeparturesForDay(ds);
-  var depH=unifocusBandLookup(UNIFOCUS_HOUSEPERSON_SHIFTS[0].bands,dep===null?0:dep);
-  var roomsH=unifocusBandLookup(UNIFOCUS_HOUSEPERSON_SHIFTS[1].bands,rooms);
+  var total=(dep!==null)?unifocusHousepersonHours(ds):null;
   var html='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.3px;">&#129529; Departures &#8212; '+dayLabel+'</div>'
-    +'<div style="font-size:10.5px;color:var(--text3);margin-top:2px;margin-bottom:10px;">Drives Unifocus only — not the Rooms budget above</div>';
-  if(dep!==null){
-    html+='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px;">'
-      +'<span style="font-size:26px;font-weight:800;color:var(--text1);">'+dep+'</span>'
-      +'<span style="font-size:12px;color:var(--text3);">departure rooms</span>'
-      +'</div>'
-      +'<div style="background:var(--surface);border-radius:8px;padding:10px 12px;font-size:12px;">'
-      +'<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text2);">'
-      +'<span>0815&#8211;1645 shift</span><span style="font-weight:600;">'+depH.toFixed(2)+'h</span></div>'
-      +'<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--text2);">'
-      +'<span>1430&#8211;2300 shift (flat)</span><span style="font-weight:600;">'+roomsH.toFixed(2)+'h</span></div>'
-      +'<div style="display:flex;justify-content:space-between;padding:6px 0 0;margin-top:4px;border-top:1px solid var(--border2);font-weight:800;color:var(--gd);">'
-      +'<span>Unifocus budget</span><span>'+(depH+roomsH).toFixed(2)+'h</span></div>'
-      +'</div>';
-  }else{
-    html+='<div style="font-size:11px;color:var(--text3);margin-top:6px;">No departures data for this date yet — re-upload OCC to fill it in.</div>';
-  }
-  html+='</div>';
+    +'<div style="font-size:12px;font-weight:700;color:var(--gd);">&#129529; Departures &#8212; '+dayLabel+'</div>'
+    +'<div style="font-size:10.5px;color:var(--text3);margin-top:1px;margin-bottom:8px;">For '+dayLabel+' itself — not the night before, unlike Rooms above</div>'
+    +'<input class="rdc-input'+(dep>0?' filled':'')+'" style="border-color:var(--gold);font-size:28px;padding:10px 8px;" type="number" min="0" max="999" '
+    +'placeholder="0" value="'+(dep>0?dep:'')+'" data-ds="'+ds+'" '
+    +'onchange="saveDeparturesForDate(this.dataset.ds,this.value);'
+    +'if(this.value.trim())this.classList.add(\'filled\');'
+    +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
+    +(dep>0?'<div style="font-size:12px;color:var(--gd);font-weight:600;margin-top:6px;">'
+      +dep+' rooms &#8594; '+total.toFixed(2)+'h Unifocus budget</div>':'')
+    +'<div class="rdc-note">Change departures to recalculate the Unifocus number</div>'
+    +'</div>';
   return html;
 }
 

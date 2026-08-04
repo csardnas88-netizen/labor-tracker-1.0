@@ -66,5 +66,33 @@ module.exports = {
     win.showPage('labor');
     const html2 = win.document.getElementById('dashDayAnalysis').innerHTML;
     t.assert(!/0\.00<\/td><\/tr>/.test(html2), 'a date with no departures data does not render a false 0.00 for Unifocus');
+
+    // ── Departures is manually editable, same as Rooms (Carlos's explicit
+    // request) — a hand-entered value wins over R106 and survives a later
+    // R106 re-upload, mirroring saveRoomsForDate/roomsSource exactly. ──
+    win.saveDeparturesForDate('2026-07-15', '55');
+    t.eq(win.getDeparturesForDay('2026-07-15'), 55, 'a manual entry overrides the R106-derived value (90 -> 55)');
+    t.eq(win.unifocusHousepersonHours('2026-07-15'), 24, '55 departures -> 1-70 band -> 16h, + 8h flat rooms band = 24h');
+
+    // R106 still says 90 underneath — re-uploading must NOT clobber the
+    // manual 55, same protection Rooms already has via roomsSource.
+    const r106After = JSON.parse(win.localStorage.getItem('hk_r106_2026-07'));
+    t.eq(r106After['2026-07-15'].dep, 90, 'the raw R106 record is untouched by the manual override');
+    t.eq(win.getDeparturesForDay('2026-07-15'), 55, 'manual value still wins after confirming R106 data is still 90 underneath');
+
+    // Clearing the input (empty value) removes the manual override's stored
+    // number but the day stays flagged 'manual' -> falls back to null, not
+    // back to R106's 90 (an explicit clear is a deliberate "I don't know"
+    // for this hand-entered day, not "go re-read R106").
+    win.saveDeparturesForDate('2026-07-15', '');
+    t.eq(win.getDeparturesForDay('2026-07-15'), null, 'clearing the manual entry reads back as null, not a silent revert to R106');
+
+    // The Rooms card renders an actual editable input for Departures (not
+    // just read-only text), pre-filled from R106 when no manual entry
+    // exists yet, mirroring the Rooms input right above it.
+    win.dashSelectedDate = new Date(2026, 6, 15);
+    win.showPage('labor');
+    const roomsCardHtml = win.document.querySelector('.rooms-day-card').innerHTML;
+    t.assert(/data-ds="2026-07-15"/.test(roomsCardHtml), 'the Departures input is wired to the day itself (ds), not the previous night');
   }
 };
