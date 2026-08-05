@@ -3,7 +3,15 @@
    THAT position's training + project hours for the week. Guards the math
    (per-position subtraction, not the week aggregate) and that a position
    with no training/project hours that week is left unchanged and labeled
-   "unchanged", not silently altered. */
+   "unchanged", not silently altered.
+
+   This test is specifically about the LABOR_STD-based math (the fixture's
+   9h/8h/15.5h figures are hand-derived against LABOR_STD, not Unifocus), so
+   it pins the toggle to Current Standard explicitly rather than relying on
+   whatever the default happens to be — the default flipped to Unifocus in
+   v6.84.0, and the fixture doesn't carry Unifocus driver data (departures/
+   rooms) for these dates, which would leave Turndown's budget null and
+   break the "unchanged" assertion below. */
 const { loadApp } = require('../_harness');
 const fixture = require('../_fixture');
 
@@ -11,6 +19,7 @@ module.exports = {
   name: "Adjusted Weekly Pace by Position recomputes variance per position",
   async run(t) {
     const { win } = await loadApp({ seed: fixture.build() });
+    win.setLaborStandardMode('current');
     const strip = win.buildWeeklyPaceHTML(
       win.loadMonthData('2026-07').days, 200,
       { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.83.0"/>
+<meta name="app-version" content="6.84.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -712,14 +712,14 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .dpc-brk.nb{background:var(--red-bg);color:var(--red);}
 .dpc-brk.sb{background:var(--yellow-bg);color:var(--yellow);}
 .rooms-day-card{background:var(--white);border:1.5px solid var(--yellow-border);border-radius:12px;overflow:hidden;margin-bottom:14px;}
-.rdc-head{background:var(--yellow-bg);border-bottom:1px solid var(--yellow-border);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
-.rdc-title{font-size:12px;font-weight:700;color:var(--yellow);}
-.rdc-drives{font-size:10px;color:var(--text3);}
-.rdc-body{padding:14px 16px;text-align:center;}
-.rdc-input{width:100%;padding:14px 8px;border:2px solid var(--yellow-border);border-radius:10px;font-size:34px;font-weight:800;text-align:center;color:var(--text1);background:#fff;transition:.15s;}
+.rdc-head{background:var(--yellow-bg);border-bottom:1px solid var(--yellow-border);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;}
+.rdc-title{font-size:11.5px;font-weight:700;color:var(--yellow);}
+.rdc-drives{font-size:9.5px;color:var(--text3);}
+.rdc-body{padding:10px 14px;text-align:center;}
+.rdc-input{width:100%;padding:8px 8px;border:2px solid var(--yellow-border);border-radius:10px;font-size:24px;font-weight:800;text-align:center;color:var(--text1);background:#fff;transition:.15s;}
 .rdc-input:focus{outline:none;border-color:var(--yellow);background:var(--yellow-bg);}
 .rdc-input.filled{border-color:var(--green);background:var(--green2);}
-.rdc-note{font-size:11px;color:var(--text3);margin-top:6px;}
+.rdc-note{font-size:10px;color:var(--text3);margin-top:4px;}
 .rooms-modal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px;}
 .rooms-modal-cell{display:flex;flex-direction:column;gap:5px;}
 .rooms-modal-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);}
@@ -1302,6 +1302,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         </div>
         <button class="btn btn-gold" onclick="showUploadModal()" style="flex-shrink:0;">&#11014; Upload PDF</button>
       </div>
+      <div id="dashStdToggleBar" style="margin-bottom:14px;"></div>
       <div id="dashMissingAlert"></div>
 
       <!-- Week navigation -->
@@ -4207,6 +4208,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.84.0', date:'2026-08-05',
+    improvements:['Labor page redesign: the Current Standard/Unifocus toggle now sits right under the page title, above everything else, so you pick a standard before looking at any numbers — and it defaults to Unifocus. Labor Summary (Total Paid/Budget/Variance/Employees) was removed as redundant; Rooms and Departures now take its place next to By Position instead of sitting full-width below. Also compacted the Rooms/Departures input boxes and spacing so the card doesn\'t feel oversized in its new, narrower spot.']
+  },
+  {
     v:'6.83.0', date:'2026-08-05',
     improvements:['Weekly Labor Pace\'s "Project Hours This Week" strip is now grouped by position (Room Attendant, House Attendant, etc.) instead of by project, and each position starts collapsed showing just its subtotal and headcount — tap one to see the names, hours, and activity notes underneath. Much less to scan in the labor meeting; if a position worked more than one project that week, the project name is noted right on their line.']
   },
@@ -6911,12 +6916,13 @@ function unifocusHoursForPosition(pos,ds){
   return total;
 }
 
-/* Which standard Labor's By Position table is currently showing —
-   'current' (LABOR_STD, the pre-Unifocus default) or 'unifocus'.
+/* Which standard Labor is currently showing — 'current' (LABOR_STD, the
+   pre-Unifocus standard) or 'unifocus' (Carlos's requested default, since
+   Unifocus is the standard he actually evaluates against day to day).
    Persisted so it survives navigation/reload; per-device, not synced (a
    display preference, not data). */
 function getLaborStandardMode(){
-  try{return localStorage.getItem('hk_labor_std_mode')==='unifocus'?'unifocus':'current';}catch(e){return 'current';}
+  try{return localStorage.getItem('hk_labor_std_mode')==='current'?'current':'unifocus';}catch(e){return 'unifocus';}
 }
 function setLaborStandardMode(mode){
   try{localStorage.setItem('hk_labor_std_mode',mode==='unifocus'?'unifocus':'current');}catch(e){}
@@ -6943,15 +6949,15 @@ function buildStandardToggleHtml(mode){
    before like Rooms uses. */
 function buildUnifocusDeparturesHTML(ds,dayLabel){
   var dep=getDeparturesForDay(ds);
-  var html='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">'
-    +'<div style="font-size:12px;font-weight:700;color:var(--gd);text-align:center;">&#129529; Departures &#8212; '+dayLabel+'</div>'
-    +'<div style="font-size:10.5px;color:var(--text3);margin-top:1px;margin-bottom:8px;text-align:center;">For '+dayLabel+' itself — not the night before, unlike Rooms above</div>'
-    +'<input class="rdc-input'+(dep>0?' filled':'')+'" style="border-color:var(--gold);font-size:28px;padding:10px 8px;" type="number" min="0" max="999" '
+  var html='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--gd);text-align:center;">&#129529; Departures &#8212; '+dayLabel+'</div>'
+    +'<div style="font-size:9.5px;color:var(--text3);margin-top:1px;margin-bottom:6px;text-align:center;">For '+dayLabel+' itself — not the night before, unlike Rooms above</div>'
+    +'<input class="rdc-input'+(dep>0?' filled':'')+'" style="border-color:var(--gold);" type="number" min="0" max="999" '
     +'placeholder="0" value="'+(dep>0?dep:'')+'" data-ds="'+ds+'" '
     +'onchange="saveDeparturesForDate(this.dataset.ds,this.value);'
     +'if(this.value.trim())this.classList.add(\'filled\');'
     +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
-    +'<div class="rdc-note" style="text-align:center;">Switch By Position below to "Unifocus" to see the resulting hours</div>'
+    +'<div class="rdc-note" style="text-align:center;">Switch the toggle above to "Unifocus" to see the resulting hours</div>'
     +'</div>';
   return html;
 }
@@ -10079,6 +10085,13 @@ try{if(stf_loadInput())STF_STATE.calculated=true;}catch(e){}
 try{stf_loadActual();}catch(e){}
 
 function renderLaborDash(){
+  /* Standard toggle lives at the top of the page now (Carlos's request —
+     pick Current/Unifocus before looking at anything below), not inside
+     the By Position card header where it used to be scoped to just that
+     table. Rendered here so it's set once per page render regardless of
+     which day is selected. */
+  var stdBarEl=document.getElementById('dashStdToggleBar');
+  if(stdBarEl)stdBarEl.innerHTML=buildStandardToggleHtml(getLaborStandardMode());
   var today=new Date();today.setHours(0,0,0,0);
   /* Self-heal any empty room counts from R106 before computing the pace, so
      recently-uploaded / just-synced days show their budget instead of "—". */
@@ -10567,7 +10580,81 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     +'<div style="font-size:14px;font-weight:700;">&#128202; '+dayLabel+'</div>'
     +'<div style="font-size:11px;color:var(--text3);">Tap any day above to switch</div></div>';
 
-  /* No report state */
+  /* Rooms/Departures card — built once, up front, since it's needed
+     regardless of whether a report exists for this day (occupancy entry
+     isn't gated on that). Now sits in the left column next to By Position
+     instead of the old full-width slot below — takes the place of Labor
+     Summary, which Carlos removed as redundant (the same Paid/Budget/
+     Variance numbers are already in By Position and Weekly Pace's header). */
+  /* R106 is stored by night date. For labor day ds, night = prevDateStr(ds).
+     Night may be in previous month — check both. */
+  var nightDs=prevDateStr(ds);
+  var nightMk=nightDs.substring(0,7);
+  var r106Data={};
+  try{var r106Str=localStorage.getItem('hk_r106_'+nightMk);if(r106Str)r106Data=JSON.parse(r106Str);}catch(e){}
+  var r106Raw=r106Data[nightDs]||0;
+  /* If not found, also check current month's R106 */
+  if(!r106Raw){
+    var r106DataCur={};
+    try{var r106StrCur=localStorage.getItem('hk_r106_'+monthKey(parseLocalDate(ds)));if(r106StrCur)r106DataCur=JSON.parse(r106StrCur);}catch(e){}
+    r106Raw=r106DataCur[nightDs]||0;
+  }
+  var r106Val=typeof r106Raw==='object'?r106Raw.net:(r106Raw||0);
+  var r106Occ=typeof r106Raw==='object'?r106Raw.occ:r106Raw;
+  var r106Comp=typeof r106Raw==='object'?r106Raw.comp:0;
+  var hasR106Month=r106Val>0;
+  /* Once a night's rooms count has been confirmed manually (typed directly, or
+     saved from this very mismatch banner via Fix Now), that's the manager's
+     final word — don't keep flagging it against R106 just because R106 still
+     disagrees. Only nights that have NOT been confirmed show the alert. */
+  var hasMismatch=r>0&&r106Val>0&&r!==r106Val&&getRoomsSourceForDay(ds)!=='manual';
+  var isFutureDay=parseLocalDate(ds)>new Date();
+
+  var roomsCardHtml='<div class="rooms-day-card" style="margin-bottom:14px;">'
+    +'<div class="rdc-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+    +'<div>'
+    +'<div class="rdc-title">&#127983; Rooms &#8212; Night of '+nightLabel+'</div>'
+    +'<div class="rdc-drives">&#8594; drives '+dayLabel.split(',')[0]+' budget</div>'
+    +'</div>'
+    /* R106 button - prominent if no R106 loaded, subtle if loaded */
+    +'<button onclick="document.getElementById(\'r106InputDash\').click();" '
+    +'style="padding:'+(hasR106Month?'4px 10px':'7px 14px')+';background:'+(hasR106Month?'rgba(15,37,68,.08)':'var(--navy)')+';color:'+(hasR106Month?'var(--navy)':'#fff')+';border:'+(hasR106Month?'1px solid var(--navy)':'none')+';border-radius:7px;font-size:'+(hasR106Month?'10px':'12px')+';font-weight:700;cursor:pointer;white-space:nowrap;">'
+    +(hasR106Month?'📋 OCC ✓':'📋 Upload OCC')+'</button>'
+    +'<input type="file" id="r106InputDash" accept=".pdf" style="display:none;" onchange="handleR106Upload(this)">'
+    +'</div>'
+    +'<div class="rdc-body">'
+    +'<input class="rdc-input'+(r>0?' filled':'')+'" type="number" min="0" max="999" '
+    +'placeholder="0" value="'+(r>0?r:'')+'" data-prevds="'+prevDateStr(ds)+'" '
+    +'onchange="saveRoomsForDate(this.dataset.prevds,this.value);'
+    +'if(this.value.trim())this.classList.add(\'filled\');'
+    +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
+    +(r>0?'<div style="font-size:11px;color:var(--green);font-weight:600;margin-top:4px;">'
+      +r+' rooms = '+dayBudget(r).toFixed(2)+'h budget'
+      +(r106Val>0&&!hasMismatch?' &nbsp;<span style="font-size:9.5px;color:var(--text3);">(OCC ✓)</span>':'')
+      +'</div>':'')
+    +(r106Val>0&&r===0?'<div style="font-size:10.5px;color:var(--yellow);font-weight:600;margin-top:4px;">OCC shows '+r106Val+' rooms — enter manually or re-upload OCC</div>':'')
+    +'<div class="rdc-note">Change rooms to recalculate budget</div>'
+    +'</div>'
+    +buildUnifocusDeparturesHTML(ds,dayLabel)
+    +'</div>';
+
+  /* Mismatch alert banner - Option A. Stays full-width above the grid
+     (rather than squeezed into the Rooms column) so it keeps its
+     attention-grabbing width. */
+  if(hasMismatch){
+    html+='<div style="background:var(--red-bg);border:1.5px solid var(--red);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">';
+    html+='<span style="font-size:22px;flex-shrink:0;">🚨</span>';
+    html+='<div style="flex:1;">';
+    html+='<div style="font-size:13px;font-weight:800;color:var(--red);">Occupancy Mismatch</div>';
+    html+='<div style="font-size:11px;color:var(--red);margin-top:2px;">Manual: <strong>'+r+' rooms</strong> &nbsp;·&nbsp; OCC: <strong>'+r106Val+' rooms</strong>'+(r106Comp>0?' ('+r106Occ+' occ − '+r106Comp+' comp)':'')+' &nbsp;·&nbsp; Diff: '+(r-r106Val>0?'+':'')+(r-r106Val)+'</div>';
+    html+='</div>';
+    html+='<button onclick="showOccupancyFixModal(\''+ds+'\','+r+','+r106Val+')" '
+      +'style="padding:8px 14px;background:var(--red);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer;">Fix Now →</button>';
+    html+='</div>';
+  }
+
+  /* No report state — Rooms/Departures still shows full width since
+     occupancy entry doesn't depend on a report existing yet. */
   if(!snap){
     html+='<div style="background:var(--yellow-bg);border:1px solid var(--yellow-border);'
       +'border-radius:12px;padding:24px;text-align:center;margin-bottom:14px;">'
@@ -10577,27 +10664,11 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       +'<div style="font-size:12px;color:var(--text2);margin-bottom:14px;">'
       +'Upload the Paychex PDF to see hours, breaks, and overtime.</div>'
       +'<button class="btn btn-gold" onclick="showUploadModal()">&#11014; Upload Report</button></div>';
+    html+=roomsCardHtml;
   }else{
-    var varH=snap.totalPaid-bud;
-    /* 2-column: summary + by position */
+    /* 2-column: Rooms/Departures + By Position */
     html+='<div class="analysis-2col">';
-
-    /* Labor summary card */
-    html+='<div class="day-summary-card">'
-      +'<div class="dsc-head">'
-      +'<div class="dsc-title">Labor Summary</div>'
-      +'<div class="dsc-date">'+dashSelectedDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</div>'
-      +'</div><div class="dsc-body">';
-    html+='<div class="dsc-row"><div class="dsc-label">Total Paid</div><div class="dsc-val">'+snap.totalPaid.toFixed(2)+'h</div></div>';
-    if(bud>0){
-      html+='<div class="dsc-row"><div class="dsc-label">Budget</div><div class="dsc-val">'+bud.toFixed(2)+'h</div></div>';
-      html+='<div class="dsc-row"><div class="dsc-label">Variance</div>'
-        +'<div class="dsc-val '+(varH>0?'red':'green')+'">'+(varH>=0?'+':'')+varH.toFixed(2)+'h</div></div>';
-      html+='<div class="dsc-row"><div class="dsc-label">vs Budget</div>'
-        +'<div class="dsc-val '+(varH>0?'red':'green')+'">'+Math.round((snap.totalPaid/bud)*100)+'%</div></div>';
-    }
-    html+='<div class="dsc-row"><div class="dsc-label">Employees</div><div class="dsc-val">'+(snap.totalEmps!=null?snap.totalEmps:(snap.emps||[]).length)+'</div></div>';
-    html+='</div></div>';
+    html+=roomsCardHtml;
 
     /* By position table. Numeric columns are right-aligned (standard for a
        data table — the original single-header version left everything
@@ -10608,21 +10679,12 @@ function renderDashDayAnalysis(days,rooms,today,wk){
        first column rather than a background tint on every data cell —
        tinting every row read as messy/unintentional at low opacity;
        a clean vertical rule is the more standard way to mark a table
-       section boundary. */
-    /* Standard toggle (added at Carlos's request, still a proof-of-concept
-       for just this table): switches the WHOLE By Position table between
-       showing only the current LABOR_STD budget or only the Unifocus
-       budget — a clean single-standard view either way, matching how the
-       page looked before Unifocus existed, rather than the two side by
-       side. Persisted so it stays put across navigation/reloads. If this
-       direction sticks, the same toggle should eventually drive Day
-       Summary's aggregate budget and Weekly Pace too — deliberately not
-       done yet, this is scoped to By Position only until Carlos confirms
-       the direction. */
+       section boundary. The Current/Unifocus toggle itself now lives at
+       the top of the page (dashStdToggleBar), not here — Carlos wanted to
+       pick a standard before looking at any numbers below. */
     var stdMode=getLaborStandardMode();
-    html+='<div class="day-summary-card"><div class="dsc-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+    html+='<div class="day-summary-card"><div class="dsc-head">'
       +'<div class="dsc-title">By Position</div>'
-      +buildStandardToggleHtml(stdMode)
       +'</div>'
       +'<div style="overflow-x:auto;">'
       +'<table style="width:100%;border-collapse:collapse;font-size:11.5px;">'
@@ -10658,72 +10720,6 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     html+='</div>'; /* end day-summary-card */
     html+='</div>'; /* end analysis-2col */
   }
-
-  /* Rooms card - always show */
-  /* R106 is stored by night date. For labor day ds, night = prevDateStr(ds).
-     Night may be in previous month — check both. */
-  var nightDs=prevDateStr(ds);
-  var nightMk=nightDs.substring(0,7);
-  var r106Data={};
-  try{var r106Str=localStorage.getItem('hk_r106_'+nightMk);if(r106Str)r106Data=JSON.parse(r106Str);}catch(e){}
-  var r106Raw=r106Data[nightDs]||0;
-  /* If not found, also check current month's R106 */
-  if(!r106Raw){
-    var r106DataCur={};
-    try{var r106StrCur=localStorage.getItem('hk_r106_'+monthKey(parseLocalDate(ds)));if(r106StrCur)r106DataCur=JSON.parse(r106StrCur);}catch(e){}
-    r106Raw=r106DataCur[nightDs]||0;
-  }
-  var r106Val=typeof r106Raw==='object'?r106Raw.net:(r106Raw||0);
-  var r106Occ=typeof r106Raw==='object'?r106Raw.occ:r106Raw;
-  var r106Comp=typeof r106Raw==='object'?r106Raw.comp:0;
-  var hasR106Month=r106Val>0;
-  /* Once a night's rooms count has been confirmed manually (typed directly, or
-     saved from this very mismatch banner via Fix Now), that's the manager's
-     final word — don't keep flagging it against R106 just because R106 still
-     disagrees. Only nights that have NOT been confirmed show the alert. */
-  var hasMismatch=r>0&&r106Val>0&&r!==r106Val&&getRoomsSourceForDay(ds)!=='manual';
-  var isFutureDay=parseLocalDate(ds)>new Date();
-
-  /* Mismatch alert banner - Option A */
-  if(hasMismatch){
-    html+='<div style="background:var(--red-bg);border:1.5px solid var(--red);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">';
-    html+='<span style="font-size:22px;flex-shrink:0;">🚨</span>';
-    html+='<div style="flex:1;">';
-    html+='<div style="font-size:13px;font-weight:800;color:var(--red);">Occupancy Mismatch</div>';
-    html+='<div style="font-size:11px;color:var(--red);margin-top:2px;">Manual: <strong>'+r+' rooms</strong> &nbsp;·&nbsp; OCC: <strong>'+r106Val+' rooms</strong>'+(r106Comp>0?' ('+r106Occ+' occ − '+r106Comp+' comp)':'')+' &nbsp;·&nbsp; Diff: '+(r-r106Val>0?'+':'')+(r-r106Val)+'</div>';
-    html+='</div>';
-    html+='<button onclick="showOccupancyFixModal(\''+ds+'\','+r+','+r106Val+')" '
-      +'style="padding:8px 14px;background:var(--red);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer;">Fix Now →</button>';
-    html+='</div>';
-  }
-
-  html+='<div class="rooms-day-card" style="margin-bottom:14px;">'
-    +'<div class="rdc-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
-    +'<div>'
-    +'<div class="rdc-title">&#127983; Rooms &#8212; Night of '+nightLabel+'</div>'
-    +'<div class="rdc-drives">&#8594; drives '+dayLabel.split(',')[0]+' budget</div>'
-    +'</div>'
-    /* R106 button - prominent if no R106 loaded, subtle if loaded */
-    +'<button onclick="document.getElementById(\'r106InputDash\').click();" '
-    +'style="padding:'+(hasR106Month?'4px 10px':'7px 14px')+';background:'+(hasR106Month?'rgba(15,37,68,.08)':'var(--navy)')+';color:'+(hasR106Month?'var(--navy)':'#fff')+';border:'+(hasR106Month?'1px solid var(--navy)':'none')+';border-radius:7px;font-size:'+(hasR106Month?'10px':'12px')+';font-weight:700;cursor:pointer;white-space:nowrap;">'
-    +(hasR106Month?'📋 OCC ✓':'📋 Upload OCC')+'</button>'
-    +'<input type="file" id="r106InputDash" accept=".pdf" style="display:none;" onchange="handleR106Upload(this)">'
-    +'</div>'
-    +'<div class="rdc-body">'
-    +'<input class="rdc-input'+(r>0?' filled':'')+'" type="number" min="0" max="999" '
-    +'placeholder="0" value="'+(r>0?r:'')+'" data-prevds="'+prevDateStr(ds)+'" '
-    +'onchange="saveRoomsForDate(this.dataset.prevds,this.value);'
-    +'if(this.value.trim())this.classList.add(\'filled\');'
-    +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
-    +(r>0?'<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:6px;">'
-      +r+' rooms = '+dayBudget(r).toFixed(2)+'h budget'
-      +(r106Val>0&&!hasMismatch?' &nbsp;<span style="font-size:10px;color:var(--text3);">(OCC ✓)</span>':'')
-      +'</div>':'')
-    +(r106Val>0&&r===0?'<div style="font-size:11px;color:var(--yellow);font-weight:600;margin-top:6px;">OCC shows '+r106Val+' rooms — enter manually or re-upload OCC</div>':'')
-    +'<div class="rdc-note">Change rooms to recalculate budget</div>'
-    +'</div>'
-    +buildUnifocusDeparturesHTML(ds,dayLabel)
-    +'</div>';
 
   /* ── Weekly Pace ── */
   html+=buildWeeklyPaceHTML(days,rooms,wk);

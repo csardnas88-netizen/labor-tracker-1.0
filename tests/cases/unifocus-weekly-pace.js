@@ -58,53 +58,53 @@ module.exports = {
     const month = JSON.parse(win.localStorage.getItem('hk_month_2026-07'));
     const week = { start: new Date(2026, 6, 18), end: new Date(2026, 6, 24) };
 
-    // ── Current Standard (the default) — LABOR_STD budgets, and the card
-    // carries the toggle control itself. ──
-    t.eq(win.getLaborStandardMode(), 'current', 'defaults to Current Standard with no stored preference');
+    // ── Unifocus (the default since v6.84.0) — its own budgets, and the
+    // card carries the toggle control itself. ──
+    t.eq(win.getLaborStandardMode(), 'unifocus', 'defaults to Unifocus with no stored preference');
     let pace = win.buildWeeklyPaceHTML(month.days, month.rooms, week);
     t.assert(pace.length > 0, 'the weekly pace card renders for a week that has reported days');
-    t.assert(/Current Standard/.test(pace), 'the card renders the toggle, showing Current Standard as active');
+    t.assert(/Unifocus/.test(pace), 'the card renders the toggle, showing Unifocus as active');
 
     let rows = pace.split('border-top:1px solid var(--border)');
     let paRow = rows.find((r) => /Public Area/.test(r)) || '';
     let raRow = rows.find((r) => /Room Attendant/.test(r)) || '';
 
-    // Public Area: LABOR_STD is a flat 32h/day fixed x 2 reported days = 64h;
-    // actual = 30 + 36 = 66 -> variance +2.00h.
-    t.assert(/64\.00h/.test(paRow), "Public Area's Current-mode budget is the LABOR_STD flat 32h/day x 2 days = 64h");
-    t.assert(/\+2\.00h/.test(paRow), 'Public Area is +2.00h over the Current-mode budget (66 actual - 64 budget)');
-    t.assert(!/80\.00h/.test(paRow), 'the Unifocus figure (80.00h) is NOT shown while in Current mode');
-
-    // Room Attendant: 120 rooms (night before, both days) x 56.2% x 2 = 134.88h.
-    t.assert(/134\.88h/.test(raRow), "Room Attendant's Current-mode budget computes normally (120 rooms x 56.2% x 2 reported days = 134.88h)");
-
-    // ── Switch to Unifocus — the SAME card function, re-driven by the
-    // toggle's persisted mode, now shows only the Unifocus figures. ──
-    win.setLaborStandardMode('unifocus');
-    pace = win.buildWeeklyPaceHTML(month.days, month.rooms, week);
-    t.assert(/Unifocus/.test(pace), 'the toggle now shows Unifocus as active');
-
-    rows = pace.split('border-top:1px solid var(--border)');
-    paRow = rows.find((r) => /Public Area/.test(r)) || '';
-    raRow = rows.find((r) => /Room Attendant/.test(r)) || '';
-
     // Public Area's weekly Unifocus budget is the SUM of its two reported
     // days (32 + 48 = 80), not a single lookup — one lookup for the week
     // would land on 32 or 48, never 80.
     t.assert(/80\.00h/.test(paRow), "Public Area's weekly Unifocus budget sums each day's own day-of-week value (32 + 48 = 80h), not one lookup for the whole week");
-    t.assert(!/64\.00h/.test(paRow), 'the Current-mode LABOR_STD figure (64.00h) is no longer shown once switched to Unifocus');
+    t.assert(!/64\.00h/.test(paRow), 'the Current-mode LABOR_STD figure (64.00h) is NOT shown by default');
     // actual = 30 + 36 = 66; 66 - 80 = -14.00
     t.assert(/-14\.00h/.test(paRow), "Public Area's Unifocus variance is actual (66h) minus the Unifocus budget (80h)");
 
     // Room Attendant has no Unifocus standard on file at all -> em-dash in
     // BOTH Budget and Variance, while Actual still renders.
     t.eq((raRow.match(/>—</g) || []).length, 2, 'a position with no Unifocus standard shows the em-dash in both Budget and Variance');
-    t.assert(!/134\.88h/.test(raRow), "Room Attendant's Current-mode LABOR_STD budget (134.88h) does not leak through in Unifocus mode");
+    t.assert(!/134\.88h/.test(raRow), "Room Attendant's Current-mode LABOR_STD budget (134.88h) does not leak through by default");
 
-    // ── Switching back to Current re-renders cleanly (no stale Unifocus
-    // figures left over from the prior call). ──
+    // ── Switch to Current Standard — the SAME card function, re-driven by
+    // the toggle's persisted mode, now shows only the LABOR_STD figures. ──
     win.setLaborStandardMode('current');
     pace = win.buildWeeklyPaceHTML(month.days, month.rooms, week);
-    t.assert(!/80\.00h/.test(pace), 'switching back to Current mode shows no trace of the Unifocus figures');
+    t.assert(/Current Standard/.test(pace), 'the toggle now shows Current Standard as active');
+
+    rows = pace.split('border-top:1px solid var(--border)');
+    paRow = rows.find((r) => /Public Area/.test(r)) || '';
+    raRow = rows.find((r) => /Room Attendant/.test(r)) || '';
+
+    // Public Area: LABOR_STD is a flat 32h/day fixed x 2 reported days = 64h;
+    // actual = 30 + 36 = 66 -> variance +2.00h.
+    t.assert(/64\.00h/.test(paRow), "Public Area's Current-mode budget is the LABOR_STD flat 32h/day x 2 days = 64h");
+    t.assert(/\+2\.00h/.test(paRow), 'Public Area is +2.00h over the Current-mode budget (66 actual - 64 budget)');
+    t.assert(!/80\.00h/.test(paRow), 'the Unifocus figure (80.00h) is no longer shown once switched to Current');
+
+    // Room Attendant: 120 rooms (night before, both days) x 56.2% x 2 = 134.88h.
+    t.assert(/134\.88h/.test(raRow), "Room Attendant's Current-mode budget computes normally (120 rooms x 56.2% x 2 reported days = 134.88h)");
+
+    // ── Switching back to Unifocus re-renders cleanly (no stale Current
+    // figures left over from the prior call). ──
+    win.setLaborStandardMode('unifocus');
+    pace = win.buildWeeklyPaceHTML(month.days, month.rooms, week);
+    t.assert(!/134\.88h/.test(pace), 'switching back to Unifocus mode shows no trace of the Current-mode figures');
   }
 };
