@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.82.0"/>
+<meta name="app-version" content="6.83.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4206,6 +4206,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.83.0', date:'2026-08-05',
+    improvements:['Weekly Labor Pace\'s "Project Hours This Week" strip is now grouped by position (Room Attendant, House Attendant, etc.) instead of by project, and each position starts collapsed showing just its subtotal and headcount — tap one to see the names, hours, and activity notes underneath. Much less to scan in the labor meeting; if a position worked more than one project that week, the project name is noted right on their line.']
+  },
   {
     v:'6.82.0', date:'2026-08-04',
     improvements:['The Labor page\'s Current Standard / Unifocus toggle (previously only on the daily By Position table) now also controls Weekly Labor Pace and Weekly Labor Pace — Adjusted — one clean set of Budget/Variance columns at a time instead of the two standards sitting side by side. Also centered the Departures card\'s title, subtitle, and note under the number, matching the Rooms card above it.']
@@ -10521,20 +10525,21 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       html+='</div></div>';
     }
 
-    /* Projects — its own compact sub-card, navy left accent. Each project
-       header, then name · position · hours + the activity note. */
+    /* Projects — its own compact sub-card, navy left accent, grouped by
+       position and collapsed by default (Carlos's chosen "Option C"). */
     if(_pw.total>0){
       html+='<div style="background:var(--white);border:1px solid var(--border);border-left:3px solid var(--navy);border-radius:10px;overflow:hidden;margin-bottom:9px;">';
       html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid var(--border);background:var(--surface);">';
       html+='<div style="font-size:10.5px;font-weight:700;color:var(--text2);"><span style="color:var(--navy);">&#128193;</span> Project Hours This Week</div>';
       html+='<div style="font-size:9.5px;font-weight:800;padding:2px 9px;border-radius:99px;white-space:nowrap;background:var(--navy);color:#fff;">Total '+_pw.total.toFixed(2)+'h</div>';
       html+='</div><div style="padding:8px 11px;">';
-      html+=_paceChips(_pw.byPos);
-      _pw.projects.forEach(function(pr){
-        html+='<div style="margin-top:7px;background:var(--white);border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
-        html+='<div style="background:var(--navy2);color:#fff;padding:5px 10px;display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:700;font-size:10px;">'+escHtml(pr.name)+'</span><strong style="font-size:10px;white-space:nowrap;">'+pr.hours.toFixed(2)+'h</strong></div>';
-        pr.items.forEach(function(it){ html+=_paceRow(it.empName, it.pos, it.hours, it.note, false); });
-        html+='</div>';
+      var _posGroups=_pacePosGroups(_pw);
+      var _multiProject=_pw.projects.length>1;
+      var _posOrder=HK_POS_LIST.concat(Object.keys(_posGroups).filter(function(p){return HK_POS_LIST.indexOf(p)===-1;}));
+      _posOrder.forEach(function(pos){
+        var items=_posGroups[pos];
+        if(!items||!items.length)return;
+        html+=_pacePosGroupHtml(pos,items,_pw.byPos[pos]||0,_multiProject);
       });
       html+='</div></div>';
     }
@@ -13592,6 +13597,51 @@ function getProjectDetailForMonth(yr,mo){
       .sort(function(a,b){return b.hours-a.hours;});
   });
   return out;
+}
+/* Project Hours This Week grouped by position, collapsed by default —
+   Carlos found the old project-first flat list too dense to read at a
+   glance in the labor meeting ("está muy denso y está muy difícil de
+   explicar a primera vista"). pacePosExpanded persists open/closed state
+   across re-renders the same way otExpanded does for Overtime's calendars.
+   When an entry's hours span more than one project that week, the project
+   name is folded into its note line so it isn't lost by dropping the old
+   per-project header. */
+var pacePosExpanded={};
+function togglePacePos(pos){
+  pacePosExpanded[pos]=!pacePosExpanded[pos];
+  renderLaborDash();
+}
+function _pacePosGroups(pw){
+  var byPos={};
+  pw.projects.forEach(function(pr){
+    pr.items.forEach(function(it){
+      var pos=it.pos||'Unknown';
+      if(!byPos[pos])byPos[pos]=[];
+      byPos[pos].push({empName:it.empName,note:it.note,hours:it.hours,projectName:pr.name});
+    });
+  });
+  Object.keys(byPos).forEach(function(pos){
+    byPos[pos].sort(function(a,b){return b.hours-a.hours;});
+  });
+  return byPos;
+}
+function _pacePosGroupHtml(pos,items,total,multiProject){
+  var open=!!pacePosExpanded[pos];
+  var h='<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:7px;">';
+  h+='<div onclick="togglePacePos(\''+pos.replace(/'/g,"\\'")+'\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--surface);">';
+  h+='<span style="font-size:10.5px;font-weight:700;color:var(--text1);"><span style="display:inline-block;transition:transform .15s;transform:rotate('+(open?'90':'0')+'deg);margin-right:5px;color:var(--text3);">&#9656;</span>'+escHtml(pos)+'<span style="font-weight:400;color:var(--text3);margin-left:6px;">'+items.length+(items.length===1?' person':' people')+'</span></span>';
+  h+='<span style="font-size:10.5px;font-weight:800;color:var(--text1);">'+total.toFixed(2)+'h</span>';
+  h+='</div>';
+  if(open){
+    h+='<div style="border-top:1px solid var(--border);">';
+    items.forEach(function(it,i){
+      var note=multiProject?(it.projectName+(it.note?' — '+it.note:'')):it.note;
+      h+=_paceRow(it.empName,'',it.hours,note,i===0);
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
 }
 /* Report-style renderers for the Weekly Labor Pace "extra hours" strips
    (Training + Projects). Shared so the two blocks read as a consistent pair:

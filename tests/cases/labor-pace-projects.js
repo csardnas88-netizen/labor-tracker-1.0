@@ -1,7 +1,13 @@
 /* Weekly Labor Pace — the "Project hours this week" strip must list each
    employee with their position, hours, AND the activity note, and the
    reconciliation line (Worked − Training − Projects = Operations) must add up.
-   This is what the labor meeting reads, so it's guarded. */
+   This is what the labor meeting reads, so it's guarded.
+
+   Also covers Carlos's "muy denso" redesign: the strip groups entries by
+   position instead of by project, collapsed by default (togglePacePos +
+   pacePosExpanded, same open/closed-state pattern as Overtime's otExpanded).
+   Names/notes only render once a position group is expanded — the collapsed
+   view shows just the position and its subtotal. */
 const { loadApp } = require('../_harness');
 const fixture = require('../_fixture');
 
@@ -25,13 +31,25 @@ module.exports = {
     t.eq(ana.hours, 9, 'Ana hours wrong');
     t.assert(/Deep cleaned rooms/.test(ana.note), 'Ana activity note missing');
 
-    // The rendered strip must contain the name, hours, and the note text.
-    const strip = win.buildWeeklyPaceHTML(
-      win.loadMonthData('2026-07').days, 200,
-      { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) }
-    );
+    const week = { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) };
+    const monthDays = win.loadMonthData('2026-07').days;
+
+    // Collapsed by default: the strip is grouped by position, showing each
+    // position's subtotal and headcount, but NOT the employee names/notes
+    // until that group is expanded — this is the whole point of the redesign.
+    let strip = win.buildWeeklyPaceHTML(monthDays, 200, week);
     t.assert(/Project Hours This Week/i.test(strip), 'project strip title missing');
-    t.assert(/Ana Lopez/.test(strip) && /Beto Cruz/.test(strip), 'employee names missing from strip');
+    t.assert(/House Attendant/.test(strip) && /Room Attendant/.test(strip), 'position group headers missing from strip');
+    t.assert(/8\.00h/.test(strip) && /9\.00h/.test(strip), 'position subtotals missing from strip (House 8h, Room 9h)');
+    t.assert(!/Ana Lopez/.test(strip) && !/Beto Cruz/.test(strip), 'employee names should be hidden while their position group is collapsed');
+
+    // Expanding a position (same open/closed pattern as Overtime's
+    // otToggleEmp) reveals its names, hours, and notes.
+    win.showPage('labor');
+    win.togglePacePos('Room Attendant');
+    win.togglePacePos('House Attendant');
+    strip = win.buildWeeklyPaceHTML(monthDays, 200, week);
+    t.assert(/Ana Lopez/.test(strip) && /Beto Cruz/.test(strip), 'employee names missing from strip once their position group is expanded');
     t.assert(/Deep cleaned rooms 1401-1410/.test(strip), 'activity note missing from strip');
 
     // Reconciliation line: Variance − Projects − Training = Adjusted, and the
