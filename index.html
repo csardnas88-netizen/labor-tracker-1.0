@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.86.0"/>
+<meta name="app-version" content="6.87.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.87.0', date:'2026-08-05',
+    fixes:['Variance notes: clicking Save now closes the note editor right away — no need to also click Close. The note icon is also bigger and clearer: a solid gold badge once a note exists, a bolder dashed circle before one does.']
+  },
+  {
     v:'6.86.0', date:'2026-08-05',
     features:['By Position now lets you explain a variance — a small icon next to any position with a real budget shows a filled bubble if there\'s already a note, or a muted "+" to add one. Tap it to open a short note (e.g. "covered a call-off on the 10th floor"), Save, Close. Only appears where there\'s an actual variance to explain, so the table stays exactly as compact as before if you never use it. Notes are stored separately from the Labor Distribution Report data, so re-uploading a report can never wipe one out.']
   },
@@ -6929,6 +6933,7 @@ function saveVarianceNoteFromInput(ds,pos,inputId){
   var el=document.getElementById(inputId);
   if(!el)return;
   saveVarianceNote(ds,pos,el.value);
+  varNoteExpanded[pos]=false;
   renderLaborDash();
 }
 /* Turndown's Hotel-Rooms-driven components use SAME-DAY occupancy, unlike
@@ -10774,8 +10779,8 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         if(vVal!==null){
           var existingNote=getVarianceNote(ds,pos);
           noteIcon=existingNote
-            ?' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;font-size:11px;vertical-align:-1px;" title="View/edit note">&#128172;</span>'
-            :' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;width:13px;height:13px;line-height:12px;text-align:center;border:1px dashed var(--border);border-radius:99px;color:var(--text3);font-size:9px;font-weight:700;vertical-align:1px;" title="Add a note">+</span>';
+            ?' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;width:17px;height:17px;line-height:17px;text-align:center;border-radius:99px;background:var(--gold);font-size:11px;vertical-align:-3px;" title="View/edit note">&#128172;</span>'
+            :' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;width:15px;height:15px;line-height:13px;text-align:center;border:1.5px dashed var(--text3);border-radius:99px;color:var(--text3);font-size:11px;font-weight:700;vertical-align:-2px;" title="Add a note">+</span>';
         }
         html+='<tr>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+'</td>'

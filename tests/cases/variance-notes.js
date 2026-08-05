@@ -66,12 +66,17 @@ module.exports = {
     dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
     t.assert(/Covered a call-off on the 10th floor\./.test(dayHtml), 'expanding the position pre-fills the textarea with its saved note');
 
-    // ── Saving from the textarea persists the new value and closes/re-renders. ──
+    // ── Saving from the textarea persists the new value and closes the
+    // editor immediately (Carlos's feedback: having to click Close
+    // separately after Save "no es operacionalmente fluido"). ──
     const inputIdMatch = dayHtml.match(/id="(varNoteInput_2026-07-15_HouseAttendant)"/);
     t.assert(inputIdMatch, 'the textarea has the expected id pattern');
     win.document.getElementById(inputIdMatch[1]).value = 'Updated: also trained a new hire.';
     win.saveVarianceNoteFromInput('2026-07-15', 'House Attendant', inputIdMatch[1]);
     t.eq(win.getVarianceNote('2026-07-15', 'House Attendant'), 'Updated: also trained a new hire.', 'saving from the textarea overwrites the stored note');
+    t.eq(win.varNoteExpanded['House Attendant'], false, 'Save collapses the editor on its own, without needing a separate Close click');
+    dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
+    t.assert(!/textarea/.test(dayHtml), 'the textarea is actually gone from the rendered page after Save, not just flagged closed in state');
 
     // ── Clearing a note (empty text) removes it rather than storing a
     // blank string — getVarianceNote should read back '' either way, but
