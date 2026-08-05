@@ -41,6 +41,7 @@ const cases = [
   require('./cases/unifocus-weekly-pace'),
   require('./cases/project-hours-manual-edit-protected'),
   require('./cases/labor-standard-toggle'),
+  require('./cases/labor-pace-projects-multiproject'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
