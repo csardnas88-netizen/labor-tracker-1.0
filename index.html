@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.79.0"/>
+<meta name="app-version" content="6.80.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4206,6 +4206,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.80.0', date:'2026-08-04',
+    fixes:['Fixed a real data-loss bug: manually-entered Project Hours (e.g. logging a few hours of a specific task against someone\'s day) could get silently overwritten back to that employee\'s full paid hours for the day, any time the Projects page was opened again after that day\'s Labor Distribution Report existed. Confirmed and fixed against 10 real entries that had been affected since July. Editing an entry by hand now permanently protects it — the report auto-fill only ever touches entries that are still blank or that were themselves auto-filled, never a value someone typed in.']
+  },
   {
     v:'6.79.0', date:'2026-08-04',
     improvements:['The Unifocus columns on Weekly Labor Pace (both the regular and Adjusted cards) now match the daily By Position table\'s look: a gold-tinted background delimits the section, and the "Unifocus" label is now a navy-and-gold badge so it\'s unmistakable at a glance next to the existing standard.']
@@ -12259,8 +12263,24 @@ function autofillAllPendingProjectEntries(){
       /* Off is the only terminal state. A day that's already auto-filled
          stays eligible too, so re-uploading a corrected Labor Distribution
          Report for a past date refreshes it instead of leaving it stuck at
-         whatever the first upload said. */
+         whatever the first upload said.
+
+         BUT: a manually-typed value (entry.autoFilled left false by
+         saveEditEntry/saveLogEntry) must NEVER be touched here, no matter
+         how much it differs from that day's paid total — a partial-task
+         hour allocation (e.g. 2h of an 8h shift) is EXPECTED to differ,
+         that's the whole point of logging it. The bug this used to have:
+         the only protection was "hours already equal the day's total",
+         which a manual partial allocation never satisfies, so this
+         function silently overwrote it back to the full day's hours the
+         next time the Projects page rendered. Confirmed against real data
+         2026-08-04 — 10 manually-entered hours got clobbered this way
+         across two projects going back to July. Fixed by keying
+         eligibility off entry.autoFilled instead: only entries that are
+         still pending, or whose CURRENT value is itself the product of an
+         earlier auto-fill, are ever touched again. */
       if(entry.off||!entry.date)return;
+      if(!entry.pending&&!entry.autoFilled)return;
       var mk=entry.date.substring(0,7);
       if(!mdCache.hasOwnProperty(mk))mdCache[mk]=loadMonthData(mk);
       var mData=mdCache[mk];
@@ -14401,6 +14421,11 @@ function saveEditEntry(projIdx, entryIdx){
   entry.note=note;
   entry.pending=hours===null;
   entry.editedAt=new Date().toISOString();
+  /* A human just set this value by hand — it's no longer "auto-filled",
+     so autofillAllPendingProjectEntries() must never touch it again (see
+     the guard there for the full story: this flag is what tells a
+     protected manual edit apart from a stale auto-fill safe to refresh). */
+  entry.autoFilled=false;
   saveProjects(projects);
   document.getElementById('editEntryModal').remove();
   renderProjects();
