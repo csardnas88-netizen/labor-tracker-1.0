@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.87.0"/>
+<meta name="app-version" content="6.88.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,6 +4219,11 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.88.0', date:'2026-08-05',
+    fixes:['Fixed a real data-loss bug: Departures counts and variance notes could get silently erased any time the app synced with the cloud (not just on a report re-upload) — the cloud-sync merge only knew about report/room data, so anything else on the day got dropped the next time it refreshed. This is why a note saved on one device could vanish. Departures and variance notes now sync their own way, the same reliable way room counts already do, and are protected from being wiped by anything the sync layer doesn\'t explicitly recognize yet.'],
+    improvements:['Variance notes: added an explicit Delete button (previously the only way to remove one was to clear the text and hit Save). The note indicator now reads "Note" in plain text instead of a bare "+", so it\'s unmistakable to anyone else opening the app.']
+  },
+  {
     v:'6.87.0', date:'2026-08-05',
     fixes:['Variance notes: clicking Save now closes the note editor right away — no need to also click Close. The note icon is also bigger and clearer: a solid gold badge once a note exists, a bolder dashed circle before one does.']
   },
@@ -6133,8 +6138,11 @@ function _monthPushShadow(mk){ try{return JSON.parse(localStorage.getItem('hk_mo
 function _dsFallbackTs(ds){ try{return new Date(ds+'T00:00:00.000Z').toISOString();}catch(e){return '1970-01-01T00:00:00.000Z';} }
 function _dayTs(data,ds){ return (data.daysUpdatedAt&&data.daysUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _roomTs(data,ds){ return (data.roomsUpdatedAt&&data.roomsUpdatedAt[ds])||_dsFallbackTs(ds); }
+function _depTs(data,ds){ return (data.departuresUpdatedAt&&data.departuresUpdatedAt[ds])||_dsFallbackTs(ds); }
+function _vnoteTs(data,ds){ return (data.varianceNotesUpdatedAt&&data.varianceNotesUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _pushMonthRows(data,mk){
   data=data||{}; var days=data.days||{}, rooms=data.rooms||{}, src=data.roomsSource||{};
+  var deps=data.departures||{}, depSrc=data.departuresSource||{}, vnotes=data.varianceNotes||{};
   var who=(typeof getSignedInEmail==='function'&&getSignedInEmail())||'';
   var shadow=_monthPushShadow(mk); var newShadow=Object.assign({},shadow); var rows=[];
   Object.keys(days).forEach(function(ds){
@@ -6147,6 +6155,23 @@ function _pushMonthRows(data,mk){
     var ts=_roomTs(data,ds), sk='r:'+ds;
     if(shadow[sk]===ts)return;
     rows.push({key:'mroom_'+mk+'_'+ds, value:JSON.stringify({v:rooms[ds],ts:ts,src:src[ds]||'',by:who})});
+    newShadow[sk]=ts;
+  });
+  /* Departures and variance notes — same per-day-row treatment as rooms,
+     added in v6.88.0 after both were found to be silently dropped by the
+     sync merge (see the comment above getVarianceNote). A day with every
+     note deleted (empty {}) still needs to push once so a delete actually
+     reaches other devices, not just a day that HAS a note. */
+  Object.keys(deps).forEach(function(ds){
+    var ts=_depTs(data,ds), sk='dep:'+ds;
+    if(shadow[sk]===ts)return;
+    rows.push({key:'mdep_'+mk+'_'+ds, value:JSON.stringify({v:deps[ds],ts:ts,src:depSrc[ds]||'',by:who})});
+    newShadow[sk]=ts;
+  });
+  Object.keys(vnotes).forEach(function(ds){
+    var ts=_vnoteTs(data,ds), sk='vn:'+ds;
+    if(shadow[sk]===ts)return;
+    rows.push({key:'mvnote_'+mk+'_'+ds, value:JSON.stringify({v:vnotes[ds],ts:ts,by:who})});
     newShadow[sk]=ts;
   });
   if(!rows.length)return;
@@ -6296,9 +6321,15 @@ function _syncFromSheetsPull(){
        keeping the newest timestamp per day; merged into local AFTER the loop. */
     var _remoteMonths={};
     function _tsRank(ts){ var n=Date.parse(ts); return isNaN(n)?0:n; }
-    function _rm(mk){ return _remoteMonths[mk]||(_remoteMonths[mk]={days:{},daysUpdatedAt:{},rooms:{},roomsUpdatedAt:{},roomsSource:{}}); }
+    function _rm(mk){ return _remoteMonths[mk]||(_remoteMonths[mk]={days:{},daysUpdatedAt:{},rooms:{},roomsUpdatedAt:{},roomsSource:{},departures:{},departuresUpdatedAt:{},departuresSource:{},varianceNotes:{},varianceNotesUpdatedAt:{}}); }
     function _foldDay(mk,ds,snap,ts){ var m=_rm(mk); if(m.daysUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.daysUpdatedAt[ds])){ m.days[ds]=snap; m.daysUpdatedAt[ds]=ts; } }
     function _foldRoom(mk,ds,n,ts,srcv){ var m=_rm(mk); if(m.roomsUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.roomsUpdatedAt[ds])){ m.rooms[ds]=n; m.roomsUpdatedAt[ds]=ts; if(srcv)m.roomsSource[ds]=srcv; } }
+    /* Departures and variance notes — same fold-by-newest-timestamp
+       treatment as rooms, added in v6.88.0 (see the comment above
+       getVarianceNote for why: both were previously dropped entirely by
+       this merge, the actual cause of Carlos's missing note). */
+    function _foldDep(mk,ds,n,ts,srcv){ var m=_rm(mk); if(m.departuresUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.departuresUpdatedAt[ds])){ m.departures[ds]=n; m.departuresUpdatedAt[ds]=ts; if(srcv)m.departuresSource[ds]=srcv; } }
+    function _foldVNote(mk,ds,notesObj,ts){ var m=_rm(mk); if(m.varianceNotesUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.varianceNotesUpdatedAt[ds])){ m.varianceNotes[ds]=notesObj; m.varianceNotesUpdatedAt[ds]=ts; } }
     Object.keys(all).forEach(function(key){
       try{
         if(key.indexOf("mday_")===0){
@@ -6307,12 +6338,22 @@ function _syncFromSheetsPull(){
         } else if(key.indexOf("mroom_")===0){
           var _rR=all[key], _restR=key.slice(6), _uR=_restR.indexOf('_');
           if(_uR>0&&_rR&&_rR.v!==undefined)_foldRoom(_restR.slice(0,_uR),_restR.slice(_uR+1),_rR.v,_rR.ts,_rR.src);
+        } else if(key.indexOf("mdep_")===0){
+          var _rP=all[key], _restP=key.slice(5), _uP=_restP.indexOf('_');
+          if(_uP>0&&_rP&&_rP.v!==undefined)_foldDep(_restP.slice(0,_uP),_restP.slice(_uP+1),_rP.v,_rP.ts,_rP.src);
+        } else if(key.indexOf("mvnote_")===0){
+          var _rV=all[key], _restV=key.slice(7), _uV=_restV.indexOf('_');
+          if(_uV>0&&_rV&&_rV.v!==undefined)_foldVNote(_restV.slice(0,_uV),_restV.slice(_uV+1),_rV.v,_rV.ts);
         } else if(key.indexOf("month_")===0){
           var mk=key.replace("month_",""); var remote=all[key]||{};
           var _rd=remote.days||{}, _rdt=remote.daysUpdatedAt||{};
           Object.keys(_rd).forEach(function(ds){ _foldDay(mk,ds,_rd[ds],_rdt[ds]!==undefined?_rdt[ds]:_dsFallbackTs(ds)); });
           var _rr=remote.rooms||{}, _rrt=remote.roomsUpdatedAt||{}, _rsrc=remote.roomsSource||{};
           Object.keys(_rr).forEach(function(ds){ _foldRoom(mk,ds,_rr[ds],_rrt[ds]!==undefined?_rrt[ds]:_dsFallbackTs(ds),_rsrc[ds]); });
+          var _rp=remote.departures||{}, _rpt=remote.departuresUpdatedAt||{}, _rpsrc=remote.departuresSource||{};
+          Object.keys(_rp).forEach(function(ds){ _foldDep(mk,ds,_rp[ds],_rpt[ds]!==undefined?_rpt[ds]:_dsFallbackTs(ds),_rpsrc[ds]); });
+          var _rv=remote.varianceNotes||{}, _rvt=remote.varianceNotesUpdatedAt||{};
+          Object.keys(_rv).forEach(function(ds){ _foldVNote(mk,ds,_rv[ds],_rvt[ds]!==undefined?_rvt[ds]:_dsFallbackTs(ds)); });
         }
         if(key.indexOf("r106_")===0){
           var mk2=key.replace("r106_","");
@@ -6464,7 +6505,22 @@ function _syncFromSheetsPull(){
       var remote=_remoteMonths[mk]; var local=_origLoadMonthData(mk);
       var daysMerge=_mergeTimedDayMap(local.days,local.daysUpdatedAt,remote.days,remote.daysUpdatedAt);
       var roomsMerge=_mergeTimedDayMap(local.rooms,local.roomsUpdatedAt,remote.rooms,remote.roomsUpdatedAt,local.roomsSource,remote.roomsSource);
-      _origSaveMonthData({days:daysMerge.map,daysUpdatedAt:daysMerge.times,rooms:roomsMerge.map,roomsUpdatedAt:roomsMerge.times,roomsSource:roomsMerge.extra},mk);
+      var depsMerge=_mergeTimedDayMap(local.departures,local.departuresUpdatedAt,remote.departures,remote.departuresUpdatedAt,local.departuresSource,remote.departuresSource);
+      var vnoteMerge=_mergeTimedDayMap(local.varianceNotes,local.varianceNotesUpdatedAt,remote.varianceNotes,remote.varianceNotesUpdatedAt);
+      /* Start from a full copy of local (not a fresh object naming only the
+         fields this function knows how to merge) so any OTHER field on the
+         month blob survives untouched. This is the actual v6.88.0 fix: the
+         old code built a brand-new {days:...,rooms:...} object from
+         scratch, which silently dropped departures/varianceNotes (and
+         would drop any future field the same way) on every sync pull —
+         see the comment above getVarianceNote. */
+      var merged=Object.assign({},local,{
+        days:daysMerge.map,daysUpdatedAt:daysMerge.times,
+        rooms:roomsMerge.map,roomsUpdatedAt:roomsMerge.times,roomsSource:roomsMerge.extra,
+        departures:depsMerge.map,departuresUpdatedAt:depsMerge.times,departuresSource:depsMerge.extra,
+        varianceNotes:vnoteMerge.map,varianceNotesUpdatedAt:vnoteMerge.times
+      });
+      _origSaveMonthData(merged,mk);
       updated=true;
     });
     try{ if(_mergeProjectsFromRemote(all))updated=true; }catch(e){console.warn('[sync] projects merge',e);}
@@ -6894,9 +6950,11 @@ function saveDeparturesForDate(ds,val){
   var mData=loadMonthData(mk);
   if(!mData.departures)mData.departures={};
   if(!mData.departuresSource)mData.departuresSource={};
+  if(!mData.departuresUpdatedAt)mData.departuresUpdatedAt={};
   var n=parseInt(val)||0;
   if(n>0)mData.departures[ds]=n;else delete mData.departures[ds];
   mData.departuresSource[ds]='manual';
+  mData.departuresUpdatedAt[ds]=new Date().toISOString();
   saveMonthData(mData,mk);
 }
 /* Variance notes on By Position — free-text explanation for why a
@@ -6909,7 +6967,18 @@ function saveDeparturesForDate(ds,val){
    snap.byPosition[pos]={...} and mData.days[ds]=snap), so anything stored
    inside it would be silently wiped on the next upload — the exact class
    of bug fixed for Project Hours in v6.80.0. Keeping notes as a separate
-   top-level field means a report re-upload can never touch them. */
+   top-level field means a report re-upload can never touch them.
+
+   A SECOND, worse instance of that same class of bug was found and fixed
+   in v6.88.0: the cloud-sync merge (_syncFromSheetsPull, _pushMonthRows)
+   only knew about days[]/rooms[] — any OTHER top-level field on the month
+   blob, including departures/departuresSource AND this varianceNotes
+   field, got silently dropped on every sync pull (not just a report
+   re-upload), because the merge rebuilt the local blob from only the
+   fields it recognized. This is what Carlos hit: a note saved on his
+   phone was gone by the next sync. Fixed by teaching the sync layer about
+   departures and varianceNotes too (see _pushMonthRows/_syncFromSheetsPull
+   below) — see [[labor-tracker-sync-architecture]]. */
 function getVarianceNote(ds,pos){
   var mk=ds.substring(0,7);
   var mData=loadMonthData(mk);
@@ -6920,8 +6989,10 @@ function saveVarianceNote(ds,pos,text){
   var mData=loadMonthData(mk);
   if(!mData.varianceNotes)mData.varianceNotes={};
   if(!mData.varianceNotes[ds])mData.varianceNotes[ds]={};
+  if(!mData.varianceNotesUpdatedAt)mData.varianceNotesUpdatedAt={};
   var t=(text||'').trim();
   if(t)mData.varianceNotes[ds][pos]=t;else delete mData.varianceNotes[ds][pos];
+  mData.varianceNotesUpdatedAt[ds]=new Date().toISOString();
   saveMonthData(mData,mk);
 }
 var varNoteExpanded={};
@@ -6933,6 +7004,11 @@ function saveVarianceNoteFromInput(ds,pos,inputId){
   var el=document.getElementById(inputId);
   if(!el)return;
   saveVarianceNote(ds,pos,el.value);
+  varNoteExpanded[pos]=false;
+  renderLaborDash();
+}
+function deleteVarianceNote(ds,pos){
+  saveVarianceNote(ds,pos,'');
   varNoteExpanded[pos]=false;
   renderLaborDash();
 }
@@ -10778,9 +10854,14 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         var noteIcon='';
         if(vVal!==null){
           var existingNote=getVarianceNote(ds,pos);
+          /* A text label ("Note"), not a bare symbol — Carlos's feedback:
+             a lone "+" reads as ambiguous ("could be interpreted as
+             something else") to anyone other than the person who already
+             knows what it means. Filled gold pill = a note exists; dashed
+             outline pill = none yet, invites adding one. */
           noteIcon=existingNote
-            ?' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;width:17px;height:17px;line-height:17px;text-align:center;border-radius:99px;background:var(--gold);font-size:11px;vertical-align:-3px;" title="View/edit note">&#128172;</span>'
-            :' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;width:15px;height:15px;line-height:13px;text-align:center;border:1.5px dashed var(--text3);border-radius:99px;color:var(--text3);font-size:11px;font-weight:700;vertical-align:-2px;" title="Add a note">+</span>';
+            ?' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;padding:1px 7px;border-radius:99px;background:var(--gold);color:var(--gd);font-size:9px;font-weight:800;vertical-align:1px;white-space:nowrap;" title="View/edit note">&#128172; Note</span>'
+            :' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;padding:1px 7px;border:1.5px dashed var(--border2);border-radius:99px;color:var(--text3);font-size:9px;font-weight:800;vertical-align:1px;white-space:nowrap;" title="Add a note">+ Note</span>';
         }
         html+='<tr>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+'</td>'
@@ -10796,6 +10877,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
             +'style="width:100%;min-height:44px;padding:6px 8px;font-size:10.5px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;">'+escHtml(getVarianceNote(ds,pos))+'</textarea>'
             +'<div style="margin-top:5px;display:flex;gap:6px;">'
             +'<button onclick="saveVarianceNoteFromInput(\''+ds+'\',\''+pos+'\',\''+noteInputId+'\')" style="padding:4px 10px;background:var(--navy);color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Save</button>'
+            +(existingNote?'<button onclick="if(confirm(\'Delete this note?\'))deleteVarianceNote(\''+ds+'\',\''+pos+'\');" style="padding:4px 10px;background:transparent;color:var(--red);border:1px solid var(--red-border);border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Delete</button>':'')
             +'<button onclick="toggleVarianceNote(\''+pos+'\')" style="padding:4px 10px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Close</button>'
             +'</div>'
             +'</td></tr>';
