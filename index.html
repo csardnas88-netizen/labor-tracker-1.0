@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.91.0"/>
+<meta name="app-version" content="6.91.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.91.1', date:'2026-08-05',
+    fixes:['Fixed a real sync gap in the DND room list\'s new Delete button, caught during a self-review Carlos asked for right after it shipped: Delete cleared the room list on the device you tapped it on, but never told the cloud — so the old list would keep reappearing on every other device forever. Deleting now pushes the clear like any other edit, so it actually reaches everywhere.']
+  },
+  {
     v:'6.91.0', date:'2026-08-05',
     improvements:['Cleaned up the DNDs field in the Occupancy card: it now shows just the count, matching the clean big-number look of Rooms and Departures, instead of cramming the full room list into a tiny box. Tap "View / edit DND room list" below it to see or change the actual rooms — with Save, Delete, and Close, the same trio as the By Position variance notes.']
   },
@@ -7105,8 +7109,14 @@ function saveDNDRoomsForDate(ds,val){
   var mData=loadMonthData(mk);
   if(!mData.dndRooms)mData.dndRooms={};
   if(!mData.dndRoomsUpdatedAt)mData.dndRoomsUpdatedAt={};
-  var t=(val||'').trim();
-  if(t)mData.dndRooms[ds]=t;else delete mData.dndRooms[ds];
+  /* Store '' rather than deleting the key on clear — _pushMonthRows only
+     pushes a row for dates present in Object.keys(dndRooms), so a delete()
+     here would mean Delete clears the field on THIS device but the row
+     already sitting in the cloud never gets overwritten, and every other
+     device keeps showing the old room list forever. Keeping the (now
+     empty) key means the clear pushes as a real row and actually reaches
+     other devices, exactly like the button implies it should. */
+  mData.dndRooms[ds]=(val||'').trim();
   mData.dndRoomsUpdatedAt[ds]=new Date().toISOString();
   saveMonthData(mData,mk);
 }
