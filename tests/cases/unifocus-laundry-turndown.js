@@ -71,6 +71,7 @@ module.exports = {
     // ── By Position table: both positions' Unifocus columns are populated
     // on a real render, with their independent computed totals. ──
     win.dashSelectedDate = new Date(2026, 6, 11);
+    win.setLaborStandardMode('unifocus');
     win.showPage('labor');
     const html = win.document.getElementById('dashDayAnalysis').innerHTML;
     const rows = html.split('<tr>');

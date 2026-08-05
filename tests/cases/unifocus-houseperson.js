@@ -61,12 +61,14 @@ module.exports = {
     // from "standard exists but no data for this day yet".
     t.eq(win.unifocusHoursForPosition('Room Attendant', '2026-07-15'), null, 'a position with no Unifocus standard defined returns null, not 0');
 
-    // ── By Position table: Unifocus column present, populated only for House Attendant ──
+    // ── By Position table: switch to Unifocus mode (see labor-standard-toggle.js
+    // for the toggle mechanism itself) and confirm House Attendant's row
+    // shows the computed total. ──
     win.dashSelectedDate = new Date(2026, 6, 15);
+    win.setLaborStandardMode('unifocus');
     win.showPage('labor');
     const html = win.document.getElementById('dashDayAnalysis').innerHTML;
-    t.assert(/Unifocus/.test(html), 'the By Position table has a Unifocus column header');
-    t.assert(/32\.00/.test(html), "House Attendant's row shows the computed Unifocus total (32.00h)");
+    t.assert(/32\.00/.test(html), "House Attendant's row shows the computed Unifocus total (32.00h) once switched to Unifocus mode");
 
     // A second date with no departures data renders the em-dash, not "0.00" or blank.
     win.dashSelectedDate = new Date(2026, 6, 16);

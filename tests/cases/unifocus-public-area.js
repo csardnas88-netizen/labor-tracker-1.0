@@ -75,6 +75,7 @@ module.exports = {
 
     // ── By Position table renders the new column for Public Area too. ──
     win.dashSelectedDate = new Date(2026, 6, 22); // Wednesday
+    win.setLaborStandardMode('unifocus');
     win.showPage('labor');
     const html = win.document.getElementById('dashDayAnalysis').innerHTML;
     const rows = html.split('<tr>');

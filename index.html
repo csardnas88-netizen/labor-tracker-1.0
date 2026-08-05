@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.81.0"/>
+<meta name="app-version" content="6.82.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4207,6 +4207,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.82.0', date:'2026-08-04',
+    improvements:['The Labor page\'s Current Standard / Unifocus toggle (previously only on the daily By Position table) now also controls Weekly Labor Pace and Weekly Labor Pace — Adjusted — one clean set of Budget/Variance columns at a time instead of the two standards sitting side by side. Also centered the Departures card\'s title, subtitle, and note under the number, matching the Rooms card above it.']
+  },
+  {
     v:'6.81.0', date:'2026-08-04',
     features:['Project Hours entries now keep a short history of previous values — every time an hour value changes (by hand or from a re-uploaded report), the value it replaced is saved. Open "Edit Entry" on any log row to see it under "Previous values." Extra safety net on top of last version\'s fix, so a number is never permanently unrecoverable again.']
   },
@@ -6902,6 +6906,29 @@ function unifocusHoursForPosition(pos,ds){
   });
   return total;
 }
+
+/* Which standard Labor's By Position table is currently showing —
+   'current' (LABOR_STD, the pre-Unifocus default) or 'unifocus'.
+   Persisted so it survives navigation/reload; per-device, not synced (a
+   display preference, not data). */
+function getLaborStandardMode(){
+  try{return localStorage.getItem('hk_labor_std_mode')==='unifocus'?'unifocus':'current';}catch(e){return 'current';}
+}
+function setLaborStandardMode(mode){
+  try{localStorage.setItem('hk_labor_std_mode',mode==='unifocus'?'unifocus':'current');}catch(e){}
+  renderLaborDash();
+}
+function buildStandardToggleHtml(mode){
+  var opts=[{key:'current',label:'Current Standard'},{key:'unifocus',label:'Unifocus'}];
+  var html='<div style="display:inline-flex;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:2px;gap:2px;">';
+  opts.forEach(function(o){
+    var active=mode===o.key;
+    html+='<button onclick="setLaborStandardMode(\''+o.key+'\')" style="padding:5px 12px;border:none;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;background:'
+      +(active?'var(--navy)':'transparent')+';color:'+(active?'#fff':'var(--text2)')+';">'+o.label+'</button>';
+  });
+  html+='</div>';
+  return html;
+}
 /* Departures input for the Labor day view's Rooms card — mirrors the Rooms
    input right above it (same rdc-input box, same auto-fill-then-editable
    behavior, same "filled" state), at Carlos's explicit request ("lo mismo
@@ -6913,14 +6940,14 @@ function unifocusHoursForPosition(pos,ds){
 function buildUnifocusDeparturesHTML(ds,dayLabel){
   var dep=getDeparturesForDay(ds);
   var html='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">'
-    +'<div style="font-size:12px;font-weight:700;color:var(--gd);">&#129529; Departures &#8212; '+dayLabel+'</div>'
-    +'<div style="font-size:10.5px;color:var(--text3);margin-top:1px;margin-bottom:8px;">For '+dayLabel+' itself — not the night before, unlike Rooms above</div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gd);text-align:center;">&#129529; Departures &#8212; '+dayLabel+'</div>'
+    +'<div style="font-size:10.5px;color:var(--text3);margin-top:1px;margin-bottom:8px;text-align:center;">For '+dayLabel+' itself — not the night before, unlike Rooms above</div>'
     +'<input class="rdc-input'+(dep>0?' filled':'')+'" style="border-color:var(--gold);font-size:28px;padding:10px 8px;" type="number" min="0" max="999" '
     +'placeholder="0" value="'+(dep>0?dep:'')+'" data-ds="'+ds+'" '
     +'onchange="saveDeparturesForDate(this.dataset.ds,this.value);'
     +'if(this.value.trim())this.classList.add(\'filled\');'
     +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
-    +'<div class="rdc-note">See the Unifocus column in By Position below for the resulting hours</div>'
+    +'<div class="rdc-note" style="text-align:center;">Switch By Position below to "Unifocus" to see the resulting hours</div>'
     +'</div>';
   return html;
 }
@@ -10220,6 +10247,7 @@ function renderLaborDash(){
 
 function buildWeeklyPaceHTML(days,rooms,wk){
   if(!wk)return'';
+  var stdMode=getLaborStandardMode();
 
   var positions=[
     {key:'Room Attendant',     label:'Room Attendant',  sub:'56.2% of rooms'},
@@ -10284,9 +10312,18 @@ function buildWeeklyPaceHTML(days,rooms,wk){
 
   if(daysLoaded===0)return'';
 
+  /* The active toggle drives which standard's budget counts toward the
+     header variance and every row below — never both at once. */
+  function stdBudgetFor(p){
+    if(stdMode==='unifocus')return weekUfDays[p.key]>0?weekUnifocus[p.key]:null;
+    return weekBudget[p.key];
+  }
+
   var totalOver=0,totalUnder=0,netVar=0;
   positions.forEach(function(p){
-    var v=weekActual[p.key]-weekBudget[p.key];
+    var b=stdBudgetFor(p);
+    if(b===null)return;
+    var v=weekActual[p.key]-b;
     netVar+=v;
     if(v>0.5)totalOver+=v;else if(v<-0.5)totalUnder+=Math.abs(v);
   });
@@ -10310,28 +10347,16 @@ function buildWeeklyPaceHTML(days,rooms,wk){
 
   var activeDayIdx=[];
   for(var di=0;di<7;di++){if(dayHasData[di])activeDayIdx.push(di);}
-  /* Two extra columns for Unifocus (budget + its own variance), marked off
-     by a gold divider on the first of them — same visual language as the
-     daily By Position table's Unifocus group. */
-  var gridCols='minmax(128px,1fr) '+activeDayIdx.map(function(){return '40px';}).join(' ')+' 58px 58px 74px 66px 66px';
-  var rowMinW=128+activeDayIdx.length*40+58+58+74+66+66;
-  /* padding-left keeps the gold rule off the neighbouring variance pill,
-     which would otherwise sit flush against it. */
-  var UF_DIV='border-left:1px solid var(--gold);padding-left:8px;';
+  var gridCols='minmax(128px,1fr) '+activeDayIdx.map(function(){return '40px';}).join(' ')+' 58px 58px 74px';
+  var rowMinW=128+activeDayIdx.length*40+58+58+74;
 
   html+='<div style="overflow-x:auto;">';
 
-  /* Group header: blank over Position/days/Actual, then one label spanning
-     each standard's own Budget+Variance pair. Unifocus's whole header block
-     (both rows) gets a gold-soft background — same delimiting treatment as
-     the daily By Position table — plus a navy-and-gold badge on the
-     "Unifocus" label itself (mirrors the existing gold "Adjusted" badge
-     elsewhere in this card set, but inverted colors so the two badges read
-     as distinct at a glance). */
-  html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:end;padding:6px 14px 3px;border-left:3px solid transparent;background:var(--surface);width:100%;min-width:'+rowMinW+'px;">';
-  html+='<div style="grid-column:span '+(2+activeDayIdx.length)+';"></div>';
-  html+='<div style="grid-column:span 2;text-align:center;font-size:9px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;">Current standard</div>';
-  html+='<div style="grid-column:span 2;text-align:center;background:var(--gold-soft);'+UF_DIV+'"><span style="font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;background:var(--navy);color:var(--gold-text);padding:2px 8px;border-radius:99px;">Unifocus</span></div>';
+  /* One standard's Budget+Variance at a time now — the toggle picks which,
+     same as the daily By Position table, instead of the old side-by-side
+     Current/Unifocus columns. */
+  html+='<div style="display:flex;align-items:center;justify-content:flex-end;padding:6px 14px;border-left:3px solid transparent;background:var(--surface);width:100%;min-width:'+rowMinW+'px;box-sizing:border-box;">';
+  html+=buildStandardToggleHtml(stdMode);
   html+='</div>';
 
   html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;padding:0 14px 7px;border-left:3px solid transparent;background:var(--surface);border-bottom:1px solid var(--border);width:100%;min-width:'+rowMinW+'px;">';
@@ -10343,17 +10368,15 @@ function buildWeeklyPaceHTML(days,rooms,wk){
   html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Actual</div>';
   html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Budget</div>';
   html+='<div style="text-align:right;padding-right:8px;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Variance</div>';
-  html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;background:var(--gold-soft);'+UF_DIV+'">Budget</div>';
-  html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;background:var(--gold-soft);">Variance</div>';
   html+='</div>';
 
   positions.forEach(function(p){
     var actual=weekActual[p.key];
-    var budget=weekBudget[p.key];
-    if(actual===0&&budget===0)return;
-    var variance=actual-budget;
-    var isOver=variance>0.5;
-    var isUnder=variance<-0.5;
+    var budget=stdBudgetFor(p);
+    if(actual===0&&(budget===0||budget===null))return;
+    var variance=budget===null?null:actual-budget;
+    var isOver=variance!==null&&variance>0.5;
+    var isUnder=variance!==null&&variance<-0.5;
     var accent=isOver?'var(--red-border)':isUnder?'var(--green-border)':'var(--border)';
     var valColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
     var pillBg=isOver?'var(--red-border)':isUnder?'var(--green-border)':'var(--border)';
@@ -10367,23 +10390,15 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       html+='<div style="text-align:right;font-size:10.5px;color:var(--text2);">'+(v>0?v.toFixed(2):'\u2014')+'</div>';
     });
     html+='<div style="text-align:right;font-size:12.5px;font-weight:800;color:'+valColor+';">'+actual.toFixed(2)+'h</div>';
-    html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);">'+budget.toFixed(2)+'h</div>';
-    html+='<div style="text-align:right;padding-right:8px;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'
-      +(variance>=0?'+':'')+variance.toFixed(2)+'h</span></div>';
-    /* Unifocus pair — em-dash for positions with no standard on file yet,
-       or whose reported days lack the driver data it needs. */
-    var ufBudget=weekUfDays[p.key]>0?weekUnifocus[p.key]:null;
-    if(ufBudget===null){
-      html+='<div style="text-align:right;font-size:12.5px;color:var(--text3);'+UF_DIV+'">—</div>';
+    /* No standard on file for this position under the active toggle mode —
+       em-dash in both Budget and Variance rather than a misleading 0.00h. */
+    if(budget===null){
       html+='<div style="text-align:right;font-size:12.5px;color:var(--text3);">—</div>';
+      html+='<div style="text-align:right;padding-right:8px;font-size:12.5px;color:var(--text3);">—</div>';
     }else{
-      var ufVar=actual-ufBudget;
-      var ufOver=ufVar>0.5,ufUnder=ufVar<-0.5;
-      var ufPillBg=ufOver?'var(--red-border)':ufUnder?'var(--green-border)':'var(--border)';
-      var ufPillColor=ufOver?'var(--red)':ufUnder?'var(--green)':'var(--text2)';
-      html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);'+UF_DIV+'">'+ufBudget.toFixed(2)+'h</div>';
-      html+='<div style="text-align:right;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+ufPillBg+';color:'+ufPillColor+';">'
-        +(ufVar>=0?'+':'')+ufVar.toFixed(2)+'h</span></div>';
+      html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);">'+budget.toFixed(2)+'h</div>';
+      html+='<div style="text-align:right;padding-right:8px;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'
+        +(variance>=0?'+':'')+variance.toFixed(2)+'h</span></div>';
     }
     html+='</div>';
   });
@@ -10417,7 +10432,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
          no training/project hours that week show unchanged numbers, noted
          "unchanged" instead of a deduction. */
       var _adjIsOver=_adj>0.5,_adjIsUnder=_adj<-0.5;
-      var adjGridCols='minmax(110px,1fr) 58px 58px 74px 66px 66px';
+      var adjGridCols='minmax(110px,1fr) 58px 58px 74px';
       html+='<div style="background:var(--white);border:1px solid var(--gold);box-shadow:inset 0 0 0 2px var(--gold);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
       html+='<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
       html+='<div>';
@@ -10433,56 +10448,44 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       html+='</div></div>';
 
       html+='<div style="overflow-x:auto;">';
-      html+='<div style="display:grid;grid-template-columns:'+adjGridCols+';align-items:end;padding:6px 14px 3px;background:var(--surface);">';
-      html+='<div style="grid-column:span 2;"></div>';
-      html+='<div style="grid-column:span 2;text-align:center;font-size:9px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;">Current standard</div>';
-      html+='<div style="grid-column:span 2;text-align:center;background:var(--gold-soft);'+UF_DIV+'"><span style="font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;background:var(--navy);color:var(--gold-text);padding:2px 8px;border-radius:99px;">Unifocus</span></div>';
+      html+='<div style="display:flex;align-items:center;justify-content:flex-end;padding:6px 14px;background:var(--surface);">';
+      html+=buildStandardToggleHtml(stdMode);
       html+='</div>';
       html+='<div style="display:grid;grid-template-columns:'+adjGridCols+';align-items:center;padding:0 14px 7px;background:var(--surface);border-bottom:1px solid var(--border);">';
       html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Position</div>';
       html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Actual</div>';
       html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Budget</div>';
       html+='<div style="text-align:right;padding-right:8px;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Variance</div>';
-      html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;background:var(--gold-soft);'+UF_DIV+'">Budget</div>';
-      html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;background:var(--gold-soft);">Variance</div>';
       html+='</div>';
 
       positions.forEach(function(p){
         var actual=weekActual[p.key];
-        var budget=weekBudget[p.key];
-        if(actual===0&&budget===0)return;
+        var budget=stdBudgetFor(p);
+        if(actual===0&&(budget===0||budget===null))return;
         var projForPos=_pw.byPos[p.key]||0;
         var trainForPos=_tw?(_tw.byPos[p.key]||0):0;
-        var adjV=(actual-budget)-projForPos-trainForPos;
-        var pIsOver=adjV>0.5,pIsUnder=adjV<-0.5;
-        var pAccent=pIsOver?'var(--red-border)':pIsUnder?'var(--green-border)':'var(--border)';
-        var pValColor=pIsOver?'var(--red)':pIsUnder?'var(--green)':'var(--text2)';
-        var pPillBg=pIsOver?'var(--red-border)':pIsUnder?'var(--green-border)':'var(--border)';
-        var pPillColor=pIsOver?'var(--red)':pIsUnder?'var(--green)':'var(--text2)';
         var noteParts=[];
         if(projForPos>0)noteParts.push('-'+projForPos.toFixed(2)+'h project');
         if(trainForPos>0)noteParts.push('-'+trainForPos.toFixed(2)+'h training');
         var posNote=noteParts.length?noteParts.join(', '):'unchanged';
+        var adjV=budget===null?null:(actual-budget)-projForPos-trainForPos;
+        var pIsOver=adjV!==null&&adjV>0.5,pIsUnder=adjV!==null&&adjV<-0.5;
+        var pAccent=pIsOver?'var(--red-border)':pIsUnder?'var(--green-border)':'var(--border)';
+        var pValColor=pIsOver?'var(--red)':pIsUnder?'var(--green)':'var(--text2)';
+        var pPillBg=pIsOver?'var(--red-border)':pIsUnder?'var(--green-border)':'var(--border)';
+        var pPillColor=pIsOver?'var(--red)':pIsUnder?'var(--green)':'var(--text2)';
 
         html+='<div style="display:grid;grid-template-columns:'+adjGridCols+';align-items:center;padding:9px 14px;border-top:1px solid var(--border);border-left:3px solid '+pAccent+';background:var(--white);">';
         html+='<div><div style="font-size:11.5px;font-weight:700;color:var(--text1);">'+p.label+'</div>'
           +'<div style="font-size:9px;color:var(--text3);margin-top:1px;">'+posNote+'</div></div>';
         html+='<div style="text-align:right;font-size:12.5px;font-weight:800;color:'+pValColor+';">'+actual.toFixed(2)+'h</div>';
-        html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);">'+budget.toFixed(2)+'h</div>';
-        html+='<div style="text-align:right;padding-right:8px;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+pPillBg+';color:'+pPillColor+';">'
-          +(adjV>=0?'+':'')+adjV.toFixed(2)+'h</span></div>';
-        var ufBudgetWk=weekUfDays[p.key]>0?weekUnifocus[p.key]:null;
-        if(ufBudgetWk===null){
-          html+='<div style="text-align:right;font-size:12.5px;color:var(--text3);'+UF_DIV+'">—</div>';
+        if(budget===null){
           html+='<div style="text-align:right;font-size:12.5px;color:var(--text3);">—</div>';
+          html+='<div style="text-align:right;padding-right:8px;font-size:12.5px;color:var(--text3);">—</div>';
         }else{
-          var ufAdjV=(actual-ufBudgetWk)-projForPos-trainForPos;
-          var ufIsOver=ufAdjV>0.5,ufIsUnder=ufAdjV<-0.5;
-          var ufPillBg2=ufIsOver?'var(--red-border)':ufIsUnder?'var(--green-border)':'var(--border)';
-          var ufPillColor2=ufIsOver?'var(--red)':ufIsUnder?'var(--green)':'var(--text2)';
-          html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);'+UF_DIV+'">'+ufBudgetWk.toFixed(2)+'h</div>';
-          html+='<div style="text-align:right;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+ufPillBg2+';color:'+ufPillColor2+';">'
-            +(ufAdjV>=0?'+':'')+ufAdjV.toFixed(2)+'h</span></div>';
+          html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);">'+budget.toFixed(2)+'h</div>';
+          html+='<div style="text-align:right;padding-right:8px;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+pPillBg+';color:'+pPillColor+';">'
+            +(adjV>=0?'+':'')+adjV.toFixed(2)+'h</span></div>';
         }
         html+='</div>';
       });
@@ -10601,50 +10604,49 @@ function renderDashDayAnalysis(days,rooms,today,wk){
        tinting every row read as messy/unintentional at low opacity;
        a clean vertical rule is the more standard way to mark a table
        section boundary. */
-    var UF_DIV='border-left:1px solid var(--gold);';
-    html+='<div class="day-summary-card"><div class="dsc-head"><div class="dsc-title">By Position</div></div>'
+    /* Standard toggle (added at Carlos's request, still a proof-of-concept
+       for just this table): switches the WHOLE By Position table between
+       showing only the current LABOR_STD budget or only the Unifocus
+       budget — a clean single-standard view either way, matching how the
+       page looked before Unifocus existed, rather than the two side by
+       side. Persisted so it stays put across navigation/reloads. If this
+       direction sticks, the same toggle should eventually drive Day
+       Summary's aggregate budget and Weekly Pace too — deliberately not
+       done yet, this is scoped to By Position only until Carlos confirms
+       the direction. */
+    var stdMode=getLaborStandardMode();
+    html+='<div class="day-summary-card"><div class="dsc-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+      +'<div class="dsc-title">By Position</div>'
+      +buildStandardToggleHtml(stdMode)
+      +'</div>'
       +'<div style="overflow-x:auto;">'
       +'<table style="width:100%;border-collapse:collapse;font-size:11.5px;">'
-      +'<thead>'
-      +'<tr>'
-      +'<th rowspan="2" style="padding:6px 10px;text-align:left;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;vertical-align:bottom;background:var(--surface);">Position</th>'
-      +'<th rowspan="2" style="padding:6px 10px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;vertical-align:bottom;background:var(--surface);">Paid</th>'
-      +'<th colspan="2" style="padding:5px 10px 3px;text-align:center;color:var(--text2);background:var(--surface);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);">Current Standard</th>'
-      +'<th colspan="2" style="padding:5px 10px 3px;text-align:center;color:var(--gd);background:var(--gold-soft);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);'+UF_DIV+'">Unifocus</th>'
-      +'</tr>'
-      +'<tr>'
-      +'<th style="padding:4px 10px 6px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Budget</th>'
-      +'<th style="padding:4px 10px 6px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Variance</th>'
-      +'<th style="padding:4px 10px 6px;text-align:right;color:var(--gd);border-bottom:1px solid var(--border);font-size:10px;background:var(--gold-soft);'+UF_DIV+'">Budget</th>'
-      +'<th style="padding:4px 10px 6px;text-align:right;color:var(--gd);border-bottom:1px solid var(--border);font-size:10px;background:var(--gold-soft);">Variance</th>'
-      +'</tr>'
-      +'</thead><tbody>';
+      +'<thead><tr>'
+      +'<th style="padding:6px 10px;text-align:left;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Position</th>'
+      +'<th style="padding:6px 10px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Paid</th>'
+      +'<th style="padding:6px 10px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Budget</th>'
+      +'<th style="padding:6px 10px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Variance</th>'
+      +'</tr></thead><tbody>';
     if(snap.byPosition){
       HK_POS_LIST.forEach(function(pos){
         var p=snap.byPosition[pos];if(!p)return;
-        var std=LABOR_STD[pos];
-        var pb=std?(std.type==='fixed'?std.daily:(r>0?r*std.factor:0)):0;
-        var pv=(pb>0)?p.paid-pb:null;
+        var bVal,vVal;
+        if(stdMode==='unifocus'){
+          bVal=unifocusHoursForPosition(pos,ds);
+        }else{
+          var std=LABOR_STD[pos];
+          var raw=std?(std.type==='fixed'?std.daily:(r>0?r*std.factor:0)):0;
+          bVal=(raw>0)?raw:null;
+        }
+        vVal=(bVal!==null)?p.paid-bVal:null;
         var short=pos.replace(' Attendant','').replace('Housekeeping ','Sup.');
-        /* Read-only reference figure, populated only for positions with a
-           Unifocus standard on file — see UNIFOCUS_STANDARDS. Does not
-           affect Variance, which still judges against the LABOR_STD budget
-           above — this is its OWN variance, against the Unifocus number,
-           shown as its own column so the two standards are never averaged
-           or conflated. */
-        var uf=unifocusHoursForPosition(pos,ds);
-        var ufv=(uf!==null)?p.paid-uf:null;
         html+='<tr>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+'</td>'
           +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);">'+p.paid.toFixed(2)+'</td>'
-          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);color:var(--text3);">'+(pb>0?pb.toFixed(2):'&#8212;')+'</td>'
+          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);color:var(--text3);">'+(bVal!==null?bVal.toFixed(2):'&#8212;')+'</td>'
           +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:'
-          +(pv!==null?(pv>0?'var(--red)':'var(--green)'):'inherit')+'">'
-          +(pv!==null?(pv>=0?'+':'')+pv.toFixed(2):'&#8212;')+'</td>'
-          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);color:var(--text3);'+UF_DIV+'">'+(uf!==null?uf.toFixed(2):'&#8212;')+'</td>'
-          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:'
-          +(ufv!==null?(ufv>0?'var(--red)':'var(--green)'):'inherit')+'">'
-          +(ufv!==null?(ufv>=0?'+':'')+ufv.toFixed(2):'&#8212;')+'</td></tr>';
+          +(vVal!==null?(vVal>0?'var(--red)':'var(--green)'):'inherit')+'">'
+          +(vVal!==null?(vVal>=0?'+':'')+vVal.toFixed(2):'&#8212;')+'</td></tr>';
       });
     }
     html+='</tbody></table></div>';

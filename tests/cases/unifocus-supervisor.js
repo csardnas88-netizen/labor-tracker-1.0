@@ -46,6 +46,7 @@ module.exports = {
     // By Position table: BOTH positions now show a real Unifocus figure;
     // a position with no standard on file (Room Attendant) still shows —.
     win.dashSelectedDate = new Date(2026, 6, 20);
+    win.setLaborStandardMode('unifocus');
     win.showPage('labor');
     const html = win.document.getElementById('dashDayAnalysis').innerHTML;
     const rows = html.split('<tr>').filter((r) => /Sup\.Supervisor|>House<|>Room</.test(r));
