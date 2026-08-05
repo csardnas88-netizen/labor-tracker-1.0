@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.88.0"/>
+<meta name="app-version" content="6.89.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4218,6 +4218,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.89.0', date:'2026-08-05',
+    improvements:['Project Hours entries now show the date the work was actually done, right under the person\'s name (e.g. "Aug 3"), instead of just their name, hours, and note.']
+  },
   {
     v:'6.88.0', date:'2026-08-05',
     fixes:['Fixed a real data-loss bug: Departures counts and variance notes could get silently erased any time the app synced with the cloud (not just on a report re-upload) — the cloud-sync merge only knew about report/room data, so anything else on the day got dropped the next time it refreshed. This is why a note saved on one device could vanish. Departures and variance notes now sync their own way, the same reliable way room counts already do, and are protected from being wiped by anything the sync layer doesn\'t explicitly recognize yet.'],
@@ -13657,8 +13661,9 @@ function getProjectHoursForWeek(weekKey){
       byProject[p.name].hours+=hh;
       var key=(e.empId||e.empName||'?')+'|'+(e.note||'');
       var it=byProject[p.name]._items[key];
-      if(!it){it={empName:e.empName||'',pos:pos,note:e.note||'',hours:0};byProject[p.name]._items[key]=it;}
+      if(!it){it={empName:e.empName||'',pos:pos,note:e.note||'',hours:0,dates:[]};byProject[p.name]._items[key]=it;}
       it.hours+=hh;
+      if(e.date&&it.dates.indexOf(e.date)===-1)it.dates.push(e.date);
     });
   });
   var projList=Object.keys(byProject).sort().map(function(n){
@@ -13781,13 +13786,22 @@ function _pacePosGroups(pw){
     pr.items.forEach(function(it){
       var pos=it.pos||'Unknown';
       if(!byPos[pos])byPos[pos]=[];
-      byPos[pos].push({empName:it.empName,note:it.note,hours:it.hours,projectName:pr.name});
+      byPos[pos].push({empName:it.empName,note:it.note,hours:it.hours,projectName:pr.name,dates:it.dates||[]});
     });
   });
   Object.keys(byPos).forEach(function(pos){
     byPos[pos].sort(function(a,b){return b.hours-a.hours;});
   });
   return byPos;
+}
+/* Compact "Aug 3" / "Aug 3, Aug 4" label for an item's work date(s) —
+   Carlos asked to see when the hours were actually worked, not just who
+   and how many. Sorted ascending regardless of log iteration order. */
+function _fmtProjectDates(dates){
+  if(!dates||!dates.length)return '';
+  return dates.slice().sort().map(function(ds){
+    try{return parseLocalDate(ds).toLocaleDateString('en-US',{month:'short',day:'numeric'});}catch(e){return ds;}
+  }).join(', ');
 }
 function _pacePosGroupHtml(pos,items,total,multiProject){
   var open=!!pacePosExpanded[pos];
@@ -13800,7 +13814,7 @@ function _pacePosGroupHtml(pos,items,total,multiProject){
     h+='<div style="border-top:1px solid var(--border);">';
     items.forEach(function(it,i){
       var note=multiProject?(it.projectName+(it.note?' — '+it.note:'')):it.note;
-      h+=_paceRow(it.empName,'',it.hours,note,i===0);
+      h+=_paceRow(it.empName,_fmtProjectDates(it.dates),it.hours,note,i===0);
     });
     h+='</div>';
   }

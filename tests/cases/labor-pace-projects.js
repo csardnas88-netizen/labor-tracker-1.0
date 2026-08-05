@@ -30,6 +30,7 @@ module.exports = {
     t.assert(ana, 'Ana Lopez missing from project items');
     t.eq(ana.hours, 9, 'Ana hours wrong');
     t.assert(/Deep cleaned rooms/.test(ana.note), 'Ana activity note missing');
+    t.assert(Array.isArray(ana.dates) && ana.dates.includes('2026-07-15'), "Ana's item carries the date she actually worked (2026-07-15), at Carlos's request");
 
     const week = { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) };
     const monthDays = win.loadMonthData('2026-07').days;
@@ -51,6 +52,14 @@ module.exports = {
     strip = win.buildWeeklyPaceHTML(monthDays, 200, week);
     t.assert(/Ana Lopez/.test(strip) && /Beto Cruz/.test(strip), 'employee names missing from strip once their position group is expanded');
     t.assert(/Deep cleaned rooms 1401-1410/.test(strip), 'activity note missing from strip');
+
+    // Each person's work date now renders too (Carlos's request), in the
+    // slot the row previously used for a redundant position label — Ana
+    // worked 2026-07-15 ("Jul 15"), Beto worked 2026-07-14 ("Jul 14").
+    const anaIdx = strip.indexOf('Ana Lopez');
+    const betoIdx = strip.indexOf('Beto Cruz');
+    t.assert(/Jul 15/.test(strip.slice(anaIdx, anaIdx + 300)), "Ana's row shows the date she worked (Jul 15)");
+    t.assert(/Jul 14/.test(strip.slice(betoIdx, betoIdx + 300)), "Beto's row shows the date he worked (Jul 14)");
 
     // Reconciliation line: Variance − Projects − Training = Adjusted, and the
     // math must actually hold (this is the number the meeting reads).
