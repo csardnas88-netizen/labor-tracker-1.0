@@ -12,7 +12,17 @@
    something else. Fixed by tracking entry.autoFilled explicitly:
    saveEditEntry() now clears it on any manual save, and the autofill pass
    only ever touches entries that are pending OR still flagged autoFilled
-   (i.e. never touched by a human since the last fill). */
+   (i.e. never touched by a human since the last fill).
+
+   Also covers a follow-up Carlos asked for after fixing the bug itself:
+   "make sure nothing gets lost in the future" — the original 10 clobbered
+   values were unrecoverable because nothing preserved what they'd been
+   before being overwritten. entry.history now records the value being
+   replaced (see _recordEntryHistory) on every path that changes
+   entry.hours — manual edit or either autofill function — so even an
+   unanticipated future bug would leave a recoverable trail instead of
+   silent, permanent loss. Shown to the user directly in the Edit Entry
+   modal (_entryHistoryHtml) rather than requiring a Supabase query. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
@@ -81,5 +91,23 @@ module.exports = {
     win.autofillAllPendingProjectEntries();
     const secondEntry = win.loadProjects()[0].log[1];
     t.eq(secondEntry.hours, 8.18, 'a still-pending entry for the same person/day fills normally — the fix is scoped to manual edits, not a blanket freeze');
+
+    // ── History: the value replaced at each step is preserved, not lost. ──
+    entry = win.loadProjects()[0].log[0];
+    t.assert(Array.isArray(entry.history), 'entry.history exists after being changed at least once');
+    t.eq(entry.history.length, 1, 'one history row so far: the 8.18h auto-fill that was replaced by the manual 2h edit');
+    t.eq(entry.history[0].hours, 8.18, 'the history row holds the value that was overwritten (8.18h), not the current one');
+    t.eq(entry.history[0].source, 'manual', 'source records what REPLACED it (a manual edit), matching _recordEntryHistory\'s call site in saveEditEntry');
+
+    // A pending entry's first-ever fill has nothing to preserve yet.
+    t.assert(!secondEntry.history, "a fresh pending entry's first autofill records no history — there was no prior real value to lose");
+
+    // The Edit Entry modal surfaces this directly, so Carlos never has to
+    // ask for a Supabase query to see what a value used to be.
+    win.showEditEntryModal(0, 0);
+    const modalHtml = win.document.getElementById('editEntryModal').innerHTML;
+    t.assert(/Previous values/.test(modalHtml), 'the edit modal shows a "Previous values" section once history exists');
+    t.assert(/8\.18h/.test(modalHtml), 'the replaced 8.18h value is visible in the modal');
+    win.closeEditEntryModal();
   }
 };

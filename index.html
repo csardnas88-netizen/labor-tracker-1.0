@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.80.0"/>
+<meta name="app-version" content="6.81.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4206,6 +4206,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'6.81.0', date:'2026-08-04',
+    features:['Project Hours entries now keep a short history of previous values — every time an hour value changes (by hand or from a re-uploaded report), the value it replaced is saved. Open "Edit Entry" on any log row to see it under "Previous values." Extra safety net on top of last version\'s fix, so a number is never permanently unrecoverable again.']
+  },
   {
     v:'6.80.0', date:'2026-08-04',
     fixes:['Fixed a real data-loss bug: manually-entered Project Hours (e.g. logging a few hours of a specific task against someone\'s day) could get silently overwritten back to that employee\'s full paid hours for the day, any time the Projects page was opened again after that day\'s Labor Distribution Report existed. Confirmed and fixed against 10 real entries that had been affected since July. Editing an entry by hand now permanently protects it — the report auto-fill only ever touches entries that are still blank or that were themselves auto-filled, never a value someone typed in.']
@@ -12209,6 +12213,7 @@ function autofillPendingProjectEntries(ds, mData){
       if(entries.length===0)return;
       // Single position — fill directly
       if(entries.length===1){
+        _recordEntryHistory(entry,'autofill');
         entry.hours=entries[0].paid;
         entry.pos=entries[0].pos;
         entry.pending=false;
@@ -12219,6 +12224,7 @@ function autofillPendingProjectEntries(ds, mData){
         // Multiple positions — pick the one matching pos if stored, else take total
         var match=entries.filter(function(e){return e.pos===entry.pos;})[0];
         if(match){
+          _recordEntryHistory(entry,'autofill');
           entry.hours=match.paid;
           entry.pending=false;
           entry.autoFilled=true;
@@ -12227,6 +12233,7 @@ function autofillPendingProjectEntries(ds, mData){
         } else {
           // Take total across all positions
           var total=entries.reduce(function(s,e){return s+e.paid;},0);
+          _recordEntryHistory(entry,'autofill');
           entry.hours=total;
           entry.pos='Multiple positions';
           entry.pending=false;
@@ -12253,6 +12260,22 @@ function autofillPendingProjectEntries(ds, mData){
    posted, or a same-day preliminary report was uploaded before the entry was
    created), it would otherwise stay stuck on "Pending" forever. This runs
    every time the Projects page renders, so nothing stays stuck. ── */
+/* Records the value a project log entry's hours is ABOUT to be replaced
+   with, so a number is never truly lost even if something unexpected
+   overwrites it later — recoverable from entry.history, not just from
+   memory or a screenshot. Call this right before entry.hours changes, from
+   every code path that can change it (manual edit, either autofill
+   function). Added after a real incident (2026-08-04) where several
+   manually-typed values were silently overwritten with no way to recover
+   what they'd originally been — see [[labor-tracker-project-hours-clobber-bug]].
+   Capped at 10 entries per log row; this field changes rarely, so that's
+   headroom, not a practical limit. */
+function _recordEntryHistory(entry,source){
+  if(entry.hours===null||entry.hours===undefined)return; /* nothing to preserve on a first-ever fill */
+  entry.history=entry.history||[];
+  entry.history.push({hours:entry.hours,pos:entry.pos,source:source,at:new Date().toISOString()});
+  if(entry.history.length>10)entry.history=entry.history.slice(-10);
+}
 function autofillAllPendingProjectEntries(){
   var projects=loadProjects();
   var changed=false;
@@ -12303,6 +12326,7 @@ function autofillAllPendingProjectEntries(){
         }
       }
       if(!entry.pending&&entry.hours===newHours&&entry.pos===newPos)return;
+      _recordEntryHistory(entry,'autofill');
       entry.hours=newHours;
       entry.pos=newPos;
       entry.pending=false;
@@ -14390,17 +14414,34 @@ function deleteLogEntry(projIdx,entryIdx){
 
 function closeEditEntryModal(){var m=document.getElementById('editEntryModal');if(m)m.remove();}
 
+/* Small "Previous values" strip shown in the Edit Entry modal — so if a
+   number ever looks wrong, Carlos can see what it used to be right there
+   instead of asking to have Supabase queried. Most recent first, capped to
+   the last 4 (entry.history itself already caps at 10 — see
+   _recordEntryHistory). */
+function _entryHistoryHtml(entry){
+  if(!entry.history||!entry.history.length)return '';
+  var rows=entry.history.slice(-4).reverse().map(function(h){
+    var when=new Date(h.at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    var src=h.source==='manual'?'you':'auto-filled';
+    return '<div>'+h.hours.toFixed(2)+'h &middot; '+src+' &middot; '+when+'</div>';
+  }).join('');
+  return '<div style="font-size:10.5px;color:var(--text3);margin-top:6px;line-height:1.6;">'
+    +'<div style="font-weight:700;text-transform:uppercase;letter-spacing:.4px;font-size:9px;margin-bottom:2px;">Previous values</div>'
+    +rows+'</div>';
+}
 function showEditEntryModal(projIdx, entryIdx){
   var projects=loadProjects();
   var proj=projects[projIdx];
   if(!proj)return;
   var entry=proj.log[entryIdx];
   if(!entry)return;
+  var historyHtml=_entryHistoryHtml(entry);
 
   var overlay=document.createElement('div');
   overlay.id='editEntryModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#9998; Edit Entry</div>'    +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(proj.name)+'</div>'    +'<div style="display:flex;flex-direction:column;gap:13px;">'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date</label>'    +'<input id="editEntryDate" type="date" value="'+entry.date+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee</label>'    +'<input id="editEntryEmp" value="'+escHtml(entry.empName)+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--surface);" readonly />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Hours '+(entry.pending?'<span style="color:var(--yellow);">⏳ Pending</span>':'')+' </label>'    +'<input id="editEntryHours" type="number" step="0.01" min="0" max="24" value="'+(entry.hours!==null&&entry.hours!==undefined?entry.hours:'')+'" placeholder="Leave empty to keep as pending" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'    +'<input id="editEntryNote" value="'+escHtml(entry.note||'')+'" placeholder="e.g. Deep cleaned floors 3-5" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'</div>'    +'<div style="display:flex;gap:8px;margin-top:20px;">'    +'<button onclick="closeEditEntryModal()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'    +'<button onclick="saveEditEntry('+projIdx+','+entryIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'    +'</div>'    +'</div>';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#9998; Edit Entry</div>'    +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(proj.name)+'</div>'    +'<div style="display:flex;flex-direction:column;gap:13px;">'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date</label>'    +'<input id="editEntryDate" type="date" value="'+entry.date+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee</label>'    +'<input id="editEntryEmp" value="'+escHtml(entry.empName)+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--surface);" readonly />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Hours '+(entry.pending?'<span style="color:var(--yellow);">⏳ Pending</span>':'')+' </label>'    +'<input id="editEntryHours" type="number" step="0.01" min="0" max="24" value="'+(entry.hours!==null&&entry.hours!==undefined?entry.hours:'')+'" placeholder="Leave empty to keep as pending" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +historyHtml    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'    +'<input id="editEntryNote" value="'+escHtml(entry.note||'')+'" placeholder="e.g. Deep cleaned floors 3-5" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'</div>'    +'<div style="display:flex;gap:8px;margin-top:20px;">'    +'<button onclick="closeEditEntryModal()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'    +'<button onclick="saveEditEntry('+projIdx+','+entryIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'    +'</div>'    +'</div>';
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
 }
@@ -14416,6 +14457,7 @@ function saveEditEntry(projIdx, entryIdx){
   var proj=projects[projIdx];
   if(!proj||!proj.log[entryIdx])return;
   var entry=proj.log[entryIdx];
+  _recordEntryHistory(entry,'manual');
   entry.date=ds;
   entry.hours=hours;
   entry.note=note;
