@@ -44,6 +44,7 @@ const cases = [
   require('./cases/labor-pace-projects-multiproject'),
   require('./cases/variance-notes'),
   require('./cases/month-sync-preserves-departures-and-notes'),
+  require('./cases/unifocus-room-attendant'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

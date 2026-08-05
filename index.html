@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.89.0"/>
+<meta name="app-version" content="6.90.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -721,11 +721,11 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .occ-head{padding:9px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;}
 .occ-title{font-size:11.5px;font-weight:700;color:var(--text1);}
 .occ-sub{font-size:9px;color:var(--text3);margin-top:1px;}
-.occ-grid{display:grid;grid-template-columns:1fr 1fr;}
-.occ-tile{padding:10px 12px;text-align:center;}
+.occ-grid{display:grid;grid-template-columns:1fr 1fr 1fr;}
+.occ-tile{padding:10px 10px;text-align:center;}
 .occ-tile+.occ-tile{border-left:1px solid var(--border);}
 .occ-tile-label{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;}
-.occ-input{width:100%;padding:5px;margin-top:4px;border:1px solid var(--border);border-radius:8px;font-size:22px;font-weight:800;text-align:center;color:var(--text1);background:#fff;transition:.15s;}
+.occ-input{width:100%;padding:5px;margin-top:4px;border:1px solid var(--border);border-radius:8px;font-size:20px;font-weight:800;text-align:center;color:var(--text1);background:#fff;transition:.15s;}
 .occ-input:focus{outline:none;border-color:var(--gold);}
 .occ-input.filled{border-color:var(--green);background:var(--green-bg);}
 .occ-note{font-size:9px;color:var(--text3);margin-top:4px;}
@@ -4219,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.90.0', date:'2026-08-05',
+    features:['Room Attendant now has a Unifocus standard too: 20 min for 85% of Stayovers (last night\'s rooms minus today\'s departures) plus 30 min per departure — Carlos\'s own numbers. The Occupancy card gained a third field, DNDs, where you list the actual room numbers that had a Do Not Disturb sign that day (comma separated, same as Project Hours notes) — kept as a real record in case of an audit, not just a total. This never changes the budget itself, it\'s purely evidence for the labor meeting. By Position shows a caption under Room Attendant with the real DND percentage (derived from the room list) against the standard\'s fixed 85%/15% assumption, so the number\'s on hand to justify it.']
+  },
+  {
     v:'6.89.0', date:'2026-08-05',
     improvements:['Project Hours entries now show the date the work was actually done, right under the person\'s name (e.g. "Aug 3"), instead of just their name, hours, and note.']
   },
@@ -6144,9 +6148,11 @@ function _dayTs(data,ds){ return (data.daysUpdatedAt&&data.daysUpdatedAt[ds])||_
 function _roomTs(data,ds){ return (data.roomsUpdatedAt&&data.roomsUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _depTs(data,ds){ return (data.departuresUpdatedAt&&data.departuresUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _vnoteTs(data,ds){ return (data.varianceNotesUpdatedAt&&data.varianceNotesUpdatedAt[ds])||_dsFallbackTs(ds); }
+function _dndTs(data,ds){ return (data.dndRoomsUpdatedAt&&data.dndRoomsUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _pushMonthRows(data,mk){
   data=data||{}; var days=data.days||{}, rooms=data.rooms||{}, src=data.roomsSource||{};
   var deps=data.departures||{}, depSrc=data.departuresSource||{}, vnotes=data.varianceNotes||{};
+  var dndRooms=data.dndRooms||{};
   var who=(typeof getSignedInEmail==='function'&&getSignedInEmail())||'';
   var shadow=_monthPushShadow(mk); var newShadow=Object.assign({},shadow); var rows=[];
   Object.keys(days).forEach(function(ds){
@@ -6176,6 +6182,17 @@ function _pushMonthRows(data,mk){
     var ts=_vnoteTs(data,ds), sk='vn:'+ds;
     if(shadow[sk]===ts)return;
     rows.push({key:'mvnote_'+mk+'_'+ds, value:JSON.stringify({v:vnotes[ds],ts:ts,by:who})});
+    newShadow[sk]=ts;
+  });
+  /* DND counts — Room Attendant's daily justification evidence for the
+     labor meeting (never affects the Unifocus budget math itself). Same
+     per-day-row treatment as departures, so it actually reaches other
+     devices instead of only ever living on whichever phone/computer it
+     was typed into. */
+  Object.keys(dndRooms).forEach(function(ds){
+    var ts=_dndTs(data,ds), sk='dnd:'+ds;
+    if(shadow[sk]===ts)return;
+    rows.push({key:'mdnd_'+mk+'_'+ds, value:JSON.stringify({v:dndRooms[ds],ts:ts,by:who})});
     newShadow[sk]=ts;
   });
   if(!rows.length)return;
@@ -6325,15 +6342,17 @@ function _syncFromSheetsPull(){
        keeping the newest timestamp per day; merged into local AFTER the loop. */
     var _remoteMonths={};
     function _tsRank(ts){ var n=Date.parse(ts); return isNaN(n)?0:n; }
-    function _rm(mk){ return _remoteMonths[mk]||(_remoteMonths[mk]={days:{},daysUpdatedAt:{},rooms:{},roomsUpdatedAt:{},roomsSource:{},departures:{},departuresUpdatedAt:{},departuresSource:{},varianceNotes:{},varianceNotesUpdatedAt:{}}); }
+    function _rm(mk){ return _remoteMonths[mk]||(_remoteMonths[mk]={days:{},daysUpdatedAt:{},rooms:{},roomsUpdatedAt:{},roomsSource:{},departures:{},departuresUpdatedAt:{},departuresSource:{},varianceNotes:{},varianceNotesUpdatedAt:{},dndRooms:{},dndRoomsUpdatedAt:{}}); }
     function _foldDay(mk,ds,snap,ts){ var m=_rm(mk); if(m.daysUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.daysUpdatedAt[ds])){ m.days[ds]=snap; m.daysUpdatedAt[ds]=ts; } }
     function _foldRoom(mk,ds,n,ts,srcv){ var m=_rm(mk); if(m.roomsUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.roomsUpdatedAt[ds])){ m.rooms[ds]=n; m.roomsUpdatedAt[ds]=ts; if(srcv)m.roomsSource[ds]=srcv; } }
     /* Departures and variance notes — same fold-by-newest-timestamp
        treatment as rooms, added in v6.88.0 (see the comment above
        getVarianceNote for why: both were previously dropped entirely by
-       this merge, the actual cause of Carlos's missing note). */
+       this merge, the actual cause of Carlos's missing note). DND counts
+       (v6.90.0) follow the exact same treatment from day one. */
     function _foldDep(mk,ds,n,ts,srcv){ var m=_rm(mk); if(m.departuresUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.departuresUpdatedAt[ds])){ m.departures[ds]=n; m.departuresUpdatedAt[ds]=ts; if(srcv)m.departuresSource[ds]=srcv; } }
     function _foldVNote(mk,ds,notesObj,ts){ var m=_rm(mk); if(m.varianceNotesUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.varianceNotesUpdatedAt[ds])){ m.varianceNotes[ds]=notesObj; m.varianceNotesUpdatedAt[ds]=ts; } }
+    function _foldDND(mk,ds,n,ts){ var m=_rm(mk); if(m.dndRoomsUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.dndRoomsUpdatedAt[ds])){ m.dndRooms[ds]=n; m.dndRoomsUpdatedAt[ds]=ts; } }
     Object.keys(all).forEach(function(key){
       try{
         if(key.indexOf("mday_")===0){
@@ -6348,6 +6367,9 @@ function _syncFromSheetsPull(){
         } else if(key.indexOf("mvnote_")===0){
           var _rV=all[key], _restV=key.slice(7), _uV=_restV.indexOf('_');
           if(_uV>0&&_rV&&_rV.v!==undefined)_foldVNote(_restV.slice(0,_uV),_restV.slice(_uV+1),_rV.v,_rV.ts);
+        } else if(key.indexOf("mdnd_")===0){
+          var _rN=all[key], _restN=key.slice(5), _uN=_restN.indexOf('_');
+          if(_uN>0&&_rN&&_rN.v!==undefined)_foldDND(_restN.slice(0,_uN),_restN.slice(_uN+1),_rN.v,_rN.ts);
         } else if(key.indexOf("month_")===0){
           var mk=key.replace("month_",""); var remote=all[key]||{};
           var _rd=remote.days||{}, _rdt=remote.daysUpdatedAt||{};
@@ -6358,6 +6380,8 @@ function _syncFromSheetsPull(){
           Object.keys(_rp).forEach(function(ds){ _foldDep(mk,ds,_rp[ds],_rpt[ds]!==undefined?_rpt[ds]:_dsFallbackTs(ds),_rpsrc[ds]); });
           var _rv=remote.varianceNotes||{}, _rvt=remote.varianceNotesUpdatedAt||{};
           Object.keys(_rv).forEach(function(ds){ _foldVNote(mk,ds,_rv[ds],_rvt[ds]!==undefined?_rvt[ds]:_dsFallbackTs(ds)); });
+          var _rn=remote.dndRooms||{}, _rnt=remote.dndRoomsUpdatedAt||{};
+          Object.keys(_rn).forEach(function(ds){ _foldDND(mk,ds,_rn[ds],_rnt[ds]!==undefined?_rnt[ds]:_dsFallbackTs(ds)); });
         }
         if(key.indexOf("r106_")===0){
           var mk2=key.replace("r106_","");
@@ -6511,6 +6535,7 @@ function _syncFromSheetsPull(){
       var roomsMerge=_mergeTimedDayMap(local.rooms,local.roomsUpdatedAt,remote.rooms,remote.roomsUpdatedAt,local.roomsSource,remote.roomsSource);
       var depsMerge=_mergeTimedDayMap(local.departures,local.departuresUpdatedAt,remote.departures,remote.departuresUpdatedAt,local.departuresSource,remote.departuresSource);
       var vnoteMerge=_mergeTimedDayMap(local.varianceNotes,local.varianceNotesUpdatedAt,remote.varianceNotes,remote.varianceNotesUpdatedAt);
+      var dndMerge=_mergeTimedDayMap(local.dndRooms,local.dndRoomsUpdatedAt,remote.dndRooms,remote.dndRoomsUpdatedAt);
       /* Start from a full copy of local (not a fresh object naming only the
          fields this function knows how to merge) so any OTHER field on the
          month blob survives untouched. This is the actual v6.88.0 fix: the
@@ -6522,7 +6547,8 @@ function _syncFromSheetsPull(){
         days:daysMerge.map,daysUpdatedAt:daysMerge.times,
         rooms:roomsMerge.map,roomsUpdatedAt:roomsMerge.times,roomsSource:roomsMerge.extra,
         departures:depsMerge.map,departuresUpdatedAt:depsMerge.times,departuresSource:depsMerge.extra,
-        varianceNotes:vnoteMerge.map,varianceNotesUpdatedAt:vnoteMerge.times
+        varianceNotes:vnoteMerge.map,varianceNotesUpdatedAt:vnoteMerge.times,
+        dndRooms:dndMerge.map,dndRoomsUpdatedAt:dndMerge.times
       });
       _origSaveMonthData(merged,mk);
       updated=true;
@@ -6908,6 +6934,30 @@ var UNIFOCUS_STANDARDS={
       bands:[[1,Infinity,[16,16,16,24,16,16,16]]] }
   ]
 };
+/* Room Attendant is NOT in UNIFOCUS_STANDARDS above — its formula is a
+   continuous per-room RATE, not a stepped band lookup like every other
+   position, so it doesn't fit that shape and is computed directly by
+   unifocusRoomAttendantHours() below instead. Confirmed with Carlos:
+   20 min for 85% of Stayovers + 30 min per Departure. Stayovers = last
+   night's rooms minus today's departures (the same night-before/same-day
+   conventions already used elsewhere). The 85% is a FIXED assumption in
+   the budget math, not driven by the day's actual DND count — that's
+   tracked separately, as the actual room list (getDNDRoomsForDay/
+   saveDNDRoomsForDate, count derived by getDNDCountForDay), purely as
+   justification evidence for the labor meeting, and never changes this
+   calculation. A DND room gets 0 minutes (it's excluded from the 85% that
+   gets cleaned), consistent with the fixed-15%-are-DNDs assumption. */
+var RA_STAYOVER_PCT=0.85;
+var RA_STAYOVER_MIN=20;
+var RA_DEPARTURE_MIN=30;
+function unifocusRoomAttendantHours(ds){
+  var dep=getDeparturesForDay(ds);
+  if(dep===null)return null; /* stayovers can't be derived without departures */
+  var rooms=getRoomsForDay(ds)||0;
+  var stayovers=Math.max(0,rooms-dep);
+  var minutes=(stayovers*RA_STAYOVER_PCT*RA_STAYOVER_MIN)+(dep*RA_DEPARTURE_MIN);
+  return minutes/60;
+}
 /* A band's hours value is either a plain number (every day the same, every
    position before Public Area Attendant) or a 7-element
    [Sun,Mon,Tue,Wed,Thu,Fri,Sat] array — Unifocus's own column order, which
@@ -7016,6 +7066,46 @@ function deleteVarianceNote(ds,pos){
   varNoteExpanded[pos]=false;
   renderLaborDash();
 }
+/* Daily DND (Do Not Disturb) room list — Room Attendant's Unifocus budget
+   assumes a FIXED 85%/15% Stayover/DND split (see unifocusRoomAttendantHours
+   above); this is REAL evidence Carlos logs each day to justify that
+   assumption in the labor meeting, and — his explicit ask — a record of
+   WHICH rooms had a DND, not just how many, in case anyone asks or audits
+   later. Stored as the comma-separated room list itself (same convention
+   already used for Project Hours activity notes, e.g. "1013,1014,1015"),
+   with the count always DERIVED from it — one source of truth, never two
+   numbers that could drift apart. Never feeds into the budget math. Same
+   placement/sync treatment as departures/varianceNotes — a sibling of
+   days[] on the month blob, never nested inside days[ds].byPosition
+   (which a report re-upload replaces wholesale), and wired into
+   _pushMonthRows/_syncFromSheetsPull from day one so it doesn't repeat
+   the missing-note bug fixed in v6.88.0. */
+function _parseDNDRoomList(text){
+  if(!text)return [];
+  /* Split on commas OR newlines — it's a textarea, and typing one room per
+     line instead of comma-separating is a natural thing to do with a long
+     list; the count must still come out right either way. */
+  return text.split(/[,\n]+/).map(function(s){return s.trim();}).filter(function(s){return s.length>0;});
+}
+function getDNDRoomsForDay(ds){
+  var mk=ds.substring(0,7);
+  var mData=loadMonthData(mk);
+  return (mData.dndRooms&&mData.dndRooms[ds])||'';
+}
+function getDNDCountForDay(ds){
+  var text=getDNDRoomsForDay(ds);
+  return text?_parseDNDRoomList(text).length:null;
+}
+function saveDNDRoomsForDate(ds,val){
+  var mk=ds.substring(0,7);
+  var mData=loadMonthData(mk);
+  if(!mData.dndRooms)mData.dndRooms={};
+  if(!mData.dndRoomsUpdatedAt)mData.dndRoomsUpdatedAt={};
+  var t=(val||'').trim();
+  if(t)mData.dndRooms[ds]=t;else delete mData.dndRooms[ds];
+  mData.dndRoomsUpdatedAt[ds]=new Date().toISOString();
+  saveMonthData(mData,mk);
+}
 /* Turndown's Hotel-Rooms-driven components use SAME-DAY occupancy, unlike
    every other Rooms-driven component in this app (which uses the night
    BEFORE, via getRoomsForDay's prevDateStr offset — the existing
@@ -7036,6 +7126,7 @@ function getSameDayRoomsForDay(ds){
   return 0;
 }
 function unifocusHoursForPosition(pos,ds){
+  if(pos==='Room Attendant')return unifocusRoomAttendantHours(ds);
   var shifts=UNIFOCUS_STANDARDS[pos];
   if(!shifts)return null; /* no Unifocus standard shared for this position yet */
   /* Only fetch/require departures if some component actually uses it —
@@ -7098,6 +7189,22 @@ function buildUnifocusDeparturesHTML(ds,dayLabel){
     +'if(this.value.trim())this.classList.add(\'filled\');'
     +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
     +'<div class="occ-note">Feeds Unifocus (toggle above)</div>'
+    +'</div>';
+  return html;
+}
+/* Daily DND count tile — sits beside Rooms/Departures in the same
+   occ-grid. Read-only reference number, never fed into the Room Attendant
+   Unifocus budget (see unifocusRoomAttendantHours) — purely evidence for
+   the labor meeting to justify the standard's fixed 85%/15% assumption. */
+function buildDNDCountHTML(ds){
+  var roomsText=getDNDRoomsForDay(ds);
+  var count=getDNDCountForDay(ds);
+  var html='<div class="occ-tile" style="text-align:left;">'
+    +'<div class="occ-tile-label" style="text-align:center;">DNDs'+(count?' &middot; '+count:'')+'</div>'
+    +'<textarea data-ds="'+ds+'" placeholder="Room #s, comma separated" '
+    +'onchange="saveDNDRoomsForDate(this.dataset.ds,this.value);renderLaborDash();" '
+    +'style="width:100%;min-height:44px;margin-top:4px;padding:6px 8px;font-size:10.5px;font-family:inherit;text-align:center;color:var(--text1);border:1px solid '+(count?'var(--green)':'var(--border)')+';background:'+(count?'var(--green-bg)':'#fff')+';border-radius:8px;resize:vertical;box-sizing:border-box;">'+escHtml(roomsText)+'</textarea>'
+    +'<div class="occ-note">For the labor meeting</div>'
     +'</div>';
   return html;
 }
@@ -10777,6 +10884,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     +(r106Val>0&&r===0?'<div class="occ-note warn">OCC shows '+r106Val+' — enter or re-upload</div>':'')
     +'</div>'
     +buildUnifocusDeparturesHTML(ds,dayLabel)
+    +buildDNDCountHTML(ds)
     +'</div>'
     +'</div>';
 
@@ -10849,6 +10957,22 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         }
         vVal=(bVal!==null)?p.paid-bVal:null;
         var short=pos.replace(' Attendant','').replace('Housekeeping ','Sup.');
+        /* Room Attendant's Unifocus budget assumes a FIXED 85% Stayover /
+           15% DND split (see unifocusRoomAttendantHours) — this caption
+           shows the day's REAL DND count against that assumption, purely
+           so Carlos has the number on hand to justify the standard in the
+           labor meeting. Never changes bVal/vVal above; only rendered
+           once he's actually logged a count for the day (no clutter on
+           days nobody's entered one). */
+        var raJustifyHtml='';
+        if(pos==='Room Attendant'&&stdMode==='unifocus'){
+          var raDep=getDeparturesForDay(ds), raDnd=getDNDCountForDay(ds);
+          if(raDep!==null&&raDnd!==null){
+            var raStayovers=Math.max(0,(getRoomsForDay(ds)||0)-raDep);
+            var raPct=raStayovers>0?((raDnd/raStayovers)*100).toFixed(1):'0.0';
+            raJustifyHtml='<div style="font-size:8.5px;font-weight:400;color:var(--text3);margin-top:1px;">'+raDnd+' DND &middot; '+raPct+'% of '+raStayovers+' stayovers</div>';
+          }
+        }
         /* Variance note affordance — only where there's an actual variance
            to explain (a position with no standard on file has nothing to
            annotate). A speech-bubble emoji marks a position that already
@@ -10868,7 +10992,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
             :' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;padding:1px 7px;border:1.5px dashed var(--border2);border-radius:99px;color:var(--text3);font-size:9px;font-weight:800;vertical-align:1px;white-space:nowrap;" title="Add a note">+ Note</span>';
         }
         html+='<tr>'
-          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+'</td>'
+          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+raJustifyHtml+'</td>'
           +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);">'+p.paid.toFixed(2)+'</td>'
           +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);color:var(--text3);">'+(bVal!==null?bVal.toFixed(2):'&#8212;')+'</td>'
           +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-weight:700;white-space:nowrap;color:'

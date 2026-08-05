@@ -43,8 +43,13 @@ module.exports = {
     // vice versa — they're separate entries, not a shared reference.
     t.assert(win.UNIFOCUS_STANDARDS['Housekeeping Supervisor'] !== win.UNIFOCUS_STANDARDS['House Attendant'], 'Supervisor and House Attendant have distinct shift/band arrays, not the same array reused');
 
-    // By Position table: BOTH positions now show a real Unifocus figure;
-    // a position with no standard on file (Room Attendant) still shows —.
+    // By Position table: all three positions show their own real Unifocus
+    // figure, computed independently from the same day's rooms/departures.
+    // Room Attendant's standard (added in v6.90.0 — see
+    // unifocus-room-attendant.js) is a per-room rate, not a banded lookup
+    // like Supervisor/House Attendant, so it lands on a different number
+    // even though it's driven by the same inputs — proof it isn't
+    // secretly sharing their band tables.
     win.dashSelectedDate = new Date(2026, 6, 20);
     win.setLaborStandardMode('unifocus');
     win.showPage('labor');
@@ -55,6 +60,7 @@ module.exports = {
     const roomRow = rows.find((r) => />Room</.test(r)) || '';
     t.assert(/24\.00/.test(supRow), "Supervisor's row shows its own Unifocus total (24.00h)");
     t.assert(/24\.00/.test(houseRow), "House Attendant's row still shows its own Unifocus total too");
-    t.assert(/—/.test(roomRow), 'Room Attendant (no Unifocus standard on file) still renders the em-dash, unaffected by adding Supervisor');
+    // Stayovers = 100 rooms - 45 departures = 55; (55*0.85*20 + 45*30) / 60 = 38.08h
+    t.assert(/38\.08/.test(roomRow), "Room Attendant's row shows its own rate-based Unifocus total (38.08h), unaffected by adding Supervisor");
   }
 };

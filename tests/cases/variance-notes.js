@@ -60,8 +60,11 @@ module.exports = {
     t.assert(!/\u{1F4AC}/u.test(roomRow), 'Room Attendant does not show the filled speech-bubble (no note saved for it)');
 
     // ── The note editor is collapsed by default; toggling opens it and
-    // pre-fills the textarea with the current note. ──
-    t.assert(!/textarea/.test(dayHtml), 'the note textarea is not rendered until a position is expanded');
+    // pre-fills the textarea with the current note. Checked via the
+    // varNoteInput_ id prefix specifically, not a bare "textarea" search —
+    // the Occupancy card's DND field (added in v6.90.0) is also a
+    // <textarea>, always rendered, and would otherwise give a false match. ──
+    t.assert(!/varNoteInput_/.test(dayHtml), 'the note textarea is not rendered until a position is expanded');
     win.toggleVarianceNote('House Attendant');
     dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
     t.assert(/Covered a call-off on the 10th floor\./.test(dayHtml), 'expanding the position pre-fills the textarea with its saved note');
@@ -76,7 +79,7 @@ module.exports = {
     t.eq(win.getVarianceNote('2026-07-15', 'House Attendant'), 'Updated: also trained a new hire.', 'saving from the textarea overwrites the stored note');
     t.eq(win.varNoteExpanded['House Attendant'], false, 'Save collapses the editor on its own, without needing a separate Close click');
     dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
-    t.assert(!/textarea/.test(dayHtml), 'the textarea is actually gone from the rendered page after Save, not just flagged closed in state');
+    t.assert(!/varNoteInput_/.test(dayHtml), 'the textarea is actually gone from the rendered page after Save, not just flagged closed in state');
 
     // ── Clearing a note (empty text) removes it rather than storing a
     // blank string — getVarianceNote should read back '' either way, but

@@ -47,7 +47,12 @@ module.exports = {
       rooms: { '2026-08-03': 150 }, roomsSource: { '2026-08-03': 'manual' }, roomsUpdatedAt: { '2026-08-03': new Date(now).toISOString() },
       departures: { '2026-08-04': 61 }, departuresSource: { '2026-08-04': 'manual' }, departuresUpdatedAt: { '2026-08-04': new Date(now).toISOString() },
       varianceNotes: { '2026-08-04': { 'Housekeeping Supervisor': 'Covered a call-off on the 10th floor.' } },
-      varianceNotesUpdatedAt: { '2026-08-04': new Date(now).toISOString() }
+      varianceNotesUpdatedAt: { '2026-08-04': new Date(now).toISOString() },
+      // Room Attendant's DND room list (v6.90.0) — same field shape as
+      // departures/varianceNotes above, wired into the sync layer from day
+      // one instead of as a retrofit, since it's the exact same class of
+      // "any other top-level field" the v6.88.0 fix was meant to protect.
+      dndRooms: { '2026-08-04': '1706, 1707, 1710' }, dndRoomsUpdatedAt: { '2026-08-04': new Date(now).toISOString() }
     });
 
     // Remote's response carries ONLY an unrelated room row for the same
@@ -67,6 +72,7 @@ module.exports = {
     t.eq(merged.departuresSource['2026-08-04'], 'manual', 'departuresSource must survive too, not just the raw number');
     t.assert(merged.varianceNotes && merged.varianceNotes['2026-08-04'], 'the day\'s varianceNotes entry must still exist after the sync');
     t.eq(merged.varianceNotes['2026-08-04']['Housekeeping Supervisor'], 'Covered a call-off on the 10th floor.', 'the note text itself must survive a sync pull unrelated to notes — this is the exact bug Carlos hit');
+    t.eq(merged.dndRooms['2026-08-04'], '1706, 1707, 1710', 'the DND room list must survive a sync pull that says nothing about DND rooms either');
     // The unrelated remote room row should still have been picked up normally.
     t.eq(merged.rooms['2026-08-10'], 200, 'the sync still does its actual job — the unrelated remote room row gets merged in');
 
@@ -77,11 +83,13 @@ module.exports = {
     seed2['hk_month_2026-08'] = JSON.stringify({
       days: {}, daysUpdatedAt: {}, rooms: {}, roomsSource: {}, roomsUpdatedAt: {},
       departures: {}, departuresSource: {}, departuresUpdatedAt: {},
-      varianceNotes: {}, varianceNotesUpdatedAt: {}
+      varianceNotes: {}, varianceNotesUpdatedAt: {},
+      dndRooms: {}, dndRoomsUpdatedAt: {}
     });
     const remoteRows2 = [
       { key: 'mvnote_2026-08_2026-08-04', value: JSON.stringify({ v: { 'Housekeeping Supervisor': 'Written on the other device.' }, ts: new Date(now).toISOString(), by: 'phone@example.com' }) },
-      { key: 'mdep_2026-08_2026-08-04', value: JSON.stringify({ v: 61, ts: new Date(now).toISOString(), src: 'manual', by: 'phone@example.com' }) }
+      { key: 'mdep_2026-08_2026-08-04', value: JSON.stringify({ v: 61, ts: new Date(now).toISOString(), src: 'manual', by: 'phone@example.com' }) },
+      { key: 'mdnd_2026-08_2026-08-04', value: JSON.stringify({ v: '1706, 1707, 1710', ts: new Date(now).toISOString(), by: 'phone@example.com' }) }
     ];
     const { win: win2 } = await loadApp({ seed: seed2, fetchImpl: remoteRowsFetch(remoteRows2) });
     win2.syncFromSheets();
@@ -89,11 +97,15 @@ module.exports = {
     const merged2 = win2.loadMonthData('2026-08');
     t.eq(merged2.varianceNotes['2026-08-04']['Housekeeping Supervisor'], 'Written on the other device.', 'a note pushed as its own mvnote_ row from another device is correctly pulled in');
     t.eq(merged2.departures['2026-08-04'], 61, 'a departures count pushed as its own mdep_ row from another device is correctly pulled in');
+    t.eq(merged2.dndRooms['2026-08-04'], '1706, 1707, 1710', 'a DND room list pushed as its own mdnd_ row from another device is correctly pulled in — this is exactly how Carlos entering it on his phone reaches the computer in the labor meeting');
 
-    // ── saveVarianceNote / saveDeparturesForDate now push their own rows
-    // (not just write localStorage) — confirms the write side, not just
-    // the merge side, actually reaches the sync layer. ──
+    // ── saveVarianceNote / saveDeparturesForDate / saveDNDRoomsForDate now
+    // push their own rows (not just write localStorage) — confirms the
+    // write side, not just the merge side, actually reaches the sync layer. ──
     win2.saveVarianceNote('2026-08-05', 'Room Attendant', 'Extra RA to cover a NCNS.');
     t.eq(win2.getVarianceNote('2026-08-05', 'Room Attendant'), 'Extra RA to cover a NCNS.', 'the note is readable back immediately after saving');
+    win2.saveDNDRoomsForDate('2026-08-05', '1401, 1402');
+    t.eq(win2.getDNDRoomsForDay('2026-08-05'), '1401, 1402', 'the DND room list is readable back immediately after saving');
+    t.eq(win2.getDNDCountForDay('2026-08-05'), 2, 'the derived count matches the number of rooms just entered');
   }
 };

@@ -58,8 +58,11 @@ module.exports = {
     t.eq(win.unifocusHoursForPosition('House Attendant', '2026-07-16'), null, 'propagates to null so the UI can show "no data" instead of a misleading 0');
 
     // A position with no Unifocus standard on file at all -> null, distinct
-    // from "standard exists but no data for this day yet".
-    t.eq(win.unifocusHoursForPosition('Room Attendant', '2026-07-15'), null, 'a position with no Unifocus standard defined returns null, not 0');
+    // from "standard exists but no data for this day yet". Every real HK
+    // position now has a standard (Room Attendant's was added in v6.90.0 —
+    // see unifocus-room-attendant.js), so a made-up position name is the
+    // only way left to exercise this path.
+    t.eq(win.unifocusHoursForPosition('Not A Real Position', '2026-07-15'), null, 'a position with no Unifocus standard defined returns null, not 0');
 
     // ── By Position table: switch to Unifocus mode (see labor-standard-toggle.js
     // for the toggle mechanism itself) and confirm House Attendant's row
