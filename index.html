@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.90.0"/>
+<meta name="app-version" content="6.91.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.91.0', date:'2026-08-05',
+    improvements:['Cleaned up the DNDs field in the Occupancy card: it now shows just the count, matching the clean big-number look of Rooms and Departures, instead of cramming the full room list into a tiny box. Tap "View / edit DND room list" below it to see or change the actual rooms — with Save, Delete, and Close, the same trio as the By Position variance notes.']
+  },
+  {
     v:'6.90.0', date:'2026-08-05',
     features:['Room Attendant now has a Unifocus standard too: 20 min for 85% of Stayovers (last night\'s rooms minus today\'s departures) plus 30 min per departure — Carlos\'s own numbers. The Occupancy card gained a third field, DNDs, where you list the actual room numbers that had a Do Not Disturb sign that day (comma separated, same as Project Hours notes) — kept as a real record in case of an audit, not just a total. This never changes the budget itself, it\'s purely evidence for the labor meeting. By Position shows a caption under Room Attendant with the real DND percentage (derived from the room list) against the standard\'s fixed 85%/15% assumption, so the number\'s on hand to justify it.']
   },
@@ -7197,15 +7201,64 @@ function buildUnifocusDeparturesHTML(ds,dayLabel){
    Unifocus budget (see unifocusRoomAttendantHours) — purely evidence for
    the labor meeting to justify the standard's fixed 85%/15% assumption. */
 function buildDNDCountHTML(ds){
-  var roomsText=getDNDRoomsForDay(ds);
   var count=getDNDCountForDay(ds);
-  var html='<div class="occ-tile" style="text-align:left;">'
-    +'<div class="occ-tile-label" style="text-align:center;">DNDs'+(count?' &middot; '+count:'')+'</div>'
-    +'<textarea data-ds="'+ds+'" placeholder="Room #s, comma separated" '
-    +'onchange="saveDNDRoomsForDate(this.dataset.ds,this.value);renderLaborDash();" '
-    +'style="width:100%;min-height:44px;margin-top:4px;padding:6px 8px;font-size:10.5px;font-family:inherit;text-align:center;color:var(--text1);border:1px solid '+(count?'var(--green)':'var(--border)')+';background:'+(count?'var(--green-bg)':'#fff')+';border-radius:8px;resize:vertical;box-sizing:border-box;">'+escHtml(roomsText)+'</textarea>'
-    +'<div class="occ-note">For the labor meeting</div>'
+  var box=(count!==null)
+    ?'<div style="font-size:20px;font-weight:800;padding:5px;margin-top:4px;border:1px solid var(--green);background:var(--green-bg);border-radius:8px;color:var(--text1);">'+count+'</div>'
+    :'<div style="font-size:20px;font-weight:800;padding:5px;margin-top:4px;border:1px solid var(--border);background:#fff;border-radius:8px;color:var(--text3);">&#8212;</div>';
+  var pctCaption='';
+  if(count!==null){
+    var dep=getDeparturesForDay(ds);
+    if(dep!==null){
+      var stayovers=Math.max(0,(getRoomsForDay(ds)||0)-dep);
+      var pct=stayovers>0?((count/stayovers)*100).toFixed(1):'0.0';
+      pctCaption='<div class="occ-note">'+pct+'% of stayovers</div>';
+    }
+  }
+  return '<div class="occ-tile"><div class="occ-tile-label">DNDs</div>'+box+pctCaption+'</div>';
+}
+/* Collapsed-by-default row under the Occupancy card's 3-tile grid — Option
+   A from Carlos's design review: the DNDs tile shows just the count (same
+   big-number treatment as Rooms/Departures), and the actual room list —
+   his audit trail — lives one tap away instead of cramming a long,
+   tiny-font list into a narrow tile, which read as unfinished. Same
+   collapsed-editor pattern (and now the same Save/Delete/Close trio) as
+   the By Position variance notes. */
+var dndRoomsExpanded=false;
+function toggleDNDRooms(){
+  dndRoomsExpanded=!dndRoomsExpanded;
+  renderLaborDash();
+}
+function saveDNDRoomsFromInput(ds,inputId){
+  var el=document.getElementById(inputId);
+  if(!el)return;
+  saveDNDRoomsForDate(ds,el.value);
+  dndRoomsExpanded=false;
+  renderLaborDash();
+}
+function deleteDNDRooms(ds){
+  saveDNDRoomsForDate(ds,'');
+  dndRoomsExpanded=false;
+  renderLaborDash();
+}
+function buildDNDExpandHTML(ds){
+  var html='<div style="border-top:1px solid var(--border);">';
+  html+='<div onclick="toggleDNDRooms()" style="cursor:pointer;padding:7px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;background:var(--surface);">'
+    +'<span style="font-size:10.5px;font-weight:700;color:var(--text1);"><span style="display:inline-block;transition:transform .15s;transform:rotate('+(dndRoomsExpanded?'90':'0')+'deg);margin-right:5px;color:var(--text3);">&#9656;</span>View / edit DND room list</span>'
+    +'<span style="font-size:9px;color:var(--text3);">for the labor meeting</span>'
     +'</div>';
+  if(dndRoomsExpanded){
+    var inputId='dndRoomsInput_'+ds;
+    html+='<div style="padding:10px 14px;">'
+      +'<textarea id="'+inputId+'" placeholder="Room #s, comma or line separated" '
+      +'style="width:100%;min-height:60px;padding:8px;font-size:11px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:8px;resize:vertical;box-sizing:border-box;">'+escHtml(getDNDRoomsForDay(ds))+'</textarea>'
+      +'<div style="margin-top:6px;display:flex;gap:6px;">'
+      +'<button onclick="saveDNDRoomsFromInput(\''+ds+'\',\''+inputId+'\')" style="padding:4px 10px;background:var(--navy);color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Save</button>'
+      +'<button onclick="deleteDNDRooms(\''+ds+'\')" style="padding:4px 10px;background:transparent;color:var(--red);border:1px solid var(--red-border);border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Delete</button>'
+      +'<button onclick="toggleDNDRooms()" style="padding:4px 10px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Close</button>'
+      +'</div>'
+      +'</div>';
+  }
+  html+='</div>';
   return html;
 }
 
@@ -10886,6 +10939,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     +buildUnifocusDeparturesHTML(ds,dayLabel)
     +buildDNDCountHTML(ds)
     +'</div>'
+    +buildDNDExpandHTML(ds)
     +'</div>';
 
   /* Mismatch alert banner - Option A. Stays full-width above the grid

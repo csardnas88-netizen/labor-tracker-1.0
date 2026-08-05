@@ -99,13 +99,34 @@ module.exports = {
     t.assert(/24 DND/.test(roomRow), 'the justification caption shows the real derived DND count');
     t.assert(/15\.0% of 160 stayovers/.test(roomRow), "the caption shows the real percentage (15.0%) against the day's actual Stayovers (160), for comparison against the standard's fixed 85/15 assumption");
 
-    // The Occupancy card gained a third tile for the DND room list,
-    // alongside Rooms and Departures — the actual room numbers are
-    // preserved in the field, not just a count, so Carlos has the list on
-    // hand for an audit.
-    const occHtml = win.document.querySelector('.rooms-day-card').innerHTML;
+    // The Occupancy card gained a third tile for the DND count, alongside
+    // Rooms and Departures (Option A from Carlos's design review) — just
+    // the big number by default, matching the other two tiles, with the
+    // actual room list collapsed behind a "View / edit" row so the card
+    // doesn't look cramped/unfinished.
+    let occHtml = win.document.querySelector('.rooms-day-card').innerHTML;
     t.assert(/occ-tile-label"[^>]*>DNDs/.test(occHtml), 'the Occupancy card has a DNDs tile alongside Rooms and Departures');
-    t.assert(occHtml.indexOf(dndRoomList) !== -1, 'the actual room list text is preserved in the field, not collapsed to just a count');
-    t.assert(/data-ds="2026-07-15"/.test(occHtml), 'the DND input is wired to the day itself, not the previous night');
+    t.assert(occHtml.indexOf(dndRoomList) === -1, 'the raw room list is NOT dumped into the tile by default (collapsed, not cramped)');
+    t.assert(!/dndRoomsInput_/.test(occHtml), 'the room-list editor is not rendered until expanded');
+
+    // Expanding shows the actual room list, with Save/Delete/Close — same
+    // trio as the By Position variance notes, per Carlos's explicit ask
+    // ("para que luzca más profesional").
+    win.toggleDNDRooms();
+    occHtml = win.document.querySelector('.rooms-day-card').innerHTML;
+    t.assert(occHtml.indexOf(dndRoomList) !== -1, 'expanding reveals the actual room list, preserved exactly for an audit');
+    const dndInputMatch = occHtml.match(/id="(dndRoomsInput_2026-07-15)"/);
+    t.assert(dndInputMatch, 'the room-list textarea has the expected id pattern');
+
+    // Delete clears the room list (and the derived count/caption with it)
+    // and collapses the editor, without needing a separate Close click.
+    win.deleteDNDRooms('2026-07-15');
+    t.eq(win.getDNDRoomsForDay('2026-07-15'), '', 'Delete clears the stored room list');
+    t.eq(win.getDNDCountForDay('2026-07-15'), null, 'the derived count goes back to null once the list is cleared');
+    t.eq(win.dndRoomsExpanded, false, 'Delete also collapses the editor, matching the variance-note Save behavior');
+    occHtml = win.document.querySelector('.rooms-day-card').innerHTML;
+    const dndTileIdx = occHtml.indexOf('DNDs');
+    t.assert(/>—</.test(occHtml.slice(dndTileIdx, dndTileIdx + 220)), 'the DNDs tile shows an em-dash again after Delete, not a stale count');
+    t.assert(!/dndRoomsInput_/.test(occHtml), 'the editor is collapsed again after Delete, not left open');
   }
 };
