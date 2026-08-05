@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.84.0"/>
+<meta name="app-version" content="6.85.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -711,15 +711,26 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .dpc-brk{font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;white-space:nowrap;}
 .dpc-brk.nb{background:var(--red-bg);color:var(--red);}
 .dpc-brk.sb{background:var(--yellow-bg);color:var(--yellow);}
-.rooms-day-card{background:var(--white);border:1.5px solid var(--yellow-border);border-radius:12px;overflow:hidden;margin-bottom:14px;}
-.rdc-head{background:var(--yellow-bg);border-bottom:1px solid var(--yellow-border);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;}
-.rdc-title{font-size:11.5px;font-weight:700;color:var(--yellow);}
-.rdc-drives{font-size:9.5px;color:var(--text3);}
-.rdc-body{padding:10px 14px;text-align:center;}
-.rdc-input{width:100%;padding:8px 8px;border:2px solid var(--yellow-border);border-radius:10px;font-size:24px;font-weight:800;text-align:center;color:var(--text1);background:#fff;transition:.15s;}
-.rdc-input:focus{outline:none;border-color:var(--yellow);background:var(--yellow-bg);}
-.rdc-input.filled{border-color:var(--green);background:var(--green2);}
-.rdc-note{font-size:10px;color:var(--text3);margin-top:4px;}
+/* Occupancy card (Rooms + Departures) — Option A from Carlos's design
+   review: side-by-side compact tiles in a plain-bordered card instead of
+   two stacked boxes with thick colored borders, which read as an
+   unfinished form once squeezed into the half-width column next to By
+   Position. Numbers are still directly editable inputs, just styled to
+   look like data rather than a blank form field until focused/filled. */
+.rooms-day-card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:14px;}
+.occ-head{padding:9px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.occ-title{font-size:11.5px;font-weight:700;color:var(--text1);}
+.occ-sub{font-size:9px;color:var(--text3);margin-top:1px;}
+.occ-grid{display:grid;grid-template-columns:1fr 1fr;}
+.occ-tile{padding:10px 12px;text-align:center;}
+.occ-tile+.occ-tile{border-left:1px solid var(--border);}
+.occ-tile-label{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;}
+.occ-input{width:100%;padding:5px;margin-top:4px;border:1px solid var(--border);border-radius:8px;font-size:22px;font-weight:800;text-align:center;color:var(--text1);background:#fff;transition:.15s;}
+.occ-input:focus{outline:none;border-color:var(--gold);}
+.occ-input.filled{border-color:var(--green);background:var(--green-bg);}
+.occ-note{font-size:9px;color:var(--text3);margin-top:4px;}
+.occ-note.green{color:var(--green);font-weight:600;}
+.occ-note.warn{color:var(--yellow);font-weight:600;}
 .rooms-modal-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px;}
 .rooms-modal-cell{display:flex;flex-direction:column;gap:5px;}
 .rooms-modal-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);}
@@ -4208,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.85.0', date:'2026-08-05',
+    improvements:['Rooms and Departures are now a single "Occupancy" card with two compact tiles side by side, instead of two stacked boxes with thick colored borders — reads as data instead of an unfinished form now that it lives in the narrower column next to By Position.']
+  },
+  {
     v:'6.84.0', date:'2026-08-05',
     improvements:['Labor page redesign: the Current Standard/Unifocus toggle now sits right under the page title, above everything else, so you pick a standard before looking at any numbers — and it defaults to Unifocus. Labor Summary (Total Paid/Budget/Variance/Employees) was removed as redundant; Rooms and Departures now take its place next to By Position instead of sitting full-width below. Also compacted the Rooms/Departures input boxes and spacing so the card doesn\'t feel oversized in its new, narrower spot.']
   },
@@ -6939,25 +6954,25 @@ function buildStandardToggleHtml(mode){
   html+='</div>';
   return html;
 }
-/* Departures input for the Labor day view's Rooms card — mirrors the Rooms
-   input right above it (same rdc-input box, same auto-fill-then-editable
-   behavior, same "filled" state), at Carlos's explicit request ("lo mismo
-   que hacemos con la ocupancia"). No summary line here — the resulting
-   Unifocus hours already show in By Position's Unifocus column right
-   below, and repeating it here was redundant (Carlos's feedback). Its own
-   date is called out because it uses the day itself (ds), not the night
-   before like Rooms uses. */
+/* Departures tile for the Labor day view's Occupancy card — sits beside
+   Rooms in the same occ-grid (same occ-input box, same auto-fill-then-
+   editable behavior, same "filled" state), at Carlos's explicit request
+   ("lo mismo que hacemos con la ocupancia"). No summary line here — the
+   resulting Unifocus hours already show in By Position's table, and
+   repeating it here was redundant (Carlos's feedback). Uses the day
+   itself (ds), not the night before like Rooms uses — the shared occ-sub
+   line in the card header spells out that distinction so it doesn't need
+   repeating per tile now that the layout is compact side-by-side. */
 function buildUnifocusDeparturesHTML(ds,dayLabel){
   var dep=getDeparturesForDay(ds);
-  var html='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--gd);text-align:center;">&#129529; Departures &#8212; '+dayLabel+'</div>'
-    +'<div style="font-size:9.5px;color:var(--text3);margin-top:1px;margin-bottom:6px;text-align:center;">For '+dayLabel+' itself — not the night before, unlike Rooms above</div>'
-    +'<input class="rdc-input'+(dep>0?' filled':'')+'" style="border-color:var(--gold);" type="number" min="0" max="999" '
+  var html='<div class="occ-tile">'
+    +'<div class="occ-tile-label">Departures</div>'
+    +'<input class="occ-input'+(dep>0?' filled':'')+'" type="number" min="0" max="999" '
     +'placeholder="0" value="'+(dep>0?dep:'')+'" data-ds="'+ds+'" '
     +'onchange="saveDeparturesForDate(this.dataset.ds,this.value);'
     +'if(this.value.trim())this.classList.add(\'filled\');'
     +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
-    +'<div class="rdc-note" style="text-align:center;">Switch the toggle above to "Unifocus" to see the resulting hours</div>'
+    +'<div class="occ-note">Feeds Unifocus (toggle above)</div>'
     +'</div>';
   return html;
 }
@@ -10611,10 +10626,10 @@ function renderDashDayAnalysis(days,rooms,today,wk){
   var isFutureDay=parseLocalDate(ds)>new Date();
 
   var roomsCardHtml='<div class="rooms-day-card" style="margin-bottom:14px;">'
-    +'<div class="rdc-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+    +'<div class="occ-head">'
     +'<div>'
-    +'<div class="rdc-title">&#127983; Rooms &#8212; Night of '+nightLabel+'</div>'
-    +'<div class="rdc-drives">&#8594; drives '+dayLabel.split(',')[0]+' budget</div>'
+    +'<div class="occ-title">&#127968; Occupancy &#8212; '+dayLabel.split(',')[0]+'</div>'
+    +'<div class="occ-sub">Rooms (night of '+nightLabel.split(',')[0]+') drives '+dayLabel.split(',')[0]+' budget &middot; Departures for '+dayLabel.split(',')[0]+' itself</div>'
     +'</div>'
     /* R106 button - prominent if no R106 loaded, subtle if loaded */
     +'<button onclick="document.getElementById(\'r106InputDash\').click();" '
@@ -10622,20 +10637,22 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     +(hasR106Month?'📋 OCC ✓':'📋 Upload OCC')+'</button>'
     +'<input type="file" id="r106InputDash" accept=".pdf" style="display:none;" onchange="handleR106Upload(this)">'
     +'</div>'
-    +'<div class="rdc-body">'
-    +'<input class="rdc-input'+(r>0?' filled':'')+'" type="number" min="0" max="999" '
+    +'<div class="occ-grid">'
+    +'<div class="occ-tile">'
+    +'<div class="occ-tile-label">Rooms</div>'
+    +'<input class="occ-input'+(r>0?' filled':'')+'" type="number" min="0" max="999" '
     +'placeholder="0" value="'+(r>0?r:'')+'" data-prevds="'+prevDateStr(ds)+'" '
     +'onchange="saveRoomsForDate(this.dataset.prevds,this.value);'
     +'if(this.value.trim())this.classList.add(\'filled\');'
     +'else this.classList.remove(\'filled\');renderLaborDash();"/>'
-    +(r>0?'<div style="font-size:11px;color:var(--green);font-weight:600;margin-top:4px;">'
-      +r+' rooms = '+dayBudget(r).toFixed(2)+'h budget'
-      +(r106Val>0&&!hasMismatch?' &nbsp;<span style="font-size:9.5px;color:var(--text3);">(OCC ✓)</span>':'')
+    +(r>0?'<div class="occ-note green">'
+      +dayBudget(r).toFixed(2)+'h budget'
+      +(r106Val>0&&!hasMismatch?' (OCC &#10003;)':'')
       +'</div>':'')
-    +(r106Val>0&&r===0?'<div style="font-size:10.5px;color:var(--yellow);font-weight:600;margin-top:4px;">OCC shows '+r106Val+' rooms — enter manually or re-upload OCC</div>':'')
-    +'<div class="rdc-note">Change rooms to recalculate budget</div>'
+    +(r106Val>0&&r===0?'<div class="occ-note warn">OCC shows '+r106Val+' — enter or re-upload</div>':'')
     +'</div>'
     +buildUnifocusDeparturesHTML(ds,dayLabel)
+    +'</div>'
     +'</div>';
 
   /* Mismatch alert banner - Option A. Stays full-width above the grid
