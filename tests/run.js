@@ -42,6 +42,7 @@ const cases = [
   require('./cases/project-hours-manual-edit-protected'),
   require('./cases/labor-standard-toggle'),
   require('./cases/labor-pace-projects-multiproject'),
+  require('./cases/variance-notes'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

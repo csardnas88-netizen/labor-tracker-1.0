@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.85.0"/>
+<meta name="app-version" content="6.86.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.86.0', date:'2026-08-05',
+    features:['By Position now lets you explain a variance — a small icon next to any position with a real budget shows a filled bubble if there\'s already a note, or a muted "+" to add one. Tap it to open a short note (e.g. "covered a call-off on the 10th floor"), Save, Close. Only appears where there\'s an actual variance to explain, so the table stays exactly as compact as before if you never use it. Notes are stored separately from the Labor Distribution Report data, so re-uploading a report can never wipe one out.']
+  },
+  {
     v:'6.85.0', date:'2026-08-05',
     improvements:['Rooms and Departures are now a single "Occupancy" card with two compact tiles side by side, instead of two stacked boxes with thick colored borders — reads as data instead of an unfinished form now that it lives in the narrower column next to By Position.']
   },
@@ -6890,6 +6894,42 @@ function saveDeparturesForDate(ds,val){
   if(n>0)mData.departures[ds]=n;else delete mData.departures[ds];
   mData.departuresSource[ds]='manual';
   saveMonthData(mData,mk);
+}
+/* Variance notes on By Position — free-text explanation for why a
+   position's variance was what it was that day (e.g. "covered a
+   call-off"), at Carlos's request. Stored as mData.varianceNotes[ds][pos],
+   a SIBLING of days[] on the month blob — same placement as departures/
+   departuresSource above — NOT nested inside days[ds].byPosition[pos].
+   That object is wholesale-replaced every time a Labor Distribution
+   Report is (re-)uploaded for that day (see saveDayToMonth's
+   snap.byPosition[pos]={...} and mData.days[ds]=snap), so anything stored
+   inside it would be silently wiped on the next upload — the exact class
+   of bug fixed for Project Hours in v6.80.0. Keeping notes as a separate
+   top-level field means a report re-upload can never touch them. */
+function getVarianceNote(ds,pos){
+  var mk=ds.substring(0,7);
+  var mData=loadMonthData(mk);
+  return (mData.varianceNotes&&mData.varianceNotes[ds]&&mData.varianceNotes[ds][pos])||'';
+}
+function saveVarianceNote(ds,pos,text){
+  var mk=ds.substring(0,7);
+  var mData=loadMonthData(mk);
+  if(!mData.varianceNotes)mData.varianceNotes={};
+  if(!mData.varianceNotes[ds])mData.varianceNotes[ds]={};
+  var t=(text||'').trim();
+  if(t)mData.varianceNotes[ds][pos]=t;else delete mData.varianceNotes[ds][pos];
+  saveMonthData(mData,mk);
+}
+var varNoteExpanded={};
+function toggleVarianceNote(pos){
+  varNoteExpanded[pos]=!varNoteExpanded[pos];
+  renderLaborDash();
+}
+function saveVarianceNoteFromInput(ds,pos,inputId){
+  var el=document.getElementById(inputId);
+  if(!el)return;
+  saveVarianceNote(ds,pos,el.value);
+  renderLaborDash();
 }
 /* Turndown's Hotel-Rooms-driven components use SAME-DAY occupancy, unlike
    every other Rooms-driven component in this app (which uses the night
@@ -10724,13 +10764,37 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         }
         vVal=(bVal!==null)?p.paid-bVal:null;
         var short=pos.replace(' Attendant','').replace('Housekeeping ','Sup.');
+        /* Variance note affordance — only where there's an actual variance
+           to explain (a position with no standard on file has nothing to
+           annotate). A speech-bubble emoji marks a position that already
+           has a note; a muted "+" invites adding one where there's none
+           yet — small enough that the table stays as compact as before
+           for anyone who never uses this. */
+        var noteIcon='';
+        if(vVal!==null){
+          var existingNote=getVarianceNote(ds,pos);
+          noteIcon=existingNote
+            ?' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;font-size:11px;vertical-align:-1px;" title="View/edit note">&#128172;</span>'
+            :' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;width:13px;height:13px;line-height:12px;text-align:center;border:1px dashed var(--border);border-radius:99px;color:var(--text3);font-size:9px;font-weight:700;vertical-align:1px;" title="Add a note">+</span>';
+        }
         html+='<tr>'
           +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+'</td>'
           +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);">'+p.paid.toFixed(2)+'</td>'
           +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);color:var(--text3);">'+(bVal!==null?bVal.toFixed(2):'&#8212;')+'</td>'
-          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:'
+          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-weight:700;white-space:nowrap;color:'
           +(vVal!==null?(vVal>0?'var(--red)':'var(--green)'):'inherit')+'">'
-          +(vVal!==null?(vVal>=0?'+':'')+vVal.toFixed(2):'&#8212;')+'</td></tr>';
+          +(vVal!==null?(vVal>=0?'+':'')+vVal.toFixed(2):'&#8212;')+noteIcon+'</td></tr>';
+        if(vVal!==null&&varNoteExpanded[pos]){
+          var noteInputId='varNoteInput_'+ds+'_'+pos.replace(/[^a-zA-Z0-9]/g,'');
+          html+='<tr><td colspan="4" style="padding:8px 10px;border-bottom:1px solid var(--border);background:var(--surface);">'
+            +'<textarea id="'+noteInputId+'" placeholder="Why was '+short+' over/under budget today?" '
+            +'style="width:100%;min-height:44px;padding:6px 8px;font-size:10.5px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;">'+escHtml(getVarianceNote(ds,pos))+'</textarea>'
+            +'<div style="margin-top:5px;display:flex;gap:6px;">'
+            +'<button onclick="saveVarianceNoteFromInput(\''+ds+'\',\''+pos+'\',\''+noteInputId+'\')" style="padding:4px 10px;background:var(--navy);color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Save</button>'
+            +'<button onclick="toggleVarianceNote(\''+pos+'\')" style="padding:4px 10px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Close</button>'
+            +'</div>'
+            +'</td></tr>';
+        }
       });
     }
     html+='</tbody></table></div>';
