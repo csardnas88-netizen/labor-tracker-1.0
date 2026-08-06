@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.93.0"/>
+<meta name="app-version" content="6.92.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,10 +4219,6 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
-    v:'6.93.0', date:'2026-08-06',
-    features:['Room Attendant\'s Unifocus budget gained its third and final component: 20 minutes for every Room Attendant who worked that day, for the morning pre-shift meeting (Carlos confirmed this directly — it was Unifocus\'s \'Staff (Minutes): 20\' line, which we\'d left out since the config export alone didn\'t explain what it meant). Combined with the earlier stayovers + departures math, this closes almost all of the remaining gap between our Room Attendant numbers and Unifocus\'s own reports.']
-  },
-  {
     v:'6.92.0', date:'2026-08-06',
     fixes:['Turndown\'s Unifocus budget was coming out too high. Unifocus can only staff whole 6-hour Turndown shifts (1700-2300), so it trims each day\'s standard down to a whole number of shifts — a 32-hour day becomes 30, a 40-hour day becomes 36. We were showing the untrimmed number. Checked against Unifocus\'s own daily reports for Aug 1, 2 and 3 and it now matches all three exactly. Those same three days also confirm Turndown reads the occupancy of the day itself, not the night before. Heads up on one thing this comparison turned up: Unifocus\'s own data for Aug 4 is broken on their side (it recorded 0 rooms and 201 departures, which is really Aug 3\'s room count), so their Aug 1-4 weekly totals for every position are off because of it — not something on our end.']
   },
@@ -6967,42 +6963,25 @@ var UNIFOCUS_STANDARDS={
 /* Room Attendant is NOT in UNIFOCUS_STANDARDS above — its formula is a
    continuous per-room RATE, not a stepped band lookup like every other
    position, so it doesn't fit that shape and is computed directly by
-   unifocusRoomAttendantHours() below instead. Confirmed with Carlos, and
-   validated against Unifocus's own real Aug 2026 reports:
-     20 min for 85% of Stayovers
-   + 30 min per Departure
-   + 20 min per Room Attendant who actually worked that day (the morning
-     pre-shift meeting — Unifocus's "01. Hotel Rooms, Staff (Minutes): 20"
-     line, initially unimplemented since "Staff (Minutes)" wasn't a
-     recognizable distribution method from the config export alone; Carlos
-     clarified it's a flat per-employee allowance for the morning meeting).
-   Stayovers = last night's rooms minus today's departures (the same
-   night-before/same-day conventions already used elsewhere). The 85% is a
-   FIXED assumption in the budget math, not driven by the day's actual DND
-   count — that's tracked separately, as the actual room list
-   (getDNDRoomsForDay/saveDNDRoomsForDate, count derived by
-   getDNDCountForDay), purely as justification evidence for the labor
-   meeting, and never changes this calculation. A DND room gets 0 minutes
-   (it's excluded from the 85% that gets cleaned), consistent with the
-   fixed-15%-are-DNDs assumption. Staff count comes from the day's already-
-   uploaded Labor Distribution Report (days[ds].byPosition['Room
-   Attendant'].emps) — same "how many people actually worked this
-   position" figure the Paid/Variance columns already use, not a schedule
-   or headcount guess. */
+   unifocusRoomAttendantHours() below instead. Confirmed with Carlos:
+   20 min for 85% of Stayovers + 30 min per Departure. Stayovers = last
+   night's rooms minus today's departures (the same night-before/same-day
+   conventions already used elsewhere). The 85% is a FIXED assumption in
+   the budget math, not driven by the day's actual DND count — that's
+   tracked separately, as the actual room list (getDNDRoomsForDay/
+   saveDNDRoomsForDate, count derived by getDNDCountForDay), purely as
+   justification evidence for the labor meeting, and never changes this
+   calculation. A DND room gets 0 minutes (it's excluded from the 85% that
+   gets cleaned), consistent with the fixed-15%-are-DNDs assumption. */
 var RA_STAYOVER_PCT=0.85;
 var RA_STAYOVER_MIN=20;
 var RA_DEPARTURE_MIN=30;
-var RA_MEETING_MIN=20;
 function unifocusRoomAttendantHours(ds){
   var dep=getDeparturesForDay(ds);
   if(dep===null)return null; /* stayovers can't be derived without departures */
   var rooms=getRoomsForDay(ds)||0;
   var stayovers=Math.max(0,rooms-dep);
-  var mk=ds.substring(0,7);
-  var mData=loadMonthData(mk);
-  var snap=mData.days&&mData.days[ds];
-  var raEmps=(snap&&snap.byPosition&&snap.byPosition['Room Attendant']&&snap.byPosition['Room Attendant'].emps)||0;
-  var minutes=(stayovers*RA_STAYOVER_PCT*RA_STAYOVER_MIN)+(dep*RA_DEPARTURE_MIN)+(raEmps*RA_MEETING_MIN);
+  var minutes=(stayovers*RA_STAYOVER_PCT*RA_STAYOVER_MIN)+(dep*RA_DEPARTURE_MIN);
   return minutes/60;
 }
 /* A band's hours value is either a plain number (every day the same, every
