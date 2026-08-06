@@ -47,6 +47,7 @@ const cases = [
   require('./cases/unifocus-room-attendant'),
   require('./cases/dnd-delete-pushes-clear'),
   require('./cases/unifocus-turndown-shift-truncation'),
+  require('./cases/unifocus-room-attendant-meeting-minutes'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
