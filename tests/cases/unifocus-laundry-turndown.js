@@ -52,8 +52,8 @@ module.exports = {
     // no departures component at all. Crossing the 175-departures threshold
     // (Jul 11 -> Jul 12) must NOT change Turndown's total, unlike Laundry's. ──
     t.eq(win.getSameDayRoomsForDay('2026-07-11'), 200, "Turndown's rooms driver: Jul 11 itself (200), not the night before (which was 50)");
-    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-07-11'), 40, 'rooms=200 same-day -> 181-290 band -> 40h (no flat component, no departures component)');
-    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-07-12'), 40, 'same 40h even though departures hit 175 here — Turndown has no departures component to react to it, unlike Laundry (which went 40h -> 48h on this same date)');
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-07-11'), 36, 'rooms=200 same-day -> 181-290 band -> 40h, truncated to whole 6h shifts -> 36h (no flat component, no departures component)');
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-07-12'), 36, 'same 36h even though departures hit 175 here — Turndown has no departures component to react to it, unlike Laundry (which went 40h -> 48h on this same date)');
 
     // ── Confirm the departures threshold itself has no lower band at all
     // (Unifocus's own data for Laundry — not a bug). ──
@@ -78,6 +78,6 @@ module.exports = {
     const laundryRow = rows.find((r) => />Laundry</.test(r)) || '';
     const turndownRow = rows.find((r) => />Turndown</.test(r)) || '';
     t.assert(/40\.00/.test(laundryRow), "Laundry's row shows its computed Unifocus total (40.00h)");
-    t.assert(/40\.00/.test(turndownRow), "Turndown's row shows its own, independently-computed total (also 40.00h here, coincidentally)");
+    t.assert(/36\.00/.test(turndownRow), "Turndown's row shows its own, independently-computed total (36.00h — its 40h band truncated to whole 6h shifts)");
   }
 };

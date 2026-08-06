@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.91.1"/>
+<meta name="app-version" content="6.92.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.92.0', date:'2026-08-06',
+    fixes:['Turndown\'s Unifocus budget was coming out too high. Unifocus can only staff whole 6-hour Turndown shifts (1700-2300), so it trims each day\'s standard down to a whole number of shifts — a 32-hour day becomes 30, a 40-hour day becomes 36. We were showing the untrimmed number. Checked against Unifocus\'s own daily reports for Aug 1, 2 and 3 and it now matches all three exactly. Those same three days also confirm Turndown reads the occupancy of the day itself, not the night before. Heads up on one thing this comparison turned up: Unifocus\'s own data for Aug 4 is broken on their side (it recorded 0 rooms and 201 departures, which is really Aug 3\'s room count), so their Aug 1-4 weekly totals for every position are off because of it — not something on our end.']
+  },
+  {
     v:'6.91.1', date:'2026-08-05',
     fixes:['Fixed a real sync gap in the DND room list\'s new Delete button, caught during a self-review Carlos asked for right after it shipped: Delete cleared the room list on the device you tapped it on, but never told the cloud — so the old list would keep reappearing on every other device forever. Deleting now pushes the clear like any other edit, so it actually reaches everywhere.']
   },
@@ -6916,8 +6920,22 @@ var UNIFOCUS_STANDARDS={
      that evening, for guests staying that night, unlike the morning
      night-before convention every other position above uses. Confirmed by
      Carlos. See getSameDayRoomsForDay for why. */
+  /* shiftHours:6 — Turndown's only shift is 1700-2300 (6h), and Unifocus
+     only ever staffs WHOLE shifts, so its band hours get truncated down to
+     a multiple of 6 before they count. Verified against Unifocus's own
+     daily Labor Effectiveness reports for Aug 1-3 2026 (3/3):
+       Aug 1: same-day rooms 154 -> band 136-180 = 32h -> 30h  (UF: 30.00)
+       Aug 2: same-day rooms 114 -> band  91-135 = 24h -> 24h  (UF: 24.00)
+       Aug 3: same-day rooms 201 -> band 181-290 = 40h -> 36h  (UF: 36.00)
+     Those same three days also re-confirm the same-day rooms convention —
+     the night-before figure matches none of them. Note the documented
+     "Rounding Threshold Above One: 0.2" in Unifocus's Planner Settings
+     demonstrably does NOT mean "round up when the fraction exceeds 0.2":
+     32/6 = 5.33 and 40/6 = 6.67 both round DOWN in the real reports.
+     Every other position's bands are already multiples of their 8h shift,
+     so they set no shiftHours and are unaffected. */
   'Turndown Attendant':[
-    { name:'1700-2300 (rooms, same-day)', driver:'rooms_sameday',
+    { name:'1700-2300 (rooms, same-day)', driver:'rooms_sameday', shiftHours:6,
       bands:[[1,90,16],[91,135,24],[136,180,32],[181,290,40],[291,Infinity,48]] }
   ],
   /* Public Area Attendant: no Departures component at all (all 3 shifts are
@@ -7156,7 +7174,13 @@ function unifocusHoursForPosition(pos,ds){
   var total=0;
   shifts.forEach(function(shift){
     var vol=shift.driver==='departures'?dep:(shift.driver==='rooms_sameday'?roomsSameDay:rooms);
-    total+=unifocusBandLookup(shift.bands, vol, dow);
+    var h=unifocusBandLookup(shift.bands, vol, dow);
+    /* Unifocus can only staff WHOLE shifts, so a band's hours get truncated
+       down to a multiple of the shift length before they count. Only matters
+       where the band values aren't already multiples of the shift (i.e.
+       Turndown's 6h shift) — see shiftHours in UNIFOCUS_STANDARDS. */
+    if(shift.shiftHours>0)h=Math.floor(h/shift.shiftHours)*shift.shiftHours;
+    total+=h;
   });
   return total;
 }

@@ -1,0 +1,89 @@
+/* Pins Turndown's budget against Unifocus's OWN daily Labor Effectiveness
+   reports for Aug 1-3 2026 — the first time we've had the real engine's
+   per-day output to check against, rather than only its configuration.
+
+   Two things came out of that comparison:
+
+   1) Unifocus only ever staffs WHOLE shifts. Turndown's single shift is
+      1700-2300 = 6h, and its band values (16/24/32/40/48) are mostly NOT
+      multiples of 6 — so the band hours get truncated down to a multiple
+      of 6 before they count. Our app was reporting the raw band value and
+      therefore overstating Turndown's budget on most days.
+
+   2) It independently re-confirms Turndown's same-day rooms convention
+      (see getSameDayRoomsForDay). The night-before figure reproduces none
+      of the three days; the same-day figure reproduces all three.
+
+   Volumes below are the real R106 numbers for those dates (net = total
+   occupancy minus comp rooms), so this doubles as a regression test on the
+   whole same-day-rooms -> band -> truncate chain, not just the arithmetic.
+
+   Deliberately NOT covering Aug 4: Unifocus's own data feed was broken that
+   day (it recorded Hotel Rooms = 0 and Hotel Departures = 201, which is
+   actually Aug 3's room count), so its Aug 4 figures — and hence the
+   Aug 1-4 weekly totals — are not a valid reference for anything. */
+const { loadApp, fakeSession } = require('../_harness');
+
+module.exports = {
+  name: "Turndown's Unifocus budget truncates band hours to whole 6h shifts, matching Unifocus's own Aug 1-3 reports",
+  async run(t) {
+    const seed = Object.assign(fakeSession(), {
+      // See [[labor-tracker-tests]] — skips the legacy rooms migration that
+      // would otherwise reshuffle rooms[] keys on dates that also have a
+      // days[] snapshot.
+      'hk_rooms_migrated_v2': '1',
+      'hk_month_2026-08': {
+        days: {
+          '2026-08-01': { totalPaid: 30, byPosition: { 'Turndown Attendant': { paid: 30.09 } } },
+          '2026-08-02': { totalPaid: 18, byPosition: { 'Turndown Attendant': { paid: 18.36 } } },
+          '2026-08-03': { totalPaid: 23, byPosition: { 'Turndown Attendant': { paid: 23.05 } } }
+        },
+        // Real R106 net occupancy, keyed by the night it belongs to.
+        rooms: {
+          '2026-07-31': 124,
+          '2026-08-01': 154,
+          '2026-08-02': 114,
+          '2026-08-03': 201
+        }
+      }
+    });
+    const { win } = await loadApp({ seed });
+
+    // Same-day convention: each labor day reads its OWN night's occupancy.
+    t.eq(win.getSameDayRoomsForDay('2026-08-01'), 154, 'Aug 1 reads Aug 1 (154), not the night before (124)');
+    t.eq(win.getSameDayRoomsForDay('2026-08-02'), 114, 'Aug 2 reads Aug 2 (114)');
+    t.eq(win.getSameDayRoomsForDay('2026-08-03'), 201, 'Aug 3 reads Aug 3 (201)');
+
+    // ── The three real days, against Unifocus's own reported Standard Hours. ──
+    // 154 -> band 136-180 = 32h -> floor(32/6)*6 = 30h
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-01'), 30,
+      "Aug 1: 154 rooms -> 32h band -> truncated to 30h, matching Unifocus's reported 30.00");
+    // 114 -> band 91-135 = 24h -> already a multiple of 6, unchanged
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-02'), 24,
+      "Aug 2: 114 rooms -> 24h band, already a whole number of 6h shifts, matching Unifocus's 24.00");
+    // 201 -> band 181-290 = 40h -> floor(40/6)*6 = 36h
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-03'), 36,
+      "Aug 3: 201 rooms -> 40h band -> truncated to 36h, matching Unifocus's reported 36.00");
+
+    // Guards the actual bug: the raw band values must NOT be what we report.
+    // Without truncation these three days would read 32 / 24 / 40.
+    const raw = win.UNIFOCUS_STANDARDS['Turndown Attendant'][0];
+    t.eq(raw.shiftHours, 6, "the Turndown component declares its 6h shift length (1700-2300)");
+    t.eq(win.unifocusBandLookup(raw.bands, 154), 32, 'the underlying band for 154 rooms is still the raw 32h — truncation happens on top, it does not rewrite the standard');
+
+    // Truncation must round DOWN, not to nearest: 32/6 = 5.33 and 40/6 = 6.67
+    // both go down in Unifocus's real reports, so the documented "Rounding
+    // Threshold Above One: 0.2" plainly isn't "round up above 0.2".
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-03'), 36,
+      '40h/6 = 6.67 truncates DOWN to 6 shifts (36h), never up to 7 (42h)');
+
+    // Only Turndown is affected — every other position's band values are
+    // already multiples of their 8h shift, so none of them declare
+    // shiftHours and none of their numbers move.
+    ['House Attendant', 'Housekeeping Supervisor', 'Laundry Attendant', 'Public Area Attendant'].forEach(function (pos) {
+      (win.UNIFOCUS_STANDARDS[pos] || []).forEach(function (c) {
+        t.assert(!c.shiftHours, pos + ' must not declare shiftHours — its bands are already whole 8h shifts');
+      });
+    });
+  }
+};
