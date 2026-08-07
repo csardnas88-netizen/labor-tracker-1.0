@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.94.0"/>
+<meta name="app-version" content="6.95.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.95.0', date:'2026-08-06',
+    features:['Weekly Labor Pace, round two, from Carlos\'s labor-meeting feedback. Variance now shows as a percent too, right next to the hours — same formula and rounding Unifocus\'s own Weekly Labor Summary report uses, so it\'s the same number he\'d be citing anyway. The three Current Standard/Unifocus toggles scattered across the Labor page (top, Weekly Pace, Adjusted) are now just one, moved to the very top of the page in a gold-ringed control so it reads as a real setting instead of buried section chrome. Day-cards start small (Actual/Budget/Variance) so all 7 days of the week fit together without scrolling — tap one to expand it into the Unifocus-report layout (Actual/Standard/Var (h)/Var (%)/Explanation). Days with a note get a soft gold background even while collapsed, so the eye goes straight to them when scanning the week.']
+  },
+  {
     v:'6.94.0', date:'2026-08-06',
     features:['Weekly Labor Pace redesigned for the labor meeting, at Carlos\'s request: each position now gets its own card with a horizontally-scrolling strip of days, instead of one dense table with everyone crammed into narrow columns. Each day shows its Actual/Budget/Variance, and — right underneath, in the same card — a spot for a note explaining that day, the same notes already used in By Position. Tap a day to add or edit its note; no note yet just shows a quiet \'+ agregar nota\' prompt. Built for walking through the whole week during the meeting without leaving the page.']
   },
@@ -7122,6 +7126,18 @@ function deleteWPNote(pos,ds){
   wpNoteExpanded[pos+'|'+ds]=false;
   renderLaborDash();
 }
+/* Weekly Labor Pace day-cards default to compact (number + vs budget +
+   variance pill) so all 7 days fit on screen together — Carlos's explicit
+   "Opcion B" pick over always-expanded cards, which only left room for 2-3
+   days at a time. Tapping a card reveals the Unifocus-report-style detail
+   (Actual/Standard/Var h/Var %) plus the note. Separate from wpNoteExpanded
+   on purpose: expanding a card to read it shouldn't drop you straight into
+   the note textarea. */
+var wpCardOpen={};
+function toggleWPCard(pos,ds){
+  wpCardOpen[pos+'|'+ds]=!wpCardOpen[pos+'|'+ds];
+  renderLaborDash();
+}
 /* Daily DND (Do Not Disturb) room list — Room Attendant's Unifocus budget
    assumes a FIXED 85%/15% Stayover/DND split (see unifocusRoomAttendantHours
    above); this is REAL evidence Carlos logs each day to justify that
@@ -7227,15 +7243,24 @@ function setLaborStandardMode(mode){
   try{localStorage.setItem('hk_labor_std_mode',mode==='unifocus'?'unifocus':'current');}catch(e){}
   renderLaborDash();
 }
+/* The ONE standard toggle for the whole Labor page — used to live here,
+   inside the Weekly Pace card, AND inside the Adjusted card (three
+   identical controls all driving the same getLaborStandardMode(), just
+   redundant UI). Carlos asked for a single, more noticeable control instead
+   ("un poco mas llamativo, para que sea mas evidente que existe") — so this
+   is the only remaining call site (dashStdToggleBar, top of the page), gold
+   ring makes it read as a page-level setting rather than a section option. */
 function buildStandardToggleHtml(mode){
   var opts=[{key:'current',label:'Current Standard'},{key:'unifocus',label:'Unifocus'}];
-  var html='<div style="display:inline-flex;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:2px;gap:2px;">';
+  var html='<div style="display:inline-flex;align-items:center;gap:10px;background:var(--white);border:1.5px solid var(--gold);box-shadow:0 0 0 3px var(--gold-soft);border-radius:11px;padding:6px 8px 6px 12px;">';
+  html+='<span style="font-size:10px;font-weight:800;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;">Est&aacute;ndar</span>';
+  html+='<div style="display:inline-flex;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:2px;gap:2px;">';
   opts.forEach(function(o){
     var active=mode===o.key;
-    html+='<button onclick="setLaborStandardMode(\''+o.key+'\')" style="padding:5px 12px;border:none;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;background:'
+    html+='<button onclick="setLaborStandardMode(\''+o.key+'\')" style="padding:6px 13px;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;background:'
       +(active?'var(--navy)':'transparent')+';color:'+(active?'#fff':'var(--text2)')+';">'+o.label+'</button>';
   });
-  html+='</div>';
+  html+='</div></div>';
   return html;
 }
 /* Departures tile for the Labor day view's Occupancy card — sits beside
@@ -10720,6 +10745,26 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     if(stdMode==='unifocus')return dailyBudgetUnifocus[p.key][di];
     return dailyBudgetCurrent[p.key][di];
   }
+  /* Variance as a percent of budget, matching the "Variance %" column on
+     Unifocus's own Weekly Labor Summary report exactly — verified against
+     Carlos's real Aug 1-7 report: (Actual-Standard)/Standard, rounded to a
+     whole percent. When Standard is 0, Unifocus's own report doesn't divide
+     by zero — it shows 100% if Actual is non-zero (fully unaccounted for)
+     or 0% if both are zero (no data that day). Carlos's ask: use the same
+     percents his labor meeting already runs on, not a number we invented.
+     Rounds HALF AWAY FROM ZERO, not JS's native Math.round (which rounds
+     -23.5 to -23) — Unifocus's own Turndown Sun 8/2 row lands on exactly
+     -23.5% and reports it as -24%, so plain Math.round would silently
+     disagree with the report on that exact boundary. */
+  function _pctOfBudget(diff,budget){
+    if(budget===0)return diff===0?0:100;
+    var raw=diff/budget*100;
+    return raw>=0?Math.round(raw):-Math.round(-raw);
+  }
+  function _pctVar(actual,budget){
+    if(budget===null||budget===undefined)return null;
+    return _pctOfBudget(actual-budget,budget);
+  }
 
   var totalOver=0,totalUnder=0,netVar=0;
   positions.forEach(function(p){
@@ -10750,10 +10795,6 @@ function buildWeeklyPaceHTML(days,rooms,wk){
   var activeDayIdx=[];
   for(var di=0;di<7;di++){if(dayHasData[di])activeDayIdx.push(di);}
 
-  html+='<div style="padding:7px 14px;display:flex;justify-content:flex-end;background:var(--surface);border-bottom:1px solid var(--border);">';
-  html+=buildStandardToggleHtml(stdMode);
-  html+='</div>';
-
   /* One block per position (Carlos's design, replacing the old single
      table where all positions shared one row of narrow day columns) — a
      mini-header with the week's variance, then a horizontally-scrolling
@@ -10778,52 +10819,91 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     html+='<div style="text-align:right;">';
     html+='<div style="font-size:8.5px;color:var(--text3);">'+actual.toFixed(2)+'h actual'+(budget!==null?' &middot; '+budget.toFixed(2)+'h budget':'')+'</div>';
     if(variance!==null){
+      var wPct=_pctVar(actual,budget);
       html+='<span style="font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;white-space:nowrap;background:'+(isOver?'var(--red-bg)':isUnder?'var(--green-bg)':'var(--border)')+';color:'+(isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)')+';">'+(variance>=0?'+':'')+variance.toFixed(2)+'h semana</span>';
+      if(wPct!==null)html+='<span style="font-size:9px;font-weight:700;color:var(--text3);margin-left:5px;">'+(wPct>=0?'+':'')+wPct+'%</span>';
     }else{
       html+='<span style="font-size:10px;font-weight:700;color:var(--text3);">&#8212; sin est&aacute;ndar</span>';
     }
     html+='</div>';
     html+='</div>';
 
-    html+='<div style="overflow-x:auto;"><div style="display:flex;min-width:'+(activeDayIdx.length*114)+'px;">';
+    /* Day-cards default to compact (Carlos's "Opcion B", chosen over always-
+       expanded cards which only fit 2-3 days on screen at once). Tapping a
+       card (toggleWPCard, keyed by pos+ds — same reasoning as wpNoteExpanded
+       below: every reported day for a position is on screen together, so a
+       pos-only key would expand/collapse every day at once) reveals the
+       Unifocus-report-style detail rows — Actual/Standard/Var (h)/Var (%) —
+       plus the Explanation (the same getVarianceNote/saveVarianceNote note
+       as By Position). A day WITH a note gets a soft gold background even
+       while collapsed (var(--gt)/var(--gd), the same pair the "Adjusted"
+       ribbon already uses) so it stands out while sliding through the
+       week, without having to open every card to find it. */
+    html+='<div style="overflow-x:auto;"><div style="display:flex;">';
     activeDayIdx.forEach(function(di,i){
       var v=dailyActual[p.key][di]||0;
       var b=dayBudgetFor(p,di);
       var hasB=(b!==null&&b!==undefined);
       var vAr=hasB?(v-b):null;
+      var dPct=hasB?_pctVar(v,b):null;
       var dIsOver=vAr!==null&&vAr>0.5, dIsUnder=vAr!==null&&vAr<-0.5;
       var pillBg=dIsOver?'var(--red-bg)':dIsUnder?'var(--green-bg)':'var(--border)';
       var pillColor=dIsOver?'var(--red)':dIsUnder?'var(--green)':'var(--text2)';
       var ds=dayDS[di];
-      var noteKey=p.key+'|'+ds;
+      var dayKey=p.key+'|'+ds;
       var note=getVarianceNote(ds,p.key);
-      var open=!!wpNoteExpanded[noteKey];
+      var hasNote=!!note;
+      var cardOpen=!!wpCardOpen[dayKey];
+      var noteEditing=!!wpNoteExpanded[dayKey];
+      var goldBg=hasNote?'background:var(--gt);':'';
+      var dayLabelColor=hasNote?'var(--gd)':'var(--text3)';
+      var borderRight=(i<activeDayIdx.length-1?'border-right:1px solid var(--border);':'');
 
-      html+='<div style="flex:1;min-width:110px;padding:9px 8px;text-align:center;'+(i<activeDayIdx.length-1?'border-right:1px solid var(--border);':'')+'">';
-      html+='<div style="font-size:9.5px;font-weight:700;color:var(--text3);">'+dayLabelsDow[di]+' '+dayLabelsShort[di]+'</div>';
-      html+='<div style="font-size:14.5px;font-weight:800;color:var(--text1);margin-top:2px;">'+(v>0?v.toFixed(2):'—')+'</div>';
-      if(hasB){
-        html+='<div style="font-size:8.5px;color:var(--text3);">vs '+b.toFixed(2)+'</div>';
-        html+='<div style="margin-top:2px;"><span style="font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'+(vAr>=0?'+':'')+vAr.toFixed(2)+'</span></div>';
-      }else{
-        html+='<div style="font-size:8.5px;color:var(--text3);">—</div>';
-      }
-      html+='<div style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--border);min-height:16px;">';
-      if(open){
-        var inputId='wpNoteInput_'+ds+'_'+p.key.replace(/[^a-zA-Z0-9]/g,'');
-        html+='<textarea id="'+inputId+'" placeholder="Nota..." style="width:100%;min-height:50px;padding:5px 6px;font-size:9.5px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;">'+escHtml(note)+'</textarea>';
-        html+='<div style="margin-top:4px;display:flex;gap:3px;justify-content:center;flex-wrap:wrap;">';
-        html+='<button onclick="saveWPNoteFromInput(\''+p.key+'\',\''+ds+'\',\''+inputId+'\')" style="padding:3px 7px;background:var(--navy);color:#fff;border:none;border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Guardar</button>';
-        if(note)html+='<button onclick="deleteWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--red);border:1px solid var(--red-border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Borrar</button>';
-        html+='<button onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Cerrar</button>';
+      if(!cardOpen){
+        html+='<div onclick="toggleWPCard(\''+p.key+'\',\''+ds+'\')" style="width:112px;flex-shrink:0;padding:9px 8px;text-align:center;cursor:pointer;'+borderRight+goldBg+'">';
+        html+='<div style="font-size:9.5px;font-weight:700;color:'+dayLabelColor+';">'+dayLabelsDow[di]+' '+dayLabelsShort[di]+'</div>';
+        html+='<div style="font-size:14.5px;font-weight:800;color:var(--text1);margin-top:2px;">'+(v>0?v.toFixed(2):'—')+'</div>';
+        if(hasB){
+          html+='<div style="font-size:8.5px;color:var(--text3);">vs '+b.toFixed(2)+'</div>';
+          html+='<div style="margin-top:2px;"><span style="font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'+(vAr>=0?'+':'')+vAr.toFixed(2)+(dPct!==null?' &middot; '+(dPct>=0?'+':'')+dPct+'%':'')+'</span></div>';
+        }else{
+          html+='<div style="font-size:8.5px;color:var(--text3);">—</div>';
+        }
+        if(hasNote)html+='<div style="margin-top:5px;font-size:8px;font-weight:700;color:var(--gd);">&#128221; nota</div>';
         html+='</div>';
-      }else if(note){
-        html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:9.5px;color:var(--text2);line-height:1.35;cursor:pointer;">'+escHtml(note)+'</div>';
       }else{
-        html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:8.5px;color:var(--text3);font-style:italic;cursor:pointer;">+ agregar nota</div>';
+        html+='<div style="width:172px;flex-shrink:0;padding:9px 10px;'+borderRight+goldBg+'">';
+        html+='<div onclick="toggleWPCard(\''+p.key+'\',\''+ds+'\')" style="font-size:10px;font-weight:700;color:'+dayLabelColor+';text-align:center;margin-bottom:6px;cursor:pointer;">'+dayLabelsDow[di]+' '+dayLabelsShort[di]+' &#9662;</div>';
+        html+='<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+        html+='<tr><td style="color:var(--text3);padding:2px 0;">Actual</td><td style="text-align:right;font-weight:700;color:var(--text1);padding:2px 0;">'+v.toFixed(2)+'</td></tr>';
+        if(hasB){
+          html+='<tr><td style="color:var(--text3);padding:2px 0;">Standard</td><td style="text-align:right;color:var(--text2);padding:2px 0;">'+b.toFixed(2)+'</td></tr>';
+          html+='<tr><td style="color:var(--text3);padding:2px 0;">Var (h)</td><td style="text-align:right;font-weight:700;color:'+pillColor+';padding:2px 0;">'+(vAr>=0?'+':'')+vAr.toFixed(2)+'</td></tr>';
+          html+='<tr><td style="color:var(--text3);padding:2px 0;">Var (%)</td><td style="text-align:right;font-weight:700;color:'+pillColor+';padding:2px 0;">'+(dPct>=0?'+':'')+dPct+'%</td></tr>';
+        }else{
+          html+='<tr><td style="color:var(--text3);padding:2px 0;">Standard</td><td style="text-align:right;color:var(--text3);padding:2px 0;">&#8212;</td></tr>';
+          html+='<tr><td style="color:var(--text3);padding:2px 0;">Var (h)</td><td style="text-align:right;color:var(--text3);padding:2px 0;">&#8212;</td></tr>';
+          html+='<tr><td style="color:var(--text3);padding:2px 0;">Var (%)</td><td style="text-align:right;color:var(--text3);padding:2px 0;">&#8212;</td></tr>';
+        }
+        html+='</table>';
+        html+='<div style="margin-top:7px;padding-top:7px;border-top:1px dashed '+(hasNote?'#E0C989':'var(--border)')+';min-height:16px;">';
+        html+='<div style="font-size:8px;font-weight:700;color:'+dayLabelColor+';text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;">Explanation</div>';
+        if(noteEditing){
+          var inputId='wpNoteInput_'+ds+'_'+p.key.replace(/[^a-zA-Z0-9]/g,'');
+          html+='<textarea id="'+inputId+'" placeholder="Nota..." style="width:100%;min-height:50px;padding:5px 6px;font-size:9.5px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;">'+escHtml(note)+'</textarea>';
+          html+='<div style="margin-top:4px;display:flex;gap:3px;justify-content:center;flex-wrap:wrap;">';
+          html+='<button onclick="saveWPNoteFromInput(\''+p.key+'\',\''+ds+'\',\''+inputId+'\')" style="padding:3px 7px;background:var(--navy);color:#fff;border:none;border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Guardar</button>';
+          if(note)html+='<button onclick="deleteWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--red);border:1px solid var(--red-border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Borrar</button>';
+          html+='<button onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Cerrar</button>';
+          html+='</div>';
+        }else if(hasNote){
+          html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:9.5px;color:var(--text2);line-height:1.35;cursor:pointer;">'+escHtml(note)+'</div>';
+        }else{
+          html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:8.5px;color:var(--text3);font-style:italic;cursor:pointer;">+ agregar nota</div>';
+        }
+        html+='</div>';
+        html+='</div>';
       }
-      html+='</div>';
-      html+='</div>';
     });
     html+='</div></div>';
     html+='</div>';
@@ -10874,10 +10954,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       html+='</div></div>';
 
       html+='<div style="overflow-x:auto;">';
-      html+='<div style="display:flex;align-items:center;justify-content:flex-end;padding:6px 14px;background:var(--surface);">';
-      html+=buildStandardToggleHtml(stdMode);
-      html+='</div>';
-      html+='<div style="display:grid;grid-template-columns:'+adjGridCols+';align-items:center;padding:0 14px 7px;background:var(--surface);border-bottom:1px solid var(--border);">';
+      html+='<div style="display:grid;grid-template-columns:'+adjGridCols+';align-items:center;padding:7px 14px;background:var(--surface);border-bottom:1px solid var(--border);">';
       html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Position</div>';
       html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Actual</div>';
       html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Budget</div>';
@@ -10910,8 +10987,9 @@ function buildWeeklyPaceHTML(days,rooms,wk){
           html+='<div style="text-align:right;padding-right:8px;font-size:12.5px;color:var(--text3);">—</div>';
         }else{
           html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);">'+budget.toFixed(2)+'h</div>';
+          var pAdjPct=_pctOfBudget(adjV,budget);
           html+='<div style="text-align:right;padding-right:8px;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+pPillBg+';color:'+pPillColor+';">'
-            +(adjV>=0?'+':'')+adjV.toFixed(2)+'h</span></div>';
+            +(adjV>=0?'+':'')+adjV.toFixed(2)+'h</span><div style="font-size:9px;font-weight:700;color:var(--text3);margin-top:2px;">'+(pAdjPct>=0?'+':'')+pAdjPct+'%</div></div>';
         }
         html+='</div>';
       });

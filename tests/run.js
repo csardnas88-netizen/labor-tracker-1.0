@@ -48,6 +48,7 @@ const cases = [
   require('./cases/dnd-delete-pushes-clear'),
   require('./cases/unifocus-turndown-shift-truncation'),
   require('./cases/weekly-pace-notes-per-day'),
+  require('./cases/weekly-pace-variance-percent'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

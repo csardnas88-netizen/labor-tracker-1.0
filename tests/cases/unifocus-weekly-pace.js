@@ -58,12 +58,15 @@ module.exports = {
     const month = JSON.parse(win.localStorage.getItem('hk_month_2026-07'));
     const week = { start: new Date(2026, 6, 18), end: new Date(2026, 6, 24) };
 
-    // ── Unifocus (the default since v6.84.0) — its own budgets, and the
-    // card carries the toggle control itself. ──
+    // ── Unifocus (the default since v6.84.0) — its own budgets. The
+    // Current/Unifocus toggle itself no longer lives inside this card (it
+    // moved to a single page-level control, per Carlos's "un solo selector"
+    // request) — proving the toggle is respected now means checking the
+    // budget figures below follow getLaborStandardMode(), not scraping the
+    // button markup out of this string. ──
     t.eq(win.getLaborStandardMode(), 'unifocus', 'defaults to Unifocus with no stored preference');
     let pace = win.buildWeeklyPaceHTML(month.days, month.rooms, week);
     t.assert(pace.length > 0, 'the weekly pace card renders for a week that has reported days');
-    t.assert(/Unifocus/.test(pace), 'the card renders the toggle, showing Unifocus as active');
 
     let rows = pace.split('border-top:1px solid var(--border)');
     let paRow = rows.find((r) => /Public Area/.test(r)) || '';
@@ -92,7 +95,6 @@ module.exports = {
     // the toggle's persisted mode, now shows only the LABOR_STD figures. ──
     win.setLaborStandardMode('current');
     pace = win.buildWeeklyPaceHTML(month.days, month.rooms, week);
-    t.assert(/Current Standard/.test(pace), 'the toggle now shows Current Standard as active');
 
     rows = pace.split('border-top:1px solid var(--border)');
     paRow = rows.find((r) => /Public Area/.test(r)) || '';
