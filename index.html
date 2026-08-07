@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.97.0"/>
+<meta name="app-version" content="6.98.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1894,6 +1894,29 @@ Supervisor 3</textarea>
       <div class="lm-scroll" id="laborModelBody"></div>
       <div style="font-size:12px;color:var(--text3);margin-top:12px;line-height:1.5;">
         Changes here recalculate budgeted hours and variance everywhere in the app. Average rates feed the P&amp;L cost analysis.
+      </div>
+
+      <!-- Read-only reference for the OTHER standard the Labor page can be
+           switched to. Collapsed by default: it's for looking something up
+           mid-meeting, not something to scroll past on the way to the
+           editable table above. -->
+      <div class="card" style="margin-top:18px;margin-bottom:0;border:1px solid var(--gold);">
+        <div onclick="toggleUnifocusStd()" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;cursor:pointer;">
+          <div>
+            <div style="font-weight:700;font-size:13px;color:var(--text1);">Unifocus Standard <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--gd);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Reference</span></div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px;">The standard Unifocus evaluates against &mdash; read-only, straight from their Labor Standards Report</div>
+          </div>
+          <span id="unifocusStdArrow" style="color:var(--gold);font-size:14px;transition:.18s;flex-shrink:0;">&#9662;</span>
+        </div>
+        <div id="unifocusStdWrap" style="display:none;padding:0 16px 14px;">
+          <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:12px;">
+            These are <b>not editable here</b>. They mirror Unifocus's own configuration, checked band-for-band against it, so the app and the report Eoin runs the labor meeting from can't drift apart. Switch between this and the Current Standard above using the toggle at the top of the <b>Labor</b> page.
+          </div>
+          <div id="unifocusStdBody"></div>
+          <div style="font-size:10.5px;color:var(--text3);line-height:1.6;margin-top:6px;">
+            <b>Rooms &middot; night before</b> means a day is staffed off the occupancy of the night before it; <b>same day</b> means the day's own. Unifocus staffs whole shifts only, so a band's hours are trimmed down to a whole number of shifts where the two don't divide evenly (Turndown's 6-hour shift is the one place that bites).
+          </div>
+        </div>
       </div>
     </div>
 
@@ -4208,6 +4231,11 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.98.0', date:'2026-08-07',
+    fixes:['Fixed the "Couldn\'t save to the cloud — Retry now" banner that kept coming back every few minutes, worst on the work computer. It was a loop the app was causing itself: one failure armed an automatic re-sync that pushed every month, OCC month, project and call-off all at once, and each of those uploads separately tried to renew the login session. Because renewing a session invalidates the previous one, a batch of simultaneous renewals mostly failed — which produced more failures, which triggered another round 30 seconds later. Now the session renews once for the whole batch, uploads go a few at a time instead of all at once, a re-sync can never start while the previous one is still running, and the wait between retries grows (30s, 1m, 2m, 4m, up to 8m) so a genuinely bad connection gets room to recover. A save rejected for an expired session is also quietly retried once now, instead of raising the banner for something one retry fixes. Tapping "Retry now" still goes immediately.'],
+    features:['Labor Model now documents the Unifocus standard, in a gold "Reference" section under the editable table. It lays out every position\'s shifts, what drives each one (departures, or rooms from the night before vs the same day), and the full hour bands — including the two things that are easy to get wrong: Turndown\'s hours being trimmed down to whole 6-hour shifts, and Public Area\'s overnight shift being longer on Wednesdays. Room Attendant\'s rate formula (20 min for 85% of Stayovers + 30 min per departure) is spelled out too. Read-only on purpose — it mirrors Unifocus\'s own report so the two can\'t drift apart. Collapsed by default; tap to open.']
+  },
+  {
     v:'6.97.0', date:'2026-08-07',
     improvements:['Cleared the duplication off the Labor page, at Carlos\'s call. The "By Position" table is gone — everything it showed for the selected day (Paid, Budget, Variance, and a note) Weekly Labor Pace now shows for every reported day of the week, in the same layout as Unifocus\'s own report. The one thing By Position had that nothing else did — Room Attendant\'s DND justification line ("24 DND · 15.0% of 160 stayovers", the evidence for defending the standard\'s fixed 85% in the labor meeting) — moved into Room Attendant\'s own day-card rather than disappearing with the table. Occupancy now runs full width. The week day-strip also stopped repeating each day\'s hours and variance; it stays the day picker, keeping the over/under colour, the break-exception counts, and the projected figure for days with no report yet.']
   },
@@ -5098,7 +5126,33 @@ function _authStore(d){
   localStorage.setItem(_SA_EXP,String(Date.now()+d.expires_in*1000));
   SUPA_HEADERS['Authorization']='Bearer '+d.access_token;
 }
-async function _authRefresh(){
+/* Single-flight: every caller that arrives while a renewal is already in
+   the air waits on that same request instead of starting another.
+
+   This is not just an efficiency nicety. Supabase ROTATES refresh tokens —
+   exchanging one returns a new one and retires the old — so a burst of
+   concurrent renewals is a burst of requests all spending the same,
+   already-being-consumed token. Most fail, each failure raises the red
+   "Couldn't save to the cloud" banner, and whichever response lands last
+   wins localStorage, so the device can end up storing a token that was
+   already superseded and then fail to renew forever.
+
+   forceSyncToSupabase() fires one supaPut per month, per OCC month, per
+   project and per call-off, so "concurrent" here routinely meant 15-50,
+   not 2. That was the loop behind Carlos's banner reappearing every few
+   minutes on 2026-08-06 (worst on the work computer, whose slower proxied
+   network widened every window). See tests/cases/sync-refresh-storm.js. */
+var _authRefreshInFlight=null;
+function _authRefresh(){
+  if(_authRefreshInFlight)return _authRefreshInFlight;
+  _authRefreshInFlight=_authRefreshOnce().then(function(ok){
+    _authRefreshInFlight=null;return ok;
+  },function(e){
+    _authRefreshInFlight=null;throw e;
+  });
+  return _authRefreshInFlight;
+}
+async function _authRefreshOnce(){
   var rt=localStorage.getItem(_SA_REF);if(!rt)return false;
   try{
     var r=await fetch(SUPA_URL+'/auth/v1/token?grant_type=refresh_token',{
@@ -5796,6 +5850,11 @@ function setSyncStatus(s){
    change nobody notices. ── */
 var _syncFailCount=0;
 var _syncFailedKeys=[];
+/* Backoff state for the automatic retry further down (see the setInterval
+   near supaPut). Declared here with the rest of the sync-failure state
+   because markSyncSuccess and retrySyncNow, both above that interval,
+   reset it. */
+var _syncRetryAttempt=0, _syncRetryBusy=false, _syncRetryNextAt=0;
 var KEY_LABELS={
   'projects_data':'Projects','projects_deleted_ids':'Projects',
   'calloffs_data':'Call-Offs','calloffs_deleted_ids':'Call-Offs',
@@ -5832,6 +5891,9 @@ function markSyncFailure(label,sessionExpired){
 function markSyncSuccess(){
   _syncFailCount=0;
   _syncFailedKeys=[];
+  /* Recovery also clears the retry backoff, so the next incident starts
+     from 30s again rather than inheriting a long delay from this one. */
+  _syncRetryAttempt=0; _syncRetryNextAt=0;
   var b=document.getElementById('syncFailBanner');
   if(b)b.style.display='none';
 }
@@ -5960,6 +6022,8 @@ function freeUpStorage(keepMonths){
 }
 function retrySyncNow(){
   showToast('&#128260; Retrying sync…');
+  /* An explicit tap is never made to wait out the automatic backoff. */
+  _syncRetryAttempt=0; _syncRetryNextAt=0;
   try{forceSyncToSupabase();}catch(e){}
   setTimeout(function(){try{syncFromSheets();}catch(e){}},800);
 }
@@ -5979,13 +6043,38 @@ window.addEventListener('online',function(){
 });
 window.addEventListener('offline',function(){ setSyncStatus('offline'); });
 window.addEventListener('online',function(){ try{startRealtime();}catch(e){} });
+/* The retry backs off (30s, 60s, 2m, 4m, capped at 8m) and never starts a
+   new attempt while the previous one is still running.
+
+   A flat 30s retry with no in-flight guard meant a slow full re-sync was
+   still uploading when the next one began, so attempts piled on top of
+   each other — each one re-pushing every key, each pile-up making the next
+   round slower and more likely to fail. That is self-sustaining: the
+   retries caused the failures that armed the retries. Backing off gives a
+   genuinely flaky connection room to recover, and the in-flight guard
+   means one slow sync can never overlap itself. A successful sync clears
+   _syncFailCount, which resets the delay to 30s for the next incident. */
+var SYNC_RETRY_BASE_MS=30000, SYNC_RETRY_MAX_MS=480000;
 setInterval(function(){
-  if(_syncFailCount>0){ try{forceSyncToSupabase();}catch(e){} }
+  if(_syncFailCount>0&&!_syncRetryBusy&&Date.now()>=_syncRetryNextAt){
+    _syncRetryBusy=true;
+    var delay=Math.min(SYNC_RETRY_BASE_MS*Math.pow(2,_syncRetryAttempt),SYNC_RETRY_MAX_MS);
+    _syncRetryAttempt++;
+    _syncRetryNextAt=Date.now()+delay;
+    var done=function(){ _syncRetryBusy=false; if(_syncFailCount===0){_syncRetryAttempt=0;_syncRetryNextAt=0;} };
+    try{
+      var p=forceSyncToSupabase();
+      if(p&&p.then)p.then(done,done);else done();
+    }catch(e){ done(); }
+  }
   /* Re-establish the live channel if it dropped while the app stayed open. */
   try{ if(navigator.onLine&&_authToken()&&!_authExpired()&&!_rtChannel)startRealtime(); }catch(e){}
 },30000);
 
-/* Upsert a key/value into Supabase */
+/* Upsert a key/value into Supabase. Returns a promise that settles when
+   the write is done (always resolves — failures are reported through the
+   banner, not thrown), so callers pushing many keys can wait rather than
+   firing everything at once. See _supaPutAll. */
 function supaPut(key, value){
   _lastLocalWriteAt=Date.now();
   setSyncStatus("syncing");
@@ -5997,25 +6086,62 @@ function supaPut(key, value){
     });
   };
   /* Proactively refresh an expired session before writing, instead of
-     silently failing with a stale token and only finding out later. */
+     silently failing with a stale token and only finding out later.
+     _authRefresh is single-flight, so a burst of puts triggers one
+     renewal between them, not one each. */
   var needsRefresh=(typeof _authExpired==='function'&&_authExpired());
   var ready=needsRefresh?_authRefresh():Promise.resolve(true);
-  ready.then(function(refreshOk){
+  return ready.then(function(refreshOk){
     if(needsRefresh&&!refreshOk){
       setSyncStatus("error");
       markSyncFailure(_friendlyKeyLabel(key),true);
       return;
     }
-    go().then(function(r){
-      if(r.ok){
-        setSyncStatus("synced"); markSyncSuccess();
-        /* Attribute the change. Snapshots and tombstone lists are machine
-           bookkeeping, not user edits, so they'd only add noise. */
-        if(key.indexOf('snapshot_')!==0&&key.indexOf('_deleted_')===-1)logAudit(key,'save');
+    return go().then(function(r){
+      /* A 401 here means the token went stale between the _authExpired()
+         check above and this request actually going out — a real window on
+         a slow connection. Renew once and retry before declaring failure,
+         rather than showing the banner for something one retry fixes. */
+      if(r.status===401){
+        return _authRefresh().then(function(ok){
+          if(!ok){ setSyncStatus("error"); markSyncFailure(_friendlyKeyLabel(key),true); return; }
+          return go().then(_settle,_fail);
+        });
       }
-      else{ setSyncStatus("error"); markSyncFailure(_friendlyKeyLabel(key)); }
-    }).catch(function(){ setSyncStatus("error"); markSyncFailure(_friendlyKeyLabel(key)); });
+      return _settle(r);
+    }).catch(_fail);
   });
+  function _settle(r){
+    if(r.ok){
+      setSyncStatus("synced"); markSyncSuccess();
+      /* Attribute the change. Snapshots and tombstone lists are machine
+         bookkeeping, not user edits, so they'd only add noise. */
+      if(key.indexOf('snapshot_')!==0&&key.indexOf('_deleted_')===-1)logAudit(key,'save');
+    }
+    else{ setSyncStatus("error"); markSyncFailure(_friendlyKeyLabel(key)); }
+  }
+  function _fail(){ setSyncStatus("error"); markSyncFailure(_friendlyKeyLabel(key)); }
+}
+
+/* Push many key/value pairs with a small concurrency cap.
+
+   forceSyncToSupabase() used to call supaPut for every month, every OCC
+   month, every project and every call-off in one synchronous pass — 15-50
+   simultaneous POSTs on a real dataset. Browsers queue those, corporate
+   proxies (Carlos's work computer) drop some, and every drop re-arms the
+   30s retry that fires the whole burst again. Draining a few at a time
+   keeps a full re-sync well inside what both ends tolerate. */
+var SUPA_PUT_CONCURRENCY=4;
+function _supaPutAll(pairs){
+  var i=0;
+  function next(){
+    if(i>=pairs.length)return Promise.resolve();
+    var p=pairs[i++];
+    return supaPut(p[0],p[1]).then(next,next);
+  }
+  var lanes=[];
+  for(var n=0;n<Math.min(SUPA_PUT_CONCURRENCY,pairs.length);n++)lanes.push(next());
+  return Promise.all(lanes);
 }
 
 /* Pull all keys from Supabase */
@@ -6592,71 +6718,40 @@ function _syncFromSheetsPull(){
 /* Manual force sync - push all local data to Supabase */
 function forceSyncToSupabase(){
   setSyncStatus("syncing");
-  var pushed=0;
+  /* Collect first, push second. This used to call supaPut inline for every
+     matching key, which on a real dataset meant 15-50 POSTs opened in the
+     same tick; _supaPutAll drains them a few at a time instead. See the
+     note on SUPA_PUT_CONCURRENCY. */
+  var pairs=[];
+  var SINGLETONS=['projects_deleted_ids','calloffs_deleted_ids',
+    'project_entries_deleted_keys','hk_roster_overrides','hk_labor_model',
+    'hk_staffing_actual','hk_staffing_input','hk_trainings','hk_emp_dates',
+    'hk_section_pin','hk_poscheck_notes','hk_paychex_report','hk_wtc_report'];
   Object.keys(localStorage).forEach(function(k){
-    if(k.indexOf("hk_month_")===0){
-      var mk=k.replace("hk_month_","");
-      try{ supaPut("month_"+mk, JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k.indexOf("hk_r106_")===0){
-      var mk2=k.replace("hk_r106_","");
-      try{ supaPut("r106_"+mk2, JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="projects_data"){
-      try{
+    try{
+      if(k.indexOf("hk_month_")===0){
+        pairs.push(["month_"+k.replace("hk_month_",""), JSON.parse(localStorage[k])]);
+      }
+      else if(k.indexOf("hk_r106_")===0){
+        pairs.push(["r106_"+k.replace("hk_r106_",""), JSON.parse(localStorage[k])]);
+      }
+      else if(k==="projects_data"){
         var _pd=JSON.parse(localStorage[k]);
-        supaPut("projects_data", _pd); pushed++;
-        (_pd||[]).forEach(function(p){ if(p&&p.id){ supaPut('project_'+p.id,p); pushed++; } });
-      }catch(e){}
-    }
-    if(k==="calloffs_data"){
-      try{
+        pairs.push(["projects_data",_pd]);
+        (_pd||[]).forEach(function(p){ if(p&&p.id)pairs.push(['project_'+p.id,p]); });
+      }
+      else if(k==="calloffs_data"){
         var _cd=JSON.parse(localStorage[k]);
-        supaPut("calloffs_data", _cd); pushed++;
-        (_cd||[]).forEach(function(c){ if(c&&c.id){ supaPut('calloff_'+c.id,c); pushed++; } });
-      }catch(e){}
-    }
-    if(k==="projects_deleted_ids"){
-      try{ supaPut("projects_deleted_ids", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="calloffs_deleted_ids"){
-      try{ supaPut("calloffs_deleted_ids", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="project_entries_deleted_keys"){
-      try{ supaPut("project_entries_deleted_keys", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_roster_overrides"){
-      try{ supaPut("hk_roster_overrides", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_labor_model"){
-      try{ supaPut("hk_labor_model", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_staffing_actual"){
-      try{ supaPut("hk_staffing_actual", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_staffing_input"){
-      try{ supaPut("hk_staffing_input", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_trainings"){
-      try{ supaPut("hk_trainings", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_emp_dates"){
-      try{ supaPut("hk_emp_dates", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_section_pin"){
-      try{ supaPut("hk_section_pin", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_poscheck_notes"){
-      try{ supaPut("hk_poscheck_notes", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_paychex_report"){
-      try{ supaPut("hk_paychex_report", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
-    if(k==="hk_wtc_report"){
-      try{ supaPut("hk_wtc_report", JSON.parse(localStorage[k])); pushed++; }catch(e){}
-    }
+        pairs.push(["calloffs_data",_cd]);
+        (_cd||[]).forEach(function(c){ if(c&&c.id)pairs.push(['calloff_'+c.id,c]); });
+      }
+      else if(SINGLETONS.indexOf(k)!==-1){
+        pairs.push([k, JSON.parse(localStorage[k])]);
+      }
+    }catch(e){}
   });
-  showToast("&#9729; Pushing "+pushed+" keys to Supabase...");
+  showToast("&#9729; Pushing "+pairs.length+" keys to Supabase...");
+  return _supaPutAll(pairs);
 }
 
 /* ═══════════════════════════════════════════
@@ -9056,6 +9151,97 @@ function renderLaborModel(){
   box.innerHTML='<table class="lm-table">'
     +'<thead><tr><th>Position</th><th>Driver type</th><th class="num">Value</th><th class="num">Avg rate</th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table>';
+  var ref=document.getElementById('unifocusStdBody');
+  if(ref)ref.innerHTML=buildUnifocusStandardHTML();
+}
+
+/* ── Unifocus standard reference (read-only) ──────────────
+   The table above is the editable "Current Standard". This documents the
+   OTHER standard the Labor page can be switched to — the one Unifocus
+   actually evaluates against in the labor meeting — so the numbers behind
+   that toggle are inspectable somewhere instead of living only in code.
+
+   Deliberately read-only: these values come from Unifocus's own Labor
+   Standards Report, verified band-for-band against it. An editable copy
+   would just be a way to silently drift out of agreement with the report
+   Eoin runs the meeting from. ── */
+var _UF_DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function _ufDriverLabel(d){
+  if(d==='departures')return 'Departures &middot; same day';
+  if(d==='rooms_sameday')return 'Rooms &middot; same day';
+  return 'Rooms &middot; night before';
+}
+function _ufBandsHTML(bands,shiftHours){
+  var out='';
+  bands.forEach(function(b){
+    var lo=b[0],hi=b[1],val=b[2];
+    var range=(lo===1&&hi===Infinity)?'any':(hi===Infinity?(lo+'+'):(lo+'&ndash;'+hi));
+    var hrs;
+    if(Object.prototype.toString.call(val)==='[object Array]'){
+      /* Day-of-week array — show only the days that differ from the norm,
+         which is what makes Public Area's Wednesday readable at a glance
+         instead of a wall of seven identical numbers. */
+      var counts={};
+      val.forEach(function(v){counts[v]=(counts[v]||0)+1;});
+      var norm=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];})[0];
+      var exceptions=[];
+      val.forEach(function(v,i){ if(String(v)!==String(norm))exceptions.push(_UF_DOW[i]+' '+v+'h'); });
+      hrs=norm+'h'+(exceptions.length?' <span style="color:var(--gd);">('+exceptions.join(', ')+')</span>':'');
+    }else{
+      var t=(shiftHours>0)?Math.floor(val/shiftHours)*shiftHours:val;
+      hrs=t+'h'+(t!==val?' <span style="color:var(--text3);">(band '+val+'h, trimmed to whole '+shiftHours+'h shifts)</span>':'');
+    }
+    out+='<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:10.5px;">'
+      +'<span style="color:var(--text3);">'+range+'</span><span style="color:var(--text1);font-weight:600;text-align:right;">'+hrs+'</span></div>';
+  });
+  return out;
+}
+function buildUnifocusStandardHTML(){
+  var html='';
+  /* Room Attendant first — it's the only rate-based one, and the one whose
+     numbers get questioned most in the meeting. */
+  html+='<div style="border:1px solid var(--gold);border-radius:10px;overflow:hidden;margin-bottom:10px;">'
+    +'<div style="background:var(--gt);padding:7px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">'
+    +'<span style="font-size:11.5px;font-weight:700;color:var(--gd);">Room Attendant</span>'
+    +'<span style="font-size:9px;font-weight:800;color:var(--gd);text-transform:uppercase;letter-spacing:.4px;">Per-room rate</span>'
+    +'</div>'
+    +'<div style="padding:9px 12px;font-size:10.5px;color:var(--text2);line-height:1.6;">'
+    +'<div><b style="color:var(--text1);">'+RA_STAYOVER_MIN+' min</b> for '+Math.round(RA_STAYOVER_PCT*100)+'% of Stayovers'
+    +' &nbsp;+&nbsp; <b style="color:var(--text1);">'+RA_DEPARTURE_MIN+' min</b> per Departure</div>'
+    +'<div style="color:var(--text3);margin-top:3px;">Stayovers = last night\'s rooms &minus; today\'s departures. '
+    +'The '+Math.round(RA_STAYOVER_PCT*100)+'% is a fixed assumption in the standard &mdash; the other '
+    +Math.round((1-RA_STAYOVER_PCT)*100)+'% is treated as DND. Log the real DND rooms on the Labor page to have the actual figure on hand.</div>'
+    +'</div></div>';
+
+  LM_ORDER.forEach(function(pos){
+    var shifts=UNIFOCUS_STANDARDS[pos];
+    if(!shifts)return; /* Room Attendant, handled above */
+    var body='';
+    shifts.forEach(function(s,i){
+      body+='<div style="padding:8px 12px;'+(i>0?'border-top:1px solid var(--border);':'')+'">'
+        +'<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:3px;">'
+        +'<span style="font-size:10.5px;font-weight:700;color:var(--text1);">'+s.name+'</span>'
+        +'<span style="font-size:9px;color:var(--text3);">'+_ufDriverLabel(s.driver)+'</span>'
+        +'</div>'
+        +_ufBandsHTML(s.bands,s.shiftHours)
+        +'</div>';
+    });
+    html+='<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px;">'
+      +'<div style="background:var(--surface);padding:7px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">'
+      +'<span style="font-size:11.5px;font-weight:700;color:var(--text1);">'+LM_LABELS[pos]+'</span>'
+      +'<span style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">'
+      +shifts.length+' shift'+(shifts.length!==1?'s':'')+'</span>'
+      +'</div>'+body+'</div>';
+  });
+  return html;
+}
+function toggleUnifocusStd(){
+  var b=document.getElementById('unifocusStdWrap');
+  var a=document.getElementById('unifocusStdArrow');
+  if(!b)return;
+  var open=b.style.display!=='none';
+  b.style.display=open?'none':'block';
+  if(a)a.style.transform=open?'rotate(0deg)':'rotate(180deg)';
 }
 function lm_onDriverChange(sel){
   var tr=sel.closest('tr');if(!tr)return;

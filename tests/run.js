@@ -49,6 +49,9 @@ const cases = [
   require('./cases/unifocus-turndown-shift-truncation'),
   require('./cases/weekly-pace-notes-per-day'),
   require('./cases/weekly-pace-variance-percent'),
+  require('./cases/sync-refresh-storm'),
+  require('./cases/sync-401-retry'),
+  require('./cases/labor-model-unifocus-reference'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
