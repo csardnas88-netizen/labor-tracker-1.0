@@ -5,15 +5,16 @@
    with all app-facing text in English (the compact version briefly shipped
    with Spanish button/prompt text — "Guardar"/"Borrar"/"Cerrar"/"+ agregar
    nota" — inconsistent with the rest of the app, which is English
-   throughout, e.g. By Position's own Save/Delete/Close note editor).
-   toggleWPCard now COLLAPSES a card (the exception), not expands it.
+   throughout). toggleWPCard now COLLAPSES a card (the exception), not
+   expands it.
 
    Three things this guards:
-   1) The notes shown here are the EXACT SAME data as the By Position daily
-      notes (getVarianceNote/saveVarianceNote, keyed by ds+pos) — this is a
-      second place to read/write them, not a parallel note store that could
-      drift out of sync. A note saved from Weekly Pace must be readable from
-      By Position and vice versa.
+   1) These cards read and write the shared variance-note store
+      (getVarianceNote/saveVarianceNote, keyed by ds+pos) rather than
+      keeping notes of their own. That store predates them — it was built
+      for the By Position table (removed in v6.97.0) and is the same data
+      the sync layer pushes and merges — so a note written anywhere, by
+      any surface or device, has to read back here unchanged.
    2) TWO independent expand states, both keyed by pos+ds (not pos alone —
       see [[labor-tracker-v6-64-name-parsing]] for why per-day keys matter
       whenever multiple days of the same position are on screen together):
@@ -29,7 +30,7 @@
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "Weekly Labor Pace day-cards default to open (English text throughout) and share the same note store as By Position",
+  name: "Weekly Labor Pace day-cards default to open, in English, reading and writing the shared variance-note store",
   async run(t) {
     const seed = Object.assign(fakeSession(), {
       'hk_rooms_migrated_v2': '1',
@@ -49,20 +50,20 @@ module.exports = {
     // rows and an English "+ Note" prompt show without tapping anything. ──
     let pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 200, week);
     t.assert(/Explanation/.test(pace), 'day-cards show their detail rows by default, with no tap needed');
-    t.assert(/>\+ Note</.test(pace), 'the no-note prompt reads "+ Note" in English, matching By Position\'s own wording');
+    t.assert(/>\+ Note</.test(pace), 'the no-note prompt reads "+ Note" in English');
     t.assert(!/agregar nota/.test(pace), 'no Spanish text ("agregar nota") leaks into the card');
     t.assert(!/wpNoteInput_/.test(pace), 'no editor is open until the note area itself is tapped');
 
-    // ── Writing a note directly through the underlying store (as By
-    // Position's UI would) shows up immediately, gold-highlighted, with
-    // the note text visible since the card is already open. ──
+    // ── A note written straight into the shared store — as a sync pull
+    // from another device would — shows up immediately, gold-highlighted,
+    // with the text visible since the card is already open. ──
     win.saveVarianceNote('2026-07-11', 'Turndown Attendant', 'Cubri un call-off, 6h extra.');
     pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 200, week);
     const tdIdx = pace.indexOf('>Turndown</div>');
     t.assert(tdIdx !== -1, 'Turndown position block found');
     let tdBlock = pace.slice(tdIdx, tdIdx + 3000);
     t.assert(/var\(--gt\)/.test(tdBlock), 'Jul 11 (which now has a note) gets the gold highlight');
-    t.assert(/Cubri un call-off, 6h extra\./.test(tdBlock), "the note saved via By Position's own store reads back here, already visible without tapping");
+    t.assert(/Cubri un call-off, 6h extra\./.test(tdBlock), 'a note written straight into the shared store reads back here, already visible without tapping');
 
     // ── Collapsing Jul 11's card must NOT collapse Jul 12's — the bug a
     // pos-only key would cause. ──
@@ -85,9 +86,9 @@ module.exports = {
     t.assert(inputMatch, 'Jul 11 editor id matches the expected ds+pos pattern');
     t.assert(!/wpNoteInput_2026-07-12_TurndownAttendant/.test(pace), "Jul 12's editor did NOT open just because Jul 11's did");
 
-    // ── Saving from the Weekly Pace editor updates the SAME underlying
-    // note By Position reads, and collapses just the editor (the card
-    // stays open so the saved text is visible right away).
+    // ── Saving from the Weekly Pace editor writes through to that same
+    // shared store, and collapses just the editor (the card stays open so
+    // the saved text is visible right away).
     // buildWeeklyPaceHTML() is called directly above (deterministic,
     // clock-independent — see [[labor-tracker-v6-64-name-parsing]]), so its
     // returned markup was never inserted into the page; drop it into a

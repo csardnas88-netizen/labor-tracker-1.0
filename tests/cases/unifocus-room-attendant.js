@@ -85,19 +85,31 @@ module.exports = {
     t.eq(win.getDNDCountForDay('2026-07-15'), null, 'clearing the DND room list reads back as null count');
     win.saveDNDRoomsForDate('2026-07-15', dndRoomList); // restore for the render check below
 
-    // ── By Position table: Room Attendant's row shows the real Unifocus
-    // total, and — once DND rooms are entered — a justification caption
-    // with the real percentage against the fixed-85% assumption. ──
+    // ── Weekly Labor Pace's Room Attendant day-card shows the real
+    // Unifocus Standard and — once DND rooms are entered — the
+    // justification caption with the real percentage against the fixed-85%
+    // assumption. Both used to live in the By Position table, removed in
+    // v6.97.0 as redundant with these cards; the DND caption was the ONE
+    // thing that table showed which nothing else did, so it moved here
+    // rather than being lost. This assertion is what proves that move
+    // actually landed. ──
     win.dashSelectedDate = new Date(2026, 6, 15);
     win.setLaborStandardMode('unifocus');
     win.showPage('labor');
-    const html = win.document.getElementById('dashDayAnalysis').innerHTML;
-    const rows = html.split('<tr>');
-    const roomRow = rows.find((r) => />Room</.test(r)) || '';
-    t.assert(/65\.33/.test(roomRow), "Room Attendant's row shows its computed Unifocus total (65.33h)");
+    const week = { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) };
+    const pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 200, week);
+    const raIdx = pace.indexOf('>Room Attendant</div>');
+    t.assert(raIdx !== -1, 'Room Attendant block found in Weekly Labor Pace');
+    const raBlock = pace.slice(raIdx, raIdx + 4000);
+    t.assert(/Standard[\s\S]{0,160}65\.33/.test(raBlock), "Room Attendant's Jul 15 card shows its computed Unifocus Standard (65.33h)");
     // Stayovers = 160, DND count = 24 -> 24/160 = 15.0%
-    t.assert(/24 DND/.test(roomRow), 'the justification caption shows the real derived DND count');
-    t.assert(/15\.0% of 160 stayovers/.test(roomRow), "the caption shows the real percentage (15.0%) against the day's actual Stayovers (160), for comparison against the standard's fixed 85/15 assumption");
+    t.assert(/24 DND/.test(raBlock), 'the justification caption shows the real derived DND count');
+    t.assert(/15\.0% of 160 stayovers/.test(raBlock), "the caption shows the real percentage (15.0%) against the day's actual Stayovers (160), for comparison against the standard's fixed 85/15 assumption");
+
+    // The caption is Room Attendant's alone — no other position's cards
+    // should sprout a DND line just because a count exists for the day.
+    const tdIdx = pace.indexOf('>Turndown</div>');
+    t.assert(tdIdx === -1 || !/DND/.test(pace.slice(tdIdx, tdIdx + 2500)), 'the DND caption does not leak into other positions\' day-cards');
 
     // The Occupancy card gained a third tile for the DND count, alongside
     // Rooms and Departures (Option A from Carlos's design review) — just

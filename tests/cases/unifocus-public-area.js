@@ -73,13 +73,19 @@ module.exports = {
     t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-07-21'), 24, 'Turndown also has no departures component and computes normally too (same-day rooms=120 -> 91-135 band -> 24h) despite the missing departures record');
     t.eq(win.unifocusHoursForPosition('Laundry Attendant', '2026-07-21'), null, "Laundry DOES have a departures component, so it correctly still returns null when departures data is genuinely missing — the fix is scoped, not a blanket bypass");
 
-    // ── By Position table renders the new column for Public Area too. ──
-    win.dashSelectedDate = new Date(2026, 6, 22); // Wednesday
+    // ── Public Area's day-of-week-sensitive Standard reaches the screen.
+    // Checked on Weekly Labor Pace's day-cards; the By Position table this
+    // used to read was removed in v6.97.0 as redundant with them. Sunday
+    // (32h) and Wednesday (48h) both appear in the same week block, which
+    // makes the day-of-week variation visible in the render, not just in
+    // the unifocusHoursForPosition calls above. ──
     win.setLaborStandardMode('unifocus');
-    win.showPage('labor');
-    const html = win.document.getElementById('dashDayAnalysis').innerHTML;
-    const rows = html.split('<tr>');
-    const publicRow = rows.find((r) => />Public Area</.test(r)) || '';
-    t.assert(/48\.00/.test(publicRow), "Public Area's row shows Wednesday's computed total (48.00h)");
+    const week = { start: new Date(2026, 6, 18), end: new Date(2026, 6, 24) };
+    const pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 120, week);
+    const paIdx = pace.indexOf('>Public Area</div>');
+    t.assert(paIdx !== -1, 'Public Area block found in Weekly Labor Pace');
+    const paBlock = pace.slice(paIdx, paIdx + 5000);
+    t.assert(/Standard[\s\S]{0,160}48\.00/.test(paBlock), "Wednesday's card shows its computed Standard (48.00h)");
+    t.assert(/Standard[\s\S]{0,160}32\.00/.test(paBlock), "Sunday's card shows its own, different Standard (32.00h) in the same week — the day-of-week variation is visible on screen");
   }
 };

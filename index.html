@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.96.0"/>
+<meta name="app-version" content="6.97.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -677,19 +677,14 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .mks-val.green{color:var(--green);}
 .mks-val.yellow{color:var(--yellow);}
 .mks-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;}
-.analysis-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
-.day-summary-card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
-.dsc-head{background:var(--navy);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;}
-.dsc-title{font-size:13px;font-weight:700;}
-.dsc-date{font-size:11px;opacity:.7;}
-.dsc-body{padding:14px 16px;}
-.dsc-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);}
-.dsc-row:last-child{border-bottom:none;}
-.dsc-label{font-size:12px;color:var(--text2);}
-.dsc-val{font-size:14px;font-weight:800;color:var(--text1);}
-.dsc-val.red{color:var(--red);}
-.dsc-val.green{color:var(--green);}
-.day-prog-card{background:var(--white);border:1.5px solid var(--border);border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;transition:.15s;position:relative;min-height:110px;}
+/* .analysis-2col / .day-summary-card / .dsc-* lived here until v6.97.0 —
+   they styled the "By Position" card and the 2-column row that held it
+   beside Occupancy. Both were removed as redundant with Weekly Labor
+   Pace; the classes had no remaining users, so they went with them. */
+/* min-height dropped from 110px to 78px in v6.97.0: these cards no longer
+   carry the paid-hours and variance lines (Weekly Labor Pace reports those
+   per position now), so the old height left them mostly empty. */
+.day-prog-card{background:var(--white);border:1.5px solid var(--border);border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;transition:.15s;position:relative;min-height:78px;}
 .day-prog-card:hover{border-color:var(--border2);box-shadow:0 2px 8px rgba(0,0,0,.06);}
 .day-prog-card.selected{border-color:var(--navy);border-width:2px;box-shadow:0 0 0 3px rgba(15,37,68,.08);}
 .day-prog-card.over{border-top:3px solid var(--red);}
@@ -701,11 +696,7 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .dpc-badge.navy{background:var(--navy);color:#fff;}
 .dpc-badge.yellow{background:var(--yellow);color:#fff;}
 .dpc-name{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:3px;}
-.dpc-date{font-size:15px;font-weight:800;color:var(--text1);}
-.dpc-hours{font-size:12px;font-weight:700;color:var(--text1);margin-top:4px;}
-.dpc-var{font-size:11px;font-weight:700;margin-top:2px;}
-.dpc-var.red{color:var(--red);}
-.dpc-var.green{color:var(--green);}
+.dpc-date{font-size:16px;font-weight:800;color:var(--text1);}
 .dpc-status{font-size:10px;color:var(--yellow);font-weight:600;margin-top:4px;}
 .dpc-breaks{display:flex;flex-direction:column;gap:2px;margin-top:5px;align-items:center;}
 .dpc-brk{font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;white-space:nowrap;}
@@ -796,7 +787,6 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   .main-wrap{margin-left:0;width:100%;}
   .topbar{padding-top:max(14px,env(safe-area-inset-top));}
   .hamburger{display:block;font-size:28px;padding:6px 12px;}
-  .analysis-2col{grid-template-columns:1fr;}
   .rooms-modal-grid{grid-template-columns:repeat(2,1fr);}
   .month-kpi-strip{min-width:80px;}
   .pages-wrap{padding:12px 14px;}
@@ -823,7 +813,6 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   .day-num{font-size:16px;}
   .day-hours{font-size:13px;}
   .week-grid{gap:4px;}
-  .analysis-2col{grid-template-columns:1fr;}
   .pos-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .detail-kpi-grid{grid-template-columns:1fr 1fr;}
   .recap-hero{grid-template-columns:1fr;}
@@ -4219,6 +4208,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.97.0', date:'2026-08-07',
+    improvements:['Cleared the duplication off the Labor page, at Carlos\'s call. The "By Position" table is gone — everything it showed for the selected day (Paid, Budget, Variance, and a note) Weekly Labor Pace now shows for every reported day of the week, in the same layout as Unifocus\'s own report. The one thing By Position had that nothing else did — Room Attendant\'s DND justification line ("24 DND · 15.0% of 160 stayovers", the evidence for defending the standard\'s fixed 85% in the labor meeting) — moved into Room Attendant\'s own day-card rather than disappearing with the table. Occupancy now runs full width. The week day-strip also stopped repeating each day\'s hours and variance; it stays the day picker, keeping the over/under colour, the break-exception counts, and the projected figure for days with no report yet.']
+  },
+  {
     v:'6.96.0', date:'2026-08-07',
     improvements:['Two quick follow-ups from Carlos on yesterday\'s Weekly Labor Pace redesign. Day-cards now show their full detail — Actual/Standard/Var (h)/Var (%)/Explanation — open by default instead of needing a tap first, so the whole week reads like the Unifocus report right away; tap a card to collapse it back down if you want it out of the way. Also fixed a few spots that had shipped in Spanish ("Guardar"/"Borrar"/"Cerrar"/"+ agregar nota") — now Save/Delete/Close/"+ Note", matching the English wording already used everywhere else in the app (including By Position\'s own note editor).']
   },
@@ -7087,23 +7080,13 @@ function saveVarianceNote(ds,pos,text){
   mData.varianceNotesUpdatedAt[ds]=new Date().toISOString();
   saveMonthData(mData,mk);
 }
-var varNoteExpanded={};
-function toggleVarianceNote(pos){
-  varNoteExpanded[pos]=!varNoteExpanded[pos];
-  renderLaborDash();
-}
-function saveVarianceNoteFromInput(ds,pos,inputId){
-  var el=document.getElementById(inputId);
-  if(!el)return;
-  saveVarianceNote(ds,pos,el.value);
-  varNoteExpanded[pos]=false;
-  renderLaborDash();
-}
-function deleteVarianceNote(ds,pos){
-  saveVarianceNote(ds,pos,'');
-  varNoteExpanded[pos]=false;
-  renderLaborDash();
-}
+/* varNoteExpanded / toggleVarianceNote / saveVarianceNoteFromInput /
+   deleteVarianceNote lived here until v6.97.0 — they drove the note
+   editor inside the By Position table, removed as redundant with Weekly
+   Labor Pace. Their Weekly Pace counterparts (toggleWPNote /
+   saveWPNoteFromInput / deleteWPNote, below) replace them one-for-one and
+   read/write the very same getVarianceNote/saveVarianceNote store, which
+   stays exactly as it was — including its sync wiring. */
 /* Same variance-note data, second surface: Weekly Labor Pace shows every
    reported day for a position side by side (Carlos's request), so unlike
    By Position — where only one day is ever on screen and varNoteExpanded
@@ -10566,12 +10549,16 @@ function renderLaborDash(){
     if(!snap&&!isFuture&&!isToday)html+='<div class="dpc-badge yellow">No Report</div>';
     html+='<div class="dpc-name">'+DNAMES[dd.getDay()]+'</div>';
     html+='<div class="dpc-date">'+dd.getDate()+'</div>';
+    /* This strip is the DAY PICKER (tap a day -> Occupancy below switches
+       to it), not a second scoreboard. It used to also print that day's
+       total paid hours and variance, which Weekly Labor Pace below now
+       reports per position AND per day — so v6.97.0 dropped both, at
+       Carlos's request, to stop repeating the same numbers twice on one
+       page. What stays is what's only here: the date, the over/under
+       border colour (set by cls above, still driven by totalPaid vs bud),
+       the break-exception counts, and the projected figure for a day with
+       no report yet. */
     if(snap){
-      html+='<div class="dpc-hours">'+snap.totalPaid.toFixed(2)+'h</div>';
-      if(bud>0){
-        var v=snap.totalPaid-bud;
-        html+='<div class="dpc-var '+(v>0?'red':'green')+'">'+(v>0?'+':'')+v.toFixed(2)+'h</div>';
-      }
       var snapE=snap.emps||[];
       var nb=snapE.length?snapE.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='none';}).length:(snap.noBreak||0);
       var sb=snapE.length?snapE.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos,e.id);return st==='short'||st==='over'||st==='long';}).length:(snap.shortBreak||0);
@@ -10893,6 +10880,26 @@ function buildWeeklyPaceHTML(days,rooms,wk){
           html+='<tr><td style="color:var(--text3);padding:2px 0;">Var (%)</td><td style="text-align:right;color:var(--text3);padding:2px 0;">&#8212;</td></tr>';
         }
         html+='</table>';
+        /* Room Attendant's Unifocus budget assumes a FIXED 85% Stayover /
+           15% DND split (see unifocusRoomAttendantHours) — this caption
+           shows the day's REAL DND count against that assumption, purely
+           so Carlos has the number on hand to justify the standard in the
+           labor meeting. It used to live in the By Position table, which
+           was removed in v6.97.0 as redundant with these cards; this was
+           the one thing By Position showed that nothing else did, so it
+           moved here rather than being lost. Never affects the budget
+           above; only rendered once a count is actually logged for the
+           day (no clutter on days nobody's entered one). */
+        if(p.key==='Room Attendant'&&stdMode==='unifocus'){
+          var raDep=getDeparturesForDay(ds), raDnd=getDNDCountForDay(ds);
+          if(raDep!==null&&raDnd!==null){
+            var raStayovers=Math.max(0,(getRoomsForDay(ds)||0)-raDep);
+            var raPct=raStayovers>0?((raDnd/raStayovers)*100).toFixed(1):'0.0';
+            html+='<div style="margin-top:6px;padding:4px 6px;background:'+(hasNote?'rgba(255,255,255,.6)':'var(--surface)')+';border:1px solid '+(hasNote?'#E0C989':'var(--border)')+';border-radius:5px;">'
+              +'<div style="font-size:8.5px;font-weight:700;color:var(--gd);text-align:center;">'+raDnd+' DND &middot; '+raPct+'% of '+raStayovers+' stayovers</div>'
+              +'</div>';
+          }
+        }
         html+='<div style="margin-top:7px;padding-top:7px;border-top:1px dashed '+(hasNote?'#E0C989':'var(--border)')+';min-height:16px;">';
         html+='<div style="font-size:8px;font-weight:700;color:'+dayLabelColor+';text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;">Explanation</div>';
         if(noteEditing){
@@ -11151,8 +11158,16 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     html+='</div>';
   }
 
-  /* No report state — Rooms/Departures still shows full width since
-     occupancy entry doesn't depend on a report existing yet. */
+  /* Occupancy runs full width, reported day or not — entering rooms/
+     departures/DNDs never depended on a report existing. It used to share
+     a 2-column row with a "By Position" table, removed in v6.97.0 at
+     Carlos's request: that table showed Paid/Budget/Variance and a note
+     affordance for the SELECTED day only, all of which Weekly Labor Pace
+     below now shows for EVERY reported day of the week, with the same
+     variance notes and in the same layout as Unifocus's own report. The
+     one thing By Position had that nothing else did — Room Attendant's
+     DND justification caption — moved into that position's day-card in
+     buildWeeklyPaceHTML rather than being lost with the table. */
   if(!snap){
     html+='<div style="background:var(--yellow-bg);border:1px solid var(--yellow-border);'
       +'border-radius:12px;padding:24px;text-align:center;margin-bottom:14px;">'
@@ -11162,108 +11177,8 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       +'<div style="font-size:12px;color:var(--text2);margin-bottom:14px;">'
       +'Upload the Paychex PDF to see hours, breaks, and overtime.</div>'
       +'<button class="btn btn-gold" onclick="showUploadModal()">&#11014; Upload Report</button></div>';
-    html+=roomsCardHtml;
-  }else{
-    /* 2-column: Rooms/Departures + By Position */
-    html+='<div class="analysis-2col">';
-    html+=roomsCardHtml;
-
-    /* By position table. Numeric columns are right-aligned (standard for a
-       data table — the original single-header version left everything
-       left-aligned, which looked fine with one header row but read as
-       sloppy/unfinished once a second, grouped header row was added and
-       drew more scrutiny). Group headers are centered over their span. The
-       Unifocus group is marked by a single gold divider border on its
-       first column rather than a background tint on every data cell —
-       tinting every row read as messy/unintentional at low opacity;
-       a clean vertical rule is the more standard way to mark a table
-       section boundary. The Current/Unifocus toggle itself now lives at
-       the top of the page (dashStdToggleBar), not here — Carlos wanted to
-       pick a standard before looking at any numbers below. */
-    var stdMode=getLaborStandardMode();
-    html+='<div class="day-summary-card"><div class="dsc-head">'
-      +'<div class="dsc-title">By Position</div>'
-      +'</div>'
-      +'<div style="overflow-x:auto;">'
-      +'<table style="width:100%;border-collapse:collapse;font-size:11.5px;">'
-      +'<thead><tr>'
-      +'<th style="padding:6px 10px;text-align:left;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Position</th>'
-      +'<th style="padding:6px 10px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Paid</th>'
-      +'<th style="padding:6px 10px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Budget</th>'
-      +'<th style="padding:6px 10px;text-align:right;color:var(--text3);border-bottom:1px solid var(--border);font-size:10px;background:var(--surface);">Variance</th>'
-      +'</tr></thead><tbody>';
-    if(snap.byPosition){
-      HK_POS_LIST.forEach(function(pos){
-        var p=snap.byPosition[pos];if(!p)return;
-        var bVal,vVal;
-        if(stdMode==='unifocus'){
-          bVal=unifocusHoursForPosition(pos,ds);
-        }else{
-          var std=LABOR_STD[pos];
-          var raw=std?(std.type==='fixed'?std.daily:(r>0?r*std.factor:0)):0;
-          bVal=(raw>0)?raw:null;
-        }
-        vVal=(bVal!==null)?p.paid-bVal:null;
-        var short=pos.replace(' Attendant','').replace('Housekeeping ','Sup.');
-        /* Room Attendant's Unifocus budget assumes a FIXED 85% Stayover /
-           15% DND split (see unifocusRoomAttendantHours) — this caption
-           shows the day's REAL DND count against that assumption, purely
-           so Carlos has the number on hand to justify the standard in the
-           labor meeting. Never changes bVal/vVal above; only rendered
-           once he's actually logged a count for the day (no clutter on
-           days nobody's entered one). */
-        var raJustifyHtml='';
-        if(pos==='Room Attendant'&&stdMode==='unifocus'){
-          var raDep=getDeparturesForDay(ds), raDnd=getDNDCountForDay(ds);
-          if(raDep!==null&&raDnd!==null){
-            var raStayovers=Math.max(0,(getRoomsForDay(ds)||0)-raDep);
-            var raPct=raStayovers>0?((raDnd/raStayovers)*100).toFixed(1):'0.0';
-            raJustifyHtml='<div style="font-size:8.5px;font-weight:400;color:var(--text3);margin-top:1px;">'+raDnd+' DND &middot; '+raPct+'% of '+raStayovers+' stayovers</div>';
-          }
-        }
-        /* Variance note affordance — only where there's an actual variance
-           to explain (a position with no standard on file has nothing to
-           annotate). A speech-bubble emoji marks a position that already
-           has a note; a muted "+" invites adding one where there's none
-           yet — small enough that the table stays as compact as before
-           for anyone who never uses this. */
-        var noteIcon='';
-        if(vVal!==null){
-          var existingNote=getVarianceNote(ds,pos);
-          /* A text label ("Note"), not a bare symbol — Carlos's feedback:
-             a lone "+" reads as ambiguous ("could be interpreted as
-             something else") to anyone other than the person who already
-             knows what it means. Filled gold pill = a note exists; dashed
-             outline pill = none yet, invites adding one. */
-          noteIcon=existingNote
-            ?' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;padding:1px 7px;border-radius:99px;background:var(--gold);color:var(--gd);font-size:9px;font-weight:800;vertical-align:1px;white-space:nowrap;" title="View/edit note">&#128172; Note</span>'
-            :' <span onclick="event.stopPropagation();toggleVarianceNote(\''+pos+'\');" style="cursor:pointer;display:inline-block;padding:1px 7px;border:1.5px dashed var(--border2);border-radius:99px;color:var(--text3);font-size:9px;font-weight:800;vertical-align:1px;white-space:nowrap;" title="Add a note">+ Note</span>';
-        }
-        html+='<tr>'
-          +'<td style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;">'+short+raJustifyHtml+'</td>'
-          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);">'+p.paid.toFixed(2)+'</td>'
-          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);color:var(--text3);">'+(bVal!==null?bVal.toFixed(2):'&#8212;')+'</td>'
-          +'<td style="padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-weight:700;white-space:nowrap;color:'
-          +(vVal!==null?(vVal>0?'var(--red)':'var(--green)'):'inherit')+'">'
-          +(vVal!==null?(vVal>=0?'+':'')+vVal.toFixed(2):'&#8212;')+noteIcon+'</td></tr>';
-        if(vVal!==null&&varNoteExpanded[pos]){
-          var noteInputId='varNoteInput_'+ds+'_'+pos.replace(/[^a-zA-Z0-9]/g,'');
-          html+='<tr><td colspan="4" style="padding:8px 10px;border-bottom:1px solid var(--border);background:var(--surface);">'
-            +'<textarea id="'+noteInputId+'" placeholder="Why was '+short+' over/under budget today?" '
-            +'style="width:100%;min-height:44px;padding:6px 8px;font-size:10.5px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;">'+escHtml(getVarianceNote(ds,pos))+'</textarea>'
-            +'<div style="margin-top:5px;display:flex;gap:6px;">'
-            +'<button onclick="saveVarianceNoteFromInput(\''+ds+'\',\''+pos+'\',\''+noteInputId+'\')" style="padding:4px 10px;background:var(--navy);color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Save</button>'
-            +(existingNote?'<button onclick="if(confirm(\'Delete this note?\'))deleteVarianceNote(\''+ds+'\',\''+pos+'\');" style="padding:4px 10px;background:transparent;color:var(--red);border:1px solid var(--red-border);border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Delete</button>':'')
-            +'<button onclick="toggleVarianceNote(\''+pos+'\')" style="padding:4px 10px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Close</button>'
-            +'</div>'
-            +'</td></tr>';
-        }
-      });
-    }
-    html+='</tbody></table></div>';
-    html+='</div>'; /* end day-summary-card */
-    html+='</div>'; /* end analysis-2col */
   }
+  html+=roomsCardHtml;
 
   /* ── Weekly Pace ── */
   html+=buildWeeklyPaceHTML(days,rooms,wk);

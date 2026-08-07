@@ -43,24 +43,26 @@ module.exports = {
     // vice versa — they're separate entries, not a shared reference.
     t.assert(win.UNIFOCUS_STANDARDS['Housekeeping Supervisor'] !== win.UNIFOCUS_STANDARDS['House Attendant'], 'Supervisor and House Attendant have distinct shift/band arrays, not the same array reused');
 
-    // By Position table: all three positions show their own real Unifocus
-    // figure, computed independently from the same day's rooms/departures.
-    // Room Attendant's standard (added in v6.90.0 — see
+    // On screen, all three positions show their own real Unifocus figure,
+    // computed independently from the same day's rooms/departures. Room
+    // Attendant's standard (added in v6.90.0 — see
     // unifocus-room-attendant.js) is a per-room rate, not a banded lookup
     // like Supervisor/House Attendant, so it lands on a different number
     // even though it's driven by the same inputs — proof it isn't
-    // secretly sharing their band tables.
-    win.dashSelectedDate = new Date(2026, 6, 20);
+    // secretly sharing their band tables. Checked against Weekly Labor
+    // Pace's day-cards; the By Position table this used to read was
+    // removed in v6.97.0 as redundant with them.
     win.setLaborStandardMode('unifocus');
-    win.showPage('labor');
-    const html = win.document.getElementById('dashDayAnalysis').innerHTML;
-    const rows = html.split('<tr>').filter((r) => /Sup\.Supervisor|>House<|>Room</.test(r));
-    const supRow = rows.find((r) => /Sup\.Supervisor/.test(r)) || '';
-    const houseRow = rows.find((r) => />House</.test(r)) || '';
-    const roomRow = rows.find((r) => />Room</.test(r)) || '';
-    t.assert(/24\.00/.test(supRow), "Supervisor's row shows its own Unifocus total (24.00h)");
-    t.assert(/24\.00/.test(houseRow), "House Attendant's row still shows its own Unifocus total too");
+    const week = { start: new Date(2026, 6, 18), end: new Date(2026, 6, 24) };
+    const pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 100, week);
+    function blockFor(label) {
+      const i = pace.indexOf('>' + label + '</div>');
+      t.assert(i !== -1, label + ' block found in Weekly Labor Pace');
+      return pace.slice(i, i + 2500);
+    }
+    t.assert(/Standard[\s\S]{0,160}24\.00/.test(blockFor('Supervisor')), "Supervisor's card shows its own Unifocus Standard (24.00h)");
+    t.assert(/Standard[\s\S]{0,160}24\.00/.test(blockFor('House Attendant')), "House Attendant's card still shows its own Unifocus Standard too");
     // Stayovers = 100 rooms - 45 departures = 55; (55*0.85*20 + 45*30) / 60 = 38.08h
-    t.assert(/38\.08/.test(roomRow), "Room Attendant's row shows its own rate-based Unifocus total (38.08h), unaffected by adding Supervisor");
+    t.assert(/Standard[\s\S]{0,160}38\.08/.test(blockFor('Room Attendant')), "Room Attendant's card shows its own rate-based Unifocus Standard (38.08h), unaffected by adding Supervisor");
   }
 };

@@ -10,7 +10,7 @@
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "Unifocus Houseperson standard: band lookup, same-day departures, and the By Position column",
+  name: "Unifocus Houseperson standard: band lookup, same-day departures, and the rendered Standard figure",
   async run(t) {
     const seed = Object.assign(fakeSession(), {
       'hk_month_2026-07': {
@@ -64,20 +64,25 @@ module.exports = {
     // only way left to exercise this path.
     t.eq(win.unifocusHoursForPosition('Not A Real Position', '2026-07-15'), null, 'a position with no Unifocus standard defined returns null, not 0');
 
-    // ── By Position table: switch to Unifocus mode (see labor-standard-toggle.js
-    // for the toggle mechanism itself) and confirm House Attendant's row
-    // shows the computed total. ──
-    win.dashSelectedDate = new Date(2026, 6, 15);
+    // ── The number has to actually REACH THE SCREEN, not just come back
+    // from unifocusHoursForPosition. That used to be checked against the
+    // By Position table, removed in v6.97.0 as redundant; Weekly Labor
+    // Pace's day-cards now carry the same per-day Standard figure, so the
+    // render check moved there. buildWeeklyPaceHTML is called directly
+    // with an explicit week (rather than via showPage) to stay
+    // clock-independent — see the note in unifocus-weekly-pace.js. ──
     win.setLaborStandardMode('unifocus');
-    win.showPage('labor');
-    const html = win.document.getElementById('dashDayAnalysis').innerHTML;
-    t.assert(/32\.00/.test(html), "House Attendant's row shows the computed Unifocus total (32.00h) once switched to Unifocus mode");
+    const week = { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) };
+    const pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 200, week);
+    const haIdx = pace.indexOf('>House Attendant</div>');
+    t.assert(haIdx !== -1, 'House Attendant block found in Weekly Labor Pace');
+    const haBlock = pace.slice(haIdx, haIdx + 4000);
+    t.assert(/Standard[\s\S]{0,160}32\.00/.test(haBlock), "Jul 15's card shows the computed Unifocus Standard (32.00h)");
 
-    // A second date with no departures data renders the em-dash, not "0.00" or blank.
-    win.dashSelectedDate = new Date(2026, 6, 16);
-    win.showPage('labor');
-    const html2 = win.document.getElementById('dashDayAnalysis').innerHTML;
-    t.assert(!/0\.00<\/td><\/tr>/.test(html2), 'a date with no departures data does not render a false 0.00 for Unifocus');
+    // Jul 16 has no departures data — its card must show an em-dash for
+    // Standard, not a false 0.00.
+    t.assert(!/Standard[\s\S]{0,160}0\.00/.test(haBlock), 'a date with no departures data does not render a false 0.00 Standard');
+    t.assert(/Standard[\s\S]{0,160}&#8212;/.test(haBlock), 'the no-data day renders an em-dash for Standard instead');
 
     // ── Departures is manually editable, same as Rooms (Carlos's explicit
     // request) — a hand-entered value wins over R106 and survives a later

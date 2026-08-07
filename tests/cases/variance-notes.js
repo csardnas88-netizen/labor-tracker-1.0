@@ -1,11 +1,10 @@
-/* Variance notes on By Position — Carlos asked to be able to explain WHY a
-   position was over/under budget on a given day (e.g. "covered a call-off"),
-   attached right to that position's Variance cell. A small icon marks the
-   affordance: a filled speech-bubble once a note exists, a muted dashed "+"
-   before one does — icon only, so the table stays exactly as compact as
-   before for anyone who never uses it. No note affordance renders for a
-   position with no computed variance at all (the em-dash case) — there's
-   nothing to explain.
+/* Variance notes — Carlos asked to be able to explain WHY a position was
+   over/under budget on a given day (e.g. "covered a call-off"), attached
+   right to that position's figures. Originally attached to the By Position
+   table's Variance cell; since v6.97.0 that table is gone (redundant with
+   Weekly Labor Pace) and the notes are read/written on Weekly Pace's
+   day-cards instead. Both surfaces always used the one store this file is
+   really about, so the storage guarantee below is unchanged by that move.
 
    The critical design constraint this test guards: notes are stored at
    mData.varianceNotes[ds][pos], a SIBLING of days[] on the month blob — NOT
@@ -21,7 +20,7 @@
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "Variance notes on By Position: save/read round-trip, UI affordance, and survival across a Labor Distribution Report re-upload",
+  name: "Variance notes: save/read round-trip, UI affordance, and survival across a Labor Distribution Report re-upload",
   async run(t) {
     const seed = Object.assign(fakeSession(), {
       'hk_month_2026-07': {
@@ -46,40 +45,26 @@ module.exports = {
     win.saveVarianceNote('2026-07-15', 'House Attendant', 'Covered a call-off on the 10th floor.');
     t.eq(win.getVarianceNote('2026-07-15', 'House Attendant'), 'Covered a call-off on the 10th floor.', 'the saved note reads back exactly');
 
-    // ── UI: the icon reflects whether a note exists, and only appears
-    // where there's an actual variance to explain. ──
-    win.showPage('labor');
-    let dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
-    const rows = dayHtml.split('<tr>');
-    const houseRow = rows.find((r) => />House</.test(r)) || '';
-    t.assert(/\u{1F4AC}/u.test(houseRow), 'House Attendant (has a note) shows the speech-bubble icon');
-    t.assert(!/Add a note/.test(houseRow), 'House Attendant does not also show the "add a note" affordance');
-
-    const roomRow = rows.find((r) => />Room</.test(r)) || '';
-    t.assert(/Add a note/.test(roomRow), 'Room Attendant (variance exists, no note yet) shows the muted "add a note" affordance');
-    t.assert(!/\u{1F4AC}/u.test(roomRow), 'Room Attendant does not show the filled speech-bubble (no note saved for it)');
-
-    // ── The note editor is collapsed by default; toggling opens it and
-    // pre-fills the textarea with the current note. Checked via the
-    // varNoteInput_ id prefix specifically, not a bare "textarea" search —
-    // the Occupancy card's DND field (added in v6.90.0) is also a
-    // <textarea>, always rendered, and would otherwise give a false match. ──
-    t.assert(!/varNoteInput_/.test(dayHtml), 'the note textarea is not rendered until a position is expanded');
-    win.toggleVarianceNote('House Attendant');
-    dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
-    t.assert(/Covered a call-off on the 10th floor\./.test(dayHtml), 'expanding the position pre-fills the textarea with its saved note');
-
-    // ── Saving from the textarea persists the new value and closes the
-    // editor immediately (Carlos's feedback: having to click Close
-    // separately after Save "no es operacionalmente fluido"). ──
-    const inputIdMatch = dayHtml.match(/id="(varNoteInput_2026-07-15_HouseAttendant)"/);
-    t.assert(inputIdMatch, 'the textarea has the expected id pattern');
-    win.document.getElementById(inputIdMatch[1]).value = 'Updated: also trained a new hire.';
-    win.saveVarianceNoteFromInput('2026-07-15', 'House Attendant', inputIdMatch[1]);
-    t.eq(win.getVarianceNote('2026-07-15', 'House Attendant'), 'Updated: also trained a new hire.', 'saving from the textarea overwrites the stored note');
-    t.eq(win.varNoteExpanded['House Attendant'], false, 'Save collapses the editor on its own, without needing a separate Close click');
-    dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
-    t.assert(!/varNoteInput_/.test(dayHtml), 'the textarea is actually gone from the rendered page after Save, not just flagged closed in state');
+    // ── UI: a saved note surfaces on Weekly Labor Pace's day-card for that
+    // position, and a position with no note yet invites adding one. (Until
+    // v6.97.0 this was checked on the By Position table, which had its own
+    // note editor; that table was removed as redundant and Weekly Pace's
+    // day-cards — see weekly-pace-notes-per-day.js for their own behaviour
+    // — are now the single place notes are read and written. Both surfaces
+    // always shared this one store, which is why the note written above
+    // via saveVarianceNote shows up here unchanged.) buildWeeklyPaceHTML
+    // is called directly with an explicit week to stay clock-independent
+    // — see the fuller note in unifocus-weekly-pace.js. ──
+    const week = { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) };
+    let pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 150, week);
+    function blockFor(label) {
+      const i = pace.indexOf('>' + label + '</div>');
+      t.assert(i !== -1, label + ' block found in Weekly Labor Pace');
+      return pace.slice(i, i + 3000);
+    }
+    t.assert(/Covered a call-off on the 10th floor\./.test(blockFor('House Attendant')), "House Attendant's Jul 15 card shows the note saved through the shared store");
+    t.assert(/\+ Note/.test(blockFor('Room Attendant')), 'Room Attendant (no note yet) invites adding one');
+    t.assert(!/Covered a call-off/.test(blockFor('Room Attendant')), "House Attendant's note does not bleed into another position's card");
 
     // ── Clearing a note (empty text) removes it rather than storing a
     // blank string — getVarianceNote should read back '' either way, but

@@ -11,11 +11,23 @@
    any numbers below — and flipped the default from Current to Unifocus,
    since that's the standard Carlos actually evaluates against day to day.
    An unrecognized/garbage stored value now falls back to that same new
-   default (Unifocus), not the old one. */
+   default (Unifocus), not the old one.
+
+   v6.95.0 made that top bar the ONLY copy of the toggle (Weekly Pace and
+   the Adjusted card each had their own duplicate driving the same
+   setting), and v6.97.0 removed the By Position table entirely as
+   redundant with Weekly Labor Pace — so the numbers this toggle drives are
+   now checked on Weekly Pace's day-cards. buildWeeklyPaceHTML is called
+   directly with an explicit week rather than going through showPage:
+   renderDashDayAnalysis picks its week from the system clock, so a fixture
+   pinned to July would render an empty card whenever "today" isn't in that
+   week (see the fuller note in unifocus-weekly-pace.js). The toggle BAR is
+   still read off the live page, since that's what proves
+   setLaborStandardMode re-renders rather than just storing a value. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "Labor standard toggle: By Position shows one standard at a time, switchable, persisted, defaulting to Unifocus",
+  name: "Labor standard toggle: one standard at a time, switchable, persisted, defaulting to Unifocus",
   async run(t) {
     const seed = Object.assign(fakeSession(), {
       'hk_month_2026-07': {
@@ -33,40 +45,53 @@ module.exports = {
     });
     const { win } = await loadApp({ seed });
     win.dashSelectedDate = new Date(2026, 6, 15);
+    const week = { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) };
+    // House Attendant is 17.5% of rooms (150, the night before) under LABOR_STD.
+    const houseBudgetCurrent = (150 * 0.175).toFixed(2); // 26.25
+
+    function haBlock() {
+      const pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 150, week);
+      const i = pace.indexOf('>House Attendant</div>');
+      t.assert(i !== -1, 'House Attendant block found in Weekly Labor Pace');
+      return pace.slice(i, i + 3000);
+    }
 
     // ── Defaults to 'unifocus' with nothing set. ──
     t.eq(win.getLaborStandardMode(), 'unifocus', "defaults to 'unifocus' with no stored preference");
 
     win.showPage('labor');
-    const houseBudgetCurrent = (150 * 0.175).toFixed(2); // House Attendant is 17.5% of rooms (150, the night before) under LABOR_STD
-    let dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
+    let block = haBlock();
     let barHtml = win.document.getElementById('dashStdToggleBar').innerHTML;
-    t.assert(/32\.00/.test(dayHtml), 'default (Unifocus) mode shows the Unifocus-derived budget (32.00h) for House Attendant');
-    t.assert(dayHtml.indexOf(houseBudgetCurrent) === -1, 'the LABOR_STD figure (26.25h) is NOT shown by default — one standard at a time, not both');
+    t.assert(/32\.00/.test(block), 'default (Unifocus) mode shows the Unifocus-derived budget (32.00h) for House Attendant');
+    t.assert(block.indexOf(houseBudgetCurrent) === -1, 'the LABOR_STD figure (26.25h) is NOT shown by default — one standard at a time, not both');
     t.assert(/Unifocus/.test(barHtml), 'the toggle bar at the top of the page shows Unifocus as the active button');
 
-    // ── The toggle itself lives at the top of the page (dashStdToggleBar),
-    // not inside the By Position card header anymore. ──
-    const byPosIdx = dayHtml.indexOf('By Position');
-    t.assert(byPosIdx !== -1, 'By Position table still renders');
-    t.assert(!/<button/.test(dayHtml.slice(byPosIdx, byPosIdx + 400)), 'the By Position card header no longer embeds the toggle buttons itself');
+    // ── The toggle exists in exactly ONE place: the top bar. Weekly Pace
+    // used to embed its own copy (and so did the Adjusted card) — three
+    // controls driving one setting, which Carlos asked to collapse into a
+    // single, more prominent one. ──
+    const pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 150, week);
+    t.assert(!/setLaborStandardMode/.test(pace), 'Weekly Labor Pace does not embed its own copy of the toggle');
+    t.assert(/setLaborStandardMode/.test(barHtml), 'the top bar is where the toggle actually lives');
 
     // ── Switching to Current re-renders with only the LABOR_STD figures. ──
     win.setLaborStandardMode('current');
     t.eq(win.getLaborStandardMode(), 'current', 'mode is now current');
-    dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
+    block = haBlock();
     barHtml = win.document.getElementById('dashStdToggleBar').innerHTML;
-    t.assert(dayHtml.indexOf(houseBudgetCurrent) !== -1, 'Current Standard mode shows the LABOR_STD-derived budget (150 rooms * 17.5% = 26.25h)');
-    t.assert(!/32\.00/.test(dayHtml), 'the Unifocus figure (32.00h) is no longer shown once switched to Current');
+    t.assert(block.indexOf(houseBudgetCurrent) !== -1, 'Current Standard mode shows the LABOR_STD-derived budget (150 rooms * 17.5% = 26.25h)');
+    t.assert(!/32\.00/.test(block), 'the Unifocus figure (32.00h) is no longer shown once switched to Current');
     t.assert(/Current Standard/.test(barHtml), 'the toggle bar now shows Current Standard as active');
 
     // ── setLaborStandardMode re-renders the Labor page itself (not just
-    // returning a value) — calling it while on the Labor page should be
-    // enough to update the visible table AND the top toggle bar without a
-    // separate showPage call. ──
+    // storing a value) — calling it while on the Labor page updates the
+    // live toggle bar with no separate showPage call. The bar is rendered
+    // by renderLaborDash, so its contents changing IS the proof. ──
+    const barBefore = win.document.getElementById('dashStdToggleBar').innerHTML;
     win.setLaborStandardMode('unifocus');
-    dayHtml = win.document.getElementById('dashDayAnalysis').innerHTML;
-    t.assert(/32\.00/.test(dayHtml), 'switching back to Unifocus re-renders immediately, without needing to navigate away and back');
+    const barAfter = win.document.getElementById('dashStdToggleBar').innerHTML;
+    t.assert(barBefore !== barAfter, 'switching re-renders the page immediately, without needing to navigate away and back');
+    t.assert(/32\.00/.test(haBlock()), 'and the figures follow it back to Unifocus');
 
     // ── The preference survives a fresh page load (persisted, not just
     // in-memory for the current session). ──

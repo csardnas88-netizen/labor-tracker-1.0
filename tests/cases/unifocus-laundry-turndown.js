@@ -68,16 +68,20 @@ module.exports = {
     t.assert(win.UNIFOCUS_STANDARDS['Laundry Attendant'].every((c) => c.driver !== 'rooms_sameday'), 'Laundry uses no same-day driver at all — it stays on the standard night-before convention throughout');
     t.assert(win.UNIFOCUS_STANDARDS['Turndown Attendant'].every((c) => c.driver === 'rooms_sameday'), "Turndown's only component uses the same-day convention");
 
-    // ── By Position table: both positions' Unifocus columns are populated
-    // on a real render, with their independent computed totals. ──
-    win.dashSelectedDate = new Date(2026, 6, 11);
+    // ── On a real render, both positions show their independent computed
+    // Standard. Checked on Weekly Labor Pace's day-cards; the By Position
+    // table this used to read was removed in v6.97.0 as redundant with
+    // them. buildWeeklyPaceHTML is called directly with an explicit week
+    // to stay clock-independent — see the note in unifocus-weekly-pace.js. ──
     win.setLaborStandardMode('unifocus');
-    win.showPage('labor');
-    const html = win.document.getElementById('dashDayAnalysis').innerHTML;
-    const rows = html.split('<tr>');
-    const laundryRow = rows.find((r) => />Laundry</.test(r)) || '';
-    const turndownRow = rows.find((r) => />Turndown</.test(r)) || '';
-    t.assert(/40\.00/.test(laundryRow), "Laundry's row shows its computed Unifocus total (40.00h)");
-    t.assert(/36\.00/.test(turndownRow), "Turndown's row shows its own, independently-computed total (36.00h — its 40h band truncated to whole 6h shifts)");
+    const week = { start: new Date(2026, 6, 11), end: new Date(2026, 6, 17) };
+    const pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-07').days, 200, week);
+    function blockFor(label) {
+      const i = pace.indexOf('>' + label + '</div>');
+      t.assert(i !== -1, label + ' block found in Weekly Labor Pace');
+      return pace.slice(i, i + 2500);
+    }
+    t.assert(/Standard[\s\S]{0,160}40\.00/.test(blockFor('Laundry')), "Laundry's Jul 11 card shows its computed Unifocus Standard (40.00h)");
+    t.assert(/Standard[\s\S]{0,160}36\.00/.test(blockFor('Turndown')), "Turndown's Jul 11 card shows its own, independently-computed Standard (36.00h — its 40h band truncated to whole 6h shifts)");
   }
 };
