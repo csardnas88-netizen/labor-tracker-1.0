@@ -13,7 +13,12 @@
    Unifocus's report rounds that to -24%, not -23%. JS's native Math.round
    rounds -23.5 to -23 (rounds toward +Infinity on a tie) — so this line
    guards that the app rounds HALF AWAY FROM ZERO like Unifocus does, not
-   whatever Math.round happens to do. */
+   whatever Math.round happens to do.
+
+   Day-cards default to OPEN (Carlos's follow-up after trying compact-by-
+   default first), so the percent shows up as its own labeled "Var (%)"
+   row by default — this test checks that row, then explicitly collapses
+   one day to confirm the percent also carries into the compact pill. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
@@ -41,27 +46,26 @@ module.exports = {
     t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-02'), 24);
     t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-03'), 36);
 
+    // ── Default render: cards are open, so each day's "Var (%)" row is
+    // visible without tapping anything. ──
     const pace = win.buildWeeklyPaceHTML(win.loadMonthData('2026-08').days, 200, week);
     const tdIdx = pace.indexOf('>Turndown</div>');
     t.assert(tdIdx !== -1, 'Turndown position block found');
-    const tdBlock = pace.slice(tdIdx, tdIdx + 4000);
+    const tdBlock = pace.slice(tdIdx, tdIdx + 5000);
 
-    // ── Collapsed day-card pills: hour variance and percent together. ──
     // Aug 1: 30.11 actual vs 30.00 standard -> +0.11h, +0% (0.37% rounds to 0).
-    t.assert(/\+0\.11 &middot; \+0%/.test(tdBlock), 'Aug 1 pill shows +0.11h and +0% (matches the report\'s 0%)');
+    t.assert(/Var \(%\)[\s\S]{0,160}\+0%/.test(tdBlock), 'Aug 1\'s Var (%) row reads +0% (matches the report\'s 0%)');
     // Aug 2: 18.36 vs 24.00 -> -5.64h, exactly -23.5% -> rounds to -24%, matching Unifocus's own report (NOT -23%, what plain Math.round would give).
-    t.assert(/-5\.64 &middot; -24%/.test(tdBlock), 'Aug 2 pill shows -24% (away-from-zero rounding), matching Unifocus\'s own report — not -23%, which native Math.round would produce on this exact .5 case');
+    t.assert(/Var \(%\)[\s\S]{0,160}-24%/.test(tdBlock), 'Aug 2\'s Var (%) row reads -24% (away-from-zero rounding), matching Unifocus\'s own report — not -23%, which native Math.round would produce on this exact .5 case');
     // Aug 3: 23.05 vs 36.00 -> -12.95h, -35.97% -> rounds to -36%.
-    t.assert(/-12\.95 &middot; -36%/.test(tdBlock), "Aug 3 pill shows -36%, matching Unifocus's report");
+    t.assert(/Var \(%\)[\s\S]{0,160}-36%/.test(tdBlock), "Aug 3's Var (%) row reads -36%, matching Unifocus's report");
 
-    // ── Expanded card: the same Aug 2 day, opened, shows the percent again
-    // as its own labeled "Var (%)" row (the Unifocus-report-style detail
-    // Carlos asked for), not just inside the collapsed pill. ──
+    // ── Collapsing Aug 2 folds the same percent into the compact pill
+    // (Actual/vs Budget/Variance), not just the open detail table. ──
     win.toggleWPCard('Turndown Attendant', '2026-08-02');
-    const paceOpen = win.buildWeeklyPaceHTML(win.loadMonthData('2026-08').days, 200, week);
-    const openBlock = paceOpen.slice(paceOpen.indexOf('>Turndown</div>'), paceOpen.indexOf('>Turndown</div>') + 4000);
-    t.assert(/Var \(%\)/.test(openBlock), 'the expanded card has a labeled "Var (%)" row');
-    t.assert(/Var \(%\)[\s\S]{0,160}-24%/.test(openBlock), 'the expanded Aug 2 card\'s Var (%) row also reads -24%, not just the collapsed pill');
+    const paceClosed = win.buildWeeklyPaceHTML(win.loadMonthData('2026-08').days, 200, week);
+    const closedBlock = paceClosed.slice(paceClosed.indexOf('>Turndown</div>'), paceClosed.indexOf('>Turndown</div>') + 5000);
+    t.assert(/-5\.64 &middot; -24%/.test(closedBlock), 'collapsing Aug 2 shows its hour variance and percent together in the compact pill');
 
     // ── Zero-standard day: Unifocus's own convention is 100% if Actual is
     // non-zero (not a divide-by-zero crash or a misleading 0%). ──

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.95.0"/>
+<meta name="app-version" content="6.96.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.96.0', date:'2026-08-07',
+    improvements:['Two quick follow-ups from Carlos on yesterday\'s Weekly Labor Pace redesign. Day-cards now show their full detail — Actual/Standard/Var (h)/Var (%)/Explanation — open by default instead of needing a tap first, so the whole week reads like the Unifocus report right away; tap a card to collapse it back down if you want it out of the way. Also fixed a few spots that had shipped in Spanish ("Guardar"/"Borrar"/"Cerrar"/"+ agregar nota") — now Save/Delete/Close/"+ Note", matching the English wording already used everywhere else in the app (including By Position\'s own note editor).']
+  },
+  {
     v:'6.95.0', date:'2026-08-06',
     features:['Weekly Labor Pace, round two, from Carlos\'s labor-meeting feedback. Variance now shows as a percent too, right next to the hours — same formula and rounding Unifocus\'s own Weekly Labor Summary report uses, so it\'s the same number he\'d be citing anyway. The three Current Standard/Unifocus toggles scattered across the Labor page (top, Weekly Pace, Adjusted) are now just one, moved to the very top of the page in a gold-ringed control so it reads as a real setting instead of buried section chrome. Day-cards start small (Actual/Budget/Variance) so all 7 days of the week fit together without scrolling — tap one to expand it into the Unifocus-report layout (Actual/Standard/Var (h)/Var (%)/Explanation). Days with a note get a soft gold background even while collapsed, so the eye goes straight to them when scanning the week.']
   },
@@ -7126,16 +7130,20 @@ function deleteWPNote(pos,ds){
   wpNoteExpanded[pos+'|'+ds]=false;
   renderLaborDash();
 }
-/* Weekly Labor Pace day-cards default to compact (number + vs budget +
-   variance pill) so all 7 days fit on screen together — Carlos's explicit
-   "Opcion B" pick over always-expanded cards, which only left room for 2-3
-   days at a time. Tapping a card reveals the Unifocus-report-style detail
-   (Actual/Standard/Var h/Var %) plus the note. Separate from wpNoteExpanded
-   on purpose: expanding a card to read it shouldn't drop you straight into
-   the note textarea. */
+/* Weekly Labor Pace day-cards default to OPEN — the Unifocus-report-style
+   detail (Actual/Standard/Var (h)/Var (%)) plus the Explanation, all
+   visible without tapping anything. Carlos tried compact-by-default first
+   (his "Opcion B", which only showed a card's numbers/pill until tapped)
+   but then asked to see the full detail by default after all. A key with
+   no entry yet, or explicitly true, reads as open; only an explicit false
+   collapses it — that's why the check below is "!==false", not "===true".
+   Separate from wpNoteExpanded on purpose: expanding a card to READ it
+   shouldn't drop you straight into the note textarea. */
 var wpCardOpen={};
 function toggleWPCard(pos,ds){
-  wpCardOpen[pos+'|'+ds]=!wpCardOpen[pos+'|'+ds];
+  var key=pos+'|'+ds;
+  var isOpen=wpCardOpen[key]!==false;
+  wpCardOpen[key]=!isOpen;
   renderLaborDash();
 }
 /* Daily DND (Do Not Disturb) room list — Room Attendant's Unifocus budget
@@ -7253,7 +7261,7 @@ function setLaborStandardMode(mode){
 function buildStandardToggleHtml(mode){
   var opts=[{key:'current',label:'Current Standard'},{key:'unifocus',label:'Unifocus'}];
   var html='<div style="display:inline-flex;align-items:center;gap:10px;background:var(--white);border:1.5px solid var(--gold);box-shadow:0 0 0 3px var(--gold-soft);border-radius:11px;padding:6px 8px 6px 12px;">';
-  html+='<span style="font-size:10px;font-weight:800;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;">Est&aacute;ndar</span>';
+  html+='<span style="font-size:10px;font-weight:800;color:var(--gd);text-transform:uppercase;letter-spacing:.5px;">Standard</span>';
   html+='<div style="display:inline-flex;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:2px;gap:2px;">';
   opts.forEach(function(o){
     var active=mode===o.key;
@@ -10823,22 +10831,21 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       html+='<span style="font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;white-space:nowrap;background:'+(isOver?'var(--red-bg)':isUnder?'var(--green-bg)':'var(--border)')+';color:'+(isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)')+';">'+(variance>=0?'+':'')+variance.toFixed(2)+'h semana</span>';
       if(wPct!==null)html+='<span style="font-size:9px;font-weight:700;color:var(--text3);margin-left:5px;">'+(wPct>=0?'+':'')+wPct+'%</span>';
     }else{
-      html+='<span style="font-size:10px;font-weight:700;color:var(--text3);">&#8212; sin est&aacute;ndar</span>';
+      html+='<span style="font-size:10px;font-weight:700;color:var(--text3);">&#8212; no standard</span>';
     }
     html+='</div>';
     html+='</div>';
 
-    /* Day-cards default to compact (Carlos's "Opcion B", chosen over always-
-       expanded cards which only fit 2-3 days on screen at once). Tapping a
-       card (toggleWPCard, keyed by pos+ds — same reasoning as wpNoteExpanded
-       below: every reported day for a position is on screen together, so a
-       pos-only key would expand/collapse every day at once) reveals the
-       Unifocus-report-style detail rows — Actual/Standard/Var (h)/Var (%) —
-       plus the Explanation (the same getVarianceNote/saveVarianceNote note
-       as By Position). A day WITH a note gets a soft gold background even
-       while collapsed (var(--gt)/var(--gd), the same pair the "Adjusted"
-       ribbon already uses) so it stands out while sliding through the
-       week, without having to open every card to find it. */
+    /* Day-cards default to OPEN, showing the Unifocus-report-style detail
+       rows — Actual/Standard/Var (h)/Var (%) — plus the Explanation (the
+       same getVarianceNote/saveVarianceNote note as By Position) without
+       tapping anything. toggleWPCard collapses/reopens a card, keyed by
+       pos+ds — same reasoning as wpNoteExpanded below: every reported day
+       for a position is on screen together, so a pos-only key would
+       collapse/reopen every day at once. A day WITH a note keeps its soft
+       gold background even when collapsed (var(--gt)/var(--gd), the same
+       pair the "Adjusted" ribbon already uses) so it still stands out
+       while sliding through the week. */
     html+='<div style="overflow-x:auto;"><div style="display:flex;">';
     activeDayIdx.forEach(function(di,i){
       var v=dailyActual[p.key][di]||0;
@@ -10853,7 +10860,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       var dayKey=p.key+'|'+ds;
       var note=getVarianceNote(ds,p.key);
       var hasNote=!!note;
-      var cardOpen=!!wpCardOpen[dayKey];
+      var cardOpen=wpCardOpen[dayKey]!==false;
       var noteEditing=!!wpNoteExpanded[dayKey];
       var goldBg=hasNote?'background:var(--gt);':'';
       var dayLabelColor=hasNote?'var(--gd)':'var(--text3)';
@@ -10869,7 +10876,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
         }else{
           html+='<div style="font-size:8.5px;color:var(--text3);">—</div>';
         }
-        if(hasNote)html+='<div style="margin-top:5px;font-size:8px;font-weight:700;color:var(--gd);">&#128221; nota</div>';
+        if(hasNote)html+='<div style="margin-top:5px;font-size:8px;font-weight:700;color:var(--gd);">&#128221; Note</div>';
         html+='</div>';
       }else{
         html+='<div style="width:172px;flex-shrink:0;padding:9px 10px;'+borderRight+goldBg+'">';
@@ -10890,16 +10897,16 @@ function buildWeeklyPaceHTML(days,rooms,wk){
         html+='<div style="font-size:8px;font-weight:700;color:'+dayLabelColor+';text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;">Explanation</div>';
         if(noteEditing){
           var inputId='wpNoteInput_'+ds+'_'+p.key.replace(/[^a-zA-Z0-9]/g,'');
-          html+='<textarea id="'+inputId+'" placeholder="Nota..." style="width:100%;min-height:50px;padding:5px 6px;font-size:9.5px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;">'+escHtml(note)+'</textarea>';
+          html+='<textarea id="'+inputId+'" placeholder="Note..." style="width:100%;min-height:50px;padding:5px 6px;font-size:9.5px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;">'+escHtml(note)+'</textarea>';
           html+='<div style="margin-top:4px;display:flex;gap:3px;justify-content:center;flex-wrap:wrap;">';
-          html+='<button onclick="saveWPNoteFromInput(\''+p.key+'\',\''+ds+'\',\''+inputId+'\')" style="padding:3px 7px;background:var(--navy);color:#fff;border:none;border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Guardar</button>';
-          if(note)html+='<button onclick="deleteWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--red);border:1px solid var(--red-border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Borrar</button>';
-          html+='<button onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Cerrar</button>';
+          html+='<button onclick="saveWPNoteFromInput(\''+p.key+'\',\''+ds+'\',\''+inputId+'\')" style="padding:3px 7px;background:var(--navy);color:#fff;border:none;border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Save</button>';
+          if(note)html+='<button onclick="deleteWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--red);border:1px solid var(--red-border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Delete</button>';
+          html+='<button onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Close</button>';
           html+='</div>';
         }else if(hasNote){
           html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:9.5px;color:var(--text2);line-height:1.35;cursor:pointer;">'+escHtml(note)+'</div>';
         }else{
-          html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:8.5px;color:var(--text3);font-style:italic;cursor:pointer;">+ agregar nota</div>';
+          html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:8.5px;color:var(--text3);font-style:italic;cursor:pointer;">+ Note</div>';
         }
         html+='</div>';
         html+='</div>';
