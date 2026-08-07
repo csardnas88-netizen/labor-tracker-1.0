@@ -77,12 +77,40 @@ module.exports = {
     t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-03'), 36,
       '40h/6 = 6.67 truncates DOWN to 6 shifts (36h), never up to 7 (42h)');
 
-    // Only Turndown is affected — every other position's band values are
-    // already multiples of their 8h shift, so none of them declare
-    // shiftHours and none of their numbers move.
-    ['House Attendant', 'Housekeeping Supervisor', 'Laundry Attendant', 'Public Area Attendant'].forEach(function (pos) {
-      (win.UNIFOCUS_STANDARDS[pos] || []).forEach(function (c) {
-        t.assert(!c.shiftHours, pos + ' must not declare shiftHours — its bands are already whole 8h shifts');
+    // Every shift declares its own length now — v6.99.0 added it to the
+    // rest so the Labor Model reference can divide hours into headcount
+    // ("3 supervisors", not "24h"). That means the trimming code path runs
+    // for all of them, so what matters is no longer "only Turndown sets
+    // shiftHours" but "only Turndown's numbers actually MOVE" — the others
+    // are 8h shifts with bands already in multiples of 8, so trimming is a
+    // no-op. Assert that directly against every band, which is the real
+    // guarantee and survives future shift-length edits.
+    Object.keys(win.UNIFOCUS_STANDARDS).forEach(function (pos) {
+      win.UNIFOCUS_STANDARDS[pos].forEach(function (c) {
+        t.assert(c.shiftHours > 0, pos + ' / ' + c.name + ' must declare its shift length');
+        c.bands.forEach(function (b) {
+          var vals = Object.prototype.toString.call(b[2]) === '[object Array]' ? b[2] : [b[2]];
+          vals.forEach(function (v) {
+            var trimmed = Math.floor(v / c.shiftHours) * c.shiftHours;
+            if (pos === 'Turndown Attendant') return; // the one place trimming is meant to bite
+            t.eq(trimmed, v, pos + ' / ' + c.name + ': band value ' + v + 'h is already a whole number of ' + c.shiftHours + 'h shifts, so trimming must not change it');
+          });
+        });
+      });
+    });
+
+    // And headcount comes out whole for every band, including Turndown's
+    // trimmed ones — that's the point of trimming, and what makes the
+    // Labor Model reference readable ("5 people", never "5.33").
+    Object.keys(win.UNIFOCUS_STANDARDS).forEach(function (pos) {
+      win.UNIFOCUS_STANDARDS[pos].forEach(function (c) {
+        c.bands.forEach(function (b) {
+          var vals = Object.prototype.toString.call(b[2]) === '[object Array]' ? b[2] : [b[2]];
+          vals.forEach(function (v) {
+            var trimmed = Math.floor(v / c.shiftHours) * c.shiftHours;
+            t.eq(trimmed % c.shiftHours, 0, pos + ' / ' + c.name + ': ' + trimmed + 'h divides into whole ' + c.shiftHours + 'h shifts');
+          });
+        });
       });
     });
   }

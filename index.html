@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.98.0"/>
+<meta name="app-version" content="6.99.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4231,6 +4231,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.99.0', date:'2026-08-07',
+    improvements:['The Unifocus Standard reference in Labor Model now shows how many PEOPLE each figure is, not just hours — Carlos\'s ask, so building a schedule reads "3 Supervisors" straight off the standard instead of working out 24 ÷ 8 every time. Each count is named by its own position (3 Supervisors, 5 Laundry Attendants, 1 House Attendant), and each shift states its own length, which is what the headcount divides by: most are 8-hour shifts, but Turndown\'s is 6, so its 30 hours is 5 Turndown Attendants, not 3.75. Public Area\'s day-of-week differences carry through too — its overnight shift reads 2, and 3 on Wednesdays.']
+  },
+  {
     v:'6.98.0', date:'2026-08-07',
     fixes:['Fixed the "Couldn\'t save to the cloud — Retry now" banner that kept coming back every few minutes, worst on the work computer. It was a loop the app was causing itself: one failure armed an automatic re-sync that pushed every month, OCC month, project and call-off all at once, and each of those uploads separately tried to renew the login session. Because renewing a session invalidates the previous one, a batch of simultaneous renewals mostly failed — which produced more failures, which triggered another round 30 seconds later. Now the session renews once for the whole batch, uploads go a few at a time instead of all at once, a re-sync can never start while the previous one is still running, and the wait between retries grows (30s, 1m, 2m, 4m, up to 8m) so a genuinely bad connection gets room to recover. A save rejected for an expired session is also quietly retried once now, instead of raising the banner for something one retry fixes. Tapping "Retry now" still goes immediately.'],
     features:['Labor Model now documents the Unifocus standard, in a gold "Reference" section under the editable table. It lays out every position\'s shifts, what drives each one (departures, or rooms from the night before vs the same day), and the full hour bands — including the two things that are easy to get wrong: Turndown\'s hours being trimmed down to whole 6-hour shifts, and Public Area\'s overnight shift being longer on Wednesdays. Room Attendant\'s rate formula (20 min for 85% of Stayovers + 30 min per departure) is spelled out too. Read-only on purpose — it mirrors Unifocus\'s own report so the two can\'t drift apart. Collapsed by default; tap to open.']
@@ -6993,16 +6997,23 @@ try{applyLaborModelToStd();}catch(e){}
    Hardcoded for v1 (mirrors how LABOR_STD/LABOR_MODEL_DEFAULTS started
    hardcoded before growing an editable Settings UI) — no edit UI yet. */
 var UNIFOCUS_STANDARDS={
+  /* Every shift declares its own shiftHours (paid length — the 0815-1645
+     style names span 8.5h of clock, less the unpaid half-hour break). It
+     does two jobs: hours are trimmed to a whole number of shifts before
+     they count (a no-op wherever the bands are already multiples, which is
+     everywhere except Turndown's 6h), and the Labor Model reference card
+     divides by it to show HEADCOUNT — Carlos's ask, so building a schedule
+     reads "3 supervisors" instead of making him work out 24 ÷ 8. */
   'House Attendant':[
-    { name:'0815-1645', driver:'departures',
+    { name:'0815-1645', driver:'departures', shiftHours:8,
       bands:[[1,70,16],[71,140,24],[141,180,32],[181,220,40],[221,Infinity,48]] },
-    { name:'1430-2300', driver:'rooms',
+    { name:'1430-2300', driver:'rooms', shiftHours:8,
       bands:[[1,Infinity,8]] }
   ],
   'Housekeeping Supervisor':[
-    { name:'0830-1700', driver:'departures',
+    { name:'0830-1700', driver:'departures', shiftHours:8,
       bands:[[1,70,16],[71,140,24],[141,180,32],[181,220,40],[221,Infinity,48]] },
-    { name:'1430-2300', driver:'rooms',
+    { name:'1430-2300', driver:'rooms', shiftHours:8,
       bands:[[1,Infinity,8]] }
   ],
   /* Laundry and Turndown are SEPARATE standards, on separate shifts —
@@ -7010,9 +7021,9 @@ var UNIFOCUS_STANDARDS={
      positions' report pages in one message; corrected once he clarified
      the 1700-2300 page was Turndown's, not a second Laundry shift. */
   'Laundry Attendant':[
-    { name:'0815-1645 (rooms)', driver:'rooms',
+    { name:'0815-1645 (rooms)', driver:'rooms', shiftHours:8,
       bands:[[1,Infinity,40]] },
-    { name:'0815-1645 (departures, 175+ only)', driver:'departures',
+    { name:'0815-1645 (departures, 175+ only)', driver:'departures', shiftHours:8,
       bands:[[175,Infinity,8]] }
   ],
   /* Turndown's only shift is the evening one, and its Rooms driver is
@@ -7032,8 +7043,9 @@ var UNIFOCUS_STANDARDS={
      "Rounding Threshold Above One: 0.2" in Unifocus's Planner Settings
      demonstrably does NOT mean "round up when the fraction exceeds 0.2":
      32/6 = 5.33 and 40/6 = 6.67 both round DOWN in the real reports.
-     Every other position's bands are already multiples of their 8h shift,
-     so they set no shiftHours and are unaffected. */
+     Turndown is the ONLY position where this trimming changes a number —
+     every other shift is 8h with bands already in multiples of 8, so the
+     same code path runs for them and leaves their hours exactly as-is. */
   'Turndown Attendant':[
     { name:'1700-2300 (rooms, same-day)', driver:'rooms_sameday', shiftHours:6,
       bands:[[1,90,16],[91,135,24],[136,180,32],[181,290,40],[291,Infinity,48]] }
@@ -7052,11 +7064,11 @@ var UNIFOCUS_STANDARDS={
      hours don't scale with the occupancy number itself — only whether
      it's nonzero, which is true most/every night in practice). */
   'Public Area Attendant':[
-    { name:'0700-1530', driver:'rooms',
+    { name:'0700-1530', driver:'rooms', shiftHours:8,
       bands:[[1,Infinity,[8,16,16,16,16,16,8]]] },
-    { name:'1430-2300', driver:'rooms',
+    { name:'1430-2300', driver:'rooms', shiftHours:8,
       bands:[[1,Infinity,8]] },
-    { name:'2200-0630', driver:'rooms',
+    { name:'2200-0630', driver:'rooms', shiftHours:8,
       bands:[[1,Infinity,[16,16,16,24,16,16,16]]] }
   ]
 };
@@ -9171,28 +9183,71 @@ function _ufDriverLabel(d){
   if(d==='rooms_sameday')return 'Rooms &middot; same day';
   return 'Rooms &middot; night before';
 }
-function _ufBandsHTML(bands,shiftHours){
+/* Hours -> how many people that actually is, at this shift's length.
+   Carlos's ask: while building a schedule he wants to read "3 Supervisors"
+   off the standard, not do 24 ÷ 8 in his head every time. Trimming to
+   whole shifts happens first, so this is always a whole number. */
+function _ufPeople(hours,shiftHours){
+  if(!(shiftHours>0))return null;
+  return Math.round(hours/shiftHours);
+}
+/* Named by role, not "people" — Carlos asked for the position's own name
+   so a band reads as the staffing decision it is. Spelled out explicitly
+   rather than auto-pluralised: LM_LABELS abbreviates a few ("Laundry",
+   "Public Area") in a way that reads as a place, not a person, once a
+   count is in front of it. */
+var UF_ROLE_NAMES={
+  'Room Attendant':['Room Attendant','Room Attendants'],
+  'House Attendant':['House Attendant','House Attendants'],
+  'Housekeeping Supervisor':['Supervisor','Supervisors'],
+  'Laundry Attendant':['Laundry Attendant','Laundry Attendants'],
+  'Turndown Attendant':['Turndown Attendant','Turndown Attendants'],
+  'Public Area Attendant':['Public Area Attendant','Public Area Attendants']
+};
+function _ufRoleName(pos,n){
+  var names=UF_ROLE_NAMES[pos];
+  if(!names)return n===1?'person':'people';
+  return n===1?names[0]:names[1];
+}
+function _ufPeopleHTML(hours,shiftHours,pos){
+  var n=_ufPeople(hours,shiftHours);
+  if(n===null)return '';
+  return '<span style="font-weight:800;color:var(--gd);">'+n+'</span>'
+    +'<span style="color:var(--text3);font-weight:400;"> '+_ufRoleName(pos,n)+'</span>';
+}
+function _ufBandsHTML(bands,shiftHours,pos){
   var out='';
   bands.forEach(function(b){
     var lo=b[0],hi=b[1],val=b[2];
     var range=(lo===1&&hi===Infinity)?'any':(hi===Infinity?(lo+'+'):(lo+'&ndash;'+hi));
-    var hrs;
+    var hrs,people;
     if(Object.prototype.toString.call(val)==='[object Array]'){
       /* Day-of-week array — show only the days that differ from the norm,
          which is what makes Public Area's Wednesday readable at a glance
-         instead of a wall of seven identical numbers. */
+         instead of a wall of seven identical numbers. Headcount follows the
+         same shape: the normal day's count, with the exception spelled out. */
       var counts={};
       val.forEach(function(v){counts[v]=(counts[v]||0)+1;});
       var norm=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];})[0];
-      var exceptions=[];
-      val.forEach(function(v,i){ if(String(v)!==String(norm))exceptions.push(_UF_DOW[i]+' '+v+'h'); });
+      var exceptions=[],peopleExceptions=[];
+      val.forEach(function(v,i){
+        if(String(v)===String(norm))return;
+        exceptions.push(_UF_DOW[i]+' '+v+'h');
+        peopleExceptions.push(_UF_DOW[i]+' '+_ufPeople(v,shiftHours));
+      });
       hrs=norm+'h'+(exceptions.length?' <span style="color:var(--gd);">('+exceptions.join(', ')+')</span>':'');
+      people=_ufPeopleHTML(parseFloat(norm),shiftHours,pos)
+        +(peopleExceptions.length?' <span style="color:var(--gd);">('+peopleExceptions.join(', ')+')</span>':'');
     }else{
       var t=(shiftHours>0)?Math.floor(val/shiftHours)*shiftHours:val;
-      hrs=t+'h'+(t!==val?' <span style="color:var(--text3);">(band '+val+'h, trimmed to whole '+shiftHours+'h shifts)</span>':'');
+      hrs=t+'h'+(t!==val?' <span style="color:var(--text3);">(band '+val+'h, trimmed)</span>':'');
+      people=_ufPeopleHTML(t,shiftHours,pos);
     }
-    out+='<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:10.5px;">'
-      +'<span style="color:var(--text3);">'+range+'</span><span style="color:var(--text1);font-weight:600;text-align:right;">'+hrs+'</span></div>';
+    out+='<div style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;padding:2px 0;font-size:10.5px;">'
+      +'<span style="color:var(--text3);min-width:52px;">'+range+'</span>'
+      +'<span style="color:var(--text1);font-weight:600;text-align:right;">'+hrs+'</span>'
+      +'<span style="text-align:right;min-width:64px;font-size:10px;">'+people+'</span>'
+      +'</div>';
   });
   return out;
 }
@@ -9220,10 +9275,16 @@ function buildUnifocusStandardHTML(){
     shifts.forEach(function(s,i){
       body+='<div style="padding:8px 12px;'+(i>0?'border-top:1px solid var(--border);':'')+'">'
         +'<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:3px;">'
-        +'<span style="font-size:10.5px;font-weight:700;color:var(--text1);">'+s.name+'</span>'
+        +'<span style="font-size:10.5px;font-weight:700;color:var(--text1);">'+s.name
+        +(s.shiftHours>0?' <span style="font-weight:400;color:var(--text3);">&middot; '+s.shiftHours+'h shift</span>':'')+'</span>'
         +'<span style="font-size:9px;color:var(--text3);">'+_ufDriverLabel(s.driver)+'</span>'
         +'</div>'
-        +_ufBandsHTML(s.bands,s.shiftHours)
+        +'<div style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;padding:0 0 2px;font-size:8.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);margin-bottom:3px;">'
+        +'<span style="min-width:52px;">'+(s.driver==='departures'?'Departures':'Rooms')+'</span>'
+        +'<span style="text-align:right;">Hours</span>'
+        +'<span style="text-align:right;min-width:64px;">Staff</span>'
+        +'</div>'
+        +_ufBandsHTML(s.bands,s.shiftHours,pos)
         +'</div>';
     });
     html+='<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px;">'

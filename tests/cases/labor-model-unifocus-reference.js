@@ -44,12 +44,48 @@ module.exports = {
     // ── Turndown's whole-shift trimming is shown, not just the raw band —
     // this is the exact discrepancy that took a day to track down against
     // Unifocus's own reports, so the card has to explain it. ──
-    t.assert(/trimmed to whole 6h shifts/.test(html), "the 6h shift trimming is explained where it applies");
-    t.assert(/>30h/.test(html), "Turndown's 32h band is shown as the 30h it actually counts as");
+    t.assert(/band 32h, trimmed/.test(html), 'the trimming is called out on the bands where it actually changes a number');
+    t.assert(/30h/.test(html), "Turndown's 32h band is shown as the 30h it actually counts as");
 
     // ── Public Area's day-of-week exception is surfaced rather than
     // flattened into one number. ──
     t.assert(/Wed 24h/.test(html), "Public Area's Wednesday overnight exception is called out by day");
+
+    // ── Headcount, Carlos's ask: he shouldn't have to work out 24 ÷ 8 in
+    // his head while building a schedule. Every shift declares its length,
+    // so hours divide into whole people — and the count is labelled with
+    // the ROLE ("3 Supervisors"), his follow-up, so a band reads as the
+    // staffing decision it is rather than an abstract "3 people". ──
+    t.assert(/Staff/.test(html), 'the bands carry a staff column');
+    t.assert(/8h shift/.test(html), 'each shift states its own length, so the division is inspectable');
+    t.assert(!/people</.test(html), 'the generic "people" wording is gone — every count is named by role');
+
+    // Supervisor is Carlos's literal example: 24h -> 3 Supervisors.
+    const supIdx = html.indexOf('>Supervisor<');
+    // Wide enough to reach the SECOND shift (1430-2300), where the
+    // singular case lives — the five bands of the first shift alone run
+    // past 2500 characters of markup.
+    const supBlock = html.slice(supIdx, html.indexOf('>Laundry<'));
+    t.assert(/71&ndash;140[\s\S]{0,300}?24h[\s\S]{0,200}?>3<\/span>[\s\S]{0,120}?Supervisors</.test(supBlock),
+      "Supervisor's 24h band reads as 3 Supervisors — the exact case Carlos described");
+    t.assert(/141&ndash;180[\s\S]{0,300}?32h[\s\S]{0,200}?>4<\/span>[\s\S]{0,120}?Supervisors</.test(supBlock),
+      'and 32h reads as 4 Supervisors');
+    t.assert(/>1<\/span>[\s\S]{0,120}?Supervisor</.test(supBlock), 'a one-person shift reads "1 Supervisor", singular');
+
+    // Each position uses its OWN role name, not a shared one. The shortened
+    // card labels ("Laundry", "Public Area") would read as a place rather
+    // than a person with a count in front, so the role names spell them out.
+    t.assert(/House Attendants</.test(html), 'House Attendant has its own plural');
+    t.assert(/Laundry Attendants</.test(html), 'Laundry reads as "Laundry Attendants", not the bare "Laundry" card label');
+    t.assert(/Public Area Attendants</.test(html), 'Public Area likewise reads as a role');
+    t.assert(/Turndown Attendants</.test(html), 'and Turndown');
+
+    // Turndown divides by its own 6h shift, not a blanket 8 — 30h = 5.
+    const tdIdx = html.indexOf('>Turndown<');
+    const tdBlock = html.slice(tdIdx, tdIdx + 2500);
+    t.assert(/6h shift/.test(tdBlock), 'Turndown states its 6h shift length');
+    t.assert(/>5<\/span>[\s\S]{0,120}?Turndown Attendants</.test(tdBlock), "Turndown's trimmed 30h reads as 5 (30 ÷ 6), not 3.75 by a blanket 8h assumption");
+    t.assert(!/\d+\.\d+\s*(<[^>]*>)?\s*[A-Z]/.test(html), 'no fractional headcount anywhere — trimming to whole shifts is what guarantees this');
 
     // ── Read-only: no form controls anywhere in it. The editable Current
     // Standard table above is where inputs belong. ──
