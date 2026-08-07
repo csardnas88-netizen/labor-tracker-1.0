@@ -42,7 +42,10 @@ module.exports = {
       // adjusted card's simpler 4-column layout doesn't, but a generous
       // window covers both without accidentally spilling into the next row.
       const win2 = section.slice(idx, idx + 1600);
-      const m = win2.match(/>([+-][0-9.]+)h<\/span>/);
+      // The original (per-position weekly cards) badge reads "+9.00h semana";
+      // the adjusted card's row-based pill reads "+9.00h" with no suffix —
+      // both are matched here.
+      const m = win2.match(/>([+-][0-9.]+)h(?:\s*semana)?<\/span>/);
       t.assert(m, 'variance pill not found near "' + label + '"');
       return parseFloat(m[1]);
     }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.92.0"/>
+<meta name="app-version" content="6.94.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4219,6 +4219,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'6.94.0', date:'2026-08-06',
+    features:['Weekly Labor Pace redesigned for the labor meeting, at Carlos\'s request: each position now gets its own card with a horizontally-scrolling strip of days, instead of one dense table with everyone crammed into narrow columns. Each day shows its Actual/Budget/Variance, and — right underneath, in the same card — a spot for a note explaining that day, the same notes already used in By Position. Tap a day to add or edit its note; no note yet just shows a quiet \'+ agregar nota\' prompt. Built for walking through the whole week during the meeting without leaving the page.']
+  },
+  {
     v:'6.92.0', date:'2026-08-06',
     fixes:['Turndown\'s Unifocus budget was coming out too high. Unifocus can only staff whole 6-hour Turndown shifts (1700-2300), so it trims each day\'s standard down to a whole number of shifts — a 32-hour day becomes 30, a 40-hour day becomes 36. We were showing the untrimmed number. Checked against Unifocus\'s own daily reports for Aug 1, 2 and 3 and it now matches all three exactly. Those same three days also confirm Turndown reads the occupancy of the day itself, not the night before. Heads up on one thing this comparison turned up: Unifocus\'s own data for Aug 4 is broken on their side (it recorded 0 rooms and 201 departures, which is really Aug 3\'s room count), so their Aug 1-4 weekly totals for every position are off because of it — not something on our end.']
   },
@@ -7090,6 +7094,32 @@ function saveVarianceNoteFromInput(ds,pos,inputId){
 function deleteVarianceNote(ds,pos){
   saveVarianceNote(ds,pos,'');
   varNoteExpanded[pos]=false;
+  renderLaborDash();
+}
+/* Same variance-note data, second surface: Weekly Labor Pace shows every
+   reported day for a position side by side (Carlos's request), so unlike
+   By Position — where only one day is ever on screen and varNoteExpanded
+   can be keyed by pos alone — the expand state here has to be keyed by
+   pos+ds together, or opening one day's note would open/close every other
+   day's note for that same position too. Reads/writes go through the
+   exact same getVarianceNote/saveVarianceNote as By Position; this is
+   just a different place to see and edit the same notes, not a second
+   store. */
+var wpNoteExpanded={};
+function toggleWPNote(pos,ds){
+  wpNoteExpanded[pos+'|'+ds]=!wpNoteExpanded[pos+'|'+ds];
+  renderLaborDash();
+}
+function saveWPNoteFromInput(pos,ds,inputId){
+  var el=document.getElementById(inputId);
+  if(!el)return;
+  saveVarianceNote(ds,pos,el.value);
+  wpNoteExpanded[pos+'|'+ds]=false;
+  renderLaborDash();
+}
+function deleteWPNote(pos,ds){
+  saveVarianceNote(ds,pos,'');
+  wpNoteExpanded[pos+'|'+ds]=false;
   renderLaborDash();
 }
 /* Daily DND (Do Not Disturb) room list — Room Attendant's Unifocus budget
@@ -10609,7 +10639,13 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     {key:'Laundry Attendant',  label:'Laundry',         sub:'18% of rooms'}
   ];
 
-  var weekActual={};var weekBudget={};var dailyActual={};var dayLabels=[];var dayLabelsDow=[];var dayLabelsShort=[];var dayHasData=[];
+  var weekActual={};var weekBudget={};var dailyActual={};
+  /* Per-day budget under EACH standard, captured alongside the running
+     week totals below — needed so every day-card can show its OWN
+     Budget/Variance, not just the week aggregate (Carlos's design:
+     "una tarjeta por dia" with the note centered under that day). */
+  var dailyBudgetCurrent={};var dailyBudgetUnifocus={};
+  var dayLabels=[];var dayLabelsDow=[];var dayLabelsShort=[];var dayDS=[];var dayHasData=[];
   var daysLoaded=0;var daysTotal=0;
   /* Unifocus runs alongside the LABOR_STD budget above, never replacing it —
      its own budget total and its own variance, so the two standards are
@@ -10618,7 +10654,11 @@ function buildWeeklyPaceHTML(days,rooms,wk){
      exists but whose days lack departures data reads as "no data" (—)
      rather than a misleadingly small total. */
   var weekUnifocus={};var weekUfDays={};
-  positions.forEach(function(p){weekActual[p.key]=0;weekBudget[p.key]=0;dailyActual[p.key]=[];weekUnifocus[p.key]=0;weekUfDays[p.key]=0;});
+  positions.forEach(function(p){
+    weekActual[p.key]=0;weekBudget[p.key]=0;dailyActual[p.key]=[];
+    dailyBudgetCurrent[p.key]=[];dailyBudgetUnifocus[p.key]=[];
+    weekUnifocus[p.key]=0;weekUfDays[p.key]=0;
+  });
 
   for(var d=0;d<7;d++){
     var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
@@ -10629,9 +10669,14 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     dayLabels.push(dd.toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric'}));
     dayLabelsDow.push(dd.toLocaleDateString('en-US',{weekday:'short'}));
     dayLabelsShort.push((dd.getMonth()+1)+'/'+dd.getDate());
+    dayDS.push(ds);
     dayHasData.push(!!snap);
     if(!snap){
-      positions.forEach(function(p){dailyActual[p.key].push(0);});
+      positions.forEach(function(p){
+        dailyActual[p.key].push(0);
+        dailyBudgetCurrent[p.key].push(0);
+        dailyBudgetUnifocus[p.key].push(null);
+      });
       continue;
     }
     daysLoaded++;
@@ -10649,25 +10694,31 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       /* Unifocus budget for this day, if this position has a standard on
          file and the day has the driver data it needs. */
       var uf=unifocusHoursForPosition(p.key,ds);
+      dailyBudgetUnifocus[p.key].push(uf);
       if(uf!==null){weekUnifocus[p.key]+=uf;weekUfDays[p.key]++;}
       /* Budget using LABOR_STD */
       var std=LABOR_STD[p.key];
-      if(!std)return;
-      if(std.type==='fixed'){
-        weekBudget[p.key]+=std.daily;
-      }else if(r>0){
-        weekBudget[p.key]+=(r*std.factor);
+      var dayBud=0;
+      if(std){
+        if(std.type==='fixed')dayBud=std.daily;
+        else if(r>0)dayBud=r*std.factor;
       }
+      dailyBudgetCurrent[p.key].push(dayBud);
+      weekBudget[p.key]+=dayBud;
     });
   }
 
   if(daysLoaded===0)return'';
 
   /* The active toggle drives which standard's budget counts toward the
-     header variance and every row below — never both at once. */
+     header variance and every card below — never both at once. */
   function stdBudgetFor(p){
     if(stdMode==='unifocus')return weekUfDays[p.key]>0?weekUnifocus[p.key]:null;
     return weekBudget[p.key];
+  }
+  function dayBudgetFor(p,di){
+    if(stdMode==='unifocus')return dailyBudgetUnifocus[p.key][di];
+    return dailyBudgetCurrent[p.key][di];
   }
 
   var totalOver=0,totalUnder=0,netVar=0;
@@ -10687,9 +10738,9 @@ function buildWeeklyPaceHTML(days,rooms,wk){
   html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Weekly Labor Pace</div>';
   html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'
     +wk.start.toLocaleDateString('en-US',{month:'short',day:'numeric'})
-    +' \u2013 '+wk.end.toLocaleDateString('en-US',{month:'short',day:'numeric'})
-    +' &nbsp;\u00B7\u00A0 '+daysLoaded+' day'+(daysLoaded!==1?'s':'')+' reported'
-    +' &nbsp;\u00B7\u00A0 '+(daysTotal-daysLoaded)+' remaining</div>';
+    +' – '+wk.end.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+    +' &nbsp;·  '+daysLoaded+' day'+(daysLoaded!==1?'s':'')+' reported'
+    +' &nbsp;·  '+(daysTotal-daysLoaded)+' remaining</div>';
   html+='</div>';
   html+='<div style="text-align:right;">';
   html+='<div style="font-size:16px;font-weight:800;color:'+(wkNetIsOver?'var(--red-border)':'var(--green-border)')+'">'+(netVar>=0?'+':'')+netVar.toFixed(2)+'h</div>';
@@ -10698,29 +10749,21 @@ function buildWeeklyPaceHTML(days,rooms,wk){
 
   var activeDayIdx=[];
   for(var di=0;di<7;di++){if(dayHasData[di])activeDayIdx.push(di);}
-  var gridCols='minmax(128px,1fr) '+activeDayIdx.map(function(){return '40px';}).join(' ')+' 58px 58px 74px';
-  var rowMinW=128+activeDayIdx.length*40+58+58+74;
 
-  html+='<div style="overflow-x:auto;">';
-
-  /* One standard's Budget+Variance at a time now — the toggle picks which,
-     same as the daily By Position table, instead of the old side-by-side
-     Current/Unifocus columns. */
-  html+='<div style="display:flex;align-items:center;justify-content:flex-end;padding:6px 14px;border-left:3px solid transparent;background:var(--surface);width:100%;min-width:'+rowMinW+'px;box-sizing:border-box;">';
+  html+='<div style="padding:7px 14px;display:flex;justify-content:flex-end;background:var(--surface);border-bottom:1px solid var(--border);">';
   html+=buildStandardToggleHtml(stdMode);
   html+='</div>';
 
-  html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;padding:0 14px 7px;border-left:3px solid transparent;background:var(--surface);border-bottom:1px solid var(--border);width:100%;min-width:'+rowMinW+'px;">';
-  html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Position</div>';
-  activeDayIdx.forEach(function(di){
-    html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);line-height:1.3;">'+dayLabelsDow[di]
-      +'<div style="font-weight:600;opacity:.6;">'+dayLabelsShort[di]+'</div></div>';
-  });
-  html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Actual</div>';
-  html+='<div style="text-align:right;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Budget</div>';
-  html+='<div style="text-align:right;padding-right:8px;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Variance</div>';
-  html+='</div>';
-
+  /* One block per position (Carlos's design, replacing the old single
+     table where all positions shared one row of narrow day columns) — a
+     mini-header with the week's variance, then a horizontally-scrolling
+     strip of day-cards. Each card carries that day's Actual/Budget/
+     Variance AND, centered directly underneath, the labor-meeting note
+     for that position on that day — so walking the week during the
+     meeting means sliding through cards, not hunting through a separate
+     notes list. Notes reuse the exact same store as the daily By Position
+     notes (getVarianceNote/saveVarianceNote, keyed by ds+pos) — this is
+     just a second place to read/write the same data, not a new store. */
   positions.forEach(function(p){
     var actual=weekActual[p.key];
     var budget=stdBudgetFor(p);
@@ -10728,34 +10771,66 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     var variance=budget===null?null:actual-budget;
     var isOver=variance!==null&&variance>0.5;
     var isUnder=variance!==null&&variance<-0.5;
-    var accent=isOver?'var(--red-border)':isUnder?'var(--green-border)':'var(--border)';
-    var valColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
-    var pillBg=isOver?'var(--red-border)':isUnder?'var(--green-border)':'var(--border)';
-    var pillColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
 
-    html+='<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;padding:9px 14px;border-top:1px solid var(--border);border-left:3px solid '+accent+';background:var(--white);width:100%;min-width:'+rowMinW+'px;">';
-    html+='<div><div style="font-size:11.5px;font-weight:700;color:var(--text1);">'+p.label+'</div>'
-      +'<div style="font-size:9px;color:var(--text3);margin-top:1px;">'+p.sub+'</div></div>';
-    activeDayIdx.forEach(function(di){
-      var v=dailyActual[p.key][di]||0;
-      html+='<div style="text-align:right;font-size:10.5px;color:var(--text2);">'+(v>0?v.toFixed(2):'\u2014')+'</div>';
-    });
-    html+='<div style="text-align:right;font-size:12.5px;font-weight:800;color:'+valColor+';">'+actual.toFixed(2)+'h</div>';
-    /* No standard on file for this position under the active toggle mode —
-       em-dash in both Budget and Variance rather than a misleading 0.00h. */
-    if(budget===null){
-      html+='<div style="text-align:right;font-size:12.5px;color:var(--text3);">—</div>';
-      html+='<div style="text-align:right;padding-right:8px;font-size:12.5px;color:var(--text3);">—</div>';
+    html+='<div style="border-top:1px solid var(--border);">';
+    html+='<div style="padding:8px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--surface);">';
+    html+='<div><div style="font-size:11.5px;font-weight:700;color:var(--text1);">'+p.label+'</div><div style="font-size:9px;color:var(--text3);">'+p.sub+'</div></div>';
+    html+='<div style="text-align:right;">';
+    html+='<div style="font-size:8.5px;color:var(--text3);">'+actual.toFixed(2)+'h actual'+(budget!==null?' &middot; '+budget.toFixed(2)+'h budget':'')+'</div>';
+    if(variance!==null){
+      html+='<span style="font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;white-space:nowrap;background:'+(isOver?'var(--red-bg)':isUnder?'var(--green-bg)':'var(--border)')+';color:'+(isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)')+';">'+(variance>=0?'+':'')+variance.toFixed(2)+'h semana</span>';
     }else{
-      html+='<div style="text-align:right;font-size:12.5px;color:var(--text2);">'+budget.toFixed(2)+'h</div>';
-      html+='<div style="text-align:right;padding-right:8px;"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'
-        +(variance>=0?'+':'')+variance.toFixed(2)+'h</span></div>';
+      html+='<span style="font-size:10px;font-weight:700;color:var(--text3);">&#8212; sin est&aacute;ndar</span>';
     }
+    html+='</div>';
+    html+='</div>';
+
+    html+='<div style="overflow-x:auto;"><div style="display:flex;min-width:'+(activeDayIdx.length*114)+'px;">';
+    activeDayIdx.forEach(function(di,i){
+      var v=dailyActual[p.key][di]||0;
+      var b=dayBudgetFor(p,di);
+      var hasB=(b!==null&&b!==undefined);
+      var vAr=hasB?(v-b):null;
+      var dIsOver=vAr!==null&&vAr>0.5, dIsUnder=vAr!==null&&vAr<-0.5;
+      var pillBg=dIsOver?'var(--red-bg)':dIsUnder?'var(--green-bg)':'var(--border)';
+      var pillColor=dIsOver?'var(--red)':dIsUnder?'var(--green)':'var(--text2)';
+      var ds=dayDS[di];
+      var noteKey=p.key+'|'+ds;
+      var note=getVarianceNote(ds,p.key);
+      var open=!!wpNoteExpanded[noteKey];
+
+      html+='<div style="flex:1;min-width:110px;padding:9px 8px;text-align:center;'+(i<activeDayIdx.length-1?'border-right:1px solid var(--border);':'')+'">';
+      html+='<div style="font-size:9.5px;font-weight:700;color:var(--text3);">'+dayLabelsDow[di]+' '+dayLabelsShort[di]+'</div>';
+      html+='<div style="font-size:14.5px;font-weight:800;color:var(--text1);margin-top:2px;">'+(v>0?v.toFixed(2):'—')+'</div>';
+      if(hasB){
+        html+='<div style="font-size:8.5px;color:var(--text3);">vs '+b.toFixed(2)+'</div>';
+        html+='<div style="margin-top:2px;"><span style="font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'+(vAr>=0?'+':'')+vAr.toFixed(2)+'</span></div>';
+      }else{
+        html+='<div style="font-size:8.5px;color:var(--text3);">—</div>';
+      }
+      html+='<div style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--border);min-height:16px;">';
+      if(open){
+        var inputId='wpNoteInput_'+ds+'_'+p.key.replace(/[^a-zA-Z0-9]/g,'');
+        html+='<textarea id="'+inputId+'" placeholder="Nota..." style="width:100%;min-height:50px;padding:5px 6px;font-size:9.5px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;">'+escHtml(note)+'</textarea>';
+        html+='<div style="margin-top:4px;display:flex;gap:3px;justify-content:center;flex-wrap:wrap;">';
+        html+='<button onclick="saveWPNoteFromInput(\''+p.key+'\',\''+ds+'\',\''+inputId+'\')" style="padding:3px 7px;background:var(--navy);color:#fff;border:none;border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Guardar</button>';
+        if(note)html+='<button onclick="deleteWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--red);border:1px solid var(--red-border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Borrar</button>';
+        html+='<button onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="padding:3px 7px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:5px;font-size:8.5px;font-weight:700;cursor:pointer;">Cerrar</button>';
+        html+='</div>';
+      }else if(note){
+        html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:9.5px;color:var(--text2);line-height:1.35;cursor:pointer;">'+escHtml(note)+'</div>';
+      }else{
+        html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:8.5px;color:var(--text3);font-style:italic;cursor:pointer;">+ agregar nota</div>';
+      }
+      html+='</div>';
+      html+='</div>';
+    });
+    html+='</div></div>';
     html+='</div>';
   });
 
   html+='</div>';
-  html+='</div>';
+
 
   /* ── Extra hours (training + special projects) + a week-summary
      reconciliation. These are SECONDARY, so they render as compact sub-cards
