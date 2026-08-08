@@ -52,6 +52,9 @@ const cases = [
   require('./cases/sync-refresh-storm'),
   require('./cases/sync-401-retry'),
   require('./cases/labor-model-unifocus-reference'),
+  require('./cases/labor-effectiveness-parse'),
+  require('./cases/labor-effectiveness-render'),
+  require('./cases/labor-effectiveness-sync'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

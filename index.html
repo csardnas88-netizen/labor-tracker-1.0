@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="6.99.0"/>
+<meta name="app-version" content="7.0.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4231,6 +4231,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.0.0', date:'2026-08-08',
+    features:['Added a new Labor Effectiveness section to the Labor page, right between Occupancy and Weekly Labor Pace — a second Unifocus report, this one giving Worked/Standard/Variance/Variance %/Overtime for the whole week per position, at a glance. Those first five columns are computed by the app itself from the same numbers Weekly Pace already uses, so they\'re always current — no upload needed. Upload that week\'s Labor Effectiveness PDF (a button right on the card) and two more columns appear that this app has no way to compute on its own — Scheduled Hours and Projected Hours, straight from Unifocus\'s own scheduling engine and forecast. Uploading also checks our own Worked/Standard against the report\'s: if they disagree by more than half an hour, that position gets a small warning icon rather than two silently different numbers sitting side by side — usually means a day\'s OCC or Paychex report is still missing. No dollar figures anywhere in this section on purpose; those already live on P&L.']
+  },
+  {
     v:'6.99.0', date:'2026-08-07',
     improvements:['The Unifocus Standard reference in Labor Model now shows how many PEOPLE each figure is, not just hours — Carlos\'s ask, so building a schedule reads "3 Supervisors" straight off the standard instead of working out 24 ÷ 8 every time. Each count is named by its own position (3 Supervisors, 5 Laundry Attendants, 1 House Attendant), and each shift states its own length, which is what the headcount divides by: most are 8-hour shifts, but Turndown\'s is 6, so its 30 hours is 5 Turndown Attendants, not 3.75. Public Area\'s day-of-week differences carry through too — its overnight shift reads 2, and 3 on Wednesdays.']
   },
@@ -5873,6 +5877,7 @@ function _friendlyKeyLabel(key){
   if(KEY_LABELS[key])return KEY_LABELS[key];
   if(key.indexOf('month_')===0)return 'Report for '+key.replace('month_','');
   if(key.indexOf('r106_')===0)return 'OCC';
+  if(key.indexOf('laboreff_')===0)return 'Labor Effectiveness';
   if(key.indexOf('snapshot_')===0)return 'Backup';
   if(key.indexOf('project_')===0)return 'Projects';
   if(key.indexOf('calloff_')===0)return 'Call-Offs';
@@ -6542,6 +6547,28 @@ function _syncFromSheetsPull(){
             updated=true;
           }
         }
+        if(key.indexOf("laboreff_")===0){
+          var mkLE=key.replace("laboreff_","");
+          var remoteLE=all[key];
+          /* A whole-blob last-write-wins by uploadedAt, NOT a per-field
+             merge like R106's Object.assign above. R106 is a date-keyed
+             dict where two devices' entries can genuinely coexist; a Labor
+             Effectiveness record is one atomic snapshot from a single PDF
+             — mixing positions from two different uploads would pair each
+             position's Worked/Standard with a Scheduled/Projected figure
+             from a DIFFERENT report, silently wrong in a way nothing would
+             ever surface. Whichever upload is newer wins the whole record. */
+          if(remoteLE&&typeof remoteLE==='object'&&remoteLE.positions){
+            var localLE=null;
+            try{var lle=localStorage.getItem('hk_laboreff_'+mkLE);if(lle)localLE=JSON.parse(lle);}catch(e){}
+            var remoteLEt=remoteLE.uploadedAt?Date.parse(remoteLE.uploadedAt):0;
+            var localLEt=(localLE&&localLE.uploadedAt)?Date.parse(localLE.uploadedAt):0;
+            if(!localLE||remoteLEt>localLEt){
+              safeSetItem('hk_laboreff_'+mkLE,JSON.stringify(remoteLE));
+              updated=true;
+            }
+          }
+        }
         if(key==="hk_roster_overrides"){
           var remoteOverrides=all[key];
           if(remoteOverrides&&typeof remoteOverrides==='object'){
@@ -6738,6 +6765,9 @@ function forceSyncToSupabase(){
       }
       else if(k.indexOf("hk_r106_")===0){
         pairs.push(["r106_"+k.replace("hk_r106_",""), JSON.parse(localStorage[k])]);
+      }
+      else if(k.indexOf("hk_laboreff_")===0){
+        pairs.push(["laboreff_"+k.replace("hk_laboreff_",""), JSON.parse(localStorage[k])]);
       }
       else if(k==="projects_data"){
         var _pd=JSON.parse(localStorage[k]);
@@ -10893,19 +10923,26 @@ function renderLaborDash(){
   }
 }
 
-function buildWeeklyPaceHTML(days,rooms,wk){
-  if(!wk)return'';
-  var stdMode=getLaborStandardMode();
-
-  var positions=[
-    {key:'Room Attendant',     label:'Room Attendant',  sub:'56.2% of rooms'},
-    {key:'House Attendant',    label:'House Attendant', sub:'17.5% of rooms'},
-    {key:'Housekeeping Supervisor',label:'Supervisor',  sub:'15.5% of rooms'},
-    {key:'Turndown Attendant', label:'Turndown',        sub:'21h fixed · daily'},
-    {key:'Public Area Attendant',label:'Public Area',   sub:'32h fixed · daily'},
-    {key:'Laundry Attendant',  label:'Laundry',         sub:'18% of rooms'}
-  ];
-
+/* The six HK positions, in the order every weekly view (Weekly Labor Pace,
+   Labor Effectiveness) lists them. A single shared list so a position
+   added here shows up everywhere, in the same order, without hunting down
+   every place it needs to be added. */
+var HK_WEEKLY_POSITIONS=[
+  {key:'Room Attendant',     label:'Room Attendant',  sub:'56.2% of rooms'},
+  {key:'House Attendant',    label:'House Attendant', sub:'17.5% of rooms'},
+  {key:'Housekeeping Supervisor',label:'Supervisor',  sub:'15.5% of rooms'},
+  {key:'Turndown Attendant', label:'Turndown',        sub:'21h fixed · daily'},
+  {key:'Public Area Attendant',label:'Public Area',   sub:'32h fixed · daily'},
+  {key:'Laundry Attendant',  label:'Laundry',         sub:'18% of rooms'}
+];
+/* Every position's Worked/Standard hours for a given week, under BOTH
+   standards at once (never averaged or conflated — Weekly Pace and Labor
+   Effectiveness each pick one via the page-level toggle). Pulled out of
+   buildWeeklyPaceHTML in v7.0.0 so Labor Effectiveness can show the exact
+   same Worked/Standard figures without a second, independently-maintained
+   copy of this loop that could quietly drift from it. */
+function _weekPositionTotals(days,rooms,wk){
+  var positions=HK_WEEKLY_POSITIONS;
   var weekActual={};var weekBudget={};var dailyActual={};
   /* Per-day budget under EACH standard, captured alongside the running
      week totals below — needed so every day-card can show its OWN
@@ -10921,10 +10958,15 @@ function buildWeeklyPaceHTML(days,rooms,wk){
      exists but whose days lack departures data reads as "no data" (—)
      rather than a misleadingly small total. */
   var weekUnifocus={};var weekUfDays={};
+  /* Weekly overtime hours per position — same byPosition/emps source and
+     fallback as Worked hours above, just a different field. Nothing reads
+     this yet when this function was Weekly Pace's alone; Labor
+     Effectiveness (v7.0.0) is the first consumer. */
+  var weekOT={};
   positions.forEach(function(p){
     weekActual[p.key]=0;weekBudget[p.key]=0;dailyActual[p.key]=[];
     dailyBudgetCurrent[p.key]=[];dailyBudgetUnifocus[p.key]=[];
-    weekUnifocus[p.key]=0;weekUfDays[p.key]=0;
+    weekUnifocus[p.key]=0;weekUfDays[p.key]=0;weekOT[p.key]=0;
   });
 
   for(var d=0;d<7;d++){
@@ -10958,6 +11000,14 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       }
       weekActual[p.key]+=posActual;
       dailyActual[p.key].push(posActual);
+      var posOT=0;
+      if(snap.byPosition&&snap.byPosition[p.key]&&snap.byPosition[p.key].ot1>0){
+        posOT=snap.byPosition[p.key].ot1;
+      }else if(snap.emps&&snap.emps.length){
+        posOT=snap.emps.filter(function(e){return e.pos===p.key;})
+          .reduce(function(s,e){return s+(e.ot1||0);},0);
+      }
+      weekOT[p.key]+=posOT;
       /* Unifocus budget for this day, if this position has a standard on
          file and the day has the driver data it needs. */
       var uf=unifocusHoursForPosition(p.key,ds);
@@ -10975,6 +11025,136 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     });
   }
 
+  return {positions:positions,weekActual:weekActual,weekBudget:weekBudget,weekOT:weekOT,
+    weekUnifocus:weekUnifocus,weekUfDays:weekUfDays,daysLoaded:daysLoaded,daysTotal:daysTotal,
+    dailyActual:dailyActual,dailyBudgetCurrent:dailyBudgetCurrent,dailyBudgetUnifocus:dailyBudgetUnifocus,
+    dayLabels:dayLabels,dayLabelsDow:dayLabelsDow,dayLabelsShort:dayLabelsShort,dayDS:dayDS,dayHasData:dayHasData};
+}
+
+/* Variance as a percent of budget, matching the "Variance %" column on
+   Unifocus's own Weekly Labor Summary report exactly — verified against
+   Carlos's real Aug 1-7 report: (Actual-Standard)/Standard, rounded to a
+   whole percent. When Standard is 0, Unifocus's own report doesn't divide
+   by zero — it shows 100% if Actual is non-zero (fully unaccounted for)
+   or 0% if both are zero (no data that day). Carlos's ask: use the same
+   percents his labor meeting already runs on, not a number we invented.
+   Rounds HALF AWAY FROM ZERO, not JS's native Math.round (which rounds
+   -23.5 to -23) — Unifocus's own Turndown Sun 8/2 row lands on exactly
+   -23.5% and reports it as -24%, so plain Math.round would silently
+   disagree with the report on that exact boundary.
+   Promoted to module scope in v7.0.0 (were local to buildWeeklyPaceHTML) so
+   Labor Effectiveness can compute the identical percent without a second,
+   separately-maintained copy of this rounding rule. */
+function _pctOfBudget(diff,budget){
+  if(budget===0)return diff===0?0:100;
+  var raw=diff/budget*100;
+  return raw>=0?Math.round(raw):-Math.round(-raw);
+}
+function _pctVar(actual,budget){
+  if(budget===null||budget===undefined)return null;
+  return _pctOfBudget(actual-budget,budget);
+}
+
+/* Labor Effectiveness — sits between Occupancy and Weekly Labor Pace, per
+   Carlos's ask. Worked/Standard/Var (h)/Var (%)/OT are always shown, from
+   the exact same _weekPositionTotals this page's Weekly Pace card below
+   uses (same toggle, same numbers — never a second, slightly different
+   figure for the same thing). Scheduled and Projected only appear once
+   that week's Labor Effectiveness PDF has been uploaded, since this app
+   has no other way to know them. When it has, each row is also checked
+   against the report's OWN Worked/Standard — a mismatch (missing OCC/
+   Paychex days, a late upload for the wrong week) gets flagged rather than
+   silently showing two numbers that don't agree. */
+var UF_LABOR_EFF_MISMATCH_TOL=0.5;
+function buildLaborEffectivenessHTML(days,rooms,wk){
+  if(!wk)return'';
+  var stdMode=getLaborStandardMode();
+  var wt=_weekPositionTotals(days,rooms,wk);
+  if(wt.daysLoaded===0)return'';
+  var positions=wt.positions;
+
+  function stdBudgetFor(p){
+    if(stdMode==='unifocus')return wt.weekUfDays[p.key]>0?wt.weekUnifocus[p.key]:null;
+    return wt.weekBudget[p.key];
+  }
+
+  var weekKey=dateStr(getHotelWeekStart(wk.start));
+  var uploaded=getLaborEffForWeek(weekKey);
+  var hasUpload=!!(uploaded&&uploaded.positions);
+
+  var html='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+  html+='<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
+  html+='<div>';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128203; Labor Effectiveness</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'
+    +wk.start.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+    +' – '+wk.end.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+    +(hasUpload?' &nbsp;·  matched to Unifocus\'s own report':' &nbsp;·  Worked/Standard computed by this app')+'</div>';
+  html+='</div>';
+  html+='<div style="display:flex;align-items:center;gap:8px;">';
+  if(hasUpload)html+='<span style="font-size:9px;font-weight:800;color:var(--gd);background:var(--gold);padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;">&#10003; Uploaded</span>';
+  html+='<button onclick="document.getElementById(\'laborEffInput\').click();" style="padding:5px 11px;background:'+(hasUpload?'rgba(255,255,255,.15)':'#fff')+';color:'+(hasUpload?'#fff':'var(--navy)')+';border:none;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;">&#11014; '+(hasUpload?'Re-upload':'Upload PDF')+'</button>';
+  html+='<input type="file" id="laborEffInput" accept=".pdf" style="display:none;" onchange="handleLaborEffectivenessUpload(this)">';
+  html+='</div></div>';
+
+  var cols=hasUpload?'minmax(120px,1fr) 62px 62px 56px 50px 54px 68px 68px':'minmax(120px,1fr) 62px 62px 56px 50px 54px';
+  html+='<div style="overflow-x:auto;"><div style="min-width:'+(hasUpload?720:520)+'px;">';
+  html+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:7px 14px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">';
+  html+='<div>Position</div><div style="text-align:right;">Worked</div><div style="text-align:right;">Standard</div>'
+    +'<div style="text-align:right;">Var (h)</div><div style="text-align:right;">Var (%)</div><div style="text-align:right;">OT</div>';
+  if(hasUpload)html+='<div style="text-align:right;color:var(--gd);">Sched.</div><div style="text-align:right;color:var(--gd);">Proj.</div>';
+  html+='</div>';
+
+  positions.forEach(function(p){
+    var actual=wt.weekActual[p.key];
+    var budget=stdBudgetFor(p);
+    var ot=wt.weekOT[p.key];
+    if(actual===0&&(budget===0||budget===null)&&!(hasUpload&&uploaded.positions[p.key]))return;
+    var variance=budget===null?null:actual-budget;
+    var pct=_pctVar(actual,budget);
+    var isOver=variance!==null&&variance>0.5,isUnder=variance!==null&&variance<-0.5;
+    var pillColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
+
+    var repRow=hasUpload?uploaded.positions[p.key]:null;
+    var mismatch=false;
+    if(repRow&&budget!==null){
+      if(Math.abs(actual-repRow.worked)>UF_LABOR_EFF_MISMATCH_TOL)mismatch=true;
+      if(Math.abs(budget-repRow.standard)>UF_LABOR_EFF_MISMATCH_TOL)mismatch=true;
+    }
+
+    html+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:8px 14px;border-top:1px solid var(--border);align-items:center;font-size:11px;'+(mismatch?'background:var(--yellow-bg);':'')+'">';
+    html+='<div style="font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+p.label
+      +(mismatch?' <span title="Doesn\'t match Unifocus\'s own Worked/Standard for this week — check for a missing OCC or Paychex day." style="color:var(--yellow);cursor:help;">&#9888;</span>':'')+'</div>';
+    html+='<div style="text-align:right;color:var(--text1);">'+actual.toFixed(2)+'</div>';
+    html+='<div style="text-align:right;color:var(--text2);">'+(budget!==null?budget.toFixed(2):'&#8212;')+'</div>';
+    html+='<div style="text-align:right;font-weight:700;color:'+pillColor+';">'+(variance!==null?(variance>=0?'+':'')+variance.toFixed(2):'&#8212;')+'</div>';
+    html+='<div style="text-align:right;font-weight:700;color:'+pillColor+';">'+(pct!==null?(pct>=0?'+':'')+pct+'%':'&#8212;')+'</div>';
+    html+='<div style="text-align:right;color:'+(ot>0?'var(--yellow)':'var(--text3)')+';">'+(ot>0?ot.toFixed(2):'&#8212;')+'</div>';
+    if(hasUpload){
+      html+='<div style="text-align:right;color:var(--gd);">'+(repRow?repRow.scheduled.toFixed(2):'&#8212;')+'</div>';
+      html+='<div style="text-align:right;color:var(--gd);">'+(repRow?repRow.projected.toFixed(2):'&#8212;')+'</div>';
+    }
+    html+='</div>';
+  });
+
+  html+='</div></div>';
+  if(!hasUpload)html+='<div style="padding:9px 14px;font-size:10.5px;color:var(--text3);border-top:1px solid var(--border);">Upload this week\'s Labor Effectiveness PDF to add Scheduled and Projected hours from Unifocus, and check our Worked/Standard against theirs.</div>';
+  html+='</div>';
+  return html;
+}
+
+function buildWeeklyPaceHTML(days,rooms,wk){
+  if(!wk)return'';
+  var stdMode=getLaborStandardMode();
+
+  var wt=_weekPositionTotals(days,rooms,wk);
+  var positions=wt.positions;
+  var weekActual=wt.weekActual,weekBudget=wt.weekBudget,dailyActual=wt.dailyActual;
+  var dailyBudgetCurrent=wt.dailyBudgetCurrent,dailyBudgetUnifocus=wt.dailyBudgetUnifocus;
+  var dayLabels=wt.dayLabels,dayLabelsDow=wt.dayLabelsDow,dayLabelsShort=wt.dayLabelsShort,dayDS=wt.dayDS,dayHasData=wt.dayHasData;
+  var daysLoaded=wt.daysLoaded,daysTotal=wt.daysTotal;
+  var weekUnifocus=wt.weekUnifocus,weekUfDays=wt.weekUfDays;
+
   if(daysLoaded===0)return'';
 
   /* The active toggle drives which standard's budget counts toward the
@@ -10986,26 +11166,6 @@ function buildWeeklyPaceHTML(days,rooms,wk){
   function dayBudgetFor(p,di){
     if(stdMode==='unifocus')return dailyBudgetUnifocus[p.key][di];
     return dailyBudgetCurrent[p.key][di];
-  }
-  /* Variance as a percent of budget, matching the "Variance %" column on
-     Unifocus's own Weekly Labor Summary report exactly — verified against
-     Carlos's real Aug 1-7 report: (Actual-Standard)/Standard, rounded to a
-     whole percent. When Standard is 0, Unifocus's own report doesn't divide
-     by zero — it shows 100% if Actual is non-zero (fully unaccounted for)
-     or 0% if both are zero (no data that day). Carlos's ask: use the same
-     percents his labor meeting already runs on, not a number we invented.
-     Rounds HALF AWAY FROM ZERO, not JS's native Math.round (which rounds
-     -23.5 to -23) — Unifocus's own Turndown Sun 8/2 row lands on exactly
-     -23.5% and reports it as -24%, so plain Math.round would silently
-     disagree with the report on that exact boundary. */
-  function _pctOfBudget(diff,budget){
-    if(budget===0)return diff===0?0:100;
-    var raw=diff/budget*100;
-    return raw>=0?Math.round(raw):-Math.round(-raw);
-  }
-  function _pctVar(actual,budget){
-    if(budget===null||budget===undefined)return null;
-    return _pctOfBudget(actual-budget,budget);
   }
 
   var totalOver=0,totalUnder=0,netVar=0;
@@ -11426,6 +11586,9 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       +'<button class="btn btn-gold" onclick="showUploadModal()">&#11014; Upload Report</button></div>';
   }
   html+=roomsCardHtml;
+
+  /* ── Labor Effectiveness ── */
+  html+=buildLaborEffectivenessHTML(days,rooms,wk);
 
   /* ── Weekly Pace ── */
   html+=buildWeeklyPaceHTML(days,rooms,wk);
@@ -12557,6 +12720,154 @@ function prog(p,m){
 /* ═══════════════════════════════════════════
    INIT - single load listener
    ═══════════════════════════════════════════ */
+/* ══════════════════════════════════════════════
+   LABOR EFFECTIVENESS — Unifocus's own weekly report
+   ══════════════════════════════════════════════
+   A second Unifocus report, distinct from the Weekly Labor Summary
+   ([[labor-tracker-weekly-pace-single-surface]]): one row per position for
+   the WHOLE week (not day-by-day), and it carries two figures we have no
+   other way to get — Scheduled Hours and Projected Hours, both driven by
+   Unifocus's own scheduling engine and forecast, not anything this app
+   computes. Worked/Standard/Variance/Variance %/OT Hours we already
+   compute ourselves (via _weekPositionTotals, the same function Weekly
+   Pace uses) — Carlos's explicit ask was "las dos cosas": show our own
+   figures always, and layer in Scheduled/Projected once he's uploaded
+   that week's PDF, with a check that our own numbers agree with
+   Unifocus's before trusting the new columns next to them.
+
+   Deliberately carries NO cost/dollar figures (Actual Costs, Standard
+   Costs, Costs Variance, OT Pay) — Carlos's explicit call, so this section
+   never becomes a second, slightly-different source of cost numbers next
+   to P&L's. Parsed and discarded. */
+
+/* Unifocus's own jobclass labels -> this app's internal position keys.
+   Confirmed against the Weekly Labor Summary parsing this session
+   ("Houseperson" = House Attendant, "Hskpg Supervisor" = Housekeeping
+   Supervisor). Laundry is its own DEPARTMENT in Unifocus's report
+   structure (separate section, separate department total) — deliberately
+   folded back into the same six-position list here, matching how every
+   other view in this app (Weekly Pace, Labor Model) already treats it,
+   rather than introducing a department split found nowhere else. */
+var UF_JOBCLASS_MAP={
+  'Houseperson':'House Attendant',
+  'Hskpg Supervisor':'Housekeeping Supervisor',
+  'Public Area Attendant':'Public Area Attendant',
+  'Room Attendant':'Room Attendant',
+  'Turndown Attendant':'Turndown Attendant',
+  'Laundry Attendant':'Laundry Attendant'
+};
+/* A data row: FTE, then 11 more numeric columns, the 7th (Variance %) the
+   only one with a trailing %. The jobclass name is usually the same line
+   ("Houseperson 0.0 184.80 ..."), captured as an optional leading group —
+   but Unifocus's PDF wraps a long label to two vertical lines and renders
+   the numbers on the Y-band BETWEEN them (e.g. "Public Area" / [data] /
+   "Attendant"), so this regex also has to work with NO leading label at
+   all; parseLaborEffectiveness stitches that case back together from the
+   lines immediately before and after. Verified against the real Aug 1-6
+   2026 report for both wrapping and non-wrapping labels. */
+var UF_LABOR_EFF_ROW_RE=/^(.*?)\s*(-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)\s+(-?\d+)%\s+(-?[\d,]+)\s+(-?[\d,]+)\s+(-?[\d,]+)\s+(-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)\s*$/;
+function parseLaborEffectiveness(text){
+  var lines=text.split('\n').map(function(l){return l.trim();});
+  var num=function(s){return parseFloat(String(s).replace(/,/g,''));};
+  var positions={};
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i];
+    if(!line)continue;
+    var m=line.match(UF_LABOR_EFF_ROW_RE);
+    if(!m)continue;
+    var label=m[1].trim();
+    if(!label){
+      /* Wrapped label: borrow the neighbouring lines, but only if they're
+         plain text (not themselves a data row) — guards against two data
+         rows ever sitting back-to-back with nothing to steal. */
+      var before=(lines[i-1]||'').trim();
+      var after=(lines[i+1]||'').trim();
+      var beforeOk=before&&!UF_LABOR_EFF_ROW_RE.test(before);
+      var afterOk=after&&!UF_LABOR_EFF_ROW_RE.test(after);
+      label=[beforeOk?before:'',afterOk?after:''].filter(Boolean).join(' ').trim();
+    }
+    var posKey=UF_JOBCLASS_MAP[label];
+    /* Unmapped label -> a Department Totals row (e.g. "Housekeeping
+       Department Totals") or something new in Unifocus's own report —
+       either way, skip rather than guess. Our own week totals already
+       come from _weekPositionTotals; we never need Unifocus's aggregate
+       row to compute anything. */
+    if(!posKey)continue;
+    positions[posKey]={
+      worked:num(m[3]),standard:num(m[4]),scheduled:num(m[5]),projected:num(m[6]),
+      hoursVariance:num(m[7]),variancePct:parseInt(m[8],10),otHours:num(m[12])
+    };
+  }
+  var rangeM=text.match(/From\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+to\s+(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+  var range=null;
+  if(rangeM){
+    var pf=rangeM[1].split('/'),pt=rangeM[2].split('/');
+    var fy=pf[2].length===2?2000+parseInt(pf[2],10):parseInt(pf[2],10);
+    var ty=pt[2].length===2?2000+parseInt(pt[2],10):parseInt(pt[2],10);
+    range={from:dateStr(new Date(fy,parseInt(pf[0],10)-1,parseInt(pf[1],10))),
+      to:dateStr(new Date(ty,parseInt(pt[0],10)-1,parseInt(pt[1],10)))};
+  }
+  return {positions:positions,range:range};
+}
+function getLaborEffForWeek(weekKey){
+  try{
+    var raw=localStorage.getItem('hk_laboreff_'+weekKey);
+    return raw?JSON.parse(raw):null;
+  }catch(e){return null;}
+}
+function saveLaborEffForWeek(weekKey,data){
+  safeSetItem('hk_laboreff_'+weekKey,JSON.stringify(data));
+  syncLaborEffToSheets(weekKey,data);
+}
+function syncLaborEffToSheets(weekKey,data){
+  supaPut('laboreff_'+weekKey,data);
+}
+function handleLaborEffectivenessUpload(input){
+  var file=input.files[0];
+  if(!file)return;
+  showToast('⏳ Reading Labor Effectiveness...');
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var typedarray=new Uint8Array(e.target.result);
+    pdfjsLib.getDocument({data:typedarray}).promise.then(function(pdf){
+      var allText='';
+      var pagePromises=[];
+      for(var p=1;p<=pdf.numPages;p++){
+        pagePromises.push(pdf.getPage(p).then(function(page){
+          return page.getTextContent().then(function(tc){
+            var sorted=tc.items.slice().sort(function(a,b){
+              var dy=Math.round(b.transform[5])-Math.round(a.transform[5]);
+              return dy!==0?dy:a.transform[4]-b.transform[4];
+            });
+            var lines=[],lastY=null,curLine=[];
+            sorted.forEach(function(item){
+              var y=Math.round(item.transform[5]);
+              if(lastY===null)lastY=y;
+              if(Math.abs(y-lastY)>4){lines.push(curLine.join(' '));curLine=[];lastY=y;}
+              curLine.push(item.str.trim());
+            });
+            if(curLine.length)lines.push(curLine.join(' '));
+            allText+=lines.join('\n')+'\n';
+          });
+        }));
+      }
+      Promise.all(pagePromises).then(function(){
+        var parsed=parseLaborEffectiveness(allText);
+        var count=Object.keys(parsed.positions).length;
+        if(count===0){showToast('❌ No position data found in that PDF');return;}
+        if(!parsed.range){showToast('❌ Could not read the report\'s date range');return;}
+        var weekKey=dateStr(getHotelWeekStart(parseLocalDate(parsed.range.from)));
+        var record={positions:parsed.positions,range:parsed.range,uploadedAt:new Date().toISOString()};
+        saveLaborEffForWeek(weekKey,record);
+        showToast('✓ Labor Effectiveness loaded — '+count+' position'+(count!==1?'s':''));
+        input.value='';
+        renderLaborDash();
+      }).catch(function(){showToast('❌ Could not read that PDF');});
+    }).catch(function(){showToast('❌ Could not read that PDF');});
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 /* ══════════════════════════════════════════════
    OCCUPANCY PAGE — R106 + Editable
 ══════════════════════════════════════════════ */
