@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.0.0"/>
+<meta name="app-version" content="7.1.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -702,6 +702,26 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .dpc-brk{font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;white-space:nowrap;}
 .dpc-brk.nb{background:var(--red-bg);color:var(--red);}
 .dpc-brk.sb{background:var(--yellow-bg);color:var(--yellow);}
+/* Weekly Labor Pace's day-card strip: fits the whole week without
+   scrolling on a desktop-width screen (Carlos's ask, after completing a
+   full week and finding himself scrolling left/right to see all 7 days)
+   — a fluid grid divides the available width evenly across however many
+   days are active (--day-count, set inline per position block), rather
+   than 7 fixed-width cards that only fit if the window happens to be wide
+   enough. Falls back to the original fixed-width, horizontally-scrolling
+   strip below 900px, where a real phone or a narrow window genuinely
+   doesn't have room for 7 columns at any readable size — mirrors this
+   file's existing max-width-override convention (mobile is the
+   exception, not the default) rather than introducing a new min-width
+   pattern found nowhere else in this app. */
+.wp-day-strip{display:grid;grid-template-columns:repeat(var(--day-count,7),minmax(0,1fr));}
+.wp-day-card{min-width:0;overflow:hidden;box-sizing:border-box;}
+@media(max-width:900px){
+  .wp-day-strip{display:flex;overflow-x:auto;}
+  .wp-day-card{flex-shrink:0;overflow:visible;}
+  .wp-day-card.wp-collapsed{width:112px;}
+  .wp-day-card.wp-expanded{width:172px;}
+}
 /* Occupancy card (Rooms + Departures) — Option A from Carlos's design
    review: side-by-side compact tiles in a plain-bordered card instead of
    two stacked boxes with thick colored borders, which read as an
@@ -4231,6 +4251,11 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.1.0', date:'2026-08-08',
+    improvements:['Weekly Labor Pace and Labor Effectiveness no longer force horizontal scrolling on a normal-sized screen — Carlos hit this after filling in a full week and having to scroll left/right just to see all 7 days. Both now stretch to fill the width they actually have instead of insisting on a fixed size per column; a real phone or a narrow window still scrolls, since there genuinely isn\'t room for 7 columns at any readable size there, but a desktop no longer should.'],
+    features:['Labor Effectiveness gained an Explanation section on each position, right after Overtime — a place to justify the week\'s variance, the same way Weekly Pace\'s day-cards already let Carlos explain a single day, just at the weekly level this section works at. Stored completely separately from the uploaded PDF record, so a corrected re-upload next week can never wipe out a note written this week.']
+  },
+  {
     v:'7.0.0', date:'2026-08-08',
     features:['Added a new Labor Effectiveness section to the Labor page, right between Occupancy and Weekly Labor Pace — a second Unifocus report, this one giving Worked/Standard/Variance/Variance %/Overtime for the whole week per position, at a glance. Those first five columns are computed by the app itself from the same numbers Weekly Pace already uses, so they\'re always current — no upload needed. Upload that week\'s Labor Effectiveness PDF (a button right on the card) and two more columns appear that this app has no way to compute on its own — Scheduled Hours and Projected Hours, straight from Unifocus\'s own scheduling engine and forecast. Uploading also checks our own Worked/Standard against the report\'s: if they disagree by more than half an hour, that position gets a small warning icon rather than two silently different numbers sitting side by side — usually means a day\'s OCC or Paychex report is still missing. No dollar figures anywhere in this section on purpose; those already live on P&L.']
   },
@@ -5877,6 +5902,7 @@ function _friendlyKeyLabel(key){
   if(KEY_LABELS[key])return KEY_LABELS[key];
   if(key.indexOf('month_')===0)return 'Report for '+key.replace('month_','');
   if(key.indexOf('r106_')===0)return 'OCC';
+  if(key.indexOf('laboreffnotes_')===0)return 'Labor Effectiveness notes';
   if(key.indexOf('laboreff_')===0)return 'Labor Effectiveness';
   if(key.indexOf('snapshot_')===0)return 'Backup';
   if(key.indexOf('project_')===0)return 'Projects';
@@ -6569,6 +6595,33 @@ function _syncFromSheetsPull(){
             }
           }
         }
+        if(key.indexOf("laboreffnotes_")===0){
+          var wkLEN=key.replace("laboreffnotes_","");
+          var remoteLEN=all[key];
+          /* Per-POSITION last-write-wins, like variance notes' per-day fold
+             (_foldVNote) — NOT whole-blob-replace like the PDF record just
+             above. Each position's note is independent within a week, so
+             two devices editing different positions' explanations must
+             both survive; only iterating remoteNotesUpdatedAt (which is
+             always set, set OR delete, exactly like varianceNotesUpdatedAt)
+             means a delete on one device propagates as a delete here too,
+             not just "no update". */
+          if(remoteLEN&&typeof remoteLEN==='object'){
+            var localLEN=_loadLaborEffNotes(wkLEN);
+            var mergedLEN={notes:Object.assign({},localLEN.notes),notesUpdatedAt:Object.assign({},localLEN.notesUpdatedAt)};
+            var remoteNotesN=remoteLEN.notes||{}, remoteNotesT=remoteLEN.notesUpdatedAt||{};
+            Object.keys(remoteNotesT).forEach(function(pos){
+              var rt=_tsRank(remoteNotesT[pos]);
+              var lt=mergedLEN.notesUpdatedAt[pos]?_tsRank(mergedLEN.notesUpdatedAt[pos]):0;
+              if(rt>=lt){
+                if(remoteNotesN[pos])mergedLEN.notes[pos]=remoteNotesN[pos];else delete mergedLEN.notes[pos];
+                mergedLEN.notesUpdatedAt[pos]=remoteNotesT[pos];
+              }
+            });
+            safeSetItem('hk_laboreff_notes_'+wkLEN,JSON.stringify(mergedLEN));
+            updated=true;
+          }
+        }
         if(key==="hk_roster_overrides"){
           var remoteOverrides=all[key];
           if(remoteOverrides&&typeof remoteOverrides==='object'){
@@ -6765,6 +6818,14 @@ function forceSyncToSupabase(){
       }
       else if(k.indexOf("hk_r106_")===0){
         pairs.push(["r106_"+k.replace("hk_r106_",""), JSON.parse(localStorage[k])]);
+      }
+      else if(k.indexOf("hk_laboreff_notes_")===0){
+        /* Checked BEFORE the plain hk_laboreff_ prefix below — that check
+           would otherwise also match this key (hk_laboreff_notes_<week>
+           starts with hk_laboreff_ too) and push it under the wrong
+           remote key, mixing the notes blob in with the PDF record's
+           whole-blob-replace sync path. */
+        pairs.push(["laboreffnotes_"+k.replace("hk_laboreff_notes_",""), JSON.parse(localStorage[k])]);
       }
       else if(k.indexOf("hk_laboreff_")===0){
         pairs.push(["laboreff_"+k.replace("hk_laboreff_",""), JSON.parse(localStorage[k])]);
@@ -11098,7 +11159,13 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
   html+='</div></div>';
 
   var cols=hasUpload?'minmax(120px,1fr) 62px 62px 56px 50px 54px 68px 68px':'minmax(120px,1fr) 62px 62px 56px 50px 54px';
-  html+='<div style="overflow-x:auto;"><div style="min-width:'+(hasUpload?720:520)+'px;">';
+  /* min-width here is just the columns' own natural floor (fixed widths +
+     gaps + Position's 120px minimum) — not an inflated target. The old
+     720/520px figures were padded well past what the content actually
+     needs, which is exactly what forced a horizontal scrollbar on
+     screens that had room for the real content but not that much
+     headroom (part of Carlos's "no deberia tener que hacer scroll" ask). */
+  html+='<div style="overflow-x:auto;"><div style="min-width:'+(hasUpload?580:440)+'px;">';
   html+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:7px 14px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">';
   html+='<div>Position</div><div style="text-align:right;">Worked</div><div style="text-align:right;">Standard</div>'
     +'<div style="text-align:right;">Var (h)</div><div style="text-align:right;">Var (%)</div><div style="text-align:right;">OT</div>';
@@ -11122,7 +11189,14 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
       if(Math.abs(budget-repRow.standard)>UF_LABOR_EFF_MISMATCH_TOL)mismatch=true;
     }
 
-    html+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:8px 14px;border-top:1px solid var(--border);align-items:center;font-size:11px;'+(mismatch?'background:var(--yellow-bg);':'')+'">';
+    var note=getWeeklyEffNote(weekKey,p.key);
+    var hasNote=!!note;
+    var noteKey=weekKey+'|'+p.key;
+    var noteEditing=!!wleNoteExpanded[noteKey];
+    var rowBg=mismatch?'var(--yellow-bg);':(hasNote?'var(--gt);':'');
+
+    html+='<div style="border-top:1px solid var(--border);'+(rowBg?'background:'+rowBg:'')+'">';
+    html+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:8px 14px;align-items:center;font-size:11px;">';
     html+='<div style="font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+p.label
       +(mismatch?' <span title="Doesn\'t match Unifocus\'s own Worked/Standard for this week — check for a missing OCC or Paychex day." style="color:var(--yellow);cursor:help;">&#9888;</span>':'')+'</div>';
     html+='<div style="text-align:right;color:var(--text1);">'+actual.toFixed(2)+'</div>';
@@ -11134,6 +11208,35 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
       html+='<div style="text-align:right;color:var(--gd);">'+(repRow?repRow.scheduled.toFixed(2):'&#8212;')+'</div>';
       html+='<div style="text-align:right;color:var(--gd);">'+(repRow?repRow.projected.toFixed(2):'&#8212;')+'</div>';
     }
+    html+='</div>';
+
+    /* Explanation — Carlos's ask, right after Overtime in reading order:
+       a place to justify the week's variance for this position, the same
+       way Weekly Pace's day-cards already let him explain a single day.
+       Weekly here, not daily — one note per position per WEEK, since this
+       whole section is a weekly total, not a day-by-day breakdown. Stored
+       separately from the uploaded PDF record (hk_laboreff_notes_<week>,
+       not inside hk_laboreff_<week>) on purpose: a re-upload replaces the
+       PDF record wholesale (see saveLaborEffForWeek), and a note living
+       inside it would vanish the next time a corrected report comes in —
+       the exact class of bug already fixed once for variance notes. */
+    html+='<div style="padding:0 14px 9px;">';
+    html+='<div style="padding-top:7px;border-top:1px dashed '+(hasNote?'#E0C989':'var(--border)')+';">';
+    html+='<div style="font-size:8px;font-weight:700;color:'+(hasNote?'var(--gd)':'var(--text3)')+';text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;">Explanation</div>';
+    if(noteEditing){
+      var inputId='wleNoteInput_'+weekKey.replace(/[^a-zA-Z0-9]/g,'')+'_'+p.key.replace(/[^a-zA-Z0-9]/g,'');
+      html+='<textarea id="'+inputId+'" placeholder="Note..." style="width:100%;min-height:50px;padding:5px 6px;font-size:10.5px;font-family:inherit;color:var(--text1);border:1px solid var(--border);border-radius:6px;resize:vertical;box-sizing:border-box;">'+escHtml(note)+'</textarea>';
+      html+='<div style="margin-top:4px;display:flex;gap:5px;">';
+      html+='<button onclick="saveWLENoteFromInput(\''+weekKey+'\',\''+p.key+'\',\''+inputId+'\')" style="padding:3px 9px;background:var(--navy);color:#fff;border:none;border-radius:5px;font-size:9px;font-weight:700;cursor:pointer;">Save</button>';
+      if(note)html+='<button onclick="deleteWLENote(\''+weekKey+'\',\''+p.key+'\')" style="padding:3px 9px;background:transparent;color:var(--red);border:1px solid var(--red-border);border-radius:5px;font-size:9px;font-weight:700;cursor:pointer;">Delete</button>';
+      html+='<button onclick="toggleWLENote(\''+weekKey+'\',\''+p.key+'\')" style="padding:3px 9px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:5px;font-size:9px;font-weight:700;cursor:pointer;">Close</button>';
+      html+='</div>';
+    }else if(hasNote){
+      html+='<div onclick="toggleWLENote(\''+weekKey+'\',\''+p.key+'\')" style="font-size:10.5px;color:var(--text2);line-height:1.4;cursor:pointer;">'+escHtml(note)+'</div>';
+    }else{
+      html+='<div onclick="toggleWLENote(\''+weekKey+'\',\''+p.key+'\')" style="font-size:9.5px;color:var(--text3);font-style:italic;cursor:pointer;">+ Note</div>';
+    }
+    html+='</div></div>';
     html+='</div>';
   });
 
@@ -11240,7 +11343,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
        gold background even when collapsed (var(--gt)/var(--gd), the same
        pair the "Adjusted" ribbon already uses) so it still stands out
        while sliding through the week. */
-    html+='<div style="overflow-x:auto;"><div style="display:flex;">';
+    html+='<div style="overflow-x:auto;"><div class="wp-day-strip" style="--day-count:'+activeDayIdx.length+';">';
     activeDayIdx.forEach(function(di,i){
       var v=dailyActual[p.key][di]||0;
       var b=dayBudgetFor(p,di);
@@ -11261,21 +11364,21 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       var borderRight=(i<activeDayIdx.length-1?'border-right:1px solid var(--border);':'');
 
       if(!cardOpen){
-        html+='<div onclick="toggleWPCard(\''+p.key+'\',\''+ds+'\')" style="width:112px;flex-shrink:0;padding:9px 8px;text-align:center;cursor:pointer;'+borderRight+goldBg+'">';
+        html+='<div class="wp-day-card wp-collapsed" onclick="toggleWPCard(\''+p.key+'\',\''+ds+'\')" style="padding:9px 8px;text-align:center;cursor:pointer;'+borderRight+goldBg+'">';
         html+='<div style="font-size:9.5px;font-weight:700;color:'+dayLabelColor+';">'+dayLabelsDow[di]+' '+dayLabelsShort[di]+'</div>';
         html+='<div style="font-size:14.5px;font-weight:800;color:var(--text1);margin-top:2px;">'+(v>0?v.toFixed(2):'—')+'</div>';
         if(hasB){
           html+='<div style="font-size:8.5px;color:var(--text3);">vs '+b.toFixed(2)+'</div>';
-          html+='<div style="margin-top:2px;"><span style="font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'+(vAr>=0?'+':'')+vAr.toFixed(2)+(dPct!==null?' &middot; '+(dPct>=0?'+':'')+dPct+'%':'')+'</span></div>';
+          html+='<div style="margin-top:2px;"><span style="font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:99px;background:'+pillBg+';color:'+pillColor+';">'+(vAr>=0?'+':'')+vAr.toFixed(2)+(dPct!==null?' &middot; '+(dPct>=0?'+':'')+dPct+'%':'')+'</span></div>';
         }else{
           html+='<div style="font-size:8.5px;color:var(--text3);">—</div>';
         }
         if(hasNote)html+='<div style="margin-top:5px;font-size:8px;font-weight:700;color:var(--gd);">&#128221; Note</div>';
         html+='</div>';
       }else{
-        html+='<div style="width:172px;flex-shrink:0;padding:9px 10px;'+borderRight+goldBg+'">';
+        html+='<div class="wp-day-card wp-expanded" style="padding:9px 10px;'+borderRight+goldBg+'">';
         html+='<div onclick="toggleWPCard(\''+p.key+'\',\''+ds+'\')" style="font-size:10px;font-weight:700;color:'+dayLabelColor+';text-align:center;margin-bottom:6px;cursor:pointer;">'+dayLabelsDow[di]+' '+dayLabelsShort[di]+' &#9662;</div>';
-        html+='<table style="width:100%;border-collapse:collapse;font-size:10px;">';
+        html+='<table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:10px;">';
         html+='<tr><td style="color:var(--text3);padding:2px 0;">Actual</td><td style="text-align:right;font-weight:700;color:var(--text1);padding:2px 0;">'+v.toFixed(2)+'</td></tr>';
         if(hasB){
           html+='<tr><td style="color:var(--text3);padding:2px 0;">Standard</td><td style="text-align:right;color:var(--text2);padding:2px 0;">'+b.toFixed(2)+'</td></tr>';
@@ -12822,6 +12925,64 @@ function saveLaborEffForWeek(weekKey,data){
 function syncLaborEffToSheets(weekKey,data){
   supaPut('laboreff_'+weekKey,data);
 }
+
+/* Weekly Labor Effectiveness notes — Carlos's ask, a place to justify a
+   position's weekly variance right in this section, one note per position
+   per WEEK (not per day — this whole section is a weekly total). Stored
+   under its own key, hk_laboreff_notes_<weekKey>, deliberately SEPARATE
+   from the uploaded PDF record (hk_laboreff_<weekKey>): that record is
+   replaced WHOLESALE on every (re-)upload (see saveLaborEffForWeek /
+   the "whole-blob last-write-wins" note on its sync merge below) — a note
+   stored inside it would vanish the moment a corrected report comes in.
+   Same class of bug already fixed once for By Position's variance notes
+   (see the comment above getVarianceNote); this section starts with the
+   separation already in place instead of hitting it later.
+
+   notesUpdatedAt tracks a per-position timestamp (like varianceNotes'
+   per-day one) so the sync merge below can fold in whichever device's
+   edit to a given position is newer, rather than one whole record always
+   winning over another the way the PDF record does. */
+function _loadLaborEffNotes(weekKey){
+  try{
+    var raw=localStorage.getItem('hk_laboreff_notes_'+weekKey);
+    return raw?JSON.parse(raw):{notes:{},notesUpdatedAt:{}};
+  }catch(e){return {notes:{},notesUpdatedAt:{}};}
+}
+function getWeeklyEffNote(weekKey,pos){
+  var data=_loadLaborEffNotes(weekKey);
+  return (data.notes&&data.notes[pos])||'';
+}
+function saveWeeklyEffNote(weekKey,pos,text){
+  var data=_loadLaborEffNotes(weekKey);
+  if(!data.notes)data.notes={};
+  if(!data.notesUpdatedAt)data.notesUpdatedAt={};
+  var t=(text||'').trim();
+  if(t)data.notes[pos]=t;else delete data.notes[pos];
+  data.notesUpdatedAt[pos]=new Date().toISOString();
+  safeSetItem('hk_laboreff_notes_'+weekKey,JSON.stringify(data));
+  syncLaborEffNotesToSheets(weekKey,data);
+}
+function syncLaborEffNotesToSheets(weekKey,data){
+  supaPut('laboreffnotes_'+weekKey,data);
+}
+var wleNoteExpanded={};
+function toggleWLENote(weekKey,pos){
+  wleNoteExpanded[weekKey+'|'+pos]=!wleNoteExpanded[weekKey+'|'+pos];
+  renderLaborDash();
+}
+function saveWLENoteFromInput(weekKey,pos,inputId){
+  var el=document.getElementById(inputId);
+  if(!el)return;
+  saveWeeklyEffNote(weekKey,pos,el.value);
+  wleNoteExpanded[weekKey+'|'+pos]=false;
+  renderLaborDash();
+}
+function deleteWLENote(weekKey,pos){
+  saveWeeklyEffNote(weekKey,pos,'');
+  wleNoteExpanded[weekKey+'|'+pos]=false;
+  renderLaborDash();
+}
+
 function handleLaborEffectivenessUpload(input){
   var file=input.files[0];
   if(!file)return;
