@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.1.6"/>
+<meta name="app-version" content="7.1.7"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4251,6 +4251,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.1.7', date:'2026-08-09',
+    fixes:['Found why "Offline" kept showing up specifically right after the first change of the session (e.g. uploading a Labor Distribution Report), even though the app looked fine right up until then: a write that fails for almost any OTHER reason — a session that went stale while the app sat open, a rejected save, a bad response — was showing the exact same "● Offline" text as a real dropped connection. It now shows "⚠ Sync error" instead, so a genuine connection problem and a save/session problem no longer look identical. Still investigating what\'s actually causing that first save to fail on the work computer — this makes it possible to tell the two apart, not a fix for the underlying failure itself.']
+  },
+  {
     v:'7.1.6', date:'2026-08-09',
     improvements:['Labor Effectiveness\'s Notes column now auto-sizes to fit whatever\'s written in it — Carlos couldn\'t read a longer note (the week ending Aug 7\'s, for one) without manually dragging the box open. It grows as you type and re-sizes itself to fit an already-saved note as soon as the page renders, so the full note is always visible with no manual step.']
   },
@@ -5908,6 +5912,16 @@ function setSyncStatus(s){
     else{el.textContent="✓ Synced";el.style.color="var(--green-border)";}
   }
   else if(s==="offline"){el.textContent="● Offline";el.style.color="rgba(255,255,255,.4)";}
+  /* "error" used to fall through to the same "● Offline" text as a real
+     disconnection — supaPut/_supaPutMany/syncFromSheets all call
+     setSyncStatus("error") for things that have nothing to do with the
+     network being down (an expired session that couldn't renew, a
+     rejected write, a bad response) — Carlos read that as "the app went
+     offline" when the actual cause was a sync/auth failure that a real
+     "Offline" reading gave him no way to tell apart from a genuine
+     dropped connection. Its own distinct label stops that mislabeling in
+     the UI itself, whatever the underlying cause turns out to be. */
+  else if(s==="error"){el.textContent="⚠ Sync error";el.style.color="var(--red-border)";}
   else{el.textContent="● Offline";el.style.color="rgba(255,255,255,.4)";}
 }
 
