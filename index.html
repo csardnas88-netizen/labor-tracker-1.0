@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.1.7"/>
+<meta name="app-version" content="7.1.8"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4250,6 +4250,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.1.8', date:'2026-08-09',
+    features:['Labor Effectiveness now shows the exact gap between Paychex\'s worked hours and Unifocus\'s own worked hours for a position, right under Worked (e.g. "UF 65.00 (+6.52)") whenever that week\'s Unifocus report is uploaded and the two disagree by more than half an hour — so a discrepancy that used to be just a warning triangle can now be read straight off the screen and used to explain an over/under in a report, no second report needed since the weekly PDF already carries Unifocus\'s own figure.']
+  },
   {
     v:'7.1.7', date:'2026-08-09',
     fixes:['Found why "Offline" kept showing up specifically right after the first change of the session (e.g. uploading a Labor Distribution Report), even though the app looked fine right up until then: a write that fails for almost any OTHER reason — a session that went stale while the app sat open, a rejected save, a bad response — was showing the exact same "● Offline" text as a real dropped connection. It now shows "⚠ Sync error" instead, so a genuine connection problem and a save/session problem no longer look identical. Still investigating what\'s actually causing that first save to fail on the work computer — this makes it possible to tell the two apart, not a fix for the underlying failure itself.']
@@ -11270,6 +11274,14 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
       if(Math.abs(actual-repRow.worked)>UF_LABOR_EFF_MISMATCH_TOL)mismatch=true;
       if(Math.abs(budget-repRow.standard)>UF_LABOR_EFF_MISMATCH_TOL)mismatch=true;
     }
+    /* Carlos's ask: Paychex worked hours and Unifocus's own worked hours
+       (from the uploaded report) sometimes disagree, and he needs the
+       exact gap to explain an over/under in a report — a silent ⚠ with
+       no number wasn't enough. Shown only past the same tolerance the ⚠
+       already uses, right under Worked, so it never widens the table
+       (Carlos previously asked to get RID of horizontal scroll here). */
+    var workedDiff=repRow?actual-repRow.worked:null;
+    var showWorkedDiff=workedDiff!==null&&Math.abs(workedDiff)>UF_LABOR_EFF_MISMATCH_TOL;
 
     var note=getWeeklyEffNote(weekKey,p.key);
     var hasNote=!!note;
@@ -11292,7 +11304,8 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
     html+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:8px 14px;align-items:center;font-size:11px;">';
     html+='<div style="font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+p.label
       +(mismatch?' <span title="Doesn\'t match Unifocus\'s own Worked/Standard for this week — check for a missing OCC or Paychex day." style="color:var(--yellow);cursor:help;">&#9888;</span>':'')+'</div>';
-    html+='<div style="text-align:right;color:var(--text1);">'+actual.toFixed(2)+'</div>';
+    html+='<div style="text-align:right;color:var(--text1);">'+actual.toFixed(2)
+      +(showWorkedDiff?'<div style="font-size:9px;font-weight:700;color:var(--yellow);margin-top:1px;">UF '+repRow.worked.toFixed(2)+' ('+(workedDiff>=0?'+':'')+workedDiff.toFixed(2)+')</div>':'')+'</div>';
     html+='<div style="text-align:right;color:var(--text2);">'+(budget!==null?budget.toFixed(2):'&#8212;')+'</div>';
     html+='<div style="text-align:right;font-weight:700;color:'+pillColor+';">'+(variance!==null?(variance>=0?'+':'')+variance.toFixed(2):'&#8212;')+'</div>';
     html+='<div style="text-align:right;font-weight:700;color:'+pillColor+';">'+(pct!==null?(pct>=0?'+':'')+pct+'%':'&#8212;')+'</div>';

@@ -77,6 +77,43 @@ module.exports = {
     tdBlock = html.slice(html.indexOf('>Turndown'), html.indexOf('>Turndown') + 1500);
     t.assert(/&#9888;/.test(tdBlock), "a 9h Standard disagreement (our 90.00h vs the report's 99.00h) is flagged");
     t.assert(/90\.00/.test(tdBlock), "our own computed Standard (90.00h) is still what's shown as Standard — the report's figure informs the flag, it doesn't silently overwrite ours");
+    t.assert(!/UF \d/.test(tdBlock), "the Standard mismatch alone doesn't show a Worked-hours discrepancy line — Worked itself (71.52) still agrees with the report");
+
+    // ── Carlos's ask: when Paychex and Unifocus's OWN Worked hours for
+    // the position genuinely disagree, he needs the exact gap (not just
+    // the ⚠) to explain an over/under in a report. Re-upload with Worked
+    // now off by ~6.5h too. ──
+    win.saveLaborEffForWeek('2026-08-01', {
+      positions: { 'Turndown Attendant': { worked: 65.00, standard: 90.00, scheduled: 126.00, projected: 216.00, hoursVariance: -25.00, variancePct: -28, otHours: 1.50 } },
+      range: { from: '2026-08-01', to: '2026-08-07' },
+      uploadedAt: new Date().toISOString()
+    });
+    html = win.buildLaborEffectivenessHTML(win.loadMonthData('2026-08').days, 200, week);
+    tdBlock = html.slice(html.indexOf('>Turndown'), html.indexOf('>Turndown') + 1500);
+    t.assert(/UF 65\.00 \(\+6\.52\)/.test(tdBlock), "the exact Paychex-vs-Unifocus Worked gap (our 71.52 minus their 65.00 = +6.52) shows right under Worked");
+
+    // ── And the reverse sign renders with its own minus, not a double
+    // negative or an unsigned drop. ──
+    win.saveLaborEffForWeek('2026-08-01', {
+      positions: { 'Turndown Attendant': { worked: 80.00, standard: 90.00, scheduled: 126.00, projected: 216.00, hoursVariance: -10.00, variancePct: -11, otHours: 1.50 } },
+      range: { from: '2026-08-01', to: '2026-08-07' },
+      uploadedAt: new Date().toISOString()
+    });
+    html = win.buildLaborEffectivenessHTML(win.loadMonthData('2026-08').days, 200, week);
+    tdBlock = html.slice(html.indexOf('>Turndown'), html.indexOf('>Turndown') + 1500);
+    t.assert(/UF 80\.00 \(-8\.48\)/.test(tdBlock), "and when Unifocus's own figure is higher than ours, the gap shows with a minus (71.52 - 80.00 = -8.48)");
+
+    // ── A trivial gap under the ⚠ tolerance (0.5h) stays silent — this
+    // line is for a genuine discrepancy worth explaining, not float noise
+    // from rounding. ──
+    win.saveLaborEffForWeek('2026-08-01', {
+      positions: { 'Turndown Attendant': { worked: 71.72, standard: 90.00, scheduled: 126.00, projected: 216.00, hoursVariance: -18.28, variancePct: -20, otHours: 1.50 } },
+      range: { from: '2026-08-01', to: '2026-08-07' },
+      uploadedAt: new Date().toISOString()
+    });
+    html = win.buildLaborEffectivenessHTML(win.loadMonthData('2026-08').days, 200, week);
+    tdBlock = html.slice(html.indexOf('>Turndown'), html.indexOf('>Turndown') + 1500);
+    t.assert(!/UF \d/.test(tdBlock), 'a 0.20h gap (within the same 0.5h tolerance the ⚠ already uses) stays silent — not worth flagging');
 
     // ── The week key comes from the report's OWN date range, not "the
     // current week" — uploading late or early must still land on the
