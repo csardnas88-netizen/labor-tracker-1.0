@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.1.0"/>
+<meta name="app-version" content="7.1.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4251,6 +4251,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.1.1', date:'2026-08-09',
+    fixes:['Fixed the "Offline" indicator and the Team list ("Couldn\'t load.") both flickering on and off far more than they should on the work computer\'s slower, proxied network. A single dropped request used to be treated the same as a real disconnection — now one dropped read (whether it\'s pulling the latest data or checking who\'s online) gets one quiet automatic retry before it shows anything to Carlos, the same way a save that gets rejected for a stale session already retried once. A genuinely offline device still shows Offline exactly as before.']
+  },
+  {
     v:'7.1.0', date:'2026-08-08',
     improvements:['Weekly Labor Pace and Labor Effectiveness no longer force horizontal scrolling on a normal-sized screen — Carlos hit this after filling in a full week and having to scroll left/right just to see all 7 days. Both now stretch to fill the width they actually have instead of insisting on a fixed size per column; a real phone or a narrow window still scrolls, since there genuinely isn\'t room for 7 columns at any readable size there, but a desktop no longer should.'],
     features:['Labor Effectiveness gained an Explanation section on each position, right after Overtime — a place to justify the week\'s variance, the same way Weekly Pace\'s day-cards already let Carlos explain a single day, just at the weekly level this section works at. Stored completely separately from the uploaded PDF record, so a corrected re-upload next week can never wipe out a note written this week.']
@@ -5343,13 +5347,24 @@ function renderPresenceList(rows){
   });
   el.innerHTML=h;
 }
+function _fetchPresenceRows(){
+  return authedFetch(SUPA_URL+'/rest/v1/user_presence?select=email,name,last_seen&order=last_seen.desc')
+    .then(function(r){ if(!r.ok)throw new Error('presence HTTP '+r.status); return r.json(); });
+}
 function loadPresence(){
   var el=document.getElementById('presenceList');
   if(el)el.innerHTML='<div style="color:var(--text3);padding:2px 0;">Loading&hellip;</div>';
-  authedFetch(SUPA_URL+'/rest/v1/user_presence?select=email,name,last_seen&order=last_seen.desc')
-    .then(function(r){ return r.ok?r.json():[]; })
-    .then(function(rows){ renderPresenceList(rows); })
-    .catch(function(){ if(el)el.innerHTML='<div style="color:var(--text3);padding:2px 0;">Couldn\'t load.</div>'; });
+  _fetchPresenceRows().then(function(rows){ renderPresenceList(rows); })
+    .catch(function(){
+      /* One quiet retry before "Couldn't load." — same reasoning as
+         _supaGetAllWithRetry: this menu is opened once and never retried
+         on its own, so a single dropped request on a slow/proxied
+         connection would otherwise stick until the menu is reopened. */
+      setTimeout(function(){
+        _fetchPresenceRows().then(function(rows){ renderPresenceList(rows); })
+          .catch(function(){ if(el)el.innerHTML='<div style="color:var(--text3);padding:2px 0;">Couldn\'t load.</div>'; });
+      },1500);
+    });
 }
 async function _authCheckAndProceed(){
   var tok=_authToken();
@@ -6195,6 +6210,17 @@ function supaGetAll(cb){
   })
   .catch(function(e){ cb(e,{}); });
 }
+/* One quiet retry before a failed pull flips the sidebar to "Offline" —
+   same reasoning as supaPut's 401 retry above: on a slow/proxied
+   connection (the work computer, see the concurrency-cap note near
+   SUPA_PUT_CONCURRENCY) a single request dropping is routine, not a real
+   disconnection. Only the second failure is treated as real. */
+function _supaGetAllWithRetry(cb){
+  supaGetAll(function(err,all){
+    if(!err){cb(null,all);return;}
+    setTimeout(function(){ supaGetAll(cb); },1500);
+  });
+}
 
 /* ── Deletion tombstones ──────────────────────────────────
    Problem: the projects/call-offs merge below unions local+remote by id,
@@ -6512,7 +6538,7 @@ function syncFromSheets(){
   });
 }
 function _syncFromSheetsPull(){
-  supaGetAll(function(err,all){
+  _supaGetAllWithRetry(function(err,all){
     if(err){setSyncStatus("offline");markSyncFailure('Data refresh');return;}
     var updated=false;
     /* Reassemble each month's remote state from its per-day rows (mday_/mroom_)
