@@ -60,6 +60,8 @@ const cases = [
   require('./cases/call-off-filter-by-name'),
   require('./cases/offline-event-debounce'),
   require('./cases/sync-status-error-distinct'),
+  require('./cases/dnd-analysis'),
+  require('./cases/occupancy-pickup'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.1.8"/>
+<meta name="app-version" content="7.2.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1206,6 +1206,9 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   <div class="nav-item" id="nav-occupancy" onclick="showPage('occupancy')">
     <span class="nav-icon">&#127963;</span> Occupancy
   </div>
+  <div class="nav-item" id="nav-dnds" onclick="showPage('dnds')">
+    <span class="nav-icon">&#128683;</span> DNDs
+  </div>
 
   <div class="nav-section-label">Finance</div>
   <div class="nav-item" id="nav-labormodel" onclick="showPage('labormodel')">
@@ -1505,6 +1508,16 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div class="page-sub">Daily rooms sold · OCC verification</div>
       </div>
       <div id="occupancyContent"></div>
+    </div>
+
+    <!-- ══ DNDs ══ -->
+    <div id="page-dnds" style="display:none;">
+      <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
+      <div class="page-header">
+        <div class="page-title">&#128683; DNDs</div>
+        <div class="page-sub">Which days run heaviest on Do Not Disturb</div>
+      </div>
+      <div id="dndsContent"></div>
     </div>
 
     <!-- ══ PROJECTS ══ -->
@@ -4251,6 +4264,13 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.2.0', date:'2026-08-09',
+    features:[
+      'New DNDs section (in the sidebar, right under Occupancy) that answers which days run heaviest on Do Not Disturb, built entirely from the room lists already logged each day on the Occupancy card since v6.90.0 — nothing new to enter. It leads with the plain answer ("heaviest day: Monday, 4.5 on average across 2 logged days"), then a bar chart of the average per weekday, a week-by-week trend, and every logged day in full with its room list. A day only counts if its room list was actually filled in — blanks are read as "nobody logged it", not as a real zero, so a thin week can never quietly drag an average down, and every figure says how many logged days it rests on.',
+      'Occupancy gained a Pickup card: how much each night moved between one OCC upload and the next — Carlos\'s exact example, Monday\'s OCC reporting 100 rooms for a night and Wednesday\'s reporting more. Each OCC upload now keeps the figure it reported for every night instead of only the latest one, so first reading, latest reading and the gap can all be shown, with cancellations in red and pickup in green. Only nights that actually moved are listed. This one necessarily starts from today: nights already in the system have no earlier reading to compare against, so their history begins at the next OCC upload — nothing was back-filled, since an invented "first reading" would look like real evidence and quietly poison the numbers.'
+    ]
+  },
+  {
     v:'7.1.8', date:'2026-08-09',
     features:['Labor Effectiveness now shows the exact gap between Paychex\'s worked hours and Unifocus\'s own worked hours for a position, right under Worked (e.g. "UF 65.00 (+6.52)") whenever that week\'s Unifocus report is uploaded and the two disagree by more than half an hour — so a discrepancy that used to be just a warning triangle can now be read straight off the screen and used to explain an over/under in a report, no second report needed since the weekly PDF already carries Unifocus\'s own figure.']
   },
@@ -5954,6 +5974,7 @@ var KEY_LABELS={
 function _friendlyKeyLabel(key){
   if(KEY_LABELS[key])return KEY_LABELS[key];
   if(key.indexOf('month_')===0)return 'Report for '+key.replace('month_','');
+  if(key.indexOf('occhist_')===0)return 'Occupancy history';
   if(key.indexOf('r106_')===0)return 'OCC';
   if(key.indexOf('laboreffnotes_')===0)return 'Labor Effectiveness notes';
   if(key.indexOf('laboreff_')===0)return 'Labor Effectiveness';
@@ -6096,6 +6117,7 @@ function freeUpStorage(keepMonths){
   Object.keys(localStorage).forEach(function(k){
     var mk=null;
     if(k.indexOf('hk_month_')===0)mk=k.replace('hk_month_','');
+    else if(k.indexOf('hk_occhist_')===0)mk=k.replace('hk_occhist_','');
     else if(k.indexOf('hk_r106_')===0)mk=k.replace('hk_r106_','');
     if(mk&&mk<cutoffKey){ try{localStorage.removeItem(k);removed++;}catch(e){} }
   });
@@ -6514,6 +6536,98 @@ function saveR106Local(mk,data){
   safeSetItem('hk_r106_'+mk,JSON.stringify(data));
 }
 
+/* ══ Occupancy revision history (hk_occhist_<mk>) ══
+   Carlos's ask: "si el lunes al subir el R106 se registraron 100
+   habitaciones, y el miércoles al subir el R106 existió un incremento,
+   registrar ese incremento" — hotel pickup, the rooms that get booked
+   AFTER a night was first read.
+
+   hk_r106_<mk> can't answer this: every upload REPLACES that month's
+   record, so the figure a previous OCC reported for the same night is
+   gone the moment a newer one lands. This is a separate, append-only log
+   — one entry per night per time the reported figure actually CHANGED,
+   never overwritten, never pruned. Nothing reads it for budget math; it
+   exists purely so a night's first read and its latest read can be
+   compared later.
+
+   Necessarily forward-looking: every night already in the system before
+   this shipped has no prior reading to compare against, so its history
+   starts at whatever the next OCC upload reports. Nothing is
+   back-filled — an invented "first reading" would look like real
+   evidence and quietly poison the pickup numbers. */
+function loadOccHist(mk){
+  try{var s=localStorage.getItem('hk_occhist_'+mk);return s?JSON.parse(s):{};}catch(e){return {};}
+}
+function saveOccHist(mk,data){
+  safeSetItem('hk_occhist_'+mk,JSON.stringify(data));
+  supaPut('occhist_'+mk,data);
+}
+/* Append this upload's reading for every night it covers, but only where
+   the net figure genuinely moved — re-uploading the same OCC (which
+   Carlos does when a report gets corrected) must not manufacture a
+   revision that reads as a real pickup of 0.
+
+   Returns only the count of nights that had a PRIOR reading and moved —
+   a night being seen for the very first time is a baseline, not a
+   pickup, and counting it as one would make the first upload after this
+   ships look like a month of movement that never happened. */
+function recordOccRevisions(mk,parsedForMonth){
+  var hist=loadOccHist(mk);
+  var at=new Date().toISOString();
+  var revised=0,wrote=false;
+  Object.keys(parsedForMonth).forEach(function(ds){
+    var rec=parsedForMonth[ds];
+    var net=typeof rec==='object'?(parseInt(rec.net,10)||0):(parseInt(rec,10)||0);
+    if(net<=0)return;
+    var list=hist[ds]||[];
+    var last=list.length?list[list.length-1]:null;
+    if(last&&parseInt(last.net,10)===net)return; /* same figure — not a revision */
+    list.push({
+      net:net,
+      occ:typeof rec==='object'?(parseInt(rec.occ,10)||net):net,
+      comp:typeof rec==='object'?(parseInt(rec.comp,10)||0):0,
+      at:at
+    });
+    hist[ds]=list;
+    wrote=true;
+    if(last)revised++;
+  });
+  if(wrote)saveOccHist(mk,hist);
+  return revised;
+}
+/* Two devices can each upload an OCC before either has synced, so a
+   night's log can genuinely have entries only one side knows about.
+   Union by timestamp+value rather than last-write-wins: dropping either
+   side's entries would silently erase a real reading. */
+function _mergeOccHist(localH,remoteH){
+  var out={};
+  var keys={};
+  Object.keys(localH||{}).forEach(function(k){keys[k]=1;});
+  Object.keys(remoteH||{}).forEach(function(k){keys[k]=1;});
+  Object.keys(keys).forEach(function(ds){
+    var seen={},merged=[];
+    ((localH&&localH[ds])||[]).concat((remoteH&&remoteH[ds])||[]).forEach(function(e){
+      if(!e||e.net===undefined)return;
+      var sig=e.at+'|'+e.net;
+      if(seen[sig])return;
+      seen[sig]=1;
+      merged.push(e);
+    });
+    merged.sort(function(a,b){return String(a.at).localeCompare(String(b.at));});
+    /* A union can interleave two devices' entries into a run of repeats
+       (same figure reported twice from different uploads); collapse those
+       so the log stays what it claims to be — a list of CHANGES. */
+    var deduped=[];
+    merged.forEach(function(e){
+      var prev=deduped.length?deduped[deduped.length-1]:null;
+      if(prev&&parseInt(prev.net,10)===parseInt(e.net,10))return;
+      deduped.push(e);
+    });
+    if(deduped.length)out[ds]=deduped;
+  });
+  return out;
+}
+
 /* Merge every project_<id> row (plus the legacy projects_data blob as a
    fallback source) into local storage, entry-by-entry. Returns true if
    anything changed. */
@@ -6646,6 +6760,19 @@ function _syncFromSheetsPull(){
           Object.keys(_rv).forEach(function(ds){ _foldVNote(mk,ds,_rv[ds],_rvt[ds]!==undefined?_rvt[ds]:_dsFallbackTs(ds)); });
           var _rn=remote.dndRooms||{}, _rnt=remote.dndRoomsUpdatedAt||{};
           Object.keys(_rn).forEach(function(ds){ _foldDND(mk,ds,_rn[ds],_rnt[ds]!==undefined?_rnt[ds]:_dsFallbackTs(ds)); });
+        }
+        if(key.indexOf("occhist_")===0){
+          var mkOH=key.replace("occhist_","");
+          var remoteOH=all[key];
+          if(remoteOH&&typeof remoteOH==='object'){
+            /* Unioned, never last-write-wins — see _mergeOccHist. An
+               append-only log is the one thing a whole-blob overwrite
+               can genuinely destroy: the other device's readings would
+               be gone with nothing to show they ever existed. */
+            var mergedOH=_mergeOccHist(loadOccHist(mkOH),remoteOH);
+            safeSetItem('hk_occhist_'+mkOH,JSON.stringify(mergedOH));
+            updated=true;
+          }
         }
         if(key.indexOf("r106_")===0){
           var mk2=key.replace("r106_","");
@@ -6902,6 +7029,9 @@ function forceSyncToSupabase(){
       if(k.indexOf("hk_month_")===0){
         pairs.push(["month_"+k.replace("hk_month_",""), JSON.parse(localStorage[k])]);
       }
+      else if(k.indexOf("hk_occhist_")===0){
+        pairs.push(["occhist_"+k.replace("hk_occhist_",""), JSON.parse(localStorage[k])]);
+      }
       else if(k.indexOf("hk_r106_")===0){
         pairs.push(["r106_"+k.replace("hk_r106_",""), JSON.parse(localStorage[k])]);
       }
@@ -6941,10 +7071,11 @@ function forceSyncToSupabase(){
 var SNAPSHOT_RETAIN_DAYS=14;
 
 function gatherAllData(){
-  var data={months:{},r106:{},roster_overrides:null,projects:null,calloffs:null,manager_name:null,savedAt:new Date().toISOString()};
+  var data={months:{},r106:{},occhist:{},roster_overrides:null,projects:null,calloffs:null,manager_name:null,savedAt:new Date().toISOString()};
   Object.keys(localStorage).forEach(function(k){
     try{
       if(k.indexOf("hk_month_")===0)data.months[k.replace("hk_month_","")]=JSON.parse(localStorage[k]);
+      else if(k.indexOf("hk_occhist_")===0)data.occhist[k.replace("hk_occhist_","")]=JSON.parse(localStorage[k]);
       else if(k.indexOf("hk_r106_")===0)data.r106[k.replace("hk_r106_","")]=JSON.parse(localStorage[k]);
       else if(k==="hk_roster_overrides")data.roster_overrides=JSON.parse(localStorage[k]);
       else if(k==="projects_data")data.projects=JSON.parse(localStorage[k]);
@@ -7049,6 +7180,12 @@ function restoreSnapshot(key){
       });
       Object.keys(data.r106||{}).forEach(function(mk){
         safeSetItem("hk_r106_"+mk,JSON.stringify(data.r106[mk]));
+      });
+      /* Unioned with whatever this device already has, not overwritten —
+         restoring an older backup must not delete readings recorded
+         since it was taken (see _mergeOccHist). */
+      Object.keys(data.occhist||{}).forEach(function(mk){
+        safeSetItem("hk_occhist_"+mk,JSON.stringify(_mergeOccHist(loadOccHist(mk),data.occhist[mk])));
       });
       if(data.roster_overrides)safeSetItem("hk_roster_overrides",JSON.stringify(data.roster_overrides));
       /* Push each restored project/call-off to its own row too — otherwise the
@@ -7458,6 +7595,241 @@ function saveDNDRoomsForDate(ds,val){
   mData.dndRooms[ds]=(val||'').trim();
   mData.dndRoomsUpdatedAt[ds]=new Date().toISOString();
   saveMonthData(mData,mk);
+}
+
+/* ══ DNDs section ══
+   Carlos's ask: "cuáles son los días con mayor número de DNDs
+   históricamente", off the room lists already logged daily since
+   v6.90.0. Read-only analysis — this section never writes a DND, it
+   only reads what the Occupancy card already captures.
+
+   A day counts as LOGGED only if its room list is non-empty. Blank is
+   deliberately read as "nobody logged it", not "zero DNDs that day":
+   saveDNDRoomsForDate stores '' on Delete and the field starts life
+   blank, so treating blanks as real zeros would quietly drag every
+   average toward zero with days that were never actually observed. Every
+   figure below is therefore explicitly "across N logged days". */
+function getAllDNDDays(){
+  var out=[];
+  Object.keys(localStorage).forEach(function(k){
+    if(k.indexOf('hk_month_')!==0)return;
+    try{
+      var mData=JSON.parse(localStorage.getItem(k));
+      var dnd=(mData&&mData.dndRooms)||{};
+      Object.keys(dnd).forEach(function(ds){
+        var rooms=_parseDNDRoomList(dnd[ds]);
+        if(!rooms.length)return;
+        var d=parseLocalDate(ds);
+        var stay=Math.max(0,(getRoomsForDay(ds)||0)-(getDeparturesForDay(ds)||0));
+        out.push({
+          ds:ds,date:d,dow:d.getDay(),
+          count:rooms.length,rooms:rooms,
+          stayovers:stay,
+          pct:stay>0?(rooms.length/stay)*100:null
+        });
+      });
+    }catch(e){}
+  });
+  out.sort(function(a,b){return a.ds.localeCompare(b.ds);});
+  return out;
+}
+
+/* Averages per weekday. Kept separate from the render so the numbers can
+   be asserted directly in tests without going through the DOM. */
+function getDNDByWeekday(days){
+  var DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var buckets=[];
+  for(var i=0;i<7;i++)buckets.push({dow:i,name:DOW[i],total:0,n:0,avg:0,peak:0});
+  (days||[]).forEach(function(d){
+    var b=buckets[d.dow];
+    b.total+=d.count;b.n++;
+    if(d.count>b.peak)b.peak=d.count;
+  });
+  buckets.forEach(function(b){b.avg=b.n>0?b.total/b.n:0;});
+  return buckets;
+}
+
+/* Weekly totals, on the same hotel week the rest of the app runs on, so
+   a point here lines up with a Weekly Labor Pace week rather than an
+   ISO week that starts on a different day. */
+function getDNDByWeek(days){
+  var weeks={};
+  (days||[]).forEach(function(d){
+    var wkStart=getHotelWeekStart(d.date);
+    var wk=dateStr(wkStart);
+    if(!weeks[wk])weeks[wk]={wk:wk,start:wkStart,total:0,n:0};
+    weeks[wk].total+=d.count;
+    weeks[wk].n++;
+  });
+  return Object.keys(weeks).sort().map(function(k){return weeks[k];});
+}
+
+var dndDowChartObj=null,dndTrendChartObj=null;
+function _destroyDndCharts(){
+  if(dndDowChartObj){try{dndDowChartObj.destroy();}catch(e){}dndDowChartObj=null;}
+  if(dndTrendChartObj){try{dndTrendChartObj.destroy();}catch(e){}dndTrendChartObj=null;}
+}
+
+function renderDnds(){
+  var el=document.getElementById('dndsContent');
+  if(!el)return;
+  _destroyDndCharts();
+
+  var days=getAllDNDDays();
+  if(!days.length){
+    el.innerHTML='<div class="empty-state"><div class="es-icon">&#128683;</div><div class="es-title">No DNDs logged yet</div>'
+      +'<div class="es-desc">This section reads the DND room lists you log each day on the Occupancy card. '
+      +'Log a few days and the weekday pattern will build itself here.</div>'
+      +'<button onclick="showPage(\'labor\')" style="margin-top:12px;padding:8px 16px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Go to Labor</button></div>';
+    return;
+  }
+
+  var byDow=getDNDByWeekday(days);
+  var byWeek=getDNDByWeek(days);
+
+  var totalDnd=0,pctSum=0,pctN=0,peakDay=days[0];
+  days.forEach(function(d){
+    totalDnd+=d.count;
+    if(d.pct!==null){pctSum+=d.pct;pctN++;}
+    if(d.count>peakDay.count)peakDay=d;
+  });
+  var avgPerDay=totalDnd/days.length;
+  var avgPct=pctN>0?pctSum/pctN:null;
+
+  /* The headline answer to Carlos's actual question. Only weekdays with
+     at least one logged day can win it — an unlogged weekday sits at
+     avg 0 and would otherwise be indistinguishable from a genuinely
+     quiet one. */
+  var ranked=byDow.filter(function(b){return b.n>0;}).sort(function(a,b){return b.avg-a.avg;});
+  var worst=ranked[0],best=ranked[ranked.length-1];
+
+  var html='';
+
+  /* ── Headline ── */
+  html+='<div style="background:var(--navy);border-radius:var(--radius);padding:16px 18px;margin-bottom:14px;">';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.5px;font-weight:700;">Heaviest day for DNDs</div>';
+  if(worst&&worst.total>0){
+    html+='<div style="font-size:24px;font-weight:800;color:#fff;margin-top:4px;">'+worst.name+'</div>';
+    html+='<div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:3px;">'
+      +worst.avg.toFixed(1)+' DNDs per '+worst.name+' on average, across '+worst.n+' logged '+(worst.n===1?'day':'days')
+      +(best&&best!==worst?' &middot; lightest is '+best.name+' at '+best.avg.toFixed(1):'')+'</div>';
+  }else{
+    html+='<div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px;">Not enough logged days yet</div>';
+  }
+  html+='</div>';
+
+  /* ── Stat tiles ── */
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;">';
+  function tile(val,label,color){
+    return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;text-align:center;">'
+      +'<div style="font-size:22px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+      +'<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">'+label+'</div></div>';
+  }
+  html+=tile(days.length,'Days logged');
+  html+=tile(totalDnd,'Total DNDs');
+  html+=tile(avgPerDay.toFixed(1),'Avg per day');
+  html+=tile(avgPct!==null?avgPct.toFixed(1)+'%':'&#8212;','Avg % of stayovers','var(--gd)');
+  html+=tile(peakDay.count,'Peak day','var(--red)');
+  html+='</div>';
+
+  /* ── Weekday chart ── */
+  html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+  html+='<div style="background:var(--navy);padding:12px 18px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Average DNDs by day of the week</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">Across every logged day, all months</div>';
+  html+='</div>';
+  html+='<div style="padding:14px;height:220px;"><canvas id="dndDowCanvas"></canvas></div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:0 14px 12px;">';
+  byDow.forEach(function(b){
+    html+='<div style="text-align:center;font-size:8.5px;color:var(--text3);">'+(b.n>0?b.n+(b.n===1?' day':' days'):'&#8212;')+'</div>';
+  });
+  html+='</div></div>';
+
+  /* ── Trend ── */
+  if(byWeek.length>1){
+    html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+    html+='<div style="background:var(--navy);padding:12px 18px;">';
+    html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128200; DNDs per week</div>';
+    html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">Total logged DNDs in each hotel week</div>';
+    html+='</div>';
+    html+='<div style="padding:14px;height:200px;"><canvas id="dndTrendCanvas"></canvas></div></div>';
+  }
+
+  /* ── Every logged day, newest first ── */
+  html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">';
+  html+='<div style="background:var(--navy);padding:12px 18px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128197; Every logged day</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+days.length+' day'+(days.length===1?'':'s')+', newest first</div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 60px 70px 1.4fr;gap:6px;padding:7px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">';
+  html+='<div>Date</div><div style="text-align:right;">DNDs</div><div style="text-align:right;">% stay</div><div>Rooms</div></div>';
+  days.slice().reverse().forEach(function(d){
+    html+='<div style="display:grid;grid-template-columns:1fr 60px 70px 1.4fr;gap:6px;padding:8px 16px;align-items:center;font-size:11px;border-top:1px solid var(--border);">';
+    html+='<div style="font-weight:700;color:var(--text1);">'+_dndShortDate(d.ds)+'</div>';
+    html+='<div style="text-align:right;font-weight:700;color:var(--navy);">'+d.count+'</div>';
+    html+='<div style="text-align:right;color:var(--gd);">'+(d.pct!==null?d.pct.toFixed(1)+'%':'&#8212;')+'</div>';
+    html+='<div style="color:var(--text2);font-size:10px;word-break:break-word;">'+escHtml(d.rooms.join(', '))+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+
+  el.innerHTML=html;
+
+  /* Charts go up AFTER innerHTML — the canvases don't exist until then. */
+  var dowCanvas=document.getElementById('dndDowCanvas');
+  if(dowCanvas&&typeof Chart!=='undefined'){
+    dndDowChartObj=new Chart(dowCanvas,{
+      type:'bar',
+      data:{
+        labels:byDow.map(function(b){return b.name.slice(0,3);}),
+        datasets:[{
+          data:byDow.map(function(b){return +b.avg.toFixed(2);}),
+          backgroundColor:byDow.map(function(b){return (worst&&b.dow===worst.dow&&b.n>0)?'#C9A84C':'#1E2D4A';}),
+          borderRadius:4,borderWidth:0
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
+          var b=byDow[ctx.dataIndex];
+          return b.n>0?(ctx.parsed.y.toFixed(1)+' avg · '+b.total+' total over '+b.n+(b.n===1?' day':' days')):'no logged days';
+        }}}},
+        scales:{
+          x:{grid:{display:false},ticks:{color:'#8C8680',font:{size:10}}},
+          y:{beginAtZero:true,grid:{color:'#E4DDD1'},ticks:{color:'#8C8680',font:{size:10}}}
+        }
+      }
+    });
+  }
+  var trendCanvas=document.getElementById('dndTrendCanvas');
+  if(trendCanvas&&typeof Chart!=='undefined'){
+    dndTrendChartObj=new Chart(trendCanvas,{
+      type:'line',
+      data:{
+        labels:byWeek.map(function(w){return w.start.toLocaleDateString('en-US',{month:'short',day:'numeric'});}),
+        datasets:[{
+          data:byWeek.map(function(w){return w.total;}),
+          borderColor:'#1E2D4A',backgroundColor:'rgba(30,45,74,0.08)',
+          fill:true,tension:.25,pointRadius:3,pointBackgroundColor:'#1E2D4A',borderWidth:2
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
+          var w=byWeek[ctx.dataIndex];
+          return ctx.parsed.y+' DNDs over '+w.n+(w.n===1?' logged day':' logged days');
+        }}}},
+        scales:{
+          x:{grid:{display:false},ticks:{color:'#8C8680',font:{size:9},maxRotation:0,autoSkip:true}},
+          y:{beginAtZero:true,grid:{color:'#E4DDD1'},ticks:{color:'#8C8680',font:{size:10}}}
+        }
+      }
+    });
+  }
+}
+function _dndShortDate(ds){
+  var d=parseLocalDate(ds);
+  return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 }
 /* Turndown's Hotel-Rooms-driven components use SAME-DAY occupancy, unlike
    every other Rooms-driven component in this app (which uses the night
@@ -8988,7 +9360,7 @@ function toggleSidebarSmart(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','labormodel','pnl','staffing','projects','trainhours','training','calloffs','assignments','tutorial','settings'];
+var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','labormodel','pnl','staffing','projects','trainhours','training','calloffs','assignments','tutorial','settings'];
 var _pinGateBypass=false;
 var pendingGatePage=null;
 var PIN_GATED_PAGES=['labormodel','pnl','settings'];
@@ -9017,6 +9389,7 @@ function showPage(page){
   if(page==='roster')renderRoster();
   if(page==='recap')renderRecap();
   if(page==='occupancy')renderOccupancy();
+  if(page==='dnds')renderDnds();
   if(page==='labormodel')renderLaborModel();
   if(page==='pnl'){renderPnl();renderPaychexRecon();}
   if(page==='staffing')renderStaffing();
@@ -13192,6 +13565,68 @@ function saveOccupancyRoom(ds,val){
   renderLaborDash();
 }
 
+/* ══ Occupancy pickup ══
+   Carlos's example, verbatim: Monday's OCC reports 100 rooms for a
+   night; by Wednesday's OCC that same night reads higher. That movement
+   is what this shows — first reading, latest reading, and the gap.
+
+   Reads hk_occhist_<mk> (see recordOccRevisions), which only started
+   filling in from v7.2.0, so a night whose figure never moved since then
+   simply doesn't appear. Deliberately silent rather than showing every
+   night at +0: a list of zeros would bury the handful of nights that
+   actually moved, which are the only ones worth explaining in a report. */
+function buildOccPickupHTML(mk){
+  var hist=loadOccHist(mk);
+  var moved=[];
+  Object.keys(hist).sort().forEach(function(ds){
+    var list=hist[ds]||[];
+    if(list.length<2)return;
+    var first=list[0],last=list[list.length-1];
+    var delta=parseInt(last.net,10)-parseInt(first.net,10);
+    if(delta===0)return;
+    moved.push({ds:ds,first:first,last:last,delta:delta,reads:list.length});
+  });
+
+  if(!moved.length){
+    return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--text1);">&#128200; Pickup</div>'
+      +'<div style="font-size:10.5px;color:var(--text3);margin-top:3px;">No night in this month has changed between OCC uploads yet. '
+      +'Each time you upload an OCC, the figure it reports for every night is kept, and any night that moves since its first reading shows up here.</div></div>';
+  }
+
+  var up=0,down=0,net=0;
+  moved.forEach(function(m){net+=m.delta;if(m.delta>0)up++;else down++;});
+
+  var html='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+  html+='<div style="background:var(--navy);padding:12px 18px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128200; Pickup &mdash; nights that moved between OCC uploads</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'
+    +moved.length+' night'+(moved.length===1?'':'s')+' changed &middot; '
+    +up+' up, '+down+' down &middot; net '+(net>=0?'+':'')+net+' rooms</div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 70px 70px 80px;gap:6px;padding:7px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">';
+  html+='<div>Night</div><div style="text-align:right;">First</div><div style="text-align:right;">Latest</div><div style="text-align:right;">Change</div></div>';
+  moved.forEach(function(m){
+    var col=m.delta>0?'var(--green)':'var(--red)';
+    html+='<div style="display:grid;grid-template-columns:1fr 70px 70px 80px;gap:6px;padding:8px 16px;align-items:center;font-size:11px;border-top:1px solid var(--border);">';
+    html+='<div><div style="font-weight:700;color:var(--text1);">'+_dndShortDate(m.ds)+'</div>'
+      +'<div style="font-size:9px;color:var(--text3);margin-top:1px;">'+m.reads+' readings &middot; last '+_occReadDate(m.last.at)+'</div></div>';
+    html+='<div style="text-align:right;color:var(--text2);">'+m.first.net+'</div>';
+    html+='<div style="text-align:right;font-weight:700;color:var(--text1);">'+m.last.net+'</div>';
+    html+='<div style="text-align:right;font-weight:700;color:'+col+';">'+(m.delta>0?'+':'')+m.delta+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  return html;
+}
+function _occReadDate(iso){
+  try{
+    var d=new Date(iso);
+    if(isNaN(d.getTime()))return '?';
+    return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  }catch(e){return '?';}
+}
+
 function renderOccupancy(){
   var el=document.getElementById('occupancyContent');
   if(!el)return;
@@ -13275,6 +13710,9 @@ function renderOccupancy(){
     +'<div style="font-size:22px;font-weight:800;color:var(--green);">'+lowRooms+'</div>'
     +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-top:2px;">Low Night</div></div>';
   html+='</div>';
+
+  /* Pickup — how much each night moved between OCC uploads */
+  html+=buildOccPickupHTML(monthKey(viewMonth));
 
   /* Daily table */
   html+='<div style="background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;">';
@@ -13436,6 +13874,13 @@ function handleR106Upload(input){
           if(!byMonth[mk])byMonth[mk]={};
           byMonth[mk][ds]=parsed[ds]; /* store full {occ, comp, net} */
         });
+        /* Log the revision BEFORE hk_r106_ is replaced below — once it's
+           overwritten the previous reading for these same nights is gone,
+           and the pickup comparison has nothing left to compare against. */
+        var pickupDays=0;
+        Object.keys(byMonth).forEach(function(mk){
+          try{pickupDays+=recordOccRevisions(mk,byMonth[mk]);}catch(e){}
+        });
         Object.keys(byMonth).forEach(function(mk){
           safeSetItem('hk_r106_'+mk,JSON.stringify(byMonth[mk]));
           syncR106ToSheets(mk,byMonth[mk]);
@@ -13458,7 +13903,7 @@ function handleR106Upload(input){
           autoFilled++;
         });
 
-        showToast('✓ OCC loaded — '+autoFilled+' days auto-filled'+(kept>0?' · '+kept+' protected (manual)':''));
+        showToast('✓ OCC loaded — '+autoFilled+' days auto-filled'+(kept>0?' · '+kept+' protected (manual)':'')+(pickupDays>0?' · '+pickupDays+' night'+(pickupDays===1?'':'s')+' changed since the last OCC':''));
         renderLaborDash();
         if(currentPage==='occupancy')renderOccupancy();
       });
