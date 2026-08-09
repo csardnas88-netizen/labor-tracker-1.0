@@ -58,6 +58,7 @@ const cases = [
   require('./cases/labor-effectiveness-notes'),
   require('./cases/labor-effectiveness-notes-sync'),
   require('./cases/call-off-filter-by-name'),
+  require('./cases/offline-event-debounce'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.1.3"/>
+<meta name="app-version" content="7.1.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4251,6 +4251,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.1.4', date:'2026-08-09',
+    fixes:['Found the other half of the "Offline" flicker on the work computer that v7.1.1 didn\'t catch. v7.1.1 fixed a failed data pull or Team check being believed on the first try; this one is a separate path — the browser itself firing a real "offline" event the instant wifi hops between access points or a VPN reconnects, even when the connection is back a second later. That event used to flip the sidebar to Offline immediately with no delay at all. Now it waits 4 seconds before believing it, and cancels if the connection comes back in that window — a real, sustained outage still shows Offline exactly as before.']
+  },
+  {
     v:'7.1.3', date:'2026-08-09',
     improvements:['Labor Effectiveness\'s notes moved from a block underneath each position\'s row into their own "Notes" column, right next to Overtime — Carlos found the old placement visually disconnected from the row it explained. It\'s now a small always-editable box right in the row: type and click away to save, no more tap-to-open/Save/Close steps.']
   },
@@ -6099,8 +6103,30 @@ window.addEventListener('online',function(){
     retrySyncNow();
   }
 });
-window.addEventListener('offline',function(){ setSyncStatus('offline'); });
-window.addEventListener('online',function(){ try{startRealtime();}catch(e){} });
+/* A momentary interface drop — wifi roaming between access points, a VPN
+   client reconnecting, a corporate proxy hiccup — fires a REAL browser
+   'offline' event even though the connection is back within a second or
+   two. Flipping the sidebar to "Offline" the instant that event fires
+   (the old behavior) means Carlos sees Offline flash on and off all day
+   on the work computer's network for something that was never actually a
+   sustained disconnection — this is a different path from the quiet
+   pull/presence retries added in v7.1.1, which only cover a single failed
+   REST request and never touch this native event at all. Waiting a few
+   seconds before believing it, and cancelling if 'online' fires in that
+   window, keeps a real outage showing Offline exactly as before while
+   absorbing the brief flaps. */
+var _offlineDebounceMs=4000, _offlineDebounceTimer=null;
+window.addEventListener('offline',function(){
+  if(_offlineDebounceTimer)clearTimeout(_offlineDebounceTimer);
+  _offlineDebounceTimer=setTimeout(function(){
+    _offlineDebounceTimer=null;
+    if(!navigator.onLine)setSyncStatus('offline');
+  },_offlineDebounceMs);
+});
+window.addEventListener('online',function(){
+  if(_offlineDebounceTimer){clearTimeout(_offlineDebounceTimer);_offlineDebounceTimer=null;}
+  try{startRealtime();}catch(e){}
+});
 /* The retry backs off (30s, 60s, 2m, 4m, capped at 8m) and never starts a
    new attempt while the previous one is still running.
 
