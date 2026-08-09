@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.1.4"/>
+<meta name="app-version" content="7.1.5"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4250,6 +4250,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.1.5', date:'2026-08-09',
+    fixes:['Fixed the other half of the Call-Offs employee-history bug Carlos found right after v7.1.2: an employee could still split across two dropdown entries if her name was saved in a different word order on different records ("Gady Gonzalez" on some, "Gonzalez Gady" on others) — same person, but the filter treated them as two different people. Identity is now resolved by matching name regardless of word order (in addition to the id-vs-no-id fold from v7.1.2), and the two signals chain together, so filtering by an employee always shows every one of her call-offs.']
+  },
   {
     v:'7.1.4', date:'2026-08-09',
     fixes:['Found the other half of the "Offline" flicker on the work computer that v7.1.1 didn\'t catch. v7.1.1 fixed a failed data pull or Team check being believed on the first try; this one is a separate path — the browser itself firing a real "offline" event the instant wifi hops between access points or a VPN reconnects, even when the connection is back a second later. That event used to flip the sidebar to Offline immediately with no delay at all. Now it waits 4 seconds before believing it, and cancels if the connection comes back in that window — a real, sustained outage still shows Offline exactly as before.']
@@ -15952,28 +15956,45 @@ function updateCallOffsBadge(){
   else{badge.style.display='none';}
 }
 
-/* Resolve each call-off's employee identity by name, not id+name — the
-   Paychex id wasn't always captured on older records (before the
-   type-to-search picker at v6.66.0 guaranteed a real one every time), so
-   the same person could split into two "employees" here: an id-less
-   legacy entry and a newer id-carrying one with the exact same name.
-   Filtering by whichever one happened to be picked then hid that
-   person's older history — the bug Carlos hit ("only shows the current
-   month"). Folding every record by normalized name keeps one person as
-   one filter option no matter when each call-off was logged. Mutates
-   list in place (list is a fresh array from loadCallOffs() each call, so
-   nothing persists to storage); accent-insensitive, same normalization
-   the New Call-Off search box already uses (coEmpRenderList's strip()). */
-function _coNormName(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();}
+/* Resolve each call-off's employee identity — not a straight
+   empId+name compare, because the same real person can show up across
+   records under more than one of: a blank empId (a legacy record from
+   before the type-to-search picker at v6.66.0 guaranteed a real Paychex
+   id every time), or a differently-spelled/ordered name — the second
+   bug Carlos found: "Gady Gonzalez" on some records, "Gonzalez Gady" on
+   others, same person. _coMatchName() normalizes that away (accents,
+   case, commas, AND word order, so "Gady Gonzalez" and "Gonzalez Gady"
+   produce the identical match string) without touching what's actually
+   displayed (byEmp keeps each record's raw empName).
+
+   Any ONE shared signal — the same non-empty id, OR the same matched
+   name — is enough to call two records the same person, and those links
+   chain together (union-find) so a record connected only indirectly
+   (through a third record bridging two different name spellings) still
+   lands in the same group; whichever real Paychex id appears anywhere in
+   the group becomes its key, so filtering doesn't depend on which
+   spelling happened to carry the id. Mutates list in place — list is a
+   fresh array from loadCallOffs() each call, so nothing persists to
+   storage. */
+function _coNormName(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/,/g,' ').replace(/\s+/g,' ').trim().toLowerCase();}
+function _coMatchName(s){var n=_coNormName(s);return n?n.split(' ').sort().join(' '):'';}
 function _coKeyEmployees(list){
-  var nameToId={};
-  list.forEach(function(c){
-    var nm=_coNormName(c.empName);
-    if(c.empId&&nm&&!nameToId[nm])nameToId[nm]=c.empId;
+  var parent=list.map(function(_,i){return i;});
+  function find(i){while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;}
+  function union(i,j){var ri=find(i),rj=find(j);if(ri!==rj)parent[ri]=rj;}
+
+  var byId={},byMatchName={};
+  list.forEach(function(c,i){
+    var id=c.empId||'',mn=_coMatchName(c.empName);
+    if(id){if(byId[id]!==undefined)union(i,byId[id]);else byId[id]=i;}
+    if(mn){if(byMatchName[mn]!==undefined)union(i,byMatchName[mn]);else byMatchName[mn]=i;}
   });
-  list.forEach(function(c){
-    var nm=_coNormName(c.empName);
-    c._coKey=(c.empId||nameToId[nm]||'')+'|'+nm;
+
+  var groupId={};
+  list.forEach(function(c,i){var r=find(i);if(c.empId&&!groupId[r])groupId[r]=c.empId;});
+  list.forEach(function(c,i){
+    var r=find(i);
+    c._coKey=groupId[r]?groupId[r]:('name:'+_coMatchName(c.empName));
   });
 }
 function renderCallOffs(){
