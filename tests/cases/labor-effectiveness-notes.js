@@ -54,6 +54,19 @@ module.exports = {
     t.assert(/<textarea[^>]*placeholder="\+ Note"/.test(tdBlock), 'the Notes column textarea is right there in the row, inviting a note');
     t.assert(!/Explanation/.test(tdBlock), 'no separate "Explanation" block underneath the row anymore — the column replaced it');
 
+    // ── v7.1.6: the textarea auto-grows to fit a long note instead of
+    // needing to be dragged open — Carlos's follow-up complaint about the
+    // fixed ~2-line box hiding most of a longer note. Wired via oninput
+    // (live growth while typing) and the wleNoteTextarea class (so
+    // _wleAutoGrowAll can re-apply sizing right after a render, without
+    // requiring the reader to touch the box first). No more manual
+    // resize handle — that was the whole "arrastrar" step Carlos wanted
+    // gone. ──
+    t.assert(/class="wleNoteTextarea"/.test(tdBlock), 'the textarea carries the class _wleAutoGrowAll targets after every render');
+    t.assert(/oninput="_wleAutoGrow\(this\)"/.test(tdBlock), 'typing grows the box live, not just after a save round-trip');
+    t.assert(/resize:none/.test(tdBlock), 'no manual drag handle — sizing is automatic now');
+    t.assert(typeof win._wleAutoGrow === 'function' && typeof win._wleAutoGrowAll === 'function', '_wleAutoGrow/_wleAutoGrowAll are exposed for the render pass to call');
+
     // ── Round trip: save via the underlying store, reads back on render,
     // pre-filled into the same inline textarea. ──
     t.eq(win.getWeeklyEffNote('2026-08-01', 'Turndown Attendant'), '', 'no note stored yet reads back empty');

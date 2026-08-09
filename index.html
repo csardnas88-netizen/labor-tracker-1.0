@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.1.5"/>
+<meta name="app-version" content="7.1.6"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4250,6 +4250,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.1.6', date:'2026-08-09',
+    improvements:['Labor Effectiveness\'s Notes column now auto-sizes to fit whatever\'s written in it — Carlos couldn\'t read a longer note (the week ending Aug 7\'s, for one) without manually dragging the box open. It grows as you type and re-sizes itself to fit an already-saved note as soon as the page renders, so the full note is always visible with no manual step.']
+  },
   {
     v:'7.1.5', date:'2026-08-09',
     fixes:['Fixed the other half of the Call-Offs employee-history bug Carlos found right after v7.1.2: an employee could still split across two dropdown entries if her name was saved in a different word order on different records ("Gady Gonzalez" on some, "Gonzalez Gady" on others) — same person, but the filter treated them as two different people. Identity is now resolved by matching name regardless of word order (in addition to the id-vs-no-id fold from v7.1.2), and the two signals chain together, so filtering by an employee always shows every one of her call-offs.']
@@ -11279,7 +11283,7 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
     html+='<div style="text-align:right;font-weight:700;color:'+pillColor+';">'+(variance!==null?(variance>=0?'+':'')+variance.toFixed(2):'&#8212;')+'</div>';
     html+='<div style="text-align:right;font-weight:700;color:'+pillColor+';">'+(pct!==null?(pct>=0?'+':'')+pct+'%':'&#8212;')+'</div>';
     html+='<div style="text-align:right;color:'+(ot>0?'var(--yellow)':'var(--text3)')+';">'+(ot>0?ot.toFixed(2):'&#8212;')+'</div>';
-    html+='<div><textarea placeholder="+ Note" onblur="saveWLENoteInline(\''+weekKey+'\',\''+p.key+'\',this.value)" style="width:100%;min-height:32px;max-height:64px;padding:3px 5px;font-size:9px;font-family:inherit;line-height:1.3;color:var(--text1);border:1px solid '+(hasNote?'#E0C989':'var(--border)')+';border-radius:5px;resize:vertical;box-sizing:border-box;background:'+(hasNote?'rgba(255,255,255,.7)':'#fff')+';">'+escHtml(note)+'</textarea></div>';
+    html+='<div><textarea class="wleNoteTextarea" placeholder="+ Note" oninput="_wleAutoGrow(this)" onblur="saveWLENoteInline(\''+weekKey+'\',\''+p.key+'\',this.value)" style="width:100%;min-height:32px;max-height:200px;padding:3px 5px;font-size:9px;font-family:inherit;line-height:1.3;color:var(--text1);border:1px solid '+(hasNote?'#E0C989':'var(--border)')+';border-radius:5px;resize:none;overflow-y:auto;box-sizing:border-box;background:'+(hasNote?'rgba(255,255,255,.7)':'#fff')+';">'+escHtml(note)+'</textarea></div>';
     if(hasUpload){
       html+='<div style="text-align:right;color:var(--gd);">'+(repRow?repRow.scheduled.toFixed(2):'&#8212;')+'</div>';
       html+='<div style="text-align:right;color:var(--gd);">'+(repRow?repRow.projected.toFixed(2):'&#8212;')+'</div>';
@@ -11909,6 +11913,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
   }
 
   el.innerHTML=html;
+  try{_wleAutoGrowAll(el);}catch(e){}
 }
 
 /* ═══════════════════════════════════════════
@@ -13022,6 +13027,24 @@ function syncLaborEffNotesToSheets(weekKey,data){
 function saveWLENoteInline(weekKey,pos,text){
   saveWeeklyEffNote(weekKey,pos,text);
   renderLaborDash();
+}
+
+/* The Notes column auto-grows to fit whatever's typed, instead of the
+   fixed ~2-line box Carlos had to manually drag open to read a longer
+   note. oninput grows it live while typing; _wleAutoGrowAll re-applies
+   the same sizing right after a render replaces the DOM (initial page
+   load, and every save via saveWLENoteInline's renderLaborDash() above),
+   so an already-saved note shows fully sized without the reader having to
+   touch it. Resetting height to 'auto' first is required — scrollHeight
+   only reports the content's real height when the element isn't already
+   holding it artificially tall. CSS max-height (200px) plus overflow-y
+   still caps a truly excessive note rather than growing the row forever. */
+function _wleAutoGrow(el){
+  el.style.height='auto';
+  el.style.height=el.scrollHeight+'px';
+}
+function _wleAutoGrowAll(root){
+  (root||document).querySelectorAll('.wleNoteTextarea').forEach(function(el){_wleAutoGrow(el);});
 }
 
 function handleLaborEffectivenessUpload(input){
