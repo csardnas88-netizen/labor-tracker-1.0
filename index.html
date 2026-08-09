@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.1.1"/>
+<meta name="app-version" content="7.1.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4250,6 +4250,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.1.2', date:'2026-08-09',
+    fixes:['Fixed Call-Offs\' "Filter by employee" only showing that employee\'s call-offs for the current month, hiding older history — Carlos\'s report. Some employees had a call-off logged back before the search box always captured their Paychex ID, so that older record and a newer one for the exact same person were being treated as two different "employees" in the filter — picking the one that only had the current record made it look like history was missing. Filtering (and the PDF export, which shares the same fix) now recognizes an employee by name across all their records regardless of when each one was logged, so selecting someone always shows their complete history.']
+  },
   {
     v:'7.1.1', date:'2026-08-09',
     fixes:['Fixed the "Offline" indicator and the Team list ("Couldn\'t load.") both flickering on and off far more than they should on the work computer\'s slower, proxied network. A single dropped request used to be treated the same as a real disconnection — now one dropped read (whether it\'s pulling the latest data or checking who\'s online) gets one quiet automatic retry before it shows anything to Carlos, the same way a save that gets rejected for a stale session already retried once. A genuinely offline device still shows Offline exactly as before.']
@@ -15941,10 +15945,35 @@ function updateCallOffsBadge(){
   else{badge.style.display='none';}
 }
 
+/* Resolve each call-off's employee identity by name, not id+name — the
+   Paychex id wasn't always captured on older records (before the
+   type-to-search picker at v6.66.0 guaranteed a real one every time), so
+   the same person could split into two "employees" here: an id-less
+   legacy entry and a newer id-carrying one with the exact same name.
+   Filtering by whichever one happened to be picked then hid that
+   person's older history — the bug Carlos hit ("only shows the current
+   month"). Folding every record by normalized name keeps one person as
+   one filter option no matter when each call-off was logged. Mutates
+   list in place (list is a fresh array from loadCallOffs() each call, so
+   nothing persists to storage); accent-insensitive, same normalization
+   the New Call-Off search box already uses (coEmpRenderList's strip()). */
+function _coNormName(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();}
+function _coKeyEmployees(list){
+  var nameToId={};
+  list.forEach(function(c){
+    var nm=_coNormName(c.empName);
+    if(c.empId&&nm&&!nameToId[nm])nameToId[nm]=c.empId;
+  });
+  list.forEach(function(c){
+    var nm=_coNormName(c.empName);
+    c._coKey=(c.empId||nameToId[nm]||'')+'|'+nm;
+  });
+}
 function renderCallOffs(){
   var el=document.getElementById('calloffsContent');
   if(!el)return;
   var list=loadCallOffs();
+  _coKeyEmployees(list);
   updateCallOffsBadge();
 
   var html='';
@@ -15965,7 +15994,7 @@ function renderCallOffs(){
   /* Build employee map (all-time, for filter dropdown + Top Offenders) */
   var byEmp={};
   list.forEach(function(c){
-    var key=(c.empId||'')+'|'+c.empName;
+    var key=c._coKey;
     if(!byEmp[key])byEmp[key]={empName:c.empName,pos:c.pos,count:0};
     byEmp[key].count++;
   });
@@ -15985,7 +16014,7 @@ function renderCallOffs(){
   html+='</div></div>';
 
   /* Apply filter */
-  var filtered=COF_FILTER==='all'?list:list.filter(function(c){return((c.empId||'')+'|'+c.empName)===COF_FILTER;});
+  var filtered=COF_FILTER==='all'?list:list.filter(function(c){return c._coKey===COF_FILTER;});
 
   /* Day-of-week pattern breakdown */
   var dowCounts=[0,0,0,0,0,0,0];
@@ -16087,7 +16116,8 @@ function setCallOffFilter(val){
 /* ── Export Call-Offs PDF (respects current filter) ── */
 function exportCallOffsPDF(){
   var list=loadCallOffs();
-  var filtered=COF_FILTER==='all'?list:list.filter(function(c){return((c.empId||'')+'|'+c.empName)===COF_FILTER;});
+  _coKeyEmployees(list);
+  var filtered=COF_FILTER==='all'?list:list.filter(function(c){return c._coKey===COF_FILTER;});
   if(filtered.length===0){showToast('No call-offs to export for this selection.');return;}
 
   var sorted=filtered.slice().sort(function(a,b){return a.date<b.date?-1:(a.date>b.date?1:0);});

@@ -57,6 +57,7 @@ const cases = [
   require('./cases/labor-effectiveness-sync'),
   require('./cases/labor-effectiveness-notes'),
   require('./cases/labor-effectiveness-notes-sync'),
+  require('./cases/call-off-filter-by-name'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
