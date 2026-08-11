@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.2.1"/>
+<meta name="app-version" content="7.2.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4264,6 +4264,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.2.2', date:'2026-08-11',
+    features:['The Occupancy forecast card is now three numbers per day, not one. Carlos explained that the single "forecast" number from v7.2.1 was really a midpoint HE was choosing between two other numbers: Unifocus/Zelle hands over a forecast every Friday that consistently runs well above what Opera\'s own reservations show at the time, so the team deliberately picks a number in between for the schedule. The card now shows all three, stacked per day — a light "UF" box for Unifocus\'s Friday number, the gold "Sched" box for the number that actually went into the schedule (unchanged from v7.2.1, just relabeled for what it always was), and the actual rooms with the gap underneath. The week summary adds Unifocus\'s own total alongside Scheduled and Actual. Editing one of the two boxes on a day never touches the other, so Unifocus (often entered Friday) and Scheduled (entered the prior Wednesday) can be filled in on different days without clobbering each other — and every week already filled in under v7.2.1 keeps reading correctly with no migration step.']
+  },
+  {
     v:'7.2.1', date:'2026-08-11',
     features:['Occupancy gained a "Forecast vs actual" card: the occupancy each week\'s schedule was built on, next to what the hotel actually ran, day by day. Carlos writes the schedule every Wednesday off a forecast, and this is the gap that explains an over or under in the labor meeting — "we staffed for 100, the night came in at 130". One block per hotel week (Saturday to Friday); type the seven numbers into the gold boxes and the actual and the gap fill themselves in underneath as the OCC reports land. Every column says which night it covers ("Sat 15 · night Fri 14"), so the forecast and the actual on a column are always the same night — the same way the Daily Occupancy table below it already works. A day left blank counts as "not forecast" rather than zero, so an unfilled day never shows up as a huge miss, and the week total only counts days that have both numbers.']
   },
@@ -6637,26 +6641,43 @@ function _mergeOccHist(localH,remoteH){
 }
 
 /* ══ Occupancy forecast (hk_occfc_<hotelWeekStart>) ══
-   Carlos's ask: every Wednesday he builds the next week's schedule off a
-   forecast occupancy, and needs the day-by-day gap between that forecast
-   and what the hotel actually ran — the number that explains an over or
-   under in the labor meeting ("we staffed for 100, the night came in at
-   130").
+   Carlos's ask, refined in two rounds. Round 1 (v7.2.1) captured a single
+   number per day — the occupancy he built that Wednesday's schedule
+   around. Round 2 (v7.2.2) split that into the two DIFFERENT numbers it
+   was actually standing in for, once he explained why: Unifocus/Zelle
+   hands them a forecast every Friday that consistently runs well above
+   what Opera's own reservations show at the time, so the team picks a
+   deliberate midpoint for the schedule rather than trusting either
+   number outright. Carlos needs to see all three side by side — Unifocus
+   (the input that runs hot), Scheduled (the midpoint they committed to),
+   and Actual (what the hotel really ran) — not just the last of the
+   three against reality.
+
+   'sched' is exactly what v7.2.1 called "forecast" — the number the
+   schedule was built on, per Carlos's own words: "los números que
+   estamos agregando manualmente son los números que decidimos nosotros
+   elegir para el horario". 'uf' is new: Unifocus's own Friday number,
+   the same units (rooms), same day-by-day grid, just a second line.
 
    Distinct from the pickup log next door, which compares one OCC report
-   against a LATER OCC report. This compares the figure the SCHEDULE was
-   built on against reality; a night can be flat between OCC uploads and
-   still be far off the forecast the roster was sized for.
+   against a LATER OCC report. This compares the figures the SCHEDULE was
+   weighed against, against reality; a night can be flat between OCC
+   uploads and still be far off both.
 
    Keyed by hotel week (the Saturday, matching getHotelWeekStart) since
    that's the unit the schedule is written in. Inside, days are keyed by
    WORK DAY — the same indexing the Daily Occupancy table on this page
    uses, where a row for date D shows the rooms occupied the night
    BEFORE (getRoomsForDay's prevDs offset: you clean this morning what
-   was occupied last night). Storing by work day means the forecast and
-   the actual on the same row always refer to the same night, with no
-   offset to get wrong. Both dates are spelled out in the UI so there is
-   nothing to infer. */
+   was occupied last night). Storing by work day means every row's three
+   numbers always refer to the same night, with no offset to get wrong.
+
+   Each day's value used to be a bare number (v7.2.1, meaning 'sched') and
+   is now {sched, uf} — real weeks Carlos already filled in before this
+   shipped are still live in Supabase in the old bare-number shape, so
+   every reader normalizes through _occfcNormDay rather than assuming the
+   new shape. There is no migration step; old and new coexist forever,
+   which is simpler and just as correct. */
 function occForecastWeekKey(d){ return dateStr(getHotelWeekStart(d)); }
 function loadOccForecast(weekKey){
   try{var s=localStorage.getItem('hk_occfc_'+weekKey);return s?JSON.parse(s):null;}catch(e){return null;}
@@ -6667,31 +6688,47 @@ function saveOccForecast(weekKey,days){
   supaPut('occfc_'+weekKey,rec);
   return rec;
 }
-/* One day's forecast, resolved through its own hotel week. Returns null
-   (not 0) when nothing was forecast — a week Carlos never filled in must
-   read as "no forecast", never as "forecast zero rooms", or every
-   untouched day would show up as a catastrophic miss. */
-function getOccForecastForDay(ds){
+/* Normalizes one day's stored value, old bare-number shape or new
+   {sched,uf} shape, into {sched:number|null, uf:number|null}. */
+function _occfcNormDay(raw){
+  if(typeof raw==='number')return {sched:raw,uf:null};
+  if(raw&&typeof raw==='object')return {
+    sched:(typeof raw.sched==='number'?raw.sched:null),
+    uf:(typeof raw.uf==='number'?raw.uf:null)
+  };
+  return {sched:null,uf:null};
+}
+/* One day's Scheduled figure, resolved through its own hotel week.
+   Returns null (not 0) when nothing was entered — a week Carlos never
+   filled in must read as "no forecast", never as "forecast zero rooms",
+   or every untouched day would show up as a catastrophic miss. Kept
+   defaulting to 'sched' (not 'uf') since that's what this function meant
+   before the two were split out, and it's the figure that actually
+   drove the schedule. */
+function getOccForecastForDay(ds,field){
   var rec=loadOccForecast(occForecastWeekKey(parseLocalDate(ds)));
   if(!rec||!rec.days)return null;
-  var v=rec.days[ds];
-  if(v===undefined||v===null||v==='')return null;
-  v=parseInt(v,10);
-  return isNaN(v)?null:v;
+  return _occfcNormDay(rec.days[ds])[field||'sched'];
 }
-/* Called from the inputs: writes one day into its week's record without
-   disturbing the other six. An empty box clears that day back to "not
-   forecast" rather than storing a 0. */
-function saveOccForecastDay(weekKey,ds,raw){
+/* Called from the inputs: writes one FIELD ('sched' or 'uf') of one day
+   into its week's record without disturbing the other field or the other
+   six days. An empty box clears that field back to "not entered" rather
+   than storing a 0; the day itself is only dropped once BOTH fields are
+   empty, so clearing Unifocus for a day that still has a Scheduled
+   number doesn't silently lose the Scheduled one. */
+function saveOccForecastDay(weekKey,ds,field,raw){
   var rec=loadOccForecast(weekKey)||{days:{}};
   var days=rec.days||{};
+  var cur=_occfcNormDay(days[ds]);
   var t=String(raw==null?'':raw).trim();
-  if(t===''){ delete days[ds]; }
+  if(t===''){ cur[field]=null; }
   else{
     var n=parseInt(t,10);
     if(isNaN(n)||n<0)return; /* ignore junk rather than storing NaN */
-    days[ds]=n;
+    cur[field]=n;
   }
+  if(cur.sched===null&&cur.uf===null){ delete days[ds]; }
+  else{ days[ds]=cur; }
   saveOccForecast(weekKey,days);
   try{ _occfcRefreshWeek(weekKey); }catch(e){}
 }
@@ -13681,47 +13718,49 @@ var _OCCFC_MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
 function _occfcShortD(d){ return _OCCFC_DN[d.getDay()]+' '+d.getDate(); }
 function _occfcShortMD(d){ return _OCCFC_MN[d.getMonth()]+' '+d.getDate(); }
 
-/* One week's forecast-vs-actual figures. Shared by the initial render and
-   by the in-place refresh after an edit, so the two can never compute the
-   week differently. */
+/* One week's Unifocus/Scheduled/Actual figures. Shared by the initial
+   render and by the in-place refresh after an edit, so the two can never
+   compute the week differently. */
 function _occfcWeekData(weekStart){
   var weekKey=dateStr(weekStart);
   var rec=loadOccForecast(weekKey);
-  var fcTotal=0,acTotal=0,bothDays=0,anyFc=false,cells=[];
+  var ufTotal=0,schedTotal=0,acTotal=0,bothDays=0,anyFc=false,cells=[];
   for(var i=0;i<7;i++){
     var d=new Date(weekStart);d.setDate(weekStart.getDate()+i);
     var ds=dateStr(d);
-    var raw=(rec&&rec.days)?rec.days[ds]:undefined;
-    var fc=null;
-    if(raw!==undefined&&raw!==null&&raw!==''){
-      var p=parseInt(raw,10);
-      if(!isNaN(p)){fc=p;anyFc=true;}
-    }
+    var v=_occfcNormDay((rec&&rec.days)?rec.days[ds]:undefined);
+    if(v.sched!==null||v.uf!==null)anyFc=true;
     var ac=getRoomsForDay(ds)||0;
-    if(fc!==null)fcTotal+=fc;
-    /* Only days with BOTH a forecast and a real actual go into the week
-       total. Adding an actual that has no forecast (or the reverse) would
-       read as a huge miss that is really just a gap in the data. */
-    if(fc!==null&&ac>0){acTotal+=ac;bothDays++;}
-    cells.push({ds:ds,d:d,night:parseLocalDate(prevDateStr(ds)),fc:fc,ac:ac,
-                diff:(fc!==null&&ac>0)?(ac-fc):null});
+    if(v.uf!==null)ufTotal+=v.uf;
+    if(v.sched!==null)schedTotal+=v.sched;
+    /* Only days with BOTH a Scheduled figure and a real actual go into
+       the week total. Adding an actual that has no Scheduled figure (or
+       the reverse) would read as a huge miss that is really just a gap
+       in the data. */
+    if(v.sched!==null&&ac>0){acTotal+=ac;bothDays++;}
+    cells.push({ds:ds,d:d,night:parseLocalDate(prevDateStr(ds)),uf:v.uf,sched:v.sched,ac:ac,
+                diff:(v.sched!==null&&ac>0)?(ac-v.sched):null});
   }
   return {weekKey:weekKey,start:new Date(weekStart),
           end:(function(){var e=new Date(weekStart);e.setDate(weekStart.getDate()+6);return e;})(),
-          cells:cells,fcTotal:fcTotal,acTotal:acTotal,bothDays:bothDays,anyFc:anyFc,
-          netVar:bothDays>0?acTotal-fcTotal:null};
+          cells:cells,ufTotal:ufTotal,schedTotal:schedTotal,acTotal:acTotal,
+          bothDays:bothDays,anyFc:anyFc,
+          netVar:bothDays>0?acTotal-schedTotal:null};
 }
 
 function _occfcSummaryHTML(wd){
+  var parts=[];
+  if(wd.ufTotal>0)parts.push('Unifocus <b style="color:var(--text1);">'+wd.ufTotal+'</b>');
+  if(wd.schedTotal>0)parts.push('Scheduled <b style="color:var(--text1);">'+wd.schedTotal+'</b>');
   if(wd.netVar!==null){
     var vc=wd.netVar>0?'var(--red)':wd.netVar<0?'var(--green)':'var(--text2)';
-    return 'Forecast <b style="color:var(--text1);">'+wd.fcTotal+'</b>'
-      +' &middot; Actual <b style="color:var(--text1);">'+wd.acTotal+'</b>'
-      +' &middot; <b style="color:'+vc+';">'+(wd.netVar>0?'+':'')+wd.netVar+'</b>'
-      +' <span style="color:var(--text3);">over '+wd.bothDays+' day'+(wd.bothDays===1?'':'s')+'</span>';
+    parts.push('Actual <b style="color:var(--text1);">'+wd.acTotal+'</b>');
+    parts.push('<b style="color:'+vc+';">'+(wd.netVar>0?'+':'')+wd.netVar+'</b>'
+      +' <span style="color:var(--text3);">over '+wd.bothDays+' day'+(wd.bothDays===1?'':'s')+'</span>');
+  }else if(wd.anyFc){
+    parts.push('waiting on actuals');
   }
-  if(wd.anyFc)return 'Forecast <b style="color:var(--text1);">'+wd.fcTotal+'</b> &middot; waiting on actuals';
-  return 'No forecast entered yet';
+  return parts.length?parts.join(' &middot; '):'Nothing entered yet';
 }
 function _occfcDiffHTML(c){
   var dc=c.diff===null?'var(--text3)':c.diff>0?'var(--red)':c.diff<0?'var(--green)':'var(--text2)';
@@ -13733,8 +13772,8 @@ function buildOccForecastHTML(yr,mo){
 
   var html='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
   html+='<div style="background:var(--navy);padding:12px 18px;">';
-  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Forecast vs actual</div>';
-  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">The occupancy each week\'s schedule was built on, against what the hotel actually ran</div>';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Unifocus vs Scheduled vs Actual</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">Unifocus\'s Friday forecast, the number the schedule was actually built on, and what the hotel ran</div>';
   html+='</div>';
 
   weeks.forEach(function(w){
@@ -13750,9 +13789,14 @@ function buildOccForecastHTML(yr,mo){
       html+='<div style="text-align:center;min-width:0;">';
       html+='<div style="font-size:9.5px;font-weight:700;color:var(--text1);">'+_occfcShortD(c.d)+'</div>';
       html+='<div style="font-size:8px;color:var(--text3);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">night '+_occfcShortD(c.night)+'</div>';
-      html+='<input type="number" min="0" inputmode="numeric" id="occfcIn_'+c.ds+'" value="'+(c.fc!==null?c.fc:'')+'" placeholder="&mdash;"'
-        +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',this.value)"'
-        +' style="width:100%;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.fc!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.fc!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+      html+='<div style="font-size:7.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">UF</div>';
+      html+='<input type="number" min="0" inputmode="numeric" id="occfcUf_'+c.ds+'" value="'+(c.uf!==null?c.uf:'')+'" placeholder="&mdash;"'
+        +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'uf\',this.value)"'
+        +' style="width:100%;padding:3px 2px;font-size:10px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
+      html+='<div style="font-size:7.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-top:3px;">Sched</div>';
+      html+='<input type="number" min="0" inputmode="numeric" id="occfcSched_'+c.ds+'" value="'+(c.sched!==null?c.sched:'')+'" placeholder="&mdash;"'
+        +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'sched\',this.value)"'
+        +' style="width:100%;padding:3px 2px;font-size:10px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
       html+='<div style="font-size:10px;color:var(--text2);margin-top:3px;">'+(c.ac>0?c.ac:'&mdash;')+'</div>';
       html+='<div id="occfcDiff_'+c.ds+'" style="font-size:9.5px;font-weight:700;">'+_occfcDiffHTML(c)+'</div>';
       html+='</div>';
@@ -13761,7 +13805,9 @@ function buildOccForecastHTML(yr,mo){
   });
 
   html+='<div style="padding:8px 16px 10px;border-top:1px solid var(--border);font-size:9.5px;color:var(--text3);">'
-    +'Gold box = forecast &middot; below it, the actual rooms and the gap. '
+    +'<b style="color:var(--text1);">UF</b> = Unifocus\'s Friday forecast &middot; '
+    +'<b style="color:var(--text1);">gold Sched</b> = the number the schedule was built on &middot; '
+    +'below that, the actual rooms and the gap (Scheduled vs Actual). '
     +'A positive gap means the hotel ran heavier than the schedule was built for.</div>';
   html+='</div>';
   return html;
@@ -13770,8 +13816,8 @@ function buildOccForecastHTML(yr,mo){
 /* Update just this week's numbers after an edit. Deliberately NOT a
    re-render of the whole Occupancy page: that would tear down the very
    input the manager is tabbing out of and drop focus mid-week, which is
-   exactly the flow this card exists for (seven numbers, one after
-   another, every Wednesday). */
+   exactly the flow this card exists for (up to fourteen numbers, one
+   after another, entered across two different days of the week). */
 function _occfcRefreshWeek(weekKey){
   var wd=_occfcWeekData(parseLocalDate(weekKey));
   var sum=document.getElementById('occfcSum_'+weekKey);
@@ -13779,10 +13825,15 @@ function _occfcRefreshWeek(weekKey){
   wd.cells.forEach(function(c){
     var dEl=document.getElementById('occfcDiff_'+c.ds);
     if(dEl)dEl.innerHTML=_occfcDiffHTML(c);
-    var inEl=document.getElementById('occfcIn_'+c.ds);
-    if(inEl){
-      inEl.style.borderColor=(c.fc!==null?'#C9A84C':'var(--border)');
-      inEl.style.background=(c.fc!==null?'var(--gt)':'#fff');
+    var ufEl=document.getElementById('occfcUf_'+c.ds);
+    if(ufEl){
+      ufEl.style.borderColor=(c.uf!==null?'#8FA3C7':'var(--border)');
+      ufEl.style.background=(c.uf!==null?'rgba(30,45,74,.07)':'#fff');
+    }
+    var schedEl=document.getElementById('occfcSched_'+c.ds);
+    if(schedEl){
+      schedEl.style.borderColor=(c.sched!==null?'#C9A84C':'var(--border)');
+      schedEl.style.background=(c.sched!==null?'var(--gt)':'#fff');
     }
   });
 }
