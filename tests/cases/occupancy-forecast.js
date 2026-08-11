@@ -1,4 +1,4 @@
-/* Occupancy forecast: Unifocus vs Scheduled vs Actual.
+/* Occupancy forecast: Forecast vs Scheduled vs Opera.
 
    v7.2.1 shipped a single number per day — Carlos called it "forecast",
    but when asked he explained it was really the number his team CHOSE
@@ -160,7 +160,7 @@ module.exports = {
 
     // ── The rendered card. ──
     const html = win.buildOccForecastHTML(2026, 7);
-    t.assert(/Unifocus vs Scheduled vs Actual/.test(html), 'the card renders on the Occupancy page under its new three-number title');
+    t.assert(/Forecast vs Scheduled vs Opera/.test(html), 'the card renders on the Occupancy page under its three-number title, Carlos\'s own terms (Forecast/Sched/Opera)');
     t.assert(/night Sun 16/.test(html), 'each column spells out the night it covers');
     t.assert(/occfcSched_2026-08-17/.test(html), 'each day has its own addressable Scheduled input, for the in-place refresh');
     t.assert(/occfcUf_2026-08-17/.test(html), 'and its own addressable Unifocus input, independent of the Scheduled one');
