@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.2.2"/>
+<meta name="app-version" content="7.2.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4263,6 +4263,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.2.3', date:'2026-08-11',
+    features:['The occupancy Forecast/Sched/Opera table now spells out full words instead of abbreviations, and lays each week out as a row per day (like the Daily Occupancy table below it) instead of seven narrow columns across — there simply wasn\'t room for "Forecast" next to its box in the old layout. Each week that has anything entered also gets a small line chart underneath — Forecast, Sched, and Opera as three separate colored lines across the week (light blue, gold, and navy, matching the table\'s own colors), so a week\'s whole story — Unifocus running hot, the schedule splitting the difference, reality landing somewhere else — reads in one glance instead of column by column. A week with nothing entered gets no chart, not three flat lines at zero.']
+  },
   {
     v:'7.2.2', date:'2026-08-11',
     features:['The Occupancy forecast card is now three numbers per day, not one. Carlos explained that the single "forecast" number from v7.2.1 was really a midpoint HE was choosing between two other numbers: Unifocus/Zelle hands over a forecast every Friday that consistently runs well above what Opera\'s own reservations show at the time, so the team deliberately picks a number in between for the schedule. The card now shows all three, stacked per day — a light "UF" box for Unifocus\'s Friday number, the gold "Sched" box for the number that actually went into the schedule (unchanged from v7.2.1, just relabeled for what it always was), and the actual rooms with the gap underneath. The week summary adds Unifocus\'s own total alongside Scheduled and Actual. Editing one of the two boxes on a day never touches the other, so Unifocus (often entered Friday) and Scheduled (entered the prior Wednesday) can be filled in on different days without clobbering each other — and every week already filled in under v7.2.1 keeps reading correctly with no migration step.']
@@ -13713,6 +13717,13 @@ function saveOccupancyRoom(ds,val){
    so a forecast and an actual on the same column always describe the
    same night, and the labels say so outright instead of leaving it to
    be inferred. */
+/* Same three colors as the table's own input-box tints (Forecast's light
+   steel border, Sched's gold), so the chart below reads as the same data
+   rather than a second, differently-coded thing. Opera gets navy — the
+   darkest, most solid line, since it's the one number here that's ever
+   actually happened rather than a plan. */
+var OCCFC_COLORS={uf:'#8FA3C7',sched:'#C9A84C',opera:'#1E2D4A'};
+var _occfcChartObjs={};
 var _OCCFC_DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var _OCCFC_MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function _occfcShortD(d){ return _OCCFC_DN[d.getDay()]+' '+d.getDate(); }
@@ -13810,6 +13821,19 @@ function buildOccForecastHTML(yr,mo){
       html+='<div id="occfcDiff_'+c.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(c)+'</div>';
       html+='</div>';
     });
+
+    /* Only when there's actually something to plot — a genuinely
+       untouched week ("Nothing entered yet" above) would just draw three
+       flat lines at zero, which reads as real data rather than absence
+       of it. */
+    if(wd.anyFc){
+      html+='<div style="padding:10px 16px 6px;height:170px;"><canvas id="occfcChart_'+wd.weekKey+'"></canvas></div>';
+      html+='<div style="display:flex;gap:14px;padding:0 16px 10px;font-size:9px;color:var(--text3);">'
+        +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.uf+';margin-right:4px;"></span>Forecast</span>'
+        +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.sched+';margin-right:4px;"></span>Sched</span>'
+        +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.opera+';margin-right:4px;"></span>Opera</span>'
+        +'</div>';
+    }
     html+='</div>';
   });
 
@@ -13820,6 +13844,55 @@ function buildOccForecastHTML(yr,mo){
     +'A positive gap means the hotel ran heavier than the schedule was built for.</div>';
   html+='</div>';
   return html;
+}
+
+/* One week's canvas. Destroys and recreates rather than .update()-ing —
+   cheap at this scale (7 points × 3 lines) and matches how every other
+   chart in this app already handles a data change (see renderOtTrendChart).
+   Silently does nothing if the canvas isn't in the DOM (a week with
+   nothing entered never gets one — see buildOccForecastHTML) or Chart.js
+   isn't loaded. */
+function _occfcRenderOneChart(wd){
+  if(_occfcChartObjs[wd.weekKey]){
+    try{_occfcChartObjs[wd.weekKey].destroy();}catch(e){}
+    delete _occfcChartObjs[wd.weekKey];
+  }
+  if(typeof Chart==='undefined'||!wd.anyFc)return;
+  var canvas=document.getElementById('occfcChart_'+wd.weekKey);
+  if(!canvas)return;
+  _occfcChartObjs[wd.weekKey]=new Chart(canvas,{
+    type:'line',
+    data:{
+      labels:wd.cells.map(function(c){return _occfcShortD(c.d);}),
+      datasets:[
+        {label:'Forecast',data:wd.cells.map(function(c){return c.uf;}),
+         borderColor:OCCFC_COLORS.uf,backgroundColor:OCCFC_COLORS.uf,
+         tension:.25,pointRadius:3,borderWidth:2,spanGaps:true},
+        {label:'Sched',data:wd.cells.map(function(c){return c.sched;}),
+         borderColor:OCCFC_COLORS.sched,backgroundColor:OCCFC_COLORS.sched,
+         tension:.25,pointRadius:3,borderWidth:2,spanGaps:true},
+        {label:'Opera',data:wd.cells.map(function(c){return c.ac>0?c.ac:null;}),
+         borderColor:OCCFC_COLORS.opera,backgroundColor:OCCFC_COLORS.opera,
+         tension:.25,pointRadius:3,borderWidth:2,spanGaps:true}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#8C8680',font:{size:9}}},
+        y:{beginAtZero:true,grid:{color:'#E4DDD1'},ticks:{color:'#8C8680',font:{size:10}}}
+      }
+    }
+  });
+}
+/* Every week's chart for the month currently on screen. Called once right
+   after buildOccForecastHTML's HTML lands in the DOM — canvases can't be
+   drawn on until then. */
+function _occfcRenderCharts(yr,mo){
+  getHotelWeeksForMonth(yr,mo).forEach(function(w){
+    _occfcRenderOneChart(_occfcWeekData(w.start));
+  });
 }
 
 /* Update just this week's numbers after an edit. Deliberately NOT a
@@ -13845,6 +13918,12 @@ function _occfcRefreshWeek(weekKey){
       schedEl.style.background=(c.sched!==null?'var(--gt)':'#fff');
     }
   });
+  /* The chart itself only exists in the DOM if the week already had
+     something entered at the last full render — a week's very first
+     number won't grow a chart until the page is next re-rendered
+     (changing month and back, or reopening the page). Everything else
+     above (the numbers themselves) is unaffected by that. */
+  _occfcRenderOneChart(wd);
 }
 
 /* ══ Occupancy pickup ══
@@ -14080,6 +14159,7 @@ function renderOccupancy(){
 
   html+='</div>';
   el.innerHTML=html;
+  try{_occfcRenderCharts(yr,mo);}catch(e){}
 }
 
 /* ── Occupancy Fix Modal ── */

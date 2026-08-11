@@ -167,6 +167,27 @@ module.exports = {
     t.assert(/occfcSum_2026-08-15/.test(html), 'and each week has an addressable summary');
     t.assert(/Nothing entered yet/.test(html), 'a genuinely untouched week says so instead of showing zeros');
 
+    // ── The chart: one canvas per week that actually has something to
+    // plot. A genuinely untouched week gets none — three flat lines at
+    // zero would read as real data instead of absence of it. ──
+    t.assert(/occfcChart_2026-08-15/.test(html), 'a week with entries gets its own chart canvas');
+    t.assert(!new RegExp('occfcChart_' + empty.weekKey).test(html), "the untouched week (" + empty.weekKey + ") gets no canvas at all");
+
+    // _occfcRenderCharts draws onto canvases already in the DOM (it doesn't
+    // insert HTML itself — renderOccupancy does that before calling it), so
+    // the rendered markup has to actually be in the document first.
+    win.document.getElementById('occupancyContent').innerHTML = html;
+    win._occfcRenderCharts(2026, 7);
+    t.assert(win._occfcChartObjs['2026-08-15'], 'the chart instance is tracked, so an edit or the next render can destroy and replace it');
+    t.assert(!win._occfcChartObjs[empty.weekKey], 'and no chart object exists for a week with nothing to plot');
+
+    // Editing a value re-renders just that week's chart in place, same as
+    // the numbers — not the instance a stale one left behind.
+    const oldChartObj = win._occfcChartObjs['2026-08-15'];
+    win.saveOccForecastDay('2026-08-15', '2026-08-15', 'sched', '161');
+    t.assert(win._occfcChartObjs['2026-08-15'] !== oldChartObj, 'saving a value replaces that week\'s chart instance rather than leaving the old one live');
+    win.saveOccForecastDay('2026-08-15', '2026-08-15', 'sched', '125'); /* restore for the sync check below */
+
     // ── Sync: a newer remote plan replaces the local one wholesale; an
     // older one is ignored. A week's plan is one act of planning, so
     // mixing days from two different plans would produce a week that was
