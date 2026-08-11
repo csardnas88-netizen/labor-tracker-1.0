@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.2.3"/>
+<meta name="app-version" content="7.2.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4263,6 +4263,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.2.4', date:'2026-08-11',
+    improvements:['The occupancy Forecast/Sched/Opera card now shows one week at a time instead of every week touching the month — it used to mean scrolling past four or five mostly-empty weeks to reach the one being worked on. It opens on the week we\'re currently in, with arrows to walk back and forward one week at a time, and a "Back to this week" button whenever you\'ve wandered off. The arrows move by exactly seven days regardless of month, so a week that straddles the end of a month (Aug 29 into September) shows whole rather than split in two.']
+  },
   {
     v:'7.2.3', date:'2026-08-11',
     features:['The occupancy Forecast/Sched/Opera table now spells out full words instead of abbreviations, and lays each week out as a row per day (like the Daily Occupancy table below it) instead of seven narrow columns across — there simply wasn\'t room for "Forecast" next to its box in the old layout. Each week that has anything entered also gets a small line chart underneath — Forecast, Sched, and Opera as three separate colored lines across the week (light blue, gold, and navy, matching the table\'s own colors), so a week\'s whole story — Unifocus running hot, the schedule splitting the difference, reality landing somewhere else — reads in one glance instead of column by column. A week with nothing entered gets no chart, not three flat lines at zero.']
@@ -13724,6 +13728,39 @@ function saveOccupancyRoom(ds,val){
    actually happened rather than a plan. */
 var OCCFC_COLORS={uf:'#8FA3C7',sched:'#C9A84C',opera:'#1E2D4A'};
 var _occfcChartObjs={};
+
+/* ── Which week the card is showing ──
+   Carlos's ask: one week at a time, defaulting to the week we're in,
+   with arrows to walk back and forward. It used to render every hotel
+   week touching the month at once, which meant scrolling past four or
+   five mostly-empty weeks to reach the one being worked on.
+
+   Deliberately INDEPENDENT of viewMonth (the Prev/Next controls at the
+   top of the Occupancy page). Weeks straddle month boundaries — the week
+   of Aug 29 runs into September — so a card that could only show weeks
+   "inside" the current month could never display those cleanly. The
+   arrows here move by exactly seven days, without regard for which month
+   that lands in, and "This week" jumps straight back to today's.
+
+   null means "not chosen yet"; resolved lazily so a device left open
+   overnight still opens on the right week the next morning rather than
+   on whatever week it was when the page first loaded. */
+var occfcViewWeekStart=null;
+function _occfcWeekStart(){
+  if(!occfcViewWeekStart)occfcViewWeekStart=getHotelWeekStart(new Date());
+  return occfcViewWeekStart;
+}
+function changeOccfcWeek(delta){
+  var d=new Date(_occfcWeekStart());
+  d.setDate(d.getDate()+delta*7);
+  occfcViewWeekStart=d;
+  renderOccupancy();
+}
+function occfcGoToThisWeek(){
+  occfcViewWeekStart=getHotelWeekStart(new Date());
+  renderOccupancy();
+}
+
 var _OCCFC_DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var _OCCFC_MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function _occfcShortD(d){ return _OCCFC_DN[d.getDay()]+' '+d.getDate(); }
@@ -13778,13 +13815,38 @@ function _occfcDiffHTML(c){
   return '<span style="color:'+dc+';">'+(c.diff!==null?((c.diff>0?'+':'')+c.diff):'&nbsp;')+'</span>';
 }
 
-function buildOccForecastHTML(yr,mo){
-  var weeks=getHotelWeeksForMonth(yr,mo);
+/* One week only, the one occfcViewWeekStart points at. */
+function buildOccForecastHTML(){
+  var wd=_occfcWeekData(_occfcWeekStart());
+  var thisWeekKey=dateStr(getHotelWeekStart(new Date()));
+  var isThisWeek=(wd.weekKey===thisWeekKey);
+  var yr=wd.start.getFullYear();
 
   var html='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
   html+='<div style="background:var(--navy);padding:12px 18px;">';
   html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Forecast vs Scheduled vs Opera</div>';
   html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">Unifocus\'s Friday forecast, the number the schedule was actually built on, and what Opera shows the hotel ran</div>';
+  html+='</div>';
+
+  /* Week picker. Its own arrows, independent of the month controls at the
+     top of the page — see the note on occfcViewWeekStart. The year is
+     spelled out because these arrows can walk into a different one, and
+     "Aug 15 – Aug 21" alone would give no hint of that. */
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--surface);border-bottom:1px solid var(--border);">';
+  html+='<button onclick="changeOccfcWeek(-1)" aria-label="Previous week" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;background:#fff;font-size:12px;font-weight:700;color:var(--text1);cursor:pointer;flex-shrink:0;">&larr;</button>';
+  html+='<div style="text-align:center;min-width:0;">';
+  html+='<div style="font-size:12px;font-weight:700;color:var(--text1);">'+_occfcShortMD(wd.start)+' &ndash; '+_occfcShortMD(wd.end)+'<span style="color:var(--text3);font-weight:400;"> &middot; '+yr+'</span></div>';
+  if(isThisWeek){
+    html+='<div style="font-size:9px;font-weight:700;color:var(--gd);text-transform:uppercase;letter-spacing:.4px;margin-top:1px;">This week</div>';
+  }else{
+    html+='<button onclick="occfcGoToThisWeek()" style="margin-top:2px;padding:1px 8px;border:1px solid var(--border);border-radius:99px;background:#fff;font-size:9px;font-weight:700;color:var(--text2);cursor:pointer;">Back to this week</button>';
+  }
+  html+='</div>';
+  html+='<button onclick="changeOccfcWeek(1)" aria-label="Next week" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;background:#fff;font-size:12px;font-weight:700;color:var(--text1);cursor:pointer;flex-shrink:0;">&rarr;</button>';
+  html+='</div>';
+
+  html+='<div style="padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);">';
+  html+='<div id="occfcSum_'+wd.weekKey+'" style="font-size:10px;color:var(--text3);">'+_occfcSummaryHTML(wd)+'</div>';
   html+='</div>';
 
   /* Full words ("Forecast", "Sched", "Opera"), Carlos's explicit ask —
@@ -13795,47 +13857,36 @@ function buildOccForecastHTML(yr,mo){
      "Sched" next to its box, let alone "Forecast". */
   var occfcCols='1fr 62px 58px 46px 46px';
 
-  weeks.forEach(function(w){
-    var wd=_occfcWeekData(w.start);
-    html+='<div style="border-top:1px solid var(--border);">';
-    html+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;padding:9px 16px;background:var(--surface);">';
-    html+='<div style="font-size:11px;font-weight:700;color:var(--text1);">'+_occfcShortMD(wd.start)+' &ndash; '+_occfcShortMD(wd.end)+'</div>';
-    html+='<div id="occfcSum_'+wd.weekKey+'" style="font-size:10px;color:var(--text3);">'+_occfcSummaryHTML(wd)+'</div>';
-    html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:'+occfcCols+';gap:4px;padding:6px 16px;border-bottom:1px solid var(--border);font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">';
+  html+='<div></div><div style="text-align:center;">Forecast</div><div style="text-align:center;">Sched</div><div style="text-align:center;">Opera</div><div style="text-align:center;">Diff</div>';
+  html+='</div>';
 
-    html+='<div style="display:grid;grid-template-columns:'+occfcCols+';gap:4px;padding:6px 16px;border-bottom:1px solid var(--border);font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">';
-    html+='<div></div><div style="text-align:center;">Forecast</div><div style="text-align:center;">Sched</div><div style="text-align:center;">Opera</div><div style="text-align:center;">Diff</div>';
-    html+='</div>';
-
-    wd.cells.forEach(function(c){
-      html+='<div style="display:grid;grid-template-columns:'+occfcCols+';gap:4px;padding:7px 16px;align-items:center;font-size:11px;border-top:1px solid var(--border);">';
-      html+='<div><div style="font-weight:700;color:var(--text1);">'+_occfcShortD(c.d)+'</div>'
-        +'<div style="font-size:9px;color:var(--text3);margin-top:1px;">night '+_occfcShortD(c.night)+'</div></div>';
-      html+='<input type="number" min="0" inputmode="numeric" id="occfcUf_'+c.ds+'" value="'+(c.uf!==null?c.uf:'')+'" placeholder="&mdash;"'
-        +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'uf\',this.value)"'
-        +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
-      html+='<input type="number" min="0" inputmode="numeric" id="occfcSched_'+c.ds+'" value="'+(c.sched!==null?c.sched:'')+'" placeholder="&mdash;"'
-        +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'sched\',this.value)"'
-        +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
-      html+='<div style="text-align:center;color:var(--text2);">'+(c.ac>0?c.ac:'&mdash;')+'</div>';
-      html+='<div id="occfcDiff_'+c.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(c)+'</div>';
-      html+='</div>';
-    });
-
-    /* Only when there's actually something to plot — a genuinely
-       untouched week ("Nothing entered yet" above) would just draw three
-       flat lines at zero, which reads as real data rather than absence
-       of it. */
-    if(wd.anyFc){
-      html+='<div style="padding:10px 16px 6px;height:170px;"><canvas id="occfcChart_'+wd.weekKey+'"></canvas></div>';
-      html+='<div style="display:flex;gap:14px;padding:0 16px 10px;font-size:9px;color:var(--text3);">'
-        +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.uf+';margin-right:4px;"></span>Forecast</span>'
-        +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.sched+';margin-right:4px;"></span>Sched</span>'
-        +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.opera+';margin-right:4px;"></span>Opera</span>'
-        +'</div>';
-    }
+  wd.cells.forEach(function(c){
+    html+='<div style="display:grid;grid-template-columns:'+occfcCols+';gap:4px;padding:7px 16px;align-items:center;font-size:11px;border-top:1px solid var(--border);">';
+    html+='<div><div style="font-weight:700;color:var(--text1);">'+_occfcShortD(c.d)+'</div>'
+      +'<div style="font-size:9px;color:var(--text3);margin-top:1px;">night '+_occfcShortD(c.night)+'</div></div>';
+    html+='<input type="number" min="0" inputmode="numeric" id="occfcUf_'+c.ds+'" value="'+(c.uf!==null?c.uf:'')+'" placeholder="&mdash;"'
+      +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'uf\',this.value)"'
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
+    html+='<input type="number" min="0" inputmode="numeric" id="occfcSched_'+c.ds+'" value="'+(c.sched!==null?c.sched:'')+'" placeholder="&mdash;"'
+      +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'sched\',this.value)"'
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+    html+='<div style="text-align:center;color:var(--text2);">'+(c.ac>0?c.ac:'&mdash;')+'</div>';
+    html+='<div id="occfcDiff_'+c.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(c)+'</div>';
     html+='</div>';
   });
+
+  /* Only when there's actually something to plot — a genuinely untouched
+     week ("Nothing entered yet" above) would just draw three flat lines
+     at zero, which reads as real data rather than absence of it. */
+  if(wd.anyFc){
+    html+='<div style="padding:10px 16px 6px;height:170px;"><canvas id="occfcChart_'+wd.weekKey+'"></canvas></div>';
+    html+='<div style="display:flex;gap:14px;padding:0 16px 10px;font-size:9px;color:var(--text3);">'
+      +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.uf+';margin-right:4px;"></span>Forecast</span>'
+      +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.sched+';margin-right:4px;"></span>Sched</span>'
+      +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.opera+';margin-right:4px;"></span>Opera</span>'
+      +'</div>';
+  }
 
   html+='<div style="padding:8px 16px 10px;border-top:1px solid var(--border);font-size:9.5px;color:var(--text3);">'
     +'<b style="color:var(--text1);">Sched</b> (gold) is the number that actually built the schedule &middot; '
@@ -13886,13 +13937,19 @@ function _occfcRenderOneChart(wd){
     }
   });
 }
-/* Every week's chart for the month currently on screen. Called once right
-   after buildOccForecastHTML's HTML lands in the DOM — canvases can't be
-   drawn on until then. */
-function _occfcRenderCharts(yr,mo){
-  getHotelWeeksForMonth(yr,mo).forEach(function(w){
-    _occfcRenderOneChart(_occfcWeekData(w.start));
+/* The visible week's chart. Called once right after
+   buildOccForecastHTML's HTML lands in the DOM — canvases can't be drawn
+   on until then. Also drops any chart instance left over from a week
+   that's no longer on screen, so walking through weeks doesn't leak a
+   Chart object per week visited. */
+function _occfcRenderCharts(){
+  var wd=_occfcWeekData(_occfcWeekStart());
+  Object.keys(_occfcChartObjs).forEach(function(k){
+    if(k===wd.weekKey)return;
+    try{_occfcChartObjs[k].destroy();}catch(e){}
+    delete _occfcChartObjs[k];
   });
+  _occfcRenderOneChart(wd);
 }
 
 /* Update just this week's numbers after an edit. Deliberately NOT a
@@ -14073,7 +14130,7 @@ function renderOccupancy(){
   html+='</div>';
 
   /* Forecast the schedule was built on, vs what actually ran */
-  html+=buildOccForecastHTML(yr,mo);
+  html+=buildOccForecastHTML();
 
   /* Pickup — how much each night moved between OCC uploads */
   html+=buildOccPickupHTML(monthKey(viewMonth));
@@ -14159,7 +14216,7 @@ function renderOccupancy(){
 
   html+='</div>';
   el.innerHTML=html;
-  try{_occfcRenderCharts(yr,mo);}catch(e){}
+  try{_occfcRenderCharts();}catch(e){}
 }
 
 /* ── Occupancy Fix Modal ── */

@@ -52,7 +52,7 @@ function seedRooms() {
 }
 
 module.exports = {
-  name: "Occupancy forecast: Unifocus and Scheduled are independent per-day fields, a bare-number legacy week still reads correctly, and neither field is ever entered as a false zero",
+  name: "Occupancy forecast: one week at a time defaulting to the current one, Forecast and Sched independent per day, a bare-number legacy week still reads correctly, and neither field is ever entered as a false zero",
   async run(t) {
     const seed = Object.assign(fakeSession(), seedRooms());
     const { win } = await loadApp({ seed });
@@ -158,28 +158,68 @@ module.exports = {
     t.eq(empty.netVar, null, 'an untouched week has no variance');
     t.eq(empty.anyFc, false, 'and knows nothing was entered, so the card can say so plainly');
 
-    // ── The rendered card. ──
-    const html = win.buildOccForecastHTML(2026, 7);
+    // ── ONE WEEK AT A TIME (Carlos's ask), the one occfcViewWeekStart
+    // points at — not every week touching the month. Walking to another
+    // week must genuinely swap what's rendered, or the arrows are
+    // decorative. ──
+    win.occfcViewWeekStart = new Date(2026, 7, 15);
+    const html = win.buildOccForecastHTML();
     t.assert(/Forecast vs Scheduled vs Opera/.test(html), 'the card renders on the Occupancy page under its three-number title, Carlos\'s own terms (Forecast/Sched/Opera)');
     t.assert(/night Sun 16/.test(html), 'each column spells out the night it covers');
     t.assert(/occfcSched_2026-08-17/.test(html), 'each day has its own addressable Scheduled input, for the in-place refresh');
     t.assert(/occfcUf_2026-08-17/.test(html), 'and its own addressable Unifocus input, independent of the Scheduled one');
-    t.assert(/occfcSum_2026-08-15/.test(html), 'and each week has an addressable summary');
-    t.assert(/Nothing entered yet/.test(html), 'a genuinely untouched week says so instead of showing zeros');
+    t.assert(/occfcSum_2026-08-15/.test(html), 'the week has an addressable summary');
+    t.assert(!/occfcSum_2026-08-22/.test(html), 'and the NEXT week is not rendered at all — one week at a time, not the whole month');
+    t.assert(!/Nothing entered yet/.test(html), 'the week on screen has entries, so it does not claim to be empty');
 
-    // ── The chart: one canvas per week that actually has something to
-    // plot. A genuinely untouched week gets none — three flat lines at
-    // zero would read as real data instead of absence of it. ──
-    t.assert(/occfcChart_2026-08-15/.test(html), 'a week with entries gets its own chart canvas');
-    t.assert(!new RegExp('occfcChart_' + empty.weekKey).test(html), "the untouched week (" + empty.weekKey + ") gets no canvas at all");
+    // Default with nothing chosen is the week we're actually in — the
+    // whole point of the default, and the one thing a stale value would
+    // silently break.
+    win.occfcViewWeekStart = null;
+    const todayWeekKey = win.dateStr(win.getHotelWeekStart(new Date()));
+    t.assert(new RegExp('occfcSum_' + todayWeekKey).test(win.buildOccForecastHTML()),
+      'with nothing chosen the card opens on the current hotel week');
+    t.assert(/This week/.test(win.buildOccForecastHTML()), 'and says so, rather than leaving the reader to check the dates');
+
+    // Arrows move by exactly one hotel week, across month boundaries.
+    win.occfcViewWeekStart = new Date(2026, 7, 15);
+    win.changeOccfcWeek(1);
+    t.eq(win.dateStr(win.occfcViewWeekStart), '2026-08-22', 'the forward arrow moves exactly one hotel week');
+    win.changeOccfcWeek(-2);
+    t.eq(win.dateStr(win.occfcViewWeekStart), '2026-08-08', 'and the back arrow walks backwards the same way');
+    win.occfcGoToThisWeek();
+    t.eq(win.dateStr(win.occfcViewWeekStart), todayWeekKey, '"Back to this week" returns to the current hotel week');
+
+    // A week with nothing entered says so plainly instead of showing zeros.
+    win.occfcViewWeekStart = new Date(2026, 7, 29);
+    const emptyHtml = win.buildOccForecastHTML();
+    t.assert(/Nothing entered yet/.test(emptyHtml), 'a genuinely untouched week says so instead of showing zeros');
+    t.assert(/Back to this week/.test(emptyHtml), 'and offers a way back, since the arrows can wander far from today');
+
+    // ── The chart: only for a week that actually has something to plot.
+    // An untouched week gets none — three flat lines at zero would read
+    // as real data instead of absence of it. ──
+    t.assert(/occfcChart_2026-08-15/.test(html), 'a week with entries gets a chart canvas');
+    t.assert(!new RegExp('occfcChart_' + empty.weekKey).test(emptyHtml), "the untouched week (" + empty.weekKey + ") gets no canvas at all");
 
     // _occfcRenderCharts draws onto canvases already in the DOM (it doesn't
     // insert HTML itself — renderOccupancy does that before calling it), so
     // the rendered markup has to actually be in the document first.
+    win.occfcViewWeekStart = new Date(2026, 7, 15);
     win.document.getElementById('occupancyContent').innerHTML = html;
-    win._occfcRenderCharts(2026, 7);
+    win._occfcRenderCharts();
     t.assert(win._occfcChartObjs['2026-08-15'], 'the chart instance is tracked, so an edit or the next render can destroy and replace it');
     t.assert(!win._occfcChartObjs[empty.weekKey], 'and no chart object exists for a week with nothing to plot');
+
+    // Walking to a different week drops the chart the old one left behind
+    // — otherwise browsing back through a year of weeks would pile up a
+    // live Chart object per week visited, none of them on screen.
+    win.occfcViewWeekStart = new Date(2026, 7, 22);
+    win._occfcRenderCharts();
+    t.assert(!win._occfcChartObjs['2026-08-15'], "moving to another week destroys the previous week's chart instead of leaking it");
+    win.occfcViewWeekStart = new Date(2026, 7, 15);
+    win.document.getElementById('occupancyContent').innerHTML = html;
+    win._occfcRenderCharts();
 
     // Editing a value re-renders just that week's chart in place, same as
     // the numbers — not the instance a stale one left behind.
