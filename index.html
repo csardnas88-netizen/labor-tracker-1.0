@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.2.0"/>
+<meta name="app-version" content="7.2.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4264,6 +4264,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.2.1', date:'2026-08-11',
+    features:['Occupancy gained a "Forecast vs actual" card: the occupancy each week\'s schedule was built on, next to what the hotel actually ran, day by day. Carlos writes the schedule every Wednesday off a forecast, and this is the gap that explains an over or under in the labor meeting — "we staffed for 100, the night came in at 130". One block per hotel week (Saturday to Friday); type the seven numbers into the gold boxes and the actual and the gap fill themselves in underneath as the OCC reports land. Every column says which night it covers ("Sat 15 · night Fri 14"), so the forecast and the actual on a column are always the same night — the same way the Daily Occupancy table below it already works. A day left blank counts as "not forecast" rather than zero, so an unfilled day never shows up as a huge miss, and the week total only counts days that have both numbers.']
+  },
+  {
     v:'7.2.0', date:'2026-08-09',
     features:[
       'New DNDs section (in the sidebar, right under Occupancy) that answers which days run heaviest on Do Not Disturb, built entirely from the room lists already logged each day on the Occupancy card since v6.90.0 — nothing new to enter. It leads with the plain answer ("heaviest day: Monday, 4.5 on average across 2 logged days"), then a bar chart of the average per weekday, a week-by-week trend, and every logged day in full with its room list. A day only counts if its room list was actually filled in — blanks are read as "nobody logged it", not as a real zero, so a thin week can never quietly drag an average down, and every figure says how many logged days it rests on.',
@@ -5974,6 +5978,7 @@ var KEY_LABELS={
 function _friendlyKeyLabel(key){
   if(KEY_LABELS[key])return KEY_LABELS[key];
   if(key.indexOf('month_')===0)return 'Report for '+key.replace('month_','');
+  if(key.indexOf('occfc_')===0)return 'Occupancy forecast';
   if(key.indexOf('occhist_')===0)return 'Occupancy history';
   if(key.indexOf('r106_')===0)return 'OCC';
   if(key.indexOf('laboreffnotes_')===0)return 'Labor Effectiveness notes';
@@ -6117,6 +6122,9 @@ function freeUpStorage(keepMonths){
   Object.keys(localStorage).forEach(function(k){
     var mk=null;
     if(k.indexOf('hk_month_')===0)mk=k.replace('hk_month_','');
+    /* Keyed by the week's Saturday, not a month — slice to YYYY-MM so it
+       compares against cutoffKey on the same footing as the rest. */
+    else if(k.indexOf('hk_occfc_')===0)mk=k.replace('hk_occfc_','').slice(0,7);
     else if(k.indexOf('hk_occhist_')===0)mk=k.replace('hk_occhist_','');
     else if(k.indexOf('hk_r106_')===0)mk=k.replace('hk_r106_','');
     if(mk&&mk<cutoffKey){ try{localStorage.removeItem(k);removed++;}catch(e){} }
@@ -6628,6 +6636,66 @@ function _mergeOccHist(localH,remoteH){
   return out;
 }
 
+/* ══ Occupancy forecast (hk_occfc_<hotelWeekStart>) ══
+   Carlos's ask: every Wednesday he builds the next week's schedule off a
+   forecast occupancy, and needs the day-by-day gap between that forecast
+   and what the hotel actually ran — the number that explains an over or
+   under in the labor meeting ("we staffed for 100, the night came in at
+   130").
+
+   Distinct from the pickup log next door, which compares one OCC report
+   against a LATER OCC report. This compares the figure the SCHEDULE was
+   built on against reality; a night can be flat between OCC uploads and
+   still be far off the forecast the roster was sized for.
+
+   Keyed by hotel week (the Saturday, matching getHotelWeekStart) since
+   that's the unit the schedule is written in. Inside, days are keyed by
+   WORK DAY — the same indexing the Daily Occupancy table on this page
+   uses, where a row for date D shows the rooms occupied the night
+   BEFORE (getRoomsForDay's prevDs offset: you clean this morning what
+   was occupied last night). Storing by work day means the forecast and
+   the actual on the same row always refer to the same night, with no
+   offset to get wrong. Both dates are spelled out in the UI so there is
+   nothing to infer. */
+function occForecastWeekKey(d){ return dateStr(getHotelWeekStart(d)); }
+function loadOccForecast(weekKey){
+  try{var s=localStorage.getItem('hk_occfc_'+weekKey);return s?JSON.parse(s):null;}catch(e){return null;}
+}
+function saveOccForecast(weekKey,days){
+  var rec={days:days||{},savedAt:new Date().toISOString()};
+  safeSetItem('hk_occfc_'+weekKey,JSON.stringify(rec));
+  supaPut('occfc_'+weekKey,rec);
+  return rec;
+}
+/* One day's forecast, resolved through its own hotel week. Returns null
+   (not 0) when nothing was forecast — a week Carlos never filled in must
+   read as "no forecast", never as "forecast zero rooms", or every
+   untouched day would show up as a catastrophic miss. */
+function getOccForecastForDay(ds){
+  var rec=loadOccForecast(occForecastWeekKey(parseLocalDate(ds)));
+  if(!rec||!rec.days)return null;
+  var v=rec.days[ds];
+  if(v===undefined||v===null||v==='')return null;
+  v=parseInt(v,10);
+  return isNaN(v)?null:v;
+}
+/* Called from the inputs: writes one day into its week's record without
+   disturbing the other six. An empty box clears that day back to "not
+   forecast" rather than storing a 0. */
+function saveOccForecastDay(weekKey,ds,raw){
+  var rec=loadOccForecast(weekKey)||{days:{}};
+  var days=rec.days||{};
+  var t=String(raw==null?'':raw).trim();
+  if(t===''){ delete days[ds]; }
+  else{
+    var n=parseInt(t,10);
+    if(isNaN(n)||n<0)return; /* ignore junk rather than storing NaN */
+    days[ds]=n;
+  }
+  saveOccForecast(weekKey,days);
+  try{ _occfcRefreshWeek(weekKey); }catch(e){}
+}
+
 /* Merge every project_<id> row (plus the legacy projects_data blob as a
    fallback source) into local storage, entry-by-entry. Returns true if
    anything changed. */
@@ -6760,6 +6828,24 @@ function _syncFromSheetsPull(){
           Object.keys(_rv).forEach(function(ds){ _foldVNote(mk,ds,_rv[ds],_rvt[ds]!==undefined?_rvt[ds]:_dsFallbackTs(ds)); });
           var _rn=remote.dndRooms||{}, _rnt=remote.dndRoomsUpdatedAt||{};
           Object.keys(_rn).forEach(function(ds){ _foldDND(mk,ds,_rn[ds],_rnt[ds]!==undefined?_rnt[ds]:_dsFallbackTs(ds)); });
+        }
+        if(key.indexOf("occfc_")===0){
+          var wkFC=key.replace("occfc_","");
+          var remoteFC=all[key];
+          /* Whole-week last-write-wins by savedAt, not a per-day merge:
+             a week's forecast is one act of planning on one Wednesday,
+             and mixing three days from an older plan with four from a
+             newer one would produce a week that was never actually
+             scheduled — the same reasoning as the Labor Effectiveness
+             record next door. */
+          if(remoteFC&&typeof remoteFC==='object'&&remoteFC.days){
+            var localFC=loadOccForecast(wkFC);
+            var rt=String(remoteFC.savedAt||''), lt=String((localFC&&localFC.savedAt)||'');
+            if(!localFC||rt>lt){
+              safeSetItem('hk_occfc_'+wkFC,JSON.stringify(remoteFC));
+              updated=true;
+            }
+          }
         }
         if(key.indexOf("occhist_")===0){
           var mkOH=key.replace("occhist_","");
@@ -7029,6 +7115,9 @@ function forceSyncToSupabase(){
       if(k.indexOf("hk_month_")===0){
         pairs.push(["month_"+k.replace("hk_month_",""), JSON.parse(localStorage[k])]);
       }
+      else if(k.indexOf("hk_occfc_")===0){
+        pairs.push(["occfc_"+k.replace("hk_occfc_",""), JSON.parse(localStorage[k])]);
+      }
       else if(k.indexOf("hk_occhist_")===0){
         pairs.push(["occhist_"+k.replace("hk_occhist_",""), JSON.parse(localStorage[k])]);
       }
@@ -7071,10 +7160,11 @@ function forceSyncToSupabase(){
 var SNAPSHOT_RETAIN_DAYS=14;
 
 function gatherAllData(){
-  var data={months:{},r106:{},occhist:{},roster_overrides:null,projects:null,calloffs:null,manager_name:null,savedAt:new Date().toISOString()};
+  var data={months:{},r106:{},occhist:{},occfc:{},roster_overrides:null,projects:null,calloffs:null,manager_name:null,savedAt:new Date().toISOString()};
   Object.keys(localStorage).forEach(function(k){
     try{
       if(k.indexOf("hk_month_")===0)data.months[k.replace("hk_month_","")]=JSON.parse(localStorage[k]);
+      else if(k.indexOf("hk_occfc_")===0)data.occfc[k.replace("hk_occfc_","")]=JSON.parse(localStorage[k]);
       else if(k.indexOf("hk_occhist_")===0)data.occhist[k.replace("hk_occhist_","")]=JSON.parse(localStorage[k]);
       else if(k.indexOf("hk_r106_")===0)data.r106[k.replace("hk_r106_","")]=JSON.parse(localStorage[k]);
       else if(k==="hk_roster_overrides")data.roster_overrides=JSON.parse(localStorage[k]);
@@ -7186,6 +7276,14 @@ function restoreSnapshot(key){
          since it was taken (see _mergeOccHist). */
       Object.keys(data.occhist||{}).forEach(function(mk){
         safeSetItem("hk_occhist_"+mk,JSON.stringify(_mergeOccHist(loadOccHist(mk),data.occhist[mk])));
+      });
+      /* Newer local plan wins over an older backup's — restoring a
+         two-week-old file must not roll this week's forecast back to
+         whatever was planned then. */
+      Object.keys(data.occfc||{}).forEach(function(wk){
+        var incoming=data.occfc[wk], cur=loadOccForecast(wk);
+        if(!cur||String(incoming&&incoming.savedAt||'')>String(cur.savedAt||''))
+          safeSetItem("hk_occfc_"+wk,JSON.stringify(incoming));
       });
       if(data.roster_overrides)safeSetItem("hk_roster_overrides",JSON.stringify(data.roster_overrides));
       /* Push each restored project/call-off to its own row too — otherwise the
@@ -13565,6 +13663,130 @@ function saveOccupancyRoom(ds,val){
   renderLaborDash();
 }
 
+/* ══ Forecast vs actual ══
+   The card Carlos asked for: the occupancy the schedule was built on,
+   next to what the hotel actually ran, day by day. Laid out one hotel
+   week per block because that's the unit he plans in — every Wednesday
+   he fills in the week starting the following Saturday.
+
+   Each column is labelled with BOTH the work day and the night it
+   covers. This page's Daily Occupancy table already works this way (a
+   row for date D shows the rooms occupied the night before, via
+   getRoomsForDay), and the actual shown here is that identical figure —
+   so a forecast and an actual on the same column always describe the
+   same night, and the labels say so outright instead of leaving it to
+   be inferred. */
+var _OCCFC_DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var _OCCFC_MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _occfcShortD(d){ return _OCCFC_DN[d.getDay()]+' '+d.getDate(); }
+function _occfcShortMD(d){ return _OCCFC_MN[d.getMonth()]+' '+d.getDate(); }
+
+/* One week's forecast-vs-actual figures. Shared by the initial render and
+   by the in-place refresh after an edit, so the two can never compute the
+   week differently. */
+function _occfcWeekData(weekStart){
+  var weekKey=dateStr(weekStart);
+  var rec=loadOccForecast(weekKey);
+  var fcTotal=0,acTotal=0,bothDays=0,anyFc=false,cells=[];
+  for(var i=0;i<7;i++){
+    var d=new Date(weekStart);d.setDate(weekStart.getDate()+i);
+    var ds=dateStr(d);
+    var raw=(rec&&rec.days)?rec.days[ds]:undefined;
+    var fc=null;
+    if(raw!==undefined&&raw!==null&&raw!==''){
+      var p=parseInt(raw,10);
+      if(!isNaN(p)){fc=p;anyFc=true;}
+    }
+    var ac=getRoomsForDay(ds)||0;
+    if(fc!==null)fcTotal+=fc;
+    /* Only days with BOTH a forecast and a real actual go into the week
+       total. Adding an actual that has no forecast (or the reverse) would
+       read as a huge miss that is really just a gap in the data. */
+    if(fc!==null&&ac>0){acTotal+=ac;bothDays++;}
+    cells.push({ds:ds,d:d,night:parseLocalDate(prevDateStr(ds)),fc:fc,ac:ac,
+                diff:(fc!==null&&ac>0)?(ac-fc):null});
+  }
+  return {weekKey:weekKey,start:new Date(weekStart),
+          end:(function(){var e=new Date(weekStart);e.setDate(weekStart.getDate()+6);return e;})(),
+          cells:cells,fcTotal:fcTotal,acTotal:acTotal,bothDays:bothDays,anyFc:anyFc,
+          netVar:bothDays>0?acTotal-fcTotal:null};
+}
+
+function _occfcSummaryHTML(wd){
+  if(wd.netVar!==null){
+    var vc=wd.netVar>0?'var(--red)':wd.netVar<0?'var(--green)':'var(--text2)';
+    return 'Forecast <b style="color:var(--text1);">'+wd.fcTotal+'</b>'
+      +' &middot; Actual <b style="color:var(--text1);">'+wd.acTotal+'</b>'
+      +' &middot; <b style="color:'+vc+';">'+(wd.netVar>0?'+':'')+wd.netVar+'</b>'
+      +' <span style="color:var(--text3);">over '+wd.bothDays+' day'+(wd.bothDays===1?'':'s')+'</span>';
+  }
+  if(wd.anyFc)return 'Forecast <b style="color:var(--text1);">'+wd.fcTotal+'</b> &middot; waiting on actuals';
+  return 'No forecast entered yet';
+}
+function _occfcDiffHTML(c){
+  var dc=c.diff===null?'var(--text3)':c.diff>0?'var(--red)':c.diff<0?'var(--green)':'var(--text2)';
+  return '<span style="color:'+dc+';">'+(c.diff!==null?((c.diff>0?'+':'')+c.diff):'&nbsp;')+'</span>';
+}
+
+function buildOccForecastHTML(yr,mo){
+  var weeks=getHotelWeeksForMonth(yr,mo);
+
+  var html='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+  html+='<div style="background:var(--navy);padding:12px 18px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Forecast vs actual</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">The occupancy each week\'s schedule was built on, against what the hotel actually ran</div>';
+  html+='</div>';
+
+  weeks.forEach(function(w){
+    var wd=_occfcWeekData(w.start);
+    html+='<div style="border-top:1px solid var(--border);">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;padding:9px 16px;background:var(--surface);">';
+    html+='<div style="font-size:11px;font-weight:700;color:var(--text1);">'+_occfcShortMD(wd.start)+' &ndash; '+_occfcShortMD(wd.end)+'</div>';
+    html+='<div id="occfcSum_'+wd.weekKey+'" style="font-size:10px;color:var(--text3);">'+_occfcSummaryHTML(wd)+'</div>';
+    html+='</div>';
+
+    html+='<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding:10px 12px;">';
+    wd.cells.forEach(function(c){
+      html+='<div style="text-align:center;min-width:0;">';
+      html+='<div style="font-size:9.5px;font-weight:700;color:var(--text1);">'+_occfcShortD(c.d)+'</div>';
+      html+='<div style="font-size:8px;color:var(--text3);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">night '+_occfcShortD(c.night)+'</div>';
+      html+='<input type="number" min="0" inputmode="numeric" id="occfcIn_'+c.ds+'" value="'+(c.fc!==null?c.fc:'')+'" placeholder="&mdash;"'
+        +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',this.value)"'
+        +' style="width:100%;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.fc!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.fc!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+      html+='<div style="font-size:10px;color:var(--text2);margin-top:3px;">'+(c.ac>0?c.ac:'&mdash;')+'</div>';
+      html+='<div id="occfcDiff_'+c.ds+'" style="font-size:9.5px;font-weight:700;">'+_occfcDiffHTML(c)+'</div>';
+      html+='</div>';
+    });
+    html+='</div></div>';
+  });
+
+  html+='<div style="padding:8px 16px 10px;border-top:1px solid var(--border);font-size:9.5px;color:var(--text3);">'
+    +'Gold box = forecast &middot; below it, the actual rooms and the gap. '
+    +'A positive gap means the hotel ran heavier than the schedule was built for.</div>';
+  html+='</div>';
+  return html;
+}
+
+/* Update just this week's numbers after an edit. Deliberately NOT a
+   re-render of the whole Occupancy page: that would tear down the very
+   input the manager is tabbing out of and drop focus mid-week, which is
+   exactly the flow this card exists for (seven numbers, one after
+   another, every Wednesday). */
+function _occfcRefreshWeek(weekKey){
+  var wd=_occfcWeekData(parseLocalDate(weekKey));
+  var sum=document.getElementById('occfcSum_'+weekKey);
+  if(sum)sum.innerHTML=_occfcSummaryHTML(wd);
+  wd.cells.forEach(function(c){
+    var dEl=document.getElementById('occfcDiff_'+c.ds);
+    if(dEl)dEl.innerHTML=_occfcDiffHTML(c);
+    var inEl=document.getElementById('occfcIn_'+c.ds);
+    if(inEl){
+      inEl.style.borderColor=(c.fc!==null?'#C9A84C':'var(--border)');
+      inEl.style.background=(c.fc!==null?'var(--gt)':'#fff');
+    }
+  });
+}
+
 /* ══ Occupancy pickup ══
    Carlos's example, verbatim: Monday's OCC reports 100 rooms for a
    night; by Wednesday's OCC that same night reads higher. That movement
@@ -13710,6 +13932,9 @@ function renderOccupancy(){
     +'<div style="font-size:22px;font-weight:800;color:var(--green);">'+lowRooms+'</div>'
     +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-top:2px;">Low Night</div></div>';
   html+='</div>';
+
+  /* Forecast the schedule was built on, vs what actually ran */
+  html+=buildOccForecastHTML(yr,mo);
 
   /* Pickup — how much each night moved between OCC uploads */
   html+=buildOccPickupHTML(monthKey(viewMonth));

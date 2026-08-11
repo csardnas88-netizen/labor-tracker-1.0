@@ -62,6 +62,7 @@ const cases = [
   require('./cases/sync-status-error-distinct'),
   require('./cases/dnd-analysis'),
   require('./cases/occupancy-pickup'),
+  require('./cases/occupancy-forecast'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
