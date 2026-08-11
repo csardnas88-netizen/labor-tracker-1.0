@@ -13776,6 +13776,14 @@ function buildOccForecastHTML(yr,mo){
   html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">Unifocus\'s Friday forecast, the number the schedule was actually built on, and what Opera shows the hotel ran</div>';
   html+='</div>';
 
+  /* Full words ("Forecast", "Sched", "Opera"), Carlos's explicit ask —
+     abbreviations like "Fc"/"Sc"/"Op" didn't read at a glance. That only
+     fits laid out as a row per day (matching the Daily Occupancy table
+     and the Pickup card elsewhere on this page) — the old seven-
+     columns-across layout gave each day a sliver too narrow for even
+     "Sched" next to its box, let alone "Forecast". */
+  var occfcCols='1fr 62px 58px 46px 46px';
+
   weeks.forEach(function(w){
     var wd=_occfcWeekData(w.start);
     html+='<div style="border-top:1px solid var(--border);">';
@@ -13784,37 +13792,31 @@ function buildOccForecastHTML(yr,mo){
     html+='<div id="occfcSum_'+wd.weekKey+'" style="font-size:10px;color:var(--text3);">'+_occfcSummaryHTML(wd)+'</div>';
     html+='</div>';
 
-    html+='<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding:10px 12px;">';
+    html+='<div style="display:grid;grid-template-columns:'+occfcCols+';gap:4px;padding:6px 16px;border-bottom:1px solid var(--border);font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">';
+    html+='<div></div><div style="text-align:center;">Forecast</div><div style="text-align:center;">Sched</div><div style="text-align:center;">Opera</div><div style="text-align:center;">Diff</div>';
+    html+='</div>';
+
     wd.cells.forEach(function(c){
-      html+='<div style="text-align:center;min-width:0;">';
-      html+='<div style="font-size:9.5px;font-weight:700;color:var(--text1);">'+_occfcShortD(c.d)+'</div>';
-      html+='<div style="font-size:8px;color:var(--text3);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">night '+_occfcShortD(c.night)+'</div>';
-      html+='<div style="display:flex;align-items:center;gap:2px;">';
-      html+='<span style="font-size:7.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.2px;flex-shrink:0;">Fc</span>';
+      html+='<div style="display:grid;grid-template-columns:'+occfcCols+';gap:4px;padding:7px 16px;align-items:center;font-size:11px;border-top:1px solid var(--border);">';
+      html+='<div><div style="font-weight:700;color:var(--text1);">'+_occfcShortD(c.d)+'</div>'
+        +'<div style="font-size:9px;color:var(--text3);margin-top:1px;">night '+_occfcShortD(c.night)+'</div></div>';
       html+='<input type="number" min="0" inputmode="numeric" id="occfcUf_'+c.ds+'" value="'+(c.uf!==null?c.uf:'')+'" placeholder="&mdash;"'
         +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'uf\',this.value)"'
-        +' style="width:100%;min-width:0;flex:1;padding:3px 2px;font-size:10px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
-      html+='</div>';
-      html+='<div style="display:flex;align-items:center;gap:2px;margin-top:3px;">';
-      html+='<span style="font-size:7.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.2px;flex-shrink:0;">Sc</span>';
+        +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
       html+='<input type="number" min="0" inputmode="numeric" id="occfcSched_'+c.ds+'" value="'+(c.sched!==null?c.sched:'')+'" placeholder="&mdash;"'
         +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'sched\',this.value)"'
-        +' style="width:100%;min-width:0;flex:1;padding:3px 2px;font-size:10px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
-      html+='</div>';
-      html+='<div style="display:flex;align-items:center;gap:2px;margin-top:4px;">';
-      html+='<span style="font-size:7.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.2px;flex-shrink:0;">Op</span>';
-      html+='<span style="flex:1;font-size:10px;font-weight:700;color:var(--text2);">'+(c.ac>0?c.ac:'&mdash;')+'</span>';
-      html+='</div>';
-      html+='<div id="occfcDiff_'+c.ds+'" style="font-size:9.5px;font-weight:700;margin-top:2px;">'+_occfcDiffHTML(c)+'</div>';
+        +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+      html+='<div style="text-align:center;color:var(--text2);">'+(c.ac>0?c.ac:'&mdash;')+'</div>';
+      html+='<div id="occfcDiff_'+c.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(c)+'</div>';
       html+='</div>';
     });
-    html+='</div></div>';
+    html+='</div>';
   });
 
   html+='<div style="padding:8px 16px 10px;border-top:1px solid var(--border);font-size:9.5px;color:var(--text3);">'
-    +'<b style="color:var(--text1);">Fc</b> = Forecast, Unifocus\'s Friday number &middot; '
-    +'<b style="color:var(--text1);">gold Sc</b> = Scheduled, the number the schedule was built on &middot; '
-    +'<b style="color:var(--text1);">Op</b> = Opera, the actual rooms &middot; below that, the gap (Scheduled vs Opera). '
+    +'<b style="color:var(--text1);">Sched</b> (gold) is the number that actually built the schedule &middot; '
+    +'<b style="color:var(--text1);">Forecast</b> is Unifocus\'s own Friday number, shown alongside it for comparison &middot; '
+    +'<b style="color:var(--text1);">Opera</b> is the actual rooms sold &middot; Diff compares Scheduled against Opera. '
     +'A positive gap means the hotel ran heavier than the schedule was built for.</div>';
   html+='</div>';
   return html;
