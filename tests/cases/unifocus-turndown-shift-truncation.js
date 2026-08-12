@@ -25,7 +25,7 @@
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "Turndown's Unifocus budget truncates band hours to whole 6h shifts, matching Unifocus's own Aug 1-3 reports",
+  name: "Turndown's Unifocus budget truncates band hours to whole 6h shifts, and reproduces Unifocus's own Standard for every day of 8/1-8/7 (204h)",
   async run(t) {
     const seed = Object.assign(fakeSession(), {
       // See [[labor-tracker-tests]] — skips the legacy rooms migration that
@@ -43,7 +43,11 @@ module.exports = {
           '2026-07-31': 124,
           '2026-08-01': 154,
           '2026-08-02': 114,
-          '2026-08-03': 201
+          '2026-08-03': 201,
+          '2026-08-04': 231,
+          '2026-08-05': 195,
+          '2026-08-06': 126,
+          '2026-08-07': 90
         }
       }
     });
@@ -65,11 +69,44 @@ module.exports = {
     t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-03'), 36,
       "Aug 3: 201 rooms -> 40h band -> truncated to 36h, matching Unifocus's reported 36.00");
 
+    // ── The 1-90 band: 18h, NOT the 16h the Labor Standards PDF prints ──
+    // Aug 7 2026 was the first day ever recorded under 91 rooms, and it
+    // broke the truncation rule outright. The PDF's 16h truncated down
+    // gives 12h; Unifocus's own Weekly Labor Summary for that week reports
+    // 18.00 — three whole 6h shifts, rounded UP where 32h and 40h round
+    // down. Carrying the printed 16 cost 6h on that week's Turndown
+    // standard, which is exactly the kind of silent gap this section
+    // exists to prevent.
+    t.eq(win.getSameDayRoomsForDay('2026-08-07'), 90, 'Aug 7 reads its own night (90 rooms)');
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-07'), 18,
+      "Aug 7: 90 rooms -> 18h, matching Unifocus's reported 18.00 — NOT the 12h that truncating the PDF's printed 16h would give");
+    t.eq(win.unifocusHoursForPosition('Turndown Attendant', '2026-08-06'), 24,
+      'Aug 6: 126 rooms -> 24h, matching Unifocus\'s 24.00 (the band either side of the corrected one is untouched)');
+
     // Guards the actual bug: the raw band values must NOT be what we report.
     // Without truncation these three days would read 32 / 24 / 40.
     const raw = win.UNIFOCUS_STANDARDS['Turndown Attendant'][0];
     t.eq(raw.shiftHours, 6, "the Turndown component declares its 6h shift length (1700-2300)");
     t.eq(win.unifocusBandLookup(raw.bands, 154), 32, 'the underlying band for 154 rooms is still the raw 32h — truncation happens on top, it does not rewrite the standard');
+    t.eq(win.unifocusBandLookup(raw.bands, 90), 18, "the 1-90 band itself carries 18 — what Unifocus applies, not the 16 its own paperwork prints");
+    t.assert(win.unifocusBandLookup(raw.bands, 90) !== 16, 'and specifically not 16, which appears in no real Unifocus report');
+
+    // ── The whole week, end to end, against Unifocus's Weekly Labor
+    // Summary for 8/1-8/7 (generated Aug 12 2026). Its Turndown Standard
+    // row reads 30 / 24 / 36 / 36 / 36 / 24 / 18 = 204.00 for the week.
+    // Every day individually AND the total, so a future band edit that
+    // happens to keep one day right while breaking another still fails. ──
+    const WEEK = {
+      '2026-08-01': 30, '2026-08-02': 24, '2026-08-03': 36, '2026-08-04': 36,
+      '2026-08-05': 36, '2026-08-06': 24, '2026-08-07': 18
+    };
+    let weekTotal = 0;
+    Object.keys(WEEK).forEach(function (ds) {
+      const got = win.unifocusHoursForPosition('Turndown Attendant', ds);
+      t.eq(got, WEEK[ds], ds + ": Unifocus's Weekly Labor Summary reports " + WEEK[ds].toFixed(2) + 'h for Turndown');
+      weekTotal += got;
+    });
+    t.eq(weekTotal, 204, "the full week totals 204h, exactly Unifocus's own Turndown Standard for 8/1-8/7 (it was 198 while the 1-90 band carried the printed 16)");
 
     // Truncation must round DOWN, not to nearest: 32/6 = 5.33 and 40/6 = 6.67
     // both go down in Unifocus's real reports, so the documented "Rounding
