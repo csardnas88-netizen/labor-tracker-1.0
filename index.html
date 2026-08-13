@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.3.0"/>
+<meta name="app-version" content="7.3.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4284,6 +4284,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.3.1', date:'2026-08-13',
+    improvements:['Cut the Daily Lineup down to what it should have been. Carlos\'s note was that it was confusing and had too many steps, and that being asked to upload a Daily line up in order to generate a Daily line up made no sense — he was right. The blank form now ships inside the app, so that upload is gone entirely and the Excel button just works (it is cached for offline too). Setup is down to two files, shown as a numbered one-time step and only while something is actually missing; once both are in, the page opens straight on the date, the two buttons and the lineup, with the files reduced to a single quiet line at the bottom for when the schedule needs re-uploading.']
+  },
+  {
     v:'7.3.0', date:'2026-08-13',
     features:['New Daily Lineup section. Upload three files once — the Section assignment, the Schedule Draft and your own Daily line up template — and the app drafts tomorrow\'s lineup for you: coordinators, floor supervisors, house attendants, lobby AM/PM, turndown and overnight all placed from their floor ranges, and every GRA in her own section. It reads the schedule\'s own overrides too, so a room attendant whose cell says LOBBY that day is placed in the lobby rather than left on her floor. Occupancy starts from the schedule\'s projection and you correct it with the real Opera figure; rooms per lady recalculates as you type. Two buttons: Print, and Generate Excel, which fills your own template — every border, merge and formula in it survives untouched, so what comes out looks exactly like the sheet you already print. What it deliberately does NOT do is guess: which floor a floater covers, and how the rooms of an uncovered section get split, are your calls made on the day, so the app lays out who is in, who owns what, and exactly which sections are uncovered — and leaves those two decisions to you.']
   },
@@ -6020,7 +6024,6 @@ function _friendlyKeyLabel(key){
   if(key.indexOf('month_')===0)return 'Report for '+key.replace('month_','');
   if(key==='dl_sections')return 'Section assignments';
   if(key==='dl_schedule')return 'Schedule Draft';
-  if(key==='dl_template')return 'Lineup template';
   if(key.indexOf('dl_day_')===0)return 'Daily Lineup';
   if(key.indexOf('occfc_')===0)return 'Occupancy forecast';
   if(key.indexOf('occhist_')===0)return 'Occupancy history';
@@ -6919,9 +6922,6 @@ function _syncFromSheetsPull(){
             safeSetItem('hk_dl_schedule',JSON.stringify(all[key])); updated=true;
           }
         }
-        if(key==='dl_template'&&typeof all[key]==='string'&&all[key].length>100){
-          safeSetItem('hk_dl_template',all[key]); updated=true;
-        }
         if(key.indexOf('dl_day_')===0&&all[key]&&typeof all[key]==='object'){
           safeSetItem('hk_'+key,JSON.stringify(all[key])); updated=true;
         }
@@ -7213,8 +7213,6 @@ function forceSyncToSupabase(){
       }
       else if(k==="hk_dl_sections"){ pairs.push(["dl_sections", JSON.parse(localStorage[k])]); }
       else if(k==="hk_dl_schedule"){ pairs.push(["dl_schedule", JSON.parse(localStorage[k])]); }
-      /* Stored as a base64 STRING, not JSON — pushed as-is. */
-      else if(k==="hk_dl_template"){ pairs.push(["dl_template", localStorage[k]]); }
       else if(k.indexOf("hk_dl_day_")===0){
         pairs.push(["dl_day_"+k.replace("hk_dl_day_",""), JSON.parse(localStorage[k])]);
       }
@@ -17864,8 +17862,19 @@ function dlLoadSections(){ try{var s=localStorage.getItem('hk_dl_sections');retu
 function dlSaveSections(o){ safeSetItem('hk_dl_sections',JSON.stringify(o)); try{supaPut('dl_sections',o);}catch(e){} }
 function dlLoadSchedule(){ try{var s=localStorage.getItem('hk_dl_schedule');return s?JSON.parse(s):null;}catch(e){return null;} }
 function dlSaveSchedule(o){ safeSetItem('hk_dl_schedule',JSON.stringify(o)); try{supaPut('dl_schedule',o);}catch(e){} }
-function dlLoadTemplate(){ try{return localStorage.getItem('hk_dl_template')||null;}catch(e){return null;} }
-function dlSaveTemplate(b64){ safeSetItem('hk_dl_template',b64); try{supaPut('dl_template',b64);}catch(e){} }
+/* The blank lineup form ships WITH the app (./lineup-template.xlsx) and
+   is cached by the service worker, so there is nothing to upload and it
+   works offline. Asking Carlos to upload a Daily line up in order to
+   generate a Daily line up was, in his words, confusing — and he was
+   right: the template is the empty form, not the thing being produced.
+   The committed copy is stripped of every name, since this repo is
+   public; only its layout and formulas are needed. */
+function dlFetchTemplate(){
+  return fetch('./lineup-template.xlsx',{cache:'force-cache'}).then(function(r){
+    if(!r.ok)throw new Error('Could not load the lineup template.');
+    return r.arrayBuffer();
+  });
+}
 /* Whatever Carlos decided for a given day: floater placements and any
    line he overrode by hand. Keyed by date so re-opening a past day shows
    what actually went out, not a fresh re-draft of it. */
@@ -18085,21 +18094,6 @@ function dlUploadSchedule(input){
     });
   },50);
 }
-function dlUploadTemplate(input){
-  var f=input.files&&input.files[0]; if(!f)return;
-  var rd=new FileReader();
-  rd.onload=function(e){
-    input.value='';
-    try{
-      var bytes=new Uint8Array(e.target.result),bin='';
-      for(var i=0;i<bytes.length;i++)bin+=String.fromCharCode(bytes[i]);
-      dlSaveTemplate(btoa(bin));
-      showToast('✓ Template saved — Excel export will use your own file');
-      renderDailyLineup();
-    }catch(err){ showToast('❌ Could not store the template.'); }
-  };
-  rd.readAsArrayBuffer(f);
-}
 
 /* ── page ── */
 var dlDate=null;
@@ -18139,41 +18133,43 @@ function dlList(title,arr,empty){
 function renderDailyLineup(){
   var el=document.getElementById('dailyLineupContent');
   if(!el)return;
-  var S=dlLoadSections(), SCH=dlLoadSchedule(), TPL=dlLoadTemplate();
+  var S=dlLoadSections(), SCH=dlLoadSchedule();
   var html='';
 
-  /* ── setup ── */
-  var ready=!!(S&&SCH);
-  html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
-  html+='<div style="background:var(--navy);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">';
-  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128193; Source files</div>';
-  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);">Upload once &middot; re-upload whenever they change</div>';
-  html+='</div>';
-  function srcRow(label,ok,detail,inputId,handler){
-    var h='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;border-top:1px solid var(--border);flex-wrap:wrap;">';
-    h+='<div style="min-width:0;"><div style="font-size:12px;font-weight:700;color:var(--text1);">'+(ok?'<span style="color:var(--green);">&#10003;</span> ':'<span style="color:var(--text3);">&#9675;</span> ')+label+'</div>';
-    h+='<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+detail+'</div></div>';
-    h+='<div><button onclick="document.getElementById(\''+inputId+'\').click()" style="padding:6px 13px;background:'+(ok?'#fff':'var(--navy)')+';color:'+(ok?'var(--text1)':'#fff')+';border:1px solid '+(ok?'var(--border)':'var(--navy)')+';border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">'+(ok?'Replace':'Upload')+'</button>';
-    h+='<input type="file" id="'+inputId+'" accept=".xlsx" style="display:none;" onchange="'+handler+'(this)"></div></div>';
-    return h;
-  }
-  html+=srcRow('Section assignment',!!S,
-    S?Object.keys(S.gra).length+' floors &middot; floaters: '+(S.gra_floaters.join(', ')||'none'):'Who owns which floor and range',
-    'dlSectionsInput','dlUploadSections');
-  html+=srcRow('Schedule Draft',!!SCH,
-    SCH?SCH.count+' days loaded':'Who is in each day',
-    'dlScheduleInput','dlUploadSchedule');
-  html+=srcRow('Daily line up template',!!TPL,
-    TPL?'Excel export will use your own file':'Optional &mdash; needed for the Excel export',
-    'dlTemplateInput','dlUploadTemplate');
-  html+='</div>';
+  /* Two hidden inputs, reachable from wherever the page needs them —
+     either the first-run setup below or the one-line footer once
+     everything is loaded. */
+  var fileInputs='<input type="file" id="dlSectionsInput" accept=".xlsx" style="display:none;" onchange="dlUploadSections(this)">'
+    +'<input type="file" id="dlScheduleInput" accept=".xlsx" style="display:none;" onchange="dlUploadSchedule(this)">';
 
-  if(!ready){
-    html+='<div class="empty-state"><div class="es-icon">&#128203;</div><div class="es-title">Upload the first two files to start</div>'
-      +'<div class="es-desc">The Section assignment tells the app who owns which floor. The Schedule Draft tells it who is in. '
-      +'With both loaded, pick a date and the lineup drafts itself.</div></div>';
+  /* ── first run ──
+     Setup only takes over the page while something is genuinely missing.
+     Once both files are in, it collapses to a single line at the bottom:
+     the job is building the lineup, not managing files. */
+  if(!S||!SCH){
+    html+=fileInputs;
+    html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">';
+    html+='<div style="background:var(--navy);padding:14px 18px;">';
+    html+='<div style="font-size:14px;font-weight:700;color:#fff;">Two files to start</div>';
+    html+='<div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:3px;">One time. After this you just pick a date.</div>';
+    html+='</div>';
+    function step(n,label,detail,ok,inputId){
+      return '<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid var(--border);flex-wrap:wrap;">'
+        +'<div style="width:26px;height:26px;border-radius:50%;background:'+(ok?'var(--green)':'var(--navy)')+';color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(ok?'&#10003;':n)+'</div>'
+        +'<div style="flex:1;min-width:140px;"><div style="font-size:13px;font-weight:700;color:var(--text1);">'+label+'</div>'
+        +'<div style="font-size:11px;color:var(--text3);margin-top:1px;">'+detail+'</div></div>'
+        +'<button onclick="document.getElementById(\''+inputId+'\').click()" style="padding:8px 16px;background:'+(ok?'#fff':'var(--navy)')+';color:'+(ok?'var(--text1)':'#fff')+';border:1px solid '+(ok?'var(--border)':'var(--navy)')+';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">'+(ok?'Replace':'Choose file')+'</button></div>';
+    }
+    html+=step(1,'Section assignment',
+      S?Object.keys(S.gra).length+' floors loaded':'Who owns which floor. Changes only when sections rotate.',
+      !!S,'dlSectionsInput');
+    html+=step(2,'Schedule Draft',
+      SCH?SCH.count+' days loaded':'Who is in each day. Upload again whenever you update it.',
+      !!SCH,'dlScheduleInput');
+    html+='</div>';
     el.innerHTML=html; return;
   }
+  html+=fileInputs;
 
   /* ── date picker ── */
   var ds=dlCurrentDate(), d=parseLocalDate(ds);
@@ -18204,8 +18200,7 @@ function renderDailyLineup(){
   /* ── actions ── */
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
   html+='<button onclick="dlPrint()" style="padding:9px 16px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#128424; Print</button>';
-  html+='<button onclick="dlExportExcel()" style="padding:9px 16px;background:'+(TPL?'var(--gold)':'var(--s3)')+';color:'+(TPL?'#fff':'var(--text3)')+';border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:'+(TPL?'pointer':'not-allowed')+';">&#128196; Generate Excel</button>';
-  if(!TPL)html+='<div style="font-size:10px;color:var(--text3);align-self:center;">Upload your template above to enable the Excel export</div>';
+  html+='<button onclick="dlExportExcel()" style="padding:9px 16px;background:var(--gold);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#128196; Generate Excel</button>';
   html+='</div>';
 
   /* ── the lineup ── */
@@ -18303,6 +18298,15 @@ function renderDailyLineup(){
       +P.pulled.map(function(p){return escHtml(p[0])+' &rarr; '+escHtml(p[1]);}).join(' &middot; ')+'</div>';
   }
   html+='</div></div>';
+
+  /* Files, out of the way. Visible enough to re-upload the schedule when
+     it changes, quiet enough not to look like a step. */
+  html+='<div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--text3);">';
+  html+='<span>Sections: '+Object.keys(S.gra).length+' floors</span><span>&middot;</span>';
+  html+='<span>Schedule: '+SCH.count+' days</span>';
+  html+='<button onclick="document.getElementById(\'dlScheduleInput\').click()" style="padding:3px 10px;border:1px solid var(--border);border-radius:99px;background:#fff;font-size:10px;font-weight:700;color:var(--text2);cursor:pointer;">Update schedule</button>';
+  html+='<button onclick="document.getElementById(\'dlSectionsInput\').click()" style="padding:3px 10px;border:1px solid var(--border);border-radius:99px;background:#fff;font-size:10px;font-weight:700;color:var(--text2);cursor:pointer;">Update sections</button>';
+  html+='</div>';
 
   el.innerHTML=html;
 }
@@ -18420,17 +18424,13 @@ function dlSetCell(doc,ref,value,numeric){
 }
 
 function dlExportExcel(){
-  var TPL=dlLoadTemplate();
-  if(!TPL){ showToast('❌ Upload your Daily line up template first'); return; }
   if(typeof JSZip==='undefined'){ showToast('❌ Excel library not loaded — check your connection'); return; }
   var ds=dlCurrentDate(), P=dlBuildPlan(ds);
   if(!P){ showToast('❌ Nothing to export for this day'); return; }
   showToast('⏳ Building the Excel...');
 
-  var bin=atob(TPL), bytes=new Uint8Array(bin.length);
-  for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
-
-  JSZip.loadAsync(bytes).then(function(zip){
+  dlFetchTemplate().then(function(bytes){
+  return JSZip.loadAsync(bytes).then(function(zip){
     return Promise.all([
       zip.file('xl/workbook.xml').async('string'),
       zip.file('xl/_rels/workbook.xml.rels').async('string')
@@ -18489,6 +18489,7 @@ function dlExportExcel(){
         return zip.generateAsync({type:'blob',compression:'DEFLATE'});
       });
     });
+  });
   }).then(function(blob){
     var name='Daily line up '+ds.slice(5,7)+'.'+ds.slice(8,10)+'.'+ds.slice(0,4)+'.xlsx';
     var url=URL.createObjectURL(blob), a=document.createElement('a');

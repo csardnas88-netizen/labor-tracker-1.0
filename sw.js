@@ -10,14 +10,17 @@
 
    Bump CACHE_VERSION on every deploy so users get the new build.
    ══════════════════════════════════════════════════════ */
-var CACHE_VERSION = 'labor-v7.3.0';
+var CACHE_VERSION = 'labor-v7.3.1';
 
 /* Same-origin shell. Relative paths keep this working under the
    /labor-tracker-1.0/ sub-path GitHub Pages serves from. */
 var SHELL = [
   './',
   './index.html',
-  './confetti-fireworks.mp3'
+  './confetti-fireworks.mp3',
+  /* Blank Daily Lineup form the Excel export fills in. Same-origin and
+     cached here so the export keeps working with no signal. */
+  './lineup-template.xlsx'
 ];
 
 /* Third-party libraries. These URLs are version-pinned and immutable,
