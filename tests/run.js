@@ -63,6 +63,7 @@ const cases = [
   require('./cases/dnd-analysis'),
   require('./cases/occupancy-pickup'),
   require('./cases/occupancy-forecast'),
+  require('./cases/daily-lineup'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

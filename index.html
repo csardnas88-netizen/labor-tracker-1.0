@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.2.5"/>
+<meta name="app-version" content="7.3.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -18,6 +18,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<!-- Daily Lineup's Excel export patches Carlos's own template at the zip
+     level (see dlBuildXlsx). SheetJS can read and rebuild a workbook, but
+     its community build drops styling on the way back out — and the whole
+     point of that export is that the file comes out looking exactly like
+     the template he already prints. Patching the stored .xlsx in place
+     keeps every border, merge and formula untouched. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1219,6 +1226,9 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   </div>
 
   <div class="nav-section-label">Operations</div>
+  <div class="nav-item" id="nav-dailylineup" onclick="showPage('dailylineup')">
+    <span class="nav-icon">&#128203;</span> Daily Lineup
+  </div>
   <div class="nav-item" id="nav-assignments" onclick="showPage('assignments')">
     <span class="nav-icon">&#128194;</span> Assignments
   </div>
@@ -1508,6 +1518,16 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div class="page-sub">Daily rooms sold · OCC verification</div>
       </div>
       <div id="occupancyContent"></div>
+    </div>
+
+    <!-- ══ DAILY LINEUP ══ -->
+    <div id="page-dailylineup" style="display:none;">
+      <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
+      <div class="page-header">
+        <div class="page-title">&#128203; Daily Lineup</div>
+        <div class="page-sub">Tomorrow's shift, drafted from the schedule</div>
+      </div>
+      <div id="dailyLineupContent"></div>
     </div>
 
     <!-- ══ DNDs ══ -->
@@ -4264,6 +4284,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.3.0', date:'2026-08-13',
+    features:['New Daily Lineup section. Upload three files once — the Section assignment, the Schedule Draft and your own Daily line up template — and the app drafts tomorrow\'s lineup for you: coordinators, floor supervisors, house attendants, lobby AM/PM, turndown and overnight all placed from their floor ranges, and every GRA in her own section. It reads the schedule\'s own overrides too, so a room attendant whose cell says LOBBY that day is placed in the lobby rather than left on her floor. Occupancy starts from the schedule\'s projection and you correct it with the real Opera figure; rooms per lady recalculates as you type. Two buttons: Print, and Generate Excel, which fills your own template — every border, merge and formula in it survives untouched, so what comes out looks exactly like the sheet you already print. What it deliberately does NOT do is guess: which floor a floater covers, and how the rooms of an uncovered section get split, are your calls made on the day, so the app lays out who is in, who owns what, and exactly which sections are uncovered — and leaves those two decisions to you.']
+  },
+  {
     v:'7.2.5', date:'2026-08-13',
     fixes:['Fixed Turndown\'s Unifocus standard for days under 91 rooms. Carlos caught this on Friday Aug 7 (90 rooms): Unifocus reported 18 hours, the app said 12. Turndown\'s shift is 6 hours, so its hours always land on a whole number of people — 2 people is 12h, 3 people is 18h. The Labor Standards PDF prints 16h for that band, which is two and a half people; Unifocus rounds that UP to 3 people (18h), while the app was rounding DOWN to 2 (12h). That band is now 18h. It went unnoticed because it had never come up before — every day we\'d ever checked was above 91 rooms, and in those bands both ways of rounding happen to give the same answer. The whole week 8/1-8/7 now reproduces Unifocus\'s own Turndown standard exactly, day by day and 204h on the total (it was 198h before). The 291+ band is still unconfirmed and left alone — Aug 11 ran 306 rooms, the first day ever that high, so the report covering it will settle it.']
   },
@@ -5994,6 +6018,10 @@ var KEY_LABELS={
 function _friendlyKeyLabel(key){
   if(KEY_LABELS[key])return KEY_LABELS[key];
   if(key.indexOf('month_')===0)return 'Report for '+key.replace('month_','');
+  if(key==='dl_sections')return 'Section assignments';
+  if(key==='dl_schedule')return 'Schedule Draft';
+  if(key==='dl_template')return 'Lineup template';
+  if(key.indexOf('dl_day_')===0)return 'Daily Lineup';
   if(key.indexOf('occfc_')===0)return 'Occupancy forecast';
   if(key.indexOf('occhist_')===0)return 'Occupancy history';
   if(key.indexOf('r106_')===0)return 'OCC';
@@ -6878,6 +6906,25 @@ function _syncFromSheetsPull(){
           var _rn=remote.dndRooms||{}, _rnt=remote.dndRoomsUpdatedAt||{};
           Object.keys(_rn).forEach(function(ds){ _foldDND(mk,ds,_rn[ds],_rnt[ds]!==undefined?_rnt[ds]:_dsFallbackTs(ds)); });
         }
+        /* Daily Lineup sources. Whole-blob last-write-wins by savedAt
+           where there is one (the schedule), plain overwrite otherwise —
+           these are single uploaded documents, not records built up
+           field by field, so there is nothing to merge. */
+        if(key==='dl_sections'&&all[key]&&typeof all[key]==='object'){
+          safeSetItem('hk_dl_sections',JSON.stringify(all[key])); updated=true;
+        }
+        if(key==='dl_schedule'&&all[key]&&all[key].days){
+          var localSch=dlLoadSchedule();
+          if(!localSch||String(all[key].savedAt||'')>String(localSch.savedAt||'')){
+            safeSetItem('hk_dl_schedule',JSON.stringify(all[key])); updated=true;
+          }
+        }
+        if(key==='dl_template'&&typeof all[key]==='string'&&all[key].length>100){
+          safeSetItem('hk_dl_template',all[key]); updated=true;
+        }
+        if(key.indexOf('dl_day_')===0&&all[key]&&typeof all[key]==='object'){
+          safeSetItem('hk_'+key,JSON.stringify(all[key])); updated=true;
+        }
         if(key.indexOf("occfc_")===0){
           var wkFC=key.replace("occfc_","");
           var remoteFC=all[key];
@@ -7163,6 +7210,13 @@ function forceSyncToSupabase(){
     try{
       if(k.indexOf("hk_month_")===0){
         pairs.push(["month_"+k.replace("hk_month_",""), JSON.parse(localStorage[k])]);
+      }
+      else if(k==="hk_dl_sections"){ pairs.push(["dl_sections", JSON.parse(localStorage[k])]); }
+      else if(k==="hk_dl_schedule"){ pairs.push(["dl_schedule", JSON.parse(localStorage[k])]); }
+      /* Stored as a base64 STRING, not JSON — pushed as-is. */
+      else if(k==="hk_dl_template"){ pairs.push(["dl_template", localStorage[k]]); }
+      else if(k.indexOf("hk_dl_day_")===0){
+        pairs.push(["dl_day_"+k.replace("hk_dl_day_",""), JSON.parse(localStorage[k])]);
       }
       else if(k.indexOf("hk_occfc_")===0){
         pairs.push(["occfc_"+k.replace("hk_occfc_",""), JSON.parse(localStorage[k])]);
@@ -9532,7 +9586,7 @@ function toggleSidebarSmart(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','labormodel','pnl','staffing','projects','trainhours','training','calloffs','assignments','tutorial','settings'];
+var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','labormodel','pnl','staffing','projects','trainhours','training','calloffs','dailylineup','assignments','tutorial','settings'];
 var _pinGateBypass=false;
 var pendingGatePage=null;
 var PIN_GATED_PAGES=['labormodel','pnl','settings'];
@@ -9562,6 +9616,7 @@ function showPage(page){
   if(page==='recap')renderRecap();
   if(page==='occupancy')renderOccupancy();
   if(page==='dnds')renderDnds();
+  if(page==='dailylineup')renderDailyLineup();
   if(page==='labormodel')renderLaborModel();
   if(page==='pnl'){renderPnl();renderPaychexRecon();}
   if(page==='staffing')renderStaffing();
@@ -17764,6 +17819,686 @@ async function assign_copySummary() {
   }
 }
 /* ── End Assignments module ── */
+
+
+/* ══════════════════════════════════════════════════════
+   DAILY LINEUP
+   Carlos builds tomorrow's housekeeping lineup every afternoon. Three of
+   his own spreadsheets already hold everything needed to draft it, and
+   this section stitches them together:
+
+     Schedule Draft      who is actually in that day
+     Section assignment  which floor (or floor range) each person owns
+     Daily line up       his own template, printed as-is
+
+   What it deliberately does NOT do: decide where a floater goes, or how
+   the rooms of an uncovered section get split. Carlos confirmed both are
+   judgement calls made on the day ("criterio del momento"), so the app
+   lays out who is in, who owns what, and what is left uncovered — and
+   leaves those two decisions to him. A lineup that LOOKS resolved but
+   quietly guessed would be worse than a blank: he'd have to re-check
+   every line to find the invented ones.
+   ══════════════════════════════════════════════════════ */
+
+var DL_FLOORS=['2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th',
+               '13th','14th','15th','16th','17th','18th','19th','20th','21st','22nd'];
+/* Section assignment spells people shorter than the Schedule does. Only
+   the genuinely ambiguous or non-prefix cases need listing — the rest
+   resolve on first name. "Maria" is the dangerous one: the schedule
+   carries Maria Noriega AND Maria Aguilar, and the section sheet lists
+   them as "Maria" and "Maria Aguilar", so first-name matching alone
+   would hand one person the other's day off. */
+var DL_ALIAS={'maria':'Maria Noriega','abby':'Abigail Rosa','vane':'Vanessa',
+  'maria m':'Marroquin','sarahy':'Sarahi','rubidia':'Rubidia G','isabel d':'Isabel D',
+  'adamaris':'Adamary','victoriano chuquin':'Victoriano Ch','olga alpacaja':'Olga A',
+  'jorge':'Jorge Gonzalez'};
+
+function dlNorm(s){
+  return String(s==null?'':s).normalize('NFKD').replace(/[̀-ͯ]/g,'')
+    .replace(/\s+/g,' ').trim().toLowerCase();
+}
+function dlIn(v){ return String(v||'').trim()==='1'; }
+
+/* ── storage ── */
+function dlLoadSections(){ try{var s=localStorage.getItem('hk_dl_sections');return s?JSON.parse(s):null;}catch(e){return null;} }
+function dlSaveSections(o){ safeSetItem('hk_dl_sections',JSON.stringify(o)); try{supaPut('dl_sections',o);}catch(e){} }
+function dlLoadSchedule(){ try{var s=localStorage.getItem('hk_dl_schedule');return s?JSON.parse(s):null;}catch(e){return null;} }
+function dlSaveSchedule(o){ safeSetItem('hk_dl_schedule',JSON.stringify(o)); try{supaPut('dl_schedule',o);}catch(e){} }
+function dlLoadTemplate(){ try{return localStorage.getItem('hk_dl_template')||null;}catch(e){return null;} }
+function dlSaveTemplate(b64){ safeSetItem('hk_dl_template',b64); try{supaPut('dl_template',b64);}catch(e){} }
+/* Whatever Carlos decided for a given day: floater placements and any
+   line he overrode by hand. Keyed by date so re-opening a past day shows
+   what actually went out, not a fresh re-draft of it. */
+function dlLoadDay(ds){ try{var s=localStorage.getItem('hk_dl_day_'+ds);return s?JSON.parse(s):null;}catch(e){return null;} }
+function dlSaveDay(ds,o){ safeSetItem('hk_dl_day_'+ds,JSON.stringify(o)); try{supaPut('dl_day_'+ds,o);}catch(e){} }
+
+/* ── parsing: Section assignment ── */
+function dlParseSections(wb){
+  function grid(name){
+    var ws=wb.Sheets[name];
+    if(!ws)return null;
+    return XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+  }
+  var g=grid('GRA'), h=grid('HM & Supervisor');
+  if(!g||!h)throw new Error('Expected sheets "GRA" and "HM & Supervisor".');
+  var cell=function(rows,r,c){ var row=rows[r-1]; return row&&row[c-1]!=null?String(row[c-1]).trim():''; };
+  var gra={},floaters=[];
+  for(var r=6;r<=26;r++){
+    var fl=cell(g,r,2), nm=cell(g,r,4);
+    if(fl&&nm)gra[fl]=nm;
+  }
+  for(var r2=8;r2<=10;r2++){ var f=cell(g,r2,8); if(f)floaters.push(f); }
+  function rng(r1,r2c,c1,c2){
+    var out=[];
+    for(var r3=r1;r3<=r2c;r3++){
+      var a=cell(h,r3,c1), b=cell(h,r3,c2);
+      if(a&&b)out.push([a,b]);
+    }
+    return out;
+  }
+  return {gra:gra,gra_floaters:floaters,
+    hm:rng(7,11,1,2), hm_float:cell(h,13,2), hm_pm:cell(h,16,2),
+    sup:rng(7,11,5,6), sup_pm:cell(h,17,6),
+    lobby:rng(22,26,1,2), td:rng(22,29,5,6)};
+}
+
+/* ── parsing: Schedule Draft ──
+   Blocks are found by their column-A label, never by a fixed row number:
+   the layout shifts between weekly sheets (one week has an extra name in
+   Turndown and pushes everything below it down a row). "Departures"
+   appears twice — once as the header figure up top and again above the
+   supervisor block — so the supervisor block is anchored past Managers.
+
+   Only a window of dates around today is kept. The file carries 85 weeks
+   and storing all of them would be most of a megabyte in localStorage for
+   weeks nobody will open. */
+var DL_WINDOW_BACK=60, DL_WINDOW_FWD=120;
+function dlSerialToDate(n){
+  var ms=(Number(n)-25569)*86400000;
+  var d=new Date(ms);
+  return new Date(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate());
+}
+function dlParseSchedule(wb,todayRef){
+  var today=todayRef||new Date(); today.setHours(0,0,0,0);
+  var lo=new Date(today); lo.setDate(lo.getDate()-DL_WINDOW_BACK);
+  var hi=new Date(today); hi.setDate(hi.getDate()+DL_WINDOW_FWD);
+  var out={},days=0;
+  wb.SheetNames.forEach(function(sn){
+    var ws=wb.Sheets[sn];
+    if(!ws)return;
+    var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+    if(!rows.length)return;
+    var A=function(r){ var row=rows[r-1]; return row&&row[0]!=null?String(row[0]).trim():''; };
+    var V=function(r,c){ var row=rows[r-1]; return row&&row[c-1]!=null?String(row[c-1]).trim():''; };
+    /* label -> every row carrying it */
+    var lab={};
+    for(var r=1;r<=rows.length;r++){ var v=A(r); if(v){ (lab[v]=lab[v]||[]).push(r); } }
+    var rowAfter=function(l,after){ var a=lab[l]||[]; for(var i=0;i<a.length;i++){ if(a[i]>(after||0))return a[i]; } return null; };
+    var mgrRow=rowAfter('Managers',0);
+    function block(start,end,after,skip){
+      var s=rowAfter(start,after||0); if(s==null)return [];
+      var e=rowAfter(end,s); if(e==null)return [];
+      var res=[];
+      for(var r4=s+1;r4<e;r4++){
+        var nm=A(r4);
+        if(!nm)continue;
+        if(skip&&skip.indexOf(nm)!==-1)continue;
+        if(/^(IDEAL|ACTUAL|OCC|Room att|Departures|Total)/.test(nm))continue;
+        res.push(r4);
+      }
+      return res;
+    }
+    var blocks={
+      mgr:block('Managers','Departures',0),
+      sup:block('Departures','Missing Supervisor',mgrRow),
+      lobby:block('AM lobby','Total  Lobby Att',0),
+      td:block('PM Turndown /GRA','Total  TD attd',0),
+      night:block('Overnight','Total  ON Attd',0),
+      gra:block('AM ROOM ATTENDANT','Total Room Att',0),
+      hp:block('Houseman','Total HP',0,['Supervisor'])
+    };
+    for(var c=2;c<=8;c++){
+      var raw=rows[0]&&rows[0][c-1];
+      if(raw===''||raw==null)continue;
+      var d;
+      try{ d=dlSerialToDate(raw); }catch(e){ continue; }
+      if(isNaN(d.getTime()))continue;
+      if(d<lo||d>hi)continue;
+      var rec={sheet:sn,occ:V(7,c),dep:V(8,c)};
+      Object.keys(blocks).forEach(function(k){
+        rec[k]=blocks[k].map(function(r5){ return [A(r5),V(r5,c)]; });
+      });
+      out[dateStr(d)]=rec; days++;
+    }
+  });
+  return {days:out,count:days,savedAt:new Date().toISOString()};
+}
+
+/* ── the lineup itself ──
+   Resolution is scoped to ONE block on purpose. First names repeat across
+   the schedule (a "Susan" in Laundry and a "Susan A" supervising floors;
+   an "Andrea" in Lobby and another in Turndown), and matching against
+   every name in the sheet at once silently returns whichever collides
+   first — reporting the wrong person as off. */
+function dlLook(day,grp,name){
+  var pairs=day[grp]||[];
+  var n=dlNorm(name), real=null, i;
+  if(DL_ALIAS[n]){
+    for(i=0;i<pairs.length;i++) if(dlNorm(pairs[i][0])===dlNorm(DL_ALIAS[n])){ real=pairs[i]; break; }
+  }
+  if(!real) for(i=0;i<pairs.length;i++) if(dlNorm(pairs[i][0])===n){ real=pairs[i]; break; }
+  if(!real) for(i=0;i<pairs.length;i++) if(dlNorm(pairs[i][0]).split(' ')[0]===n){ real=pairs[i]; break; }
+  return real?real[1]:null;
+}
+function dlBuildPlan(ds){
+  var S=dlLoadSections(), SCH=dlLoadSchedule();
+  if(!S||!SCH||!SCH.days)return null;
+  var day=SCH.days[ds];
+  if(!day)return null;
+  var P={ds:ds,sheet:day.sheet,occ:day.occ,dep:day.dep};
+  P.am_coord=day.mgr.filter(function(p){return dlIn(p[1]);}).map(function(p){return p[0];});
+  P.pm_coord=day.mgr.filter(function(p){return p[1]==='PM';}).map(function(p){return p[0];});
+  P.sup=S.sup.filter(function(p){return dlIn(dlLook(day,'sup',p[1]));}).map(function(p){return p[1];});
+  P.sup_pm=(function(){var v=dlLook(day,'sup',S.sup_pm);return (v==='1'||v==='PM')?[S.sup_pm]:[];})();
+  P.hm=S.hm.filter(function(p){return dlIn(dlLook(day,'hp',p[1]));}).map(function(p){return p[1];});
+  if(dlIn(dlLook(day,'hp',S.hm_float)))P.hm.push(S.hm_float);
+  P.hm_pm=(dlLook(day,'td',S.hm_pm)==='HOUSEMAN'||dlIn(dlLook(day,'hp',S.hm_pm)))?[S.hm_pm]:[];
+  P.lobby_am=S.lobby.filter(function(p){return /AM/.test(p[0])&&dlIn(dlLook(day,'lobby',p[1]));}).map(function(p){return p[1];});
+  P.lobby_pm=S.lobby.filter(function(p){return /PM/.test(p[0])&&dlIn(dlLook(day,'lobby',p[1]));}).map(function(p){return p[1];});
+  /* A GRA the schedule explicitly pulls to the lobby that day (the cell
+     reads LOBBY instead of 1) covers it when the usual lobby person is
+     off — that override is how Carlos already records it. */
+  day.gra.forEach(function(p){ if(p[1]==='LOBBY')P.lobby_am.push(p[0]); });
+  P.night=day.night.filter(function(p){return dlIn(p[1]);}).map(function(p){return p[0];});
+  P.td=S.td.filter(function(p){return dlIn(dlLook(day,'td',p[1]));}).map(function(p){return p[1];});
+  var placed={},uncovered=[];
+  DL_FLOORS.forEach(function(fl){
+    var owner=S.gra[fl];
+    if(owner&&dlIn(dlLook(day,'gra',owner)))placed[fl]=owner;
+    else uncovered.push([fl,owner||null]);
+  });
+  P.gra=placed; P.uncovered=uncovered;
+  P.floaters=(S.gra_floaters||[]).filter(function(f){return dlIn(dlLook(day,'gra',f));});
+  P.pulled=day.gra.filter(function(p){return p[1]&&['1','OFF','R-OFF',''].indexOf(p[1])===-1;});
+  /* Carlos's own decisions for this date, layered on top. */
+  var saved=dlLoadDay(ds);
+  P.assign=(saved&&saved.assign)||{};   /* floater name -> floor */
+  P.occOverride=saved&&saved.occ!=null?saved.occ:null;
+  P.depOverride=saved&&saved.dep!=null?saved.dep:null;
+  return P;
+}
+/* Floors as they end up after Carlos places his floaters. */
+function dlFinalFloors(P){
+  var out={};
+  Object.keys(P.gra).forEach(function(fl){ out[fl]=P.gra[fl]; });
+  Object.keys(P.assign||{}).forEach(function(name){
+    var fl=P.assign[name];
+    if(fl&&DL_FLOORS.indexOf(fl)!==-1&&!out[fl])out[fl]=name;
+  });
+  return out;
+}
+function dlUnplacedFloaters(P){
+  var a=P.assign||{};
+  return (P.floaters||[]).filter(function(f){ return !a[f]; });
+}
+
+/* ── uploads ── */
+function dlReadWorkbook(file,cb){
+  var rd=new FileReader();
+  rd.onload=function(e){
+    try{ cb(null,XLSX.read(new Uint8Array(e.target.result),{type:'array'})); }
+    catch(err){ cb(err); }
+  };
+  rd.onerror=function(){ cb(new Error('Could not read the file.')); };
+  rd.readAsArrayBuffer(file);
+}
+function dlUploadSections(input){
+  var f=input.files&&input.files[0]; if(!f)return;
+  showToast('⏳ Reading section assignments...');
+  dlReadWorkbook(f,function(err,wb){
+    input.value='';
+    if(err){ showToast('❌ '+err.message); return; }
+    try{
+      var S=dlParseSections(wb);
+      var n=Object.keys(S.gra).length;
+      if(!n)throw new Error('No floor assignments found on the GRA sheet.');
+      dlSaveSections(S);
+      showToast('✓ Sections loaded — '+n+' floors, '+S.gra_floaters.length+' floaters');
+      renderDailyLineup();
+    }catch(e){ showToast('❌ '+e.message); }
+  });
+}
+function dlUploadSchedule(input){
+  var f=input.files&&input.files[0]; if(!f)return;
+  showToast('⏳ Reading the schedule — this one is big...');
+  setTimeout(function(){
+    dlReadWorkbook(f,function(err,wb){
+      input.value='';
+      if(err){ showToast('❌ '+err.message); return; }
+      try{
+        var SCH=dlParseSchedule(wb);
+        if(!SCH.count)throw new Error('No dates found in range. Is this the Schedule Draft?');
+        dlSaveSchedule(SCH);
+        showToast('✓ Schedule loaded — '+SCH.count+' days');
+        renderDailyLineup();
+      }catch(e){ showToast('❌ '+e.message); }
+    });
+  },50);
+}
+function dlUploadTemplate(input){
+  var f=input.files&&input.files[0]; if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(e){
+    input.value='';
+    try{
+      var bytes=new Uint8Array(e.target.result),bin='';
+      for(var i=0;i<bytes.length;i++)bin+=String.fromCharCode(bytes[i]);
+      dlSaveTemplate(btoa(bin));
+      showToast('✓ Template saved — Excel export will use your own file');
+      renderDailyLineup();
+    }catch(err){ showToast('❌ Could not store the template.'); }
+  };
+  rd.readAsArrayBuffer(f);
+}
+
+/* ── page ── */
+var dlDate=null;
+function dlCurrentDate(){
+  if(!dlDate){
+    /* Defaults to TOMORROW: the lineup is built the afternoon before. */
+    var d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+1);
+    dlDate=dateStr(d);
+  }
+  return dlDate;
+}
+function dlShiftDate(n){
+  var d=parseLocalDate(dlCurrentDate()); d.setDate(d.getDate()+n);
+  dlDate=dateStr(d); renderDailyLineup();
+}
+function dlSetDate(v){ if(v){ dlDate=v; renderDailyLineup(); } }
+function dlAssignFloater(name,floor){
+  var ds=dlCurrentDate(), rec=dlLoadDay(ds)||{};
+  rec.assign=rec.assign||{};
+  if(floor)rec.assign[name]=floor; else delete rec.assign[name];
+  dlSaveDay(ds,rec); renderDailyLineup();
+}
+function dlSetOcc(which,val){
+  var ds=dlCurrentDate(), rec=dlLoadDay(ds)||{};
+  var t=String(val==null?'':val).trim();
+  if(t===''){ delete rec[which]; } else { var n=parseInt(t,10); if(isNaN(n)||n<0)return; rec[which]=n; }
+  dlSaveDay(ds,rec); renderDailyLineup();
+}
+
+function dlList(title,arr,empty){
+  var h='<div style="margin-bottom:10px;"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;">'+title+'</div>';
+  if(!arr||!arr.length)h+='<div style="font-size:11px;color:var(--text3);font-style:italic;">'+(empty||'nobody in')+'</div>';
+  else h+=arr.map(function(n,i){return '<div style="font-size:12px;color:var(--text1);"><span style="color:var(--text3);">'+(i+1)+'.</span> '+escHtml(n)+'</div>';}).join('');
+  return h+'</div>';
+}
+
+function renderDailyLineup(){
+  var el=document.getElementById('dailyLineupContent');
+  if(!el)return;
+  var S=dlLoadSections(), SCH=dlLoadSchedule(), TPL=dlLoadTemplate();
+  var html='';
+
+  /* ── setup ── */
+  var ready=!!(S&&SCH);
+  html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+  html+='<div style="background:var(--navy);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128193; Source files</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);">Upload once &middot; re-upload whenever they change</div>';
+  html+='</div>';
+  function srcRow(label,ok,detail,inputId,handler){
+    var h='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;border-top:1px solid var(--border);flex-wrap:wrap;">';
+    h+='<div style="min-width:0;"><div style="font-size:12px;font-weight:700;color:var(--text1);">'+(ok?'<span style="color:var(--green);">&#10003;</span> ':'<span style="color:var(--text3);">&#9675;</span> ')+label+'</div>';
+    h+='<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+detail+'</div></div>';
+    h+='<div><button onclick="document.getElementById(\''+inputId+'\').click()" style="padding:6px 13px;background:'+(ok?'#fff':'var(--navy)')+';color:'+(ok?'var(--text1)':'#fff')+';border:1px solid '+(ok?'var(--border)':'var(--navy)')+';border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">'+(ok?'Replace':'Upload')+'</button>';
+    h+='<input type="file" id="'+inputId+'" accept=".xlsx" style="display:none;" onchange="'+handler+'(this)"></div></div>';
+    return h;
+  }
+  html+=srcRow('Section assignment',!!S,
+    S?Object.keys(S.gra).length+' floors &middot; floaters: '+(S.gra_floaters.join(', ')||'none'):'Who owns which floor and range',
+    'dlSectionsInput','dlUploadSections');
+  html+=srcRow('Schedule Draft',!!SCH,
+    SCH?SCH.count+' days loaded':'Who is in each day',
+    'dlScheduleInput','dlUploadSchedule');
+  html+=srcRow('Daily line up template',!!TPL,
+    TPL?'Excel export will use your own file':'Optional &mdash; needed for the Excel export',
+    'dlTemplateInput','dlUploadTemplate');
+  html+='</div>';
+
+  if(!ready){
+    html+='<div class="empty-state"><div class="es-icon">&#128203;</div><div class="es-title">Upload the first two files to start</div>'
+      +'<div class="es-desc">The Section assignment tells the app who owns which floor. The Schedule Draft tells it who is in. '
+      +'With both loaded, pick a date and the lineup drafts itself.</div></div>';
+    el.innerHTML=html; return;
+  }
+
+  /* ── date picker ── */
+  var ds=dlCurrentDate(), d=parseLocalDate(ds);
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px;margin-bottom:14px;">';
+  html+='<button onclick="dlShiftDate(-1)" aria-label="Previous day" style="padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">&larr;</button>';
+  html+='<div style="text-align:center;min-width:0;">';
+  html+='<div style="font-size:13px;font-weight:700;color:var(--text1);">'+d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</div>';
+  html+='<input type="date" value="'+ds+'" onchange="dlSetDate(this.value)" style="margin-top:3px;padding:2px 6px;font-size:11px;font-family:inherit;color:var(--text2);border:1px solid var(--border);border-radius:6px;background:#fff;">';
+  html+='</div>';
+  html+='<button onclick="dlShiftDate(1)" aria-label="Next day" style="padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">&rarr;</button>';
+  html+='</div>';
+
+  var P=dlBuildPlan(ds);
+  if(!P){
+    html+='<div class="empty-state"><div class="es-icon">&#128197;</div><div class="es-title">No schedule for this day</div>'
+      +'<div class="es-desc">'+escHtml(d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}))
+      +' isn\'t in the Schedule Draft that was uploaded. Try another date, or re-upload the schedule if it now covers this week.</div></div>';
+    el.innerHTML=html; return;
+  }
+
+  var occ=P.occOverride!=null?P.occOverride:P.occ;
+  var dep=P.depOverride!=null?P.depOverride:P.dep;
+  var floors=dlFinalFloors(P);
+  var ladies=Object.keys(floors).length;
+  var perLady=ladies>0&&occ?(Number(occ)/ladies):null;
+  var depLady=ladies>0&&dep?(Number(dep)/ladies):null;
+
+  /* ── actions ── */
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
+  html+='<button onclick="dlPrint()" style="padding:9px 16px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#128424; Print</button>';
+  html+='<button onclick="dlExportExcel()" style="padding:9px 16px;background:'+(TPL?'var(--gold)':'var(--s3)')+';color:'+(TPL?'#fff':'var(--text3)')+';border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:'+(TPL?'pointer':'not-allowed')+';">&#128196; Generate Excel</button>';
+  if(!TPL)html+='<div style="font-size:10px;color:var(--text3);align-self:center;">Upload your template above to enable the Excel export</div>';
+  html+='</div>';
+
+  /* ── the lineup ── */
+  html+='<div id="dlSheet" style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">';
+  html+='<div style="background:var(--navy);padding:12px 18px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">Daily Lineup &middot; '+d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric',year:'numeric'})+'</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">from schedule sheet '+escHtml(P.sheet)+'</div>';
+  html+='</div>';
+
+  /* occupancy */
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);">';
+  html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">To Clean</div>'
+    +'<input type="number" min="0" value="'+escHtml(occ)+'" onchange="dlSetOcc(\'occ\',this.value)" style="width:100%;margin-top:2px;padding:5px 7px;font-size:15px;font-weight:800;color:var(--navy);border:1px solid '+(P.occOverride!=null?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(P.occOverride!=null?'var(--gt)':'#fff')+';box-sizing:border-box;">'
+    +'<div style="font-size:9px;color:var(--text3);margin-top:2px;">schedule says '+escHtml(P.occ)+'</div></div>';
+  html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Departures</div>'
+    +'<input type="number" min="0" value="'+escHtml(dep)+'" onchange="dlSetOcc(\'dep\',this.value)" style="width:100%;margin-top:2px;padding:5px 7px;font-size:15px;font-weight:800;color:var(--navy);border:1px solid '+(P.depOverride!=null?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(P.depOverride!=null?'var(--gt)':'#fff')+';box-sizing:border-box;">'
+    +'<div style="font-size:9px;color:var(--text3);margin-top:2px;">schedule says '+escHtml(P.dep)+'</div></div>';
+  html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Rooms / lady</div>'
+    +'<div style="font-size:15px;font-weight:800;color:var(--text1);margin-top:5px;">'+(perLady!=null?perLady.toFixed(2):'&mdash;')+'</div>'
+    +'<div style="font-size:9px;color:var(--text3);margin-top:2px;">'+ladies+' ladies in</div></div>';
+  html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Departures / lady</div>'
+    +'<div style="font-size:15px;font-weight:800;color:var(--text1);margin-top:5px;">'+(depLady!=null?depLady.toFixed(2):'&mdash;')+'</div></div>';
+  html+='</div>';
+
+  /* shifts */
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;">';
+  html+='<div style="padding:12px 16px;border-right:1px solid var(--border);">';
+  html+='<div style="font-size:11px;font-weight:800;color:var(--navy);margin-bottom:8px;">&lt; AM SHIFT &gt;</div>';
+  html+=dlList('Coordinator',P.am_coord);
+  html+=dlList('Floor supervisors',P.sup);
+  html+=dlList('House attendants',P.hm);
+  html+=dlList('Lobby AM',P.lobby_am);
+  html+='</div>';
+  html+='<div style="padding:12px 16px;">';
+  html+='<div style="font-size:11px;font-weight:800;color:var(--navy);margin-bottom:8px;">&lt; PM SHIFT &gt;</div>';
+  html+=dlList('Coordinator',P.pm_coord);
+  html+=dlList('Floor supervisor',P.sup_pm);
+  html+=dlList('Lobby PM',P.lobby_pm);
+  html+=dlList('Houseman',P.hm_pm);
+  html+=dlList('Turndown',P.td);
+  html+=dlList('Overnight',P.night);
+  html+='</div></div>';
+
+  /* GRA sections */
+  html+='<div style="border-top:1px solid var(--border);padding:12px 16px;">';
+  html+='<div style="font-size:11px;font-weight:800;color:var(--navy);margin-bottom:8px;">GRA SECTIONS</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:5px;">';
+  var task=0;
+  DL_FLOORS.forEach(function(fl){
+    if(!floors[fl])return;
+    task++;
+    var isFloater=!P.gra[fl];
+    html+='<div style="background:'+(isFloater?'var(--gt)':'var(--surface)')+';border-radius:6px;padding:6px 9px;display:flex;align-items:center;gap:7px;">'
+      +'<span style="font-size:9px;font-weight:700;color:var(--text3);min-width:26px;">'+fl+'</span>'
+      +'<span style="font-size:9px;color:var(--text3);">'+task+'</span>'
+      +'<span style="font-size:12px;font-weight:700;color:var(--text1);">'+escHtml(floors[fl])+'</span>'
+      +(isFloater?'<span style="font-size:8.5px;font-weight:700;color:var(--gd);margin-left:auto;">FLOATER</span>':'')
+      +'</div>';
+  });
+  html+='</div>';
+
+  /* floaters to place */
+  var un=dlUnplacedFloaters(P);
+  var freeFloors=DL_FLOORS.filter(function(fl){ return !floors[fl]; });
+  if(P.floaters.length){
+    html+='<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">';
+    html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Floaters &mdash; you decide where each one goes</div>';
+    P.floaters.forEach(function(f){
+      var cur=(P.assign||{})[f]||'';
+      html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap;">';
+      html+='<span style="font-size:12px;font-weight:700;color:var(--text1);min-width:80px;">'+escHtml(f)+'</span>';
+      html+='<select onchange="dlAssignFloater(\''+escHtml(f).replace(/'/g,"\\'")+'\',this.value)" style="padding:4px 8px;font-size:11px;font-family:inherit;border:1px solid '+(cur?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(cur?'var(--gt)':'#fff')+';color:var(--text1);">';
+      html+='<option value="">— not placed —</option>';
+      var opts=freeFloors.slice();
+      if(cur&&opts.indexOf(cur)===-1)opts.push(cur);
+      opts.sort(function(a,b){return DL_FLOORS.indexOf(a)-DL_FLOORS.indexOf(b);});
+      opts.forEach(function(fl){ html+='<option value="'+fl+'"'+(fl===cur?' selected':'')+'>'+fl+'</option>'; });
+      html+='</select></div>';
+    });
+    html+='</div>';
+  }
+
+  /* uncovered */
+  var stillOpen=DL_FLOORS.filter(function(fl){ return !floors[fl]; })
+    .map(function(fl){ var o=(P.uncovered.filter(function(u){return u[0]===fl;})[0]||[])[1]; return [fl,o]; });
+  if(stillOpen.length){
+    html+='<div style="margin-top:12px;background:var(--rd);border:1px solid var(--red-border);border-radius:8px;padding:9px 12px;">';
+    html+='<div style="font-size:10px;font-weight:700;color:var(--red);margin-bottom:4px;">'+stillOpen.length+' section'+(stillOpen.length===1?'':'s')+' uncovered &mdash; split these rooms among the ladies who came</div>';
+    html+='<div style="font-size:11px;color:var(--red);line-height:1.6;">'+stillOpen.map(function(u){
+      return u[0]+(u[1]?' <span style="opacity:.7;">('+escHtml(u[1])+' off)</span>':' <span style="opacity:.7;">(no owner)</span>');
+    }).join(' &middot; ')+'</div></div>';
+  }
+  if(P.pulled.length){
+    html+='<div style="margin-top:10px;font-size:10px;color:var(--text3);">Pulled elsewhere by the schedule: '
+      +P.pulled.map(function(p){return escHtml(p[0])+' &rarr; '+escHtml(p[1]);}).join(' &middot; ')+'</div>';
+  }
+  html+='</div></div>';
+
+  el.innerHTML=html;
+}
+
+/* ── print ──
+   Builds its own document rather than print-styling the page: the lineup
+   goes up on a wall and gets carried around, so it wants the tight
+   multi-column shape of Carlos's own sheet, not a narrowed screenshot of
+   the app. */
+function dlPrint(){
+  var ds=dlCurrentDate(), P=dlBuildPlan(ds);
+  if(!P){ showToast('❌ Nothing to print for this day'); return; }
+  var d=parseLocalDate(ds);
+  var occ=P.occOverride!=null?P.occOverride:P.occ;
+  var dep=P.depOverride!=null?P.depOverride:P.dep;
+  var floors=dlFinalFloors(P), ladies=Object.keys(floors).length;
+  function col(t,arr){
+    return '<div class="grp"><div class="lbl">'+t+'</div>'
+      +((arr&&arr.length)?arr.map(function(n,i){return '<div class="nm">'+(i+1)+'. '+escHtml(n)+'</div>';}).join(''):'<div class="nm em">&mdash;</div>')
+      +'</div>';
+  }
+  var task=0,rows='';
+  DL_FLOORS.forEach(function(fl){
+    if(!floors[fl])return;
+    task++;
+    rows+='<tr><td class="fl">'+fl+'</td><td class="tk">'+task+'</td><td>'+escHtml(floors[fl])+'</td></tr>';
+  });
+  var open=DL_FLOORS.filter(function(fl){return !floors[fl];});
+  var h='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Daily Lineup '+ds+'</title><style>'
+    +'*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;padding:14px 18px;}'
+    +'h1{font-size:17px;margin-bottom:2px;}'
+    +'.sub{font-size:11px;color:#666;margin-bottom:10px;}'
+    +'.occ{display:flex;gap:22px;border:1px solid #999;padding:7px 10px;margin-bottom:12px;font-size:12px;}'
+    +'.occ b{font-size:15px;}'
+    +'.cols{display:flex;gap:26px;align-items:flex-start;}'
+    +'.side{flex:1;}.side h2{font-size:12px;border-bottom:1px solid #333;margin-bottom:6px;padding-bottom:2px;}'
+    +'.grp{margin-bottom:8px;}'
+    +'.lbl{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:#666;}'
+    +'.nm{font-size:12px;}.em{color:#999;}'
+    +'table{border-collapse:collapse;width:100%;margin-top:4px;}'
+    +'td{border:1px solid #bbb;padding:3px 6px;font-size:11px;}'
+    +'td.fl{width:42px;color:#666;}td.tk{width:26px;color:#666;}'
+    +'.warn{margin-top:10px;border:1px solid #999;padding:6px 9px;font-size:11px;}'
+    +'@media print{body{padding:0;}}'
+    +'</style></head><body>'
+    +'<h1>Daily Lineup &mdash; '+d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})+'</h1>'
+    +'<div class="sub">Housekeeping</div>'
+    +'<div class="occ"><div>To Clean <b>'+escHtml(occ)+'</b></div><div>Departures <b>'+escHtml(dep)+'</b></div>'
+    +'<div>Ladies <b>'+ladies+'</b></div>'
+    +'<div>Rooms/lady <b>'+(ladies&&occ?(Number(occ)/ladies).toFixed(2):'&mdash;')+'</b></div>'
+    +'<div>Dep/lady <b>'+(ladies&&dep?(Number(dep)/ladies).toFixed(2):'&mdash;')+'</b></div></div>'
+    +'<div class="cols"><div class="side"><h2>&lt; AM Shift &gt;</h2>'
+    +col('Coordinator',P.am_coord)+col('Floor supervisors',P.sup)+col('House attendants',P.hm)+col('Lobby AM',P.lobby_am)
+    +'</div><div class="side"><h2>&lt; PM Shift &gt;</h2>'
+    +col('Coordinator',P.pm_coord)+col('Floor supervisor',P.sup_pm)+col('Lobby PM',P.lobby_pm)
+    +col('Houseman',P.hm_pm)+col('Turndown',P.td)+col('Overnight',P.night)
+    +'</div><div class="side"><h2>GRA Sections</h2><table>'+rows+'</table>'
+    +(open.length?'<div class="warn"><b>Uncovered ('+open.length+'):</b> '+open.join(', ')+'</div>':'')
+    +'</div></div></body></html>';
+  var w=window.open('','_blank');
+  if(!w){ showToast('❌ Allow pop-ups to print'); return; }
+  w.document.write(h); w.document.close();
+  setTimeout(function(){ try{w.focus();w.print();}catch(e){} },250);
+}
+
+/* ── Excel export ──
+   Patches Carlos's stored template at the zip level and hands back a
+   copy. Everything not written below — borders, merges, column widths,
+   and every formula — survives untouched, which is the whole reason this
+   goes through JSZip rather than being rebuilt with SheetJS. */
+var DL_SHEET_NAME='ACTUAL (new template )';
+var DL_GRA_CELL={'2nd':'E35','3rd':'E36','4th':'E37','5th':'E38','6th':'E39','7th':'E40',
+  '8th':'E41','9th':'E42','10th':'E43','11th':'E44','12th':'E45','13th':'I35','14th':'I36',
+  '15th':'I37','16th':'I38','17th':'I39','18th':'I40','19th':'I41','20th':'I42','21st':'I43','22nd':'I44'};
+var DL_FLOATER_CELL=['I45','I46','I47'];
+var DL_XNS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+var DL_RNS='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+function dlColNum(ref){
+  var m=/^([A-Z]+)/.exec(ref)[1],n=0;
+  for(var i=0;i<m.length;i++)n=n*26+(m.charCodeAt(i)-64);
+  return n;
+}
+function dlSetCell(doc,ref,value,numeric){
+  var rn=parseInt(/(\d+)$/.exec(ref)[1],10);
+  var sd=doc.getElementsByTagNameNS(DL_XNS,'sheetData')[0];
+  var rows=sd.getElementsByTagNameNS(DL_XNS,'row'),row=null,i;
+  for(i=0;i<rows.length;i++) if(parseInt(rows[i].getAttribute('r'),10)===rn){ row=rows[i]; break; }
+  if(!row){
+    row=doc.createElementNS(DL_XNS,'row'); row.setAttribute('r',String(rn));
+    var placed=false;
+    for(i=0;i<rows.length;i++){ if(parseInt(rows[i].getAttribute('r'),10)>rn){ sd.insertBefore(row,rows[i]); placed=true; break; } }
+    if(!placed)sd.appendChild(row);
+  }
+  var cells=row.getElementsByTagNameNS(DL_XNS,'c'),cell=null;
+  for(i=0;i<cells.length;i++) if(cells[i].getAttribute('r')===ref){ cell=cells[i]; break; }
+  if(!cell){
+    cell=doc.createElementNS(DL_XNS,'c'); cell.setAttribute('r',ref);
+    var target=dlColNum(ref),put=false;
+    for(i=0;i<cells.length;i++){ if(dlColNum(cells[i].getAttribute('r'))>target){ row.insertBefore(cell,cells[i]); put=true; break; } }
+    if(!put)row.appendChild(cell);
+  }
+  while(cell.firstChild)cell.removeChild(cell.firstChild);
+  var v=String(value==null?'':value);
+  if(v===''){ cell.removeAttribute('t'); return; }
+  if(numeric){
+    cell.removeAttribute('t');
+    var ve=doc.createElementNS(DL_XNS,'v'); ve.appendChild(doc.createTextNode(v)); cell.appendChild(ve);
+  }else{
+    cell.setAttribute('t','inlineStr');
+    var is=doc.createElementNS(DL_XNS,'is'), t=doc.createElementNS(DL_XNS,'t');
+    t.appendChild(doc.createTextNode(v)); is.appendChild(t); cell.appendChild(is);
+  }
+}
+
+function dlExportExcel(){
+  var TPL=dlLoadTemplate();
+  if(!TPL){ showToast('❌ Upload your Daily line up template first'); return; }
+  if(typeof JSZip==='undefined'){ showToast('❌ Excel library not loaded — check your connection'); return; }
+  var ds=dlCurrentDate(), P=dlBuildPlan(ds);
+  if(!P){ showToast('❌ Nothing to export for this day'); return; }
+  showToast('⏳ Building the Excel...');
+
+  var bin=atob(TPL), bytes=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+
+  JSZip.loadAsync(bytes).then(function(zip){
+    return Promise.all([
+      zip.file('xl/workbook.xml').async('string'),
+      zip.file('xl/_rels/workbook.xml.rels').async('string')
+    ]).then(function(res){
+      var par=new DOMParser();
+      var wbDoc=par.parseFromString(res[0],'application/xml');
+      var relDoc=par.parseFromString(res[1],'application/xml');
+      var rels={},rl=relDoc.getElementsByTagName('Relationship');
+      for(var r=0;r<rl.length;r++)rels[rl[r].getAttribute('Id')]=rl[r].getAttribute('Target');
+      var sheets=wbDoc.getElementsByTagNameNS(DL_XNS,'sheet'),target=null;
+      for(var s=0;s<sheets.length;s++){
+        if(sheets[s].getAttribute('name')===DL_SHEET_NAME){
+          var rid=sheets[s].getAttributeNS(DL_RNS,'id')||sheets[s].getAttribute('r:id');
+          var t=rels[rid]||'';
+          target=t.indexOf('xl/')===0?t:'xl/'+t.replace(/^\//,'');
+        }
+      }
+      if(!target)throw new Error('Sheet "'+DL_SHEET_NAME+'" not found in the template.');
+      return zip.file(target).async('string').then(function(shXml){
+        var doc=par.parseFromString(shXml,'application/xml');
+        var S=function(ref,val){ dlSetCell(doc,ref,val,false); };
+        var N=function(ref,val){ dlSetCell(doc,ref,val,true); };
+        var d=parseLocalDate(ds);
+        var occ=P.occOverride!=null?P.occOverride:P.occ;
+        var dep=P.depOverride!=null?P.depOverride:P.dep;
+
+        S('J6',d.toLocaleDateString('en-US',{weekday:'long'}));
+        S('J7',ds.slice(5,7)+'.'+ds.slice(8,10)+'.'+ds.slice(0,4));
+        /* Written into the F cells so Carlos's own To Clean / Departures
+           formulas still drive off them and he can correct on the day. */
+        N('F6',occ); S('E6',''); S('G6','');
+        N('F7',dep); S('E7',''); S('G7','');
+        N('J49',occ);
+        S('C9',P.am_coord.join(', ')); S('J9',P.pm_coord.join(', '));
+        function fill(refs,arr){ refs.forEach(function(ref,ix){ S(ref,(arr&&arr[ix])||''); }); }
+        fill(['B12','B13','B14','B15','B16','B17'],P.sup);
+        fill(['I12','I13'],P.sup_pm);
+        fill(['B20','B21','B22','B23','B24','B25'],P.hm);
+        fill(['I15','I16'],P.lobby_am);
+        fill(['I18','I19'],P.lobby_pm);
+        fill(['I21','I22'],P.hm_pm);
+        fill(['I24','I25','I26'],P.night);
+        fill(['E49','E50','E51','E52','E53','E54','E55'],P.td);
+        var floors=dlFinalFloors(P);
+        Object.keys(DL_GRA_CELL).forEach(function(fl){ S(DL_GRA_CELL[fl],floors[fl]||''); });
+        fill(DL_FLOATER_CELL,dlUnplacedFloaters(P));
+
+        /* Cached formula results are stale now; make Excel recalculate. */
+        var calc=wbDoc.getElementsByTagNameNS(DL_XNS,'calcPr')[0];
+        if(!calc){ calc=wbDoc.createElementNS(DL_XNS,'calcPr'); wbDoc.documentElement.appendChild(calc); }
+        calc.setAttribute('fullCalcOnLoad','1');
+
+        var ser=new XMLSerializer();
+        zip.file(target,ser.serializeToString(doc));
+        zip.file('xl/workbook.xml',ser.serializeToString(wbDoc));
+        return zip.generateAsync({type:'blob',compression:'DEFLATE'});
+      });
+    });
+  }).then(function(blob){
+    var name='Daily line up '+ds.slice(5,7)+'.'+ds.slice(8,10)+'.'+ds.slice(0,4)+'.xlsx';
+    var url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download=name; document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); },100);
+    showToast('✓ '+name);
+  }).catch(function(e){
+    showToast('❌ '+(e&&e.message?e.message:'Could not build the Excel'));
+  });
+}
 
 </script>
 </body>

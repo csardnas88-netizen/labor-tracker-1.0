@@ -10,7 +10,7 @@
 
    Bump CACHE_VERSION on every deploy so users get the new build.
    ══════════════════════════════════════════════════════ */
-var CACHE_VERSION = 'labor-v7.2.5';
+var CACHE_VERSION = 'labor-v7.3.0';
 
 /* Same-origin shell. Relative paths keep this working under the
    /labor-tracker-1.0/ sub-path GitHub Pages serves from. */
@@ -26,7 +26,8 @@ var VENDOR = [
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
 ];
 
 self.addEventListener('install', function (e) {
