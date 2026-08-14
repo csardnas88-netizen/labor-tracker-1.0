@@ -445,6 +445,50 @@ module.exports = {
     win.dlSetFloors('Susan', '');
     win.dlSetFloors('David', '');
 
+    // ── The .XX in "43.33 each" spelled out as a real split ──
+    // Carlos asked what the decimal actually means once the shift
+    // starts: with 130 departures across 3 supervisors, nobody gets a
+    // fraction — two of them get 43 and one gets 44. This must show up
+    // wherever a per-person average already does (Floor supervisors,
+    // House attendants, Turndown), on both the screen and the print.
+    const evenPlan = win.dlBuildPlan('2026-08-14');
+    t.eq(evenPlan.toCleanDep, 130, 'the departures total this split is based on');
+    t.eq(evenPlan.sup.length, 3, 'three floor supervisors this day');
+    // 130 / 3 = 43 remainder 1 -> two people at 43, one at 44.
+    win.renderDailyLineup();
+    const splitHtml = win.document.getElementById('dailyLineupContent').innerHTML;
+    t.assert(/43\.33/.test(splitHtml), 'the average still shows');
+    t.assert(/\(2 at 43, 1 at 44\)/.test(splitHtml), 'and the real split is spelled out beside it');
+
+    let splitPrinted = '';
+    const realOpenSplit = win.open;
+    win.open = () => ({ document: { write: (h) => { splitPrinted = h; }, close() {} }, focus() {}, print() {} });
+    try { win.dlPrint(); } finally { win.open = realOpenSplit; }
+    t.assert(/\(2 at 43, 1 at 44\)/.test(splitPrinted), 'the printed sheet spells out the same split for Floor supervisors');
+    // Turndown: 133 rooms / 3 attendants = 44 remainder 1 -> two at 44, one at 45.
+    t.assert(/\(2 at 44, 1 at 45\)/.test(splitPrinted), 'and its own split for Turndown, a different total and a different remainder');
+
+    // A split with no remainder gets no note — it would just repeat the
+    // average and add noise on a day that happens to divide evenly.
+    // GRA Sections: 190 rooms / 5 ladies = 38 exactly, 130 departures /
+    // 5 ladies = 26 exactly.
+    const graBarHtml = splitHtml.match(/GRA Sections<\/span>.*?<\/div>/s);
+    t.assert(graBarHtml && /38\.00/.test(graBarHtml[0]), 'the even rooms average still shows');
+    t.assert(graBarHtml && !/\(\d+ at \d+/.test(graBarHtml[0]), 'but no split note, since 190 divides evenly across 5 ladies');
+
+    // The printed GRA Sections figure is its own hand-rolled line (not
+    // routed through the shared each()/dlEach() helper the other roles
+    // use), so it needs its own check that the split note actually
+    // reaches it — this was the one place it didn't, until now.
+    win.dlSetOcc('occ', '191');
+    let graPrinted = '';
+    const realOpenGra = win.open;
+    win.open = () => ({ document: { write: (h) => { graPrinted = h; }, close() {} }, focus() {}, print() {} });
+    try { win.dlPrint(); } finally { win.open = realOpenGra; }
+    t.assert(/perlady">38\.20 rooms <span class="sn">\(4 at 38, 1 at 39\)/.test(graPrinted),
+      'and it shows up there too: 191 rooms / 5 ladies is not even, so the printed sheet says who gets the extra one');
+    win.dlSetOcc('occ', '');
+
     // ── Every floor stays on the sheet, covered or not ──
     // An uncovered floor still has rooms that must go somewhere; Carlos
     // writes a name on that line by hand, so the row cannot vanish.

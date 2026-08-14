@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.3.6"/>
+<meta name="app-version" content="7.3.7"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4300,6 +4300,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.3.7', date:'2026-08-14',
+    improvements:['Every "X.XX each" figure on the Daily Lineup (Floor Supervisors, House Attendants, Turndown, and GRA Sections) now spells out what that decimal means in practice — "43.33 departures each (2 at 43, 1 at 44)" — since the .33 was never a number anyone actually gets. Carlos asked who ends up with more and who ends up with less; this answers it directly instead of leaving the split to be worked out by hand. Same note on the printed sheet, in every section that has one.']
+  },
   {
     v:'7.3.6', date:'2026-08-14',
     features:[
@@ -18396,9 +18400,22 @@ function renderDailyLineup(){
       +' style="width:100%;min-width:0;padding:2px 1px;font-size:10.5px;font-weight:700;text-align:center;color:var(--navy);'
       +'border:1px solid '+(val?'#C9A84C':'var(--border)')+';border-radius:4px;background:'+(val?'var(--gt)':'#fff')+';box-sizing:border-box;">';
   }
+  /* The .XX in an average like "43.33 each" is not a real number anyone
+     gets — it's what's left over after splitting evenly, and someone
+     has to take the extra one. Carlos asked what that actually means in
+     practice: with 130 across 3 people, two get 43 and one gets 44. */
+  function dlSplitNote(total,n){
+    if(!n)return '';
+    var base=Math.floor(total/n), rem=total-base*n;
+    if(rem===0)return '';
+    var parts=[];
+    if(n-rem>0)parts.push((n-rem)+' at '+base);
+    parts.push(rem+' at '+(base+1));
+    return ' <span style="color:var(--text3);font-weight:600;">('+parts.join(', ')+')</span>';
+  }
   function dlEach(total,n,noun){
     if(!n)return '';
-    return '<b style="color:var(--gd);font-weight:800;">'+(total/n).toFixed(2)+'</b> '+noun+' each';
+    return '<b style="color:var(--gd);font-weight:800;">'+(total/n).toFixed(2)+'</b> '+noun+' each'+dlSplitNote(total,n);
   }
 
   /* ── occupancy math, as a real table: (received + base) - dropped ── */
@@ -18647,8 +18664,16 @@ function dlPrint(){
   /* Same per-person load the screen shows, beside the same crew — this
      is the sheet the managers are actually handed, so it must not be the
      one place the figure is missing. */
+  function splitNote(total,n){
+    var base=Math.floor(total/n), rem=total-base*n;
+    if(rem===0)return '';
+    var parts=[];
+    if(n-rem>0)parts.push((n-rem)+' at '+base);
+    parts.push(rem+' at '+(base+1));
+    return ' <span class="sn">('+parts.join(', ')+')</span>';
+  }
   function each(total,n,noun){
-    return n?'<span class="ea">'+(total/n).toFixed(2)+' '+noun+' each</span>':'';
+    return n?'<span class="ea">'+(total/n).toFixed(2)+' '+noun+' each'+splitNote(total,n)+'</span>':'';
   }
   function col(t,arr,ea){
     return '<div class="grp'+((arr&&arr.length)?'':' em0')+'"><div class="lbl">'+t+(ea||'')+'</div>'
@@ -18729,6 +18754,7 @@ function dlPrint(){
     +'.grp.em0{border-left-color:#D6CCBC;background:transparent;}'
     +'.lbl{font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;color:#8C8680;font-weight:700;}'
     +'.ea{float:right;text-transform:none;letter-spacing:0;font-weight:800;color:#8A6F20;}'
+    +'.sn{font-weight:600;color:#8C8680;}'
     +'.perlady{font-size:10px;font-weight:800;color:#8A6F20;margin-bottom:5px;}'
     +'.nm{font-size:12px;color:#1A1714;font-weight:600;margin-top:2px;}'
     +'.em{color:#8C8680;font-weight:500;}'
@@ -18765,7 +18791,7 @@ function dlPrint(){
     +col('Turndown',P.td,each(P.tdOcc,P.td.length,'rooms'))
     +col('Overnight',P.night)
     +'</div><div class="side"><h2>GRA Sections</h2>'
-    +(ladies?'<div class="perlady">'+(P.toClean/ladies).toFixed(2)+' rooms &middot; '+(P.toCleanDep/ladies).toFixed(2)+' departures each</div>':'')
+    +(ladies?'<div class="perlady">'+(P.toClean/ladies).toFixed(2)+' rooms'+splitNote(P.toClean,ladies)+' &middot; '+(P.toCleanDep/ladies).toFixed(2)+' departures each'+splitNote(P.toCleanDep,ladies)+'</div>':'')
     +'<table><tr><th class="fl">Fl</th><th class="tk">Tk</th><th>GRA Name</th><th class="wr">Rms</th><th class="wr">Dep</th><th class="ck">&#10003;</th></tr>'+rows+'</table>'
     +'<table class="xt">'+extraRows+'</table>'
     +(open.length?'<div class="warn"><b>Uncovered ('+open.length+'):</b> '+open.join(', ')+'</div>':'')
