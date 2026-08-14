@@ -332,6 +332,27 @@ module.exports = {
     win.dlDate = '2026-08-14';
     t.eq(win.dlBuildPlan('2026-08-14').toClean, 190, 'clearing every adjustment returns To Clean to the plain schedule figure');
 
+    // ── Turndown divides by its OWN occupancy ──
+    // Carlos's sheet keeps turndown's figure in a separate cell from To
+    // Clean, and they genuinely differ: on Aug 14 To Clean was 181 while
+    // turndown ran 133. Dividing turndown by To Clean would have told
+    // three attendants they had 63 rooms each on a night that really ran
+    // 44 — a number a manager would act on.
+    const td0 = win.dlBuildPlan('2026-08-14');
+    t.eq(td0.tdOccSched, 133, "the schedule's own turndown OCC row is read, from inside the turndown block");
+    t.eq(td0.tdOcc, 133, 'and is what turndown divides by — NOT To Clean');
+    t.assert(td0.tdOcc !== td0.toClean, 'the two are genuinely different figures (190 to clean vs 133 turndown)');
+    t.eq(td0.tdOccAuto, true, 'flagged as not hand-confirmed, so the page can show where it came from');
+
+    win.dlDate = '2026-08-14';
+    win.dlSetOcc('tdOcc', '133');
+    const td1 = win.dlBuildPlan('2026-08-14');
+    t.eq(td1.tdOcc, 133, "typing turndown's real occupancy pins it");
+    t.eq(td1.tdOccAuto, false, 'and it stops being a seed');
+    t.eq(td1.toClean, 190, 'without touching To Clean, which is a different figure entirely');
+    win.dlSetOcc('tdOcc', '');
+    t.eq(win.dlBuildPlan('2026-08-14').tdOcc, 133, "clearing it falls back to the schedule's figure, not to zero and not to To Clean");
+
     // ── A day the schedule does not cover must say so, not draw a blank
     // lineup that looks like nobody is working. ──
     t.eq(win.dlBuildPlan('2026-12-25'), null, 'a date outside the loaded schedule yields no plan at all');

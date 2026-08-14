@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.3.3"/>
+<meta name="app-version" content="7.3.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4171,7 +4171,17 @@ function doExport(){
   showToast("Excel exported successfully");
 }
 function showToast(m){
-  document.getElementById("toastMsg").textContent=m;
+  /* Most callers write their leading icon as a numeric HTML entity
+     ("&#10003; Saved"). textContent renders that literally, so those
+     toasts have been showing "&#10003;" as visible text. Decoded here
+     rather than switching to innerHTML: the messages interpolate roster
+     names, report labels and emails, and none of that should ever be
+     parsed as markup. Only &#NNNN; is decoded, and the result still
+     goes out through textContent. */
+  document.getElementById("toastMsg").textContent=
+    String(m==null?'':m).replace(/&#(\d+);/g,function(_,n){
+      try{ return String.fromCodePoint(parseInt(n,10)); }catch(e){ return _; }
+    });
   var t=document.getElementById("toast");t.classList.add("show");
   setTimeout(function(){t.classList.remove("show")},2800);
 }
@@ -4290,6 +4300,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.3.4', date:'2026-08-13',
+    improvements:[
+      'The Daily Lineup now shows a per-person room load beside every crew, not just the GRAs — Carlos pointed out that Turndown, the housemen and the supervisors had none. Floor supervisors and house attendants each carry their departures-per-person figure, Turndown carries its rooms-per-attendant, and the GRAs\' rooms-per-lady and departures-per-lady moved out of the summary row at the top down to the GRA Sections heading, right beside the crew they describe. Each is divided by the people actually in that day, the same way his own sheet counts them, so a call-off moves the number.',
+      'Turndown now divides by its OWN occupancy instead of the morning\'s To Clean. They are genuinely different figures — Friday Aug 14 read 190 to clean but 150 for turndown — so the old number told three attendants they had 63 rooms each on a night that really ran 50. It is read straight from the schedule\'s own turndown occupancy row, and stays editable for the day it needs correcting.'
+    ],
+    fixes:['Toast messages were printing their icon as raw text: "&#10003; Project created" instead of a checkmark. Over thirty of them did this, so it showed on nearly every save. The icon is now decoded properly, while the message itself is still handled as plain text — roster names and report labels get interpolated into these, and none of that should ever be treated as markup.']
+  },
   {
     v:'7.3.3', date:'2026-08-13',
     improvements:[
@@ -17975,6 +17993,18 @@ function dlParseSchedule(wb,todayRef){
       }
       return res;
     }
+    /* The PM Turndown block carries its OWN occupancy row, and it is a
+       different number from the header OCC up top — Fri Aug 14 2026 reads
+       150 here against 190 there, because turndown covers the rooms
+       occupied that night rather than the rooms cleaned that morning.
+       Found by label inside its own block for the same reason every
+       other block is: the row moves between weekly sheets. */
+    var tdOccRow=(function(){
+      var st=rowAfter('PM Turndown /GRA',0); if(st==null)return null;
+      var en=rowAfter('Total  TD attd',st); if(en==null)return null;
+      for(var rr=st+1;rr<en;rr++) if(A(rr)==='OCC')return rr;
+      return null;
+    })();
     var blocks={
       mgr:block('Managers','Departures',0),
       sup:block('Departures','Missing Supervisor',mgrRow),
@@ -17991,7 +18021,7 @@ function dlParseSchedule(wb,todayRef){
       try{ d=dlSerialToDate(raw); }catch(e){ continue; }
       if(isNaN(d.getTime()))continue;
       if(d<lo||d>hi)continue;
-      var rec={sheet:sn,occ:V(7,c),dep:V(8,c)};
+      var rec={sheet:sn,occ:V(7,c),dep:V(8,c),tdOcc:tdOccRow?V(tdOccRow,c):''};
       Object.keys(blocks).forEach(function(k){
         rec[k]=blocks[k].map(function(r5){ return [A(r5),V(r5,c)]; });
       });
@@ -18076,6 +18106,18 @@ function dlBuildPlan(ds){
   P.recvDepAuto=(saved.recvDep==null&&dlNumOr(prev.dropDep,0)>0);
   P.toClean=P.recv+P.occBase-P.drop;
   P.toCleanDep=P.recvDep+P.depBase-P.dropDep;
+  /* Turndown divides by its OWN occupancy, not To Clean — they are
+     genuinely different figures and Carlos's sheet keeps them in
+     separate cells (J49 vs C6). Fri Aug 14 2026: To Clean 190, turndown
+     150. Taken from the schedule's own turndown OCC row where it has
+     one, falling back to To Clean only if that row is missing, and
+     overridable either way. Dividing turndown by To Clean would have
+     printed 63 rooms per attendant on a night that ran 50. */
+  var tdSched=parseInt(day.tdOcc,10);
+  P.tdOccSched=isNaN(tdSched)?null:tdSched;
+  P.tdOcc=saved.tdOcc!=null?dlNumOr(saved.tdOcc,P.toClean)
+         :(P.tdOccSched!=null?P.tdOccSched:P.toClean);
+  P.tdOccAuto=(saved.tdOcc==null);
   return P;
 }
 function dlPrevDs(ds){ var d=parseLocalDate(ds); d.setDate(d.getDate()-1); return dateStr(d); }
@@ -18255,8 +18297,6 @@ function renderDailyLineup(){
   html+=dlTile(P.toClean,'To Clean',null,'var(--gd)');
   html+=dlTile(P.toCleanDep,'Departures');
   html+=dlTile(ladies,'Ladies in');
-  html+=dlTile(perLady!=null?perLady.toFixed(2):'&mdash;','Rooms / lady');
-  html+=dlTile(depLady!=null?depLady.toFixed(2):'&mdash;','Departures / lady');
   html+='</div>';
 
   /* ── the lineup sheet itself — everything below reads as one printed
@@ -18272,8 +18312,22 @@ function renderDailyLineup(){
      below (Occupancy, AM Shift, PM Shift, GRA Sections), the same way
      every other page in this app opens a sub-table with a labeled bar
      rather than a bare bold line of text. */
-  function dlBar(label){
-    return '<div style="background:var(--surface);padding:7px 16px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--text1);text-transform:uppercase;letter-spacing:.4px;">'+label+'</div>';
+  function dlBar(label,right){
+    return '<div style="background:var(--surface);padding:7px 16px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">'
+      +'<span style="font-size:10px;font-weight:700;color:var(--text1);text-transform:uppercase;letter-spacing:.4px;">'+label+'</span>'
+      +(right?'<span style="font-size:10px;color:var(--text2);">'+right+'</span>':'')+'</div>';
+  }
+  /* Carlos's sheet carries a per-person load beside every crew, not just
+     the GRAs: Rooms per HM and Rooms per Sup sit under the AM shift, and
+     the turndown block has its own. They are the numbers a manager is
+     actually handed, so each one goes NEXT TO the crew it describes
+     rather than in a summary row at the top, which is where he pointed
+     out they were missing. Division is by the crew ACTUALLY in that day
+     (the same COUNTA-over-the-filled-names his formulas do), so a
+     call-off moves the figure the same way it moves his. */
+  function dlEach(total,n,noun){
+    if(!n)return '';
+    return '<b style="color:var(--gd);font-weight:800;">'+(total/n).toFixed(2)+'</b> '+noun+' each';
   }
 
   /* ── occupancy math, as a real table: (received + base) - dropped ── */
@@ -18320,18 +18374,20 @@ function renderDailyLineup(){
      bare floating text: a left gold accent bar and a light background,
      the same "labeled block" language assign_buildResult already uses
      on the Assignments page. ── */
-  function dlRoleBlock(label,arr){
+  function dlRoleBlock(label,arr,each){
     var has=arr&&arr.length;
     var names=has?arr.map(function(n,i){return '<span style="white-space:nowrap;">'+(i+1)+'. '+escHtml(n)+'</span>';}).join('<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>') : '<span style="color:var(--text3);font-style:italic;">nobody in</span>';
     return '<div style="border-left:3px solid '+(has?'var(--gold)':'var(--border2)')+';background:'+(has?'var(--surface)':'transparent')+';border-radius:0 6px 6px 0;padding:6px 10px;margin-bottom:6px;">'
-      +'<div style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">'+label+'</div>'
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
+      +'<span style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">'+label+'</span>'
+      +((has&&each)?'<span style="font-size:10px;color:var(--text2);">'+each+'</span>':'')+'</div>'
       +'<div style="font-size:12px;font-weight:600;color:var(--text1);margin-top:2px;line-height:1.5;">'+names+'</div></div>';
   }
   html+=dlBar('&lt; AM Shift &gt;');
   html+='<div style="padding:10px 16px;">';
   html+=dlRoleBlock('Coordinator',P.am_coord);
-  html+=dlRoleBlock('Floor supervisors',P.sup);
-  html+=dlRoleBlock('House attendants',P.hm);
+  html+=dlRoleBlock('Floor supervisors',P.sup,dlEach(P.toCleanDep,P.sup.length,'departures'));
+  html+=dlRoleBlock('House attendants',P.hm,dlEach(P.toCleanDep,P.hm.length,'departures'));
   html+=dlRoleBlock('Lobby AM',P.lobby_am);
   html+='</div>';
 
@@ -18341,7 +18397,12 @@ function renderDailyLineup(){
   html+=dlRoleBlock('Floor supervisor',P.sup_pm);
   html+=dlRoleBlock('Lobby PM',P.lobby_pm);
   html+=dlRoleBlock('Houseman',P.hm_pm);
-  html+=dlRoleBlock('Turndown',P.td);
+  html+=dlRoleBlock('Turndown',P.td, P.td.length
+    ? '<input type="number" min="0" value="'+escHtml(P.tdOcc)+'" title="Rooms occupied that night — turndown\'s own figure, not To Clean"'
+      +' onchange="dlSetOcc(\'tdOcc\',this.value)" style="width:56px;padding:2px 4px;font-size:11px;font-weight:800;text-align:center;color:var(--navy);border:1px solid '
+      +(P.tdOccAuto?'var(--border)':'#C9A84C')+';border-radius:5px;background:'+(P.tdOccAuto?'#fff':'var(--gt)')+';">'
+      +' rooms &rarr; '+dlEach(P.tdOcc,P.td.length,'')
+    : '');
   html+=dlRoleBlock('Overnight',P.night);
   html+='</div>';
 
@@ -18350,7 +18411,9 @@ function renderDailyLineup(){
      floaters on the right, each FLOORS / TASK / GRA NAME), instead of a
      loose wrap of chips. This is the one part of the page he'd recognize
      on sight, so it gets his own layout, not a reinvented one. ── */
-  html+=dlBar('GRA Sections');
+  html+=dlBar('GRA Sections', ladies
+    ? dlEach(P.toClean,ladies,'rooms')+'<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>'+dlEach(P.toCleanDep,ladies,'departures')
+    : '');
   var LEFT_FLOORS=DL_FLOORS.slice(0,11), RIGHT_FLOORS=DL_FLOORS.slice(11);
   var task=0, taskFor={};
   DL_FLOORS.forEach(function(fl){ if(floors[fl])taskFor[fl]=++task; });
@@ -18456,8 +18519,14 @@ function dlPrint(){
     if(drop)bits.push('&minus;'+drop+' dropped');
     return bits.length?' <span style="font-size:10px;color:#666;">('+bits.join(', ')+')</span>':'';
   }
-  function col(t,arr){
-    return '<div class="grp"><div class="lbl">'+t+'</div>'
+  /* Same per-person load the screen shows, beside the same crew — this
+     is the sheet the managers are actually handed, so it must not be the
+     one place the figure is missing. */
+  function each(total,n,noun){
+    return n?'<span class="ea">'+(total/n).toFixed(2)+' '+noun+' each</span>':'';
+  }
+  function col(t,arr,ea){
+    return '<div class="grp"><div class="lbl">'+t+(ea||'')+'</div>'
       +((arr&&arr.length)?arr.map(function(n,i){return '<div class="nm">'+(i+1)+'. '+escHtml(n)+'</div>';}).join(''):'<div class="nm em">&mdash;</div>')
       +'</div>';
   }
@@ -18486,6 +18555,8 @@ function dlPrint(){
     +'.side{flex:1;}.side h2{font-size:12px;border-bottom:1px solid #333;margin-bottom:6px;padding-bottom:2px;}'
     +'.grp{margin-bottom:8px;}'
     +'.lbl{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:#666;}'
+    +'.ea{float:right;text-transform:none;letter-spacing:0;font-weight:700;color:#8A6F20;}'
+    +'.perlady{font-size:10px;font-weight:700;color:#8A6F20;margin-bottom:4px;}'
     +'.nm{font-size:12px;}.em{color:#999;}'
     +'table{border-collapse:collapse;width:100%;margin-top:4px;}'
     +'td{border:1px solid #bbb;padding:3px 6px;font-size:11px;}'
@@ -18497,15 +18568,20 @@ function dlPrint(){
     +'<div class="sub">Housekeeping</div>'
     +'<div class="occ"><div>To Clean <b>'+P.toClean+'</b>'+adj(P.recv,P.drop)+'</div>'
     +'<div>Departures <b>'+P.toCleanDep+'</b>'+adj(P.recvDep,P.dropDep)+'</div>'
-    +'<div>Ladies <b>'+ladies+'</b></div>'
-    +'<div>Rooms/lady <b>'+(ladies?(P.toClean/ladies).toFixed(2):'&mdash;')+'</b></div>'
-    +'<div>Dep/lady <b>'+(ladies?(P.toCleanDep/ladies).toFixed(2):'&mdash;')+'</b></div></div>'
+    +'<div>Ladies <b>'+ladies+'</b></div></div>'
     +'<div class="cols"><div class="side"><h2>&lt; AM Shift &gt;</h2>'
-    +col('Coordinator',P.am_coord)+col('Floor supervisors',P.sup)+col('House attendants',P.hm)+col('Lobby AM',P.lobby_am)
+    +col('Coordinator',P.am_coord)
+    +col('Floor supervisors',P.sup,each(P.toCleanDep,P.sup.length,'dep'))
+    +col('House attendants',P.hm,each(P.toCleanDep,P.hm.length,'dep'))
+    +col('Lobby AM',P.lobby_am)
     +'</div><div class="side"><h2>&lt; PM Shift &gt;</h2>'
     +col('Coordinator',P.pm_coord)+col('Floor supervisor',P.sup_pm)+col('Lobby PM',P.lobby_pm)
-    +col('Houseman',P.hm_pm)+col('Turndown',P.td)+col('Overnight',P.night)
-    +'</div><div class="side"><h2>GRA Sections</h2><table>'+rows+'</table>'
+    +col('Houseman',P.hm_pm)
+    +col('Turndown',P.td,each(P.tdOcc,P.td.length,'rooms'))
+    +col('Overnight',P.night)
+    +'</div><div class="side"><h2>GRA Sections</h2>'
+    +(ladies?'<div class="perlady">'+(P.toClean/ladies).toFixed(2)+' rooms &middot; '+(P.toCleanDep/ladies).toFixed(2)+' departures each</div>':'')
+    +'<table>'+rows+'</table>'
     +(open.length?'<div class="warn"><b>Uncovered ('+open.length+'):</b> '+open.join(', ')+'</div>':'')
     +'</div></div></body></html>';
   var w=window.open('','_blank');
@@ -18605,7 +18681,7 @@ function dlExportExcel(){
            Clean the app shows. */
         N('E6',P.recv); N('F6',P.occBase); N('G6',P.drop);
         N('E7',P.recvDep); N('F7',P.depBase); N('G7',P.dropDep);
-        N('J49',P.toClean);
+        N('J49',P.tdOcc);
         S('C9',P.am_coord.join(', ')); S('J9',P.pm_coord.join(', '));
         function fill(refs,arr){ refs.forEach(function(ref,ix){ S(ref,(arr&&arr[ix])||''); }); }
         fill(['B12','B13','B14','B15','B16','B17'],P.sup);
