@@ -344,5 +344,16 @@ module.exports = {
     t.assert(/Debora/.test(html), 'with the section owners on it');
     t.assert(/uncovered/i.test(html), 'and says plainly that sections are uncovered');
     t.assert(/Ada/.test(html) && /Mayra/.test(html), 'and offers the floaters to place');
+
+    // ── Print: a real printed page, not the browser's dark-mode guess
+    // at one. A print window that never states its own colors gets
+    // force-inverted by a dark OS/browser theme — legible on screen,
+    // useless once actually printed and read off paper. ──
+    let printedHtml = '';
+    const realOpen = win.open;
+    win.open = () => ({ document: { write: (h) => { printedHtml = h; }, close() {} }, focus() {}, print() {} });
+    try { win.dlPrint(); } finally { win.open = realOpen; }
+    t.assert(/name="color-scheme" content="light"/.test(printedHtml), 'the print page pins itself to light mode explicitly');
+    t.assert(/background:#fff/.test(printedHtml), 'with a real white background stated outright, not left to the browser to guess');
   }
 };

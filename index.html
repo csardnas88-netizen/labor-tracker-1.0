@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.3.2"/>
+<meta name="app-version" content="7.3.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -460,7 +460,14 @@ tbody tr:hover td{background:var(--surface);}
 }
 
 .main-wrap{margin-left:260px;min-height:100vh;min-width:0;width:calc(100% - 260px);flex:none;}
-.pages-wrap{padding:var(--sp-xl);max-width:1100px;margin:0 auto;}
+/* min-width:0 — .pages-wrap is a flex item of .main-wrap, and a flex
+   item's default min-width is auto: it refuses to shrink below its
+   widest descendant's intrinsic size, even one sitting inside its own
+   overflow-x:auto scroller (Daily Lineup's occupancy and GRA tables set
+   an explicit min-width so their columns stay legible on a real phone).
+   Without this the whole page — not just that one table — grows wider
+   than the viewport instead of the table quietly scrolling on its own. */
+.pages-wrap{padding:var(--sp-xl);max-width:1100px;margin:0 auto;min-width:0;width:100%;overflow-x:hidden;}
 .sidebar{position:fixed;top:0;left:0;width:260px;height:100vh;background:var(--navy);color:#fff;display:flex;flex-direction:column;z-index:200;overflow-y:auto;transition:transform .25s;}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:199;}
 .sidebar-header{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:12px;}
@@ -4283,6 +4290,13 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.3.3', date:'2026-08-13',
+    improvements:[
+      'Redesigned the Daily Lineup to match the rest of the app instead of looking like an unfinished sketch, per Carlos\'s note. Summary tiles at the top now use the same card style as Occupancy and D&Ds; every block (Occupancy, AM Shift, PM Shift, GRA Sections) opens with a labeled bar instead of a bare line of bold text; and each role\'s crew is now a filled gold-accented block rather than names floating on white. GRA Sections was rebuilt as the actual two-column Floor/Task/GRA Name table from Carlos\'s own sheet (floors 2nd-12th on the left, 13th-22nd plus floaters on the right) instead of a loose wrap of chips — the one part of the page a manager would recognize on sight, so it keeps his layout rather than a reinvented one.',
+      'Fixed the print view rendering unreadable on a device set to dark mode: the popup never stated its own colors, so the browser force-inverted it into pale grey text on a near-black page. It now pins itself to a real white page with black text no matter what theme the browser or the OS prefers, so what prints matches what was checked on screen.'
+    ]
+  },
   {
     v:'7.3.2', date:'2026-08-13',
     fixes:['Daily Lineup now carries drop rooms and received rooms — Carlos flagged that his sheet computes To Clean as (rooms received + OCC before) minus (rooms dropped to tomorrow), and that adjustment was missing entirely: worse, the Excel export was actively blanking those two cells on every generation, silently erasing anything typed there. Both figures are editable right on the page next to the base occupancy, the totals update live, and a day\'s dropped rooms now default into the NEXT day\'s received figure automatically (still overridable by typing over it) — since that is exactly where those rooms went. Both Print and the Excel export carry the same numbers now.']
@@ -18157,13 +18171,6 @@ function dlSetOcc(which,val){
   dlSaveDay(ds,rec); renderDailyLineup();
 }
 
-function dlList(title,arr,empty){
-  var h='<div style="margin-bottom:10px;"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;">'+title+'</div>';
-  if(!arr||!arr.length)h+='<div style="font-size:11px;color:var(--text3);font-style:italic;">'+(empty||'nobody in')+'</div>';
-  else h+=arr.map(function(n,i){return '<div style="font-size:12px;color:var(--text1);"><span style="color:var(--text3);">'+(i+1)+'.</span> '+escHtml(n)+'</div>';}).join('');
-  return h+'</div>';
-}
-
 function renderDailyLineup(){
   var el=document.getElementById('dailyLineupContent');
   if(!el)return;
@@ -18235,23 +18242,50 @@ function renderDailyLineup(){
   html+='<button onclick="dlExportExcel()" style="padding:9px 16px;background:var(--gold);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#128196; Generate Excel</button>';
   html+='</div>';
 
-  /* ── the lineup ── */
+  /* Summary tiles — same card language as every other page's headline
+     numbers (Occupancy's Total/Avg/Peak, D&Ds' stat row): white card,
+     hairline border, a big number and a small caption underneath. */
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px;">';
+  function dlTile(val,label,sub,color){
+    return '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:11px 13px;">'
+      +'<div style="font-size:20px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+      +'<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:2px;">'+label+'</div>'
+      +(sub?'<div style="font-size:9.5px;color:var(--text3);margin-top:1px;">'+sub+'</div>':'')+'</div>';
+  }
+  html+=dlTile(P.toClean,'To Clean',null,'var(--gd)');
+  html+=dlTile(P.toCleanDep,'Departures');
+  html+=dlTile(ladies,'Ladies in');
+  html+=dlTile(perLady!=null?perLady.toFixed(2):'&mdash;','Rooms / lady');
+  html+=dlTile(depLady!=null?depLady.toFixed(2):'&mdash;','Departures / lady');
+  html+='</div>';
+
+  /* ── the lineup sheet itself — everything below reads as one printed
+     form, same way Carlos's own spreadsheet does: a navy title bar, then
+     bordered tables stacked with no gaps between them. ── */
   html+='<div id="dlSheet" style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">';
   html+='<div style="background:var(--navy);padding:12px 18px;">';
   html+='<div style="font-size:13px;font-weight:700;color:#fff;">Daily Lineup &middot; '+d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric',year:'numeric'})+'</div>';
   html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">from schedule sheet '+escHtml(P.sheet)+'</div>';
   html+='</div>';
 
-  /* ── occupancy, laid out as the sheet computes it:
-     (received + base) - dropped = to clean ── */
-  var occCols='1fr 74px 12px 74px 12px 74px 74px';
+  /* Section header bar — the one visual unit reused for every block
+     below (Occupancy, AM Shift, PM Shift, GRA Sections), the same way
+     every other page in this app opens a sub-table with a labeled bar
+     rather than a bare bold line of text. */
+  function dlBar(label){
+    return '<div style="background:var(--surface);padding:7px 16px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--text1);text-transform:uppercase;letter-spacing:.4px;">'+label+'</div>';
+  }
+
+  /* ── occupancy math, as a real table: (received + base) - dropped ── */
+  html+=dlBar('Occupancy');
+  var occCols='84px 70px 16px 70px 16px 70px 70px';
   function numBox(key,val,gold,ttl){
     return '<input type="number" min="0" value="'+escHtml(val)+'" title="'+ttl+'" onchange="dlSetOcc(\''+key+'\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 3px;font-size:13px;font-weight:800;text-align:center;color:var(--navy);border:1px solid '
+      +' style="width:100%;min-width:0;padding:4px 3px;font-size:12px;font-weight:800;text-align:center;color:var(--navy);border:1px solid '
       +(gold?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(gold?'var(--gt)':'#fff')+';box-sizing:border-box;">';
   }
-  html+='<div style="padding:10px 16px;border-bottom:1px solid var(--border);overflow-x:auto;">';
-  html+='<div style="min-width:430px;">';
+  html+='<div style="padding:9px 16px;overflow-x:auto;">';
+  html+='<div style="min-width:400px;">';
   html+='<div style="display:grid;grid-template-columns:'+occCols+';gap:4px;align-items:end;font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;">';
   html+='<div></div><div style="text-align:center;">Received</div><div></div><div style="text-align:center;">OCC before</div><div></div><div style="text-align:center;">Dropped</div><div style="text-align:center;color:var(--gd);">To clean</div></div>';
 
@@ -18281,57 +18315,86 @@ function renderDailyLineup(){
   html+='<div style="font-size:9.5px;color:var(--text3);margin-top:6px;">'+notes.join(' &middot; ')+'</div>';
   html+='</div></div>';
 
-  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);">';
-  html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Rooms / lady</div>'
-    +'<div style="font-size:17px;font-weight:800;color:var(--text1);margin-top:3px;">'+(perLady!=null?perLady.toFixed(2):'&mdash;')+'</div>'
-    +'<div style="font-size:9px;color:var(--text3);margin-top:2px;">'+ladies+' ladies in</div></div>';
-  html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Departures / lady</div>'
-    +'<div style="font-size:17px;font-weight:800;color:var(--text1);margin-top:3px;">'+(depLady!=null?depLady.toFixed(2):'&mdash;')+'</div></div>';
+  /* ── AM / PM rosters — role above its names, exactly the shape of
+     Carlos's own sheet, but each role is now a filled block rather than
+     bare floating text: a left gold accent bar and a light background,
+     the same "labeled block" language assign_buildResult already uses
+     on the Assignments page. ── */
+  function dlRoleBlock(label,arr){
+    var has=arr&&arr.length;
+    var names=has?arr.map(function(n,i){return '<span style="white-space:nowrap;">'+(i+1)+'. '+escHtml(n)+'</span>';}).join('<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>') : '<span style="color:var(--text3);font-style:italic;">nobody in</span>';
+    return '<div style="border-left:3px solid '+(has?'var(--gold)':'var(--border2)')+';background:'+(has?'var(--surface)':'transparent')+';border-radius:0 6px 6px 0;padding:6px 10px;margin-bottom:6px;">'
+      +'<div style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">'+label+'</div>'
+      +'<div style="font-size:12px;font-weight:600;color:var(--text1);margin-top:2px;line-height:1.5;">'+names+'</div></div>';
+  }
+  html+=dlBar('&lt; AM Shift &gt;');
+  html+='<div style="padding:10px 16px;">';
+  html+=dlRoleBlock('Coordinator',P.am_coord);
+  html+=dlRoleBlock('Floor supervisors',P.sup);
+  html+=dlRoleBlock('House attendants',P.hm);
+  html+=dlRoleBlock('Lobby AM',P.lobby_am);
   html+='</div>';
 
-  /* shifts */
-  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;">';
-  html+='<div style="padding:12px 16px;border-right:1px solid var(--border);">';
-  html+='<div style="font-size:11px;font-weight:800;color:var(--navy);margin-bottom:8px;">&lt; AM SHIFT &gt;</div>';
-  html+=dlList('Coordinator',P.am_coord);
-  html+=dlList('Floor supervisors',P.sup);
-  html+=dlList('House attendants',P.hm);
-  html+=dlList('Lobby AM',P.lobby_am);
+  html+=dlBar('&lt; PM Shift &gt;');
+  html+='<div style="padding:10px 16px;">';
+  html+=dlRoleBlock('Coordinator',P.pm_coord);
+  html+=dlRoleBlock('Floor supervisor',P.sup_pm);
+  html+=dlRoleBlock('Lobby PM',P.lobby_pm);
+  html+=dlRoleBlock('Houseman',P.hm_pm);
+  html+=dlRoleBlock('Turndown',P.td);
+  html+=dlRoleBlock('Overnight',P.night);
   html+='</div>';
-  html+='<div style="padding:12px 16px;">';
-  html+='<div style="font-size:11px;font-weight:800;color:var(--navy);margin-bottom:8px;">&lt; PM SHIFT &gt;</div>';
-  html+=dlList('Coordinator',P.pm_coord);
-  html+=dlList('Floor supervisor',P.sup_pm);
-  html+=dlList('Lobby PM',P.lobby_pm);
-  html+=dlList('Houseman',P.hm_pm);
-  html+=dlList('Turndown',P.td);
-  html+=dlList('Overnight',P.night);
+
+  /* ── GRA sections — rebuilt as the actual two-block table from
+     Carlos's own sheet (Floors 2nd-12th on the left, 13th-22nd plus
+     floaters on the right, each FLOORS / TASK / GRA NAME), instead of a
+     loose wrap of chips. This is the one part of the page he'd recognize
+     on sight, so it gets his own layout, not a reinvented one. ── */
+  html+=dlBar('GRA Sections');
+  var LEFT_FLOORS=DL_FLOORS.slice(0,11), RIGHT_FLOORS=DL_FLOORS.slice(11);
+  var task=0, taskFor={};
+  DL_FLOORS.forEach(function(fl){ if(floors[fl])taskFor[fl]=++task; });
+  function graRows(list,extra){
+    var rows=list.map(function(fl){ return [fl,taskFor[fl],floors[fl]]; });
+    (extra||[]).forEach(function(nm){ rows.push([null,null,nm]); });
+    return rows;
+  }
+  var leftRows=graRows(LEFT_FLOORS), rightRows=graRows(RIGHT_FLOORS,dlUnplacedFloaters(P));
+  var rowCount=Math.max(leftRows.length,rightRows.length);
+  var graCols='46px 24px 1fr';
+  html+='<div style="padding:8px 16px;overflow-x:auto;">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;min-width:420px;">';
+  [leftRows,rightRows].forEach(function(rows,side){
+    var h='<div>';
+    h+='<div style="display:grid;grid-template-columns:'+graCols+';gap:4px;padding:4px 6px;background:var(--surface);border:1px solid var(--border);border-bottom:none;font-size:8px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">'
+      +'<div>Floor</div><div>Tk</div><div>GRA Name</div></div>';
+    for(var i=0;i<rowCount;i++){
+      var r=rows[i];
+      if(!r){ h+='<div style="border:1px solid var(--border);border-top:none;padding:5px 6px;">&nbsp;</div>'; continue; }
+      /* A row covered by a floater rather than its own owner — either a
+         real floor P.gra never filled, or one of the extra rows appended
+         for a still-unplaced floater (which never had a floor to begin
+         with, hence no P.gra entry either). Gets the same gold "filled
+         by a floater" tint used everywhere else in the app (a Sched box,
+         a note that has content). */
+      var isFloater=!P.gra[r[0]];
+      var filled=!!r[2];
+      h+='<div style="display:grid;grid-template-columns:'+graCols+';gap:4px;align-items:center;padding:5px 6px;border:1px solid var(--border);border-top:none;background:'+(isFloater&&filled?'var(--gt)':'transparent')+';">';
+      h+='<div style="font-size:9.5px;color:var(--text3);">'+(r[0]||(filled?'Float':''))+'</div>';
+      h+='<div style="font-size:9.5px;color:var(--text3);">'+(r[1]||'')+'</div>';
+      h+='<div style="font-size:11.5px;font-weight:700;color:'+(filled?'var(--text1)':'var(--text3)')+';">'+(filled?escHtml(r[2]):'&mdash;')+'</div>';
+      h+='</div>';
+    }
+    h+='</div>';
+    html+=h;
+  });
   html+='</div></div>';
 
-  /* GRA sections */
-  html+='<div style="border-top:1px solid var(--border);padding:12px 16px;">';
-  html+='<div style="font-size:11px;font-weight:800;color:var(--navy);margin-bottom:8px;">GRA SECTIONS</div>';
-  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:5px;">';
-  var task=0;
-  DL_FLOORS.forEach(function(fl){
-    if(!floors[fl])return;
-    task++;
-    var isFloater=!P.gra[fl];
-    html+='<div style="background:'+(isFloater?'var(--gt)':'var(--surface)')+';border-radius:6px;padding:6px 9px;display:flex;align-items:center;gap:7px;">'
-      +'<span style="font-size:9px;font-weight:700;color:var(--text3);min-width:26px;">'+fl+'</span>'
-      +'<span style="font-size:9px;color:var(--text3);">'+task+'</span>'
-      +'<span style="font-size:12px;font-weight:700;color:var(--text1);">'+escHtml(floors[fl])+'</span>'
-      +(isFloater?'<span style="font-size:8.5px;font-weight:700;color:var(--gd);margin-left:auto;">FLOATER</span>':'')
-      +'</div>';
-  });
-  html+='</div>';
-
   /* floaters to place */
-  var un=dlUnplacedFloaters(P);
   var freeFloors=DL_FLOORS.filter(function(fl){ return !floors[fl]; });
   if(P.floaters.length){
-    html+='<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">';
-    html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Floaters &mdash; you decide where each one goes</div>';
+    html+='<div style="padding:10px 16px;border-top:1px solid var(--border);background:var(--surface);">';
+    html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px;">Floaters &mdash; you decide where each one goes</div>';
     P.floaters.forEach(function(f){
       var cur=(P.assign||{})[f]||'';
       html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap;">';
@@ -18351,17 +18414,17 @@ function renderDailyLineup(){
   var stillOpen=DL_FLOORS.filter(function(fl){ return !floors[fl]; })
     .map(function(fl){ var o=(P.uncovered.filter(function(u){return u[0]===fl;})[0]||[])[1]; return [fl,o]; });
   if(stillOpen.length){
-    html+='<div style="margin-top:12px;background:var(--rd);border:1px solid var(--red-border);border-radius:8px;padding:9px 12px;">';
+    html+='<div style="padding:9px 16px;border-top:1px solid var(--border);background:var(--rd);">';
     html+='<div style="font-size:10px;font-weight:700;color:var(--red);margin-bottom:4px;">'+stillOpen.length+' section'+(stillOpen.length===1?'':'s')+' uncovered &mdash; split these rooms among the ladies who came</div>';
     html+='<div style="font-size:11px;color:var(--red);line-height:1.6;">'+stillOpen.map(function(u){
       return u[0]+(u[1]?' <span style="opacity:.7;">('+escHtml(u[1])+' off)</span>':' <span style="opacity:.7;">(no owner)</span>');
     }).join(' &middot; ')+'</div></div>';
   }
   if(P.pulled.length){
-    html+='<div style="margin-top:10px;font-size:10px;color:var(--text3);">Pulled elsewhere by the schedule: '
+    html+='<div style="padding:8px 16px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);">Pulled elsewhere by the schedule: '
       +P.pulled.map(function(p){return escHtml(p[0])+' &rarr; '+escHtml(p[1]);}).join(' &middot; ')+'</div>';
   }
-  html+='</div></div>';
+  html+='</div>';
 
   /* Files, out of the way. Visible enough to re-upload the schedule when
      it changes, quiet enough not to look like a step. */
@@ -18405,9 +18468,16 @@ function dlPrint(){
     rows+='<tr><td class="fl">'+fl+'</td><td class="tk">'+task+'</td><td>'+escHtml(floors[fl])+'</td></tr>';
   });
   var open=DL_FLOORS.filter(function(fl){return !floors[fl];});
-  var h='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Daily Lineup '+ds+'</title><style>'
+  /* color-scheme:light + an explicit white background — without both,
+     a browser (or OS) set to dark mode force-inverts this popup's colors
+     since it never declares its own theme, turning "black text on white
+     paper" into pale grey on near-black. Printers don't care about the
+     OS's dark mode, but the on-screen preview Carlos checks before
+     printing does. */
+  var h='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Daily Lineup '+ds+'</title><style>'
     +'*{box-sizing:border-box;margin:0;padding:0;}'
-    +'body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;padding:14px 18px;}'
+    +'html{color-scheme:light;}'
+    +'body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;background:#fff;padding:14px 18px;}'
     +'h1{font-size:17px;margin-bottom:2px;}'
     +'.sub{font-size:11px;color:#666;margin-bottom:10px;}'
     +'.occ{display:flex;gap:22px;border:1px solid #999;padding:7px 10px;margin-bottom:12px;font-size:12px;}'
