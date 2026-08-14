@@ -270,6 +270,68 @@ module.exports = {
     win.dlSetOcc('occ', '');
     t.eq(win.dlBuildPlan('2026-08-14').occOverride, null, 'and clearing it falls back to the schedule again');
 
+    // ── Drop rooms / rooms received ──
+    // Carlos's sheet computes To Clean as (HR/Day of + OCC before) −
+    // HR/Next Day: rooms he takes on ADD to the day, rooms he pushes to
+    // tomorrow SUBTRACT. This is what decides how many rooms each lady
+    // carries, and an earlier version of the Excel export blanked those
+    // two cells outright — silently wiping the adjustment every time.
+    const base = win.dlBuildPlan('2026-08-14');
+    t.eq(base.toClean, 190, 'with no adjustment, To Clean is just the base occupancy');
+    t.eq(base.recv, 0, 'nothing received by default');
+    t.eq(base.drop, 0, 'and nothing dropped');
+
+    win.dlSetOcc('recv', '2');
+    win.dlSetOcc('drop', '5');
+    const adj = win.dlBuildPlan('2026-08-14');
+    t.eq(adj.toClean, 187, 'received ADDS and dropped SUBTRACTS: 2 + 190 − 5 = 187');
+    t.eq(adj.occBase, 190, 'without disturbing the base figure the schedule supplied');
+
+    // Departures carry their own adjustment on the row below.
+    win.dlSetOcc('recvDep', '1');
+    win.dlSetOcc('dropDep', '4');
+    t.eq(win.dlBuildPlan('2026-08-14').toCleanDep, 127, 'departures adjust independently: 1 + 130 − 4 = 127');
+
+    // The whole point: the per-lady figure must follow the adjustment,
+    // not the raw schedule number.
+    const adj2 = win.dlBuildPlan('2026-08-14');
+    win.dlAssignFloater('Mayra', '4th');
+    const withF = win.dlBuildPlan('2026-08-14');
+    const ladies = Object.keys(win.dlFinalFloors(withF)).length;
+    t.assert(Math.abs(withF.toClean / ladies - 187 / ladies) < 1e-9,
+      'rooms per lady is computed off the adjusted To Clean, which is the number that changes her workload');
+    win.dlAssignFloater('Mayra', '');
+
+    // ── Yesterday's drop becomes today's received, automatically ──
+    // Those rooms went somewhere, and it is the next day that inherits
+    // them. It stays a DEFAULT though: if only part of them carried,
+    // typing a number pins it. Tested across Thu 13 -> Fri 14, both in
+    // the loaded week.
+    win.dlSetOcc('recv', ''); win.dlSetOcc('drop', '');
+    win.dlSetOcc('recvDep', ''); win.dlSetOcc('dropDep', '');
+    win.dlDate = '2026-08-13';
+    win.dlSetOcc('drop', '5');
+    win.dlSetOcc('dropDep', '4');
+
+    const next = win.dlBuildPlan('2026-08-14');
+    t.eq(next.recv, 5, "the 5 rooms dropped on the 13th show up as received on the 14th");
+    t.eq(next.recvAuto, true, 'flagged as carried over, so the page can say where it came from');
+    t.eq(next.recvDep, 4, 'departures carry the same way');
+    t.eq(next.toClean, 195, 'and they land in the total: 5 + 190 = 195');
+
+    win.dlDate = '2026-08-14';
+    win.dlSetOcc('recv', '3');
+    const pinned = win.dlBuildPlan('2026-08-14');
+    t.eq(pinned.recv, 3, 'typing over it wins — only some of the dropped rooms actually carried');
+    t.eq(pinned.recvAuto, false, 'and it stops being reported as automatic');
+    win.dlSetOcc('recv', '');
+    t.eq(win.dlBuildPlan('2026-08-14').recv, 5, 'clearing it falls back to the carry-over again rather than to zero');
+
+    win.dlDate = '2026-08-13';
+    win.dlSetOcc('drop', ''); win.dlSetOcc('dropDep', '');
+    win.dlDate = '2026-08-14';
+    t.eq(win.dlBuildPlan('2026-08-14').toClean, 190, 'clearing every adjustment returns To Clean to the plain schedule figure');
+
     // ── A day the schedule does not cover must say so, not draw a blank
     // lineup that looks like nobody is working. ──
     t.eq(win.dlBuildPlan('2026-12-25'), null, 'a date outside the loaded schedule yields no plan at all');

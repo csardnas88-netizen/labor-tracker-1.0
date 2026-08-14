@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.3.1"/>
+<meta name="app-version" content="7.3.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4283,6 +4283,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.3.2', date:'2026-08-13',
+    fixes:['Daily Lineup now carries drop rooms and received rooms — Carlos flagged that his sheet computes To Clean as (rooms received + OCC before) minus (rooms dropped to tomorrow), and that adjustment was missing entirely: worse, the Excel export was actively blanking those two cells on every generation, silently erasing anything typed there. Both figures are editable right on the page next to the base occupancy, the totals update live, and a day\'s dropped rooms now default into the NEXT day\'s received figure automatically (still overridable by typing over it) — since that is exactly where those rooms went. Both Print and the Excel export carry the same numbers now.']
+  },
   {
     v:'7.3.1', date:'2026-08-13',
     improvements:['Cut the Daily Lineup down to what it should have been. Carlos\'s note was that it was confusing and had too many steps, and that being asked to upload a Daily line up in order to generate a Daily line up made no sense — he was right. The blank form now ships inside the app, so that upload is gone entirely and the Excel button just works (it is cached for offline too). Setup is down to two files, shown as a numbered one-time step and only while something is actually missing; once both are in, the page opens straight on the date, the two buttons and the lineup, with the files reduced to a single quiet line at the bottom for when the schedule needs re-uploading.']
@@ -18030,11 +18034,41 @@ function dlBuildPlan(ds){
   P.floaters=(S.gra_floaters||[]).filter(function(f){return dlIn(dlLook(day,'gra',f));});
   P.pulled=day.gra.filter(function(p){return p[1]&&['1','OFF','R-OFF',''].indexOf(p[1])===-1;});
   /* Carlos's own decisions for this date, layered on top. */
-  var saved=dlLoadDay(ds);
-  P.assign=(saved&&saved.assign)||{};   /* floater name -> floor */
-  P.occOverride=saved&&saved.occ!=null?saved.occ:null;
-  P.depOverride=saved&&saved.dep!=null?saved.dep:null;
+  var saved=dlLoadDay(ds)||{};
+  P.assign=saved.assign||{};   /* floater name -> floor */
+  P.occOverride=saved.occ!=null?saved.occ:null;
+  P.depOverride=saved.dep!=null?saved.dep:null;
+
+  /* ── Drop rooms / rooms received ──
+     Carlos's own sheet computes To Clean as (HR/Day of + OCC before) −
+     HR/Next Day: rooms he RECEIVES add to the day, rooms he DROPS move
+     to tomorrow. Same for departures on the row below. This is the
+     figure that decides how many rooms each lady carries, so it is
+     carried here rather than left to be patched into the Excel
+     afterwards — the earlier version blanked those very cells on export,
+     silently wiping the adjustment.
+
+     Today's received defaults to YESTERDAY'S drop, because that is
+     exactly where those rooms went. It stays a default, not a rule: if
+     only part of them actually carried over, typing a number pins it. */
+  var prev=dlLoadDay(dlPrevDs(ds))||{};
+  P.occBase=saved.occ!=null?saved.occ:(parseInt(P.occ,10)||0);
+  P.depBase=saved.dep!=null?saved.dep:(parseInt(P.dep,10)||0);
+  P.drop=dlNumOr(saved.drop,0);
+  P.dropDep=dlNumOr(saved.dropDep,0);
+  P.recv=saved.recv!=null?dlNumOr(saved.recv,0):dlNumOr(prev.drop,0);
+  P.recvDep=saved.recvDep!=null?dlNumOr(saved.recvDep,0):dlNumOr(prev.dropDep,0);
+  P.recvAuto=(saved.recv==null&&dlNumOr(prev.drop,0)>0);
+  P.recvDepAuto=(saved.recvDep==null&&dlNumOr(prev.dropDep,0)>0);
+  P.toClean=P.recv+P.occBase-P.drop;
+  P.toCleanDep=P.recvDep+P.depBase-P.dropDep;
   return P;
+}
+function dlPrevDs(ds){ var d=parseLocalDate(ds); d.setDate(d.getDate()-1); return dateStr(d); }
+function dlNumOr(v,dflt){
+  if(v===undefined||v===null||v==='')return dflt;
+  var n=parseInt(v,10);
+  return isNaN(n)?dflt:n;
 }
 /* Floors as they end up after Carlos places his floaters. */
 function dlFinalFloors(P){
@@ -18190,12 +18224,10 @@ function renderDailyLineup(){
     el.innerHTML=html; return;
   }
 
-  var occ=P.occOverride!=null?P.occOverride:P.occ;
-  var dep=P.depOverride!=null?P.depOverride:P.dep;
   var floors=dlFinalFloors(P);
   var ladies=Object.keys(floors).length;
-  var perLady=ladies>0&&occ?(Number(occ)/ladies):null;
-  var depLady=ladies>0&&dep?(Number(dep)/ladies):null;
+  var perLady=ladies>0?(P.toClean/ladies):null;
+  var depLady=ladies>0?(P.toCleanDep/ladies):null;
 
   /* ── actions ── */
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
@@ -18210,19 +18242,51 @@ function renderDailyLineup(){
   html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">from schedule sheet '+escHtml(P.sheet)+'</div>';
   html+='</div>';
 
-  /* occupancy */
-  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);">';
-  html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">To Clean</div>'
-    +'<input type="number" min="0" value="'+escHtml(occ)+'" onchange="dlSetOcc(\'occ\',this.value)" style="width:100%;margin-top:2px;padding:5px 7px;font-size:15px;font-weight:800;color:var(--navy);border:1px solid '+(P.occOverride!=null?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(P.occOverride!=null?'var(--gt)':'#fff')+';box-sizing:border-box;">'
-    +'<div style="font-size:9px;color:var(--text3);margin-top:2px;">schedule says '+escHtml(P.occ)+'</div></div>';
-  html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Departures</div>'
-    +'<input type="number" min="0" value="'+escHtml(dep)+'" onchange="dlSetOcc(\'dep\',this.value)" style="width:100%;margin-top:2px;padding:5px 7px;font-size:15px;font-weight:800;color:var(--navy);border:1px solid '+(P.depOverride!=null?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(P.depOverride!=null?'var(--gt)':'#fff')+';box-sizing:border-box;">'
-    +'<div style="font-size:9px;color:var(--text3);margin-top:2px;">schedule says '+escHtml(P.dep)+'</div></div>';
+  /* ── occupancy, laid out as the sheet computes it:
+     (received + base) - dropped = to clean ── */
+  var occCols='1fr 74px 12px 74px 12px 74px 74px';
+  function numBox(key,val,gold,ttl){
+    return '<input type="number" min="0" value="'+escHtml(val)+'" title="'+ttl+'" onchange="dlSetOcc(\''+key+'\',this.value)"'
+      +' style="width:100%;min-width:0;padding:4px 3px;font-size:13px;font-weight:800;text-align:center;color:var(--navy);border:1px solid '
+      +(gold?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(gold?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+  }
+  html+='<div style="padding:10px 16px;border-bottom:1px solid var(--border);overflow-x:auto;">';
+  html+='<div style="min-width:430px;">';
+  html+='<div style="display:grid;grid-template-columns:'+occCols+';gap:4px;align-items:end;font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;">';
+  html+='<div></div><div style="text-align:center;">Received</div><div></div><div style="text-align:center;">OCC before</div><div></div><div style="text-align:center;">Dropped</div><div style="text-align:center;color:var(--gd);">To clean</div></div>';
+
+  html+='<div style="display:grid;grid-template-columns:'+occCols+';gap:4px;align-items:center;margin-bottom:5px;">';
+  html+='<div style="font-size:11px;font-weight:700;color:var(--text1);">Rooms</div>';
+  html+=numBox('recv',P.recv,!P.recvAuto&&P.recv!==0,'HR/Day of - rooms that came to you');
+  html+='<div style="text-align:center;font-size:12px;color:var(--text3);">+</div>';
+  html+=numBox('occ',P.occBase,P.occOverride!=null,'OCC before - the base figure');
+  html+='<div style="text-align:center;font-size:12px;color:var(--text3);">&minus;</div>';
+  html+=numBox('drop',P.drop,P.drop!==0,'HR/Next Day - rooms you push to tomorrow');
+  html+='<div style="text-align:center;font-size:15px;font-weight:800;color:var(--navy);">'+P.toClean+'</div>';
+  html+='</div>';
+
+  html+='<div style="display:grid;grid-template-columns:'+occCols+';gap:4px;align-items:center;">';
+  html+='<div style="font-size:11px;font-weight:700;color:var(--text1);">Departures</div>';
+  html+=numBox('recvDep',P.recvDep,!P.recvDepAuto&&P.recvDep!==0,'Departures that came to you');
+  html+='<div style="text-align:center;font-size:12px;color:var(--text3);">+</div>';
+  html+=numBox('dep',P.depBase,P.depOverride!=null,'Departures before');
+  html+='<div style="text-align:center;font-size:12px;color:var(--text3);">&minus;</div>';
+  html+=numBox('dropDep',P.dropDep,P.dropDep!==0,'Departures you push to tomorrow');
+  html+='<div style="text-align:center;font-size:15px;font-weight:800;color:var(--navy);">'+P.toCleanDep+'</div>';
+  html+='</div>';
+
+  var notes=[];
+  if(P.recvAuto)notes.push('Received carried over from '+_dndShortDate(dlPrevDs(ds))+"'s drop");
+  notes.push('schedule says '+escHtml(P.occ)+' rooms, '+escHtml(P.dep)+' departures');
+  html+='<div style="font-size:9.5px;color:var(--text3);margin-top:6px;">'+notes.join(' &middot; ')+'</div>';
+  html+='</div></div>';
+
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);">';
   html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Rooms / lady</div>'
-    +'<div style="font-size:15px;font-weight:800;color:var(--text1);margin-top:5px;">'+(perLady!=null?perLady.toFixed(2):'&mdash;')+'</div>'
+    +'<div style="font-size:17px;font-weight:800;color:var(--text1);margin-top:3px;">'+(perLady!=null?perLady.toFixed(2):'&mdash;')+'</div>'
     +'<div style="font-size:9px;color:var(--text3);margin-top:2px;">'+ladies+' ladies in</div></div>';
   html+='<div><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Departures / lady</div>'
-    +'<div style="font-size:15px;font-weight:800;color:var(--text1);margin-top:5px;">'+(depLady!=null?depLady.toFixed(2):'&mdash;')+'</div></div>';
+    +'<div style="font-size:17px;font-weight:800;color:var(--text1);margin-top:3px;">'+(depLady!=null?depLady.toFixed(2):'&mdash;')+'</div></div>';
   html+='</div>';
 
   /* shifts */
@@ -18320,9 +18384,15 @@ function dlPrint(){
   var ds=dlCurrentDate(), P=dlBuildPlan(ds);
   if(!P){ showToast('❌ Nothing to print for this day'); return; }
   var d=parseLocalDate(ds);
-  var occ=P.occOverride!=null?P.occOverride:P.occ;
-  var dep=P.depOverride!=null?P.depOverride:P.dep;
   var floors=dlFinalFloors(P), ladies=Object.keys(floors).length;
+  /* Spelled out rather than reduced to a total: the crew needs to see
+     that rooms were taken on or pushed, not just the final figure. */
+  function adj(recv,drop){
+    var bits=[];
+    if(recv)bits.push('+'+recv+' received');
+    if(drop)bits.push('&minus;'+drop+' dropped');
+    return bits.length?' <span style="font-size:10px;color:#666;">('+bits.join(', ')+')</span>':'';
+  }
   function col(t,arr){
     return '<div class="grp"><div class="lbl">'+t+'</div>'
       +((arr&&arr.length)?arr.map(function(n,i){return '<div class="nm">'+(i+1)+'. '+escHtml(n)+'</div>';}).join(''):'<div class="nm em">&mdash;</div>')
@@ -18355,10 +18425,11 @@ function dlPrint(){
     +'</style></head><body>'
     +'<h1>Daily Lineup &mdash; '+d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})+'</h1>'
     +'<div class="sub">Housekeeping</div>'
-    +'<div class="occ"><div>To Clean <b>'+escHtml(occ)+'</b></div><div>Departures <b>'+escHtml(dep)+'</b></div>'
+    +'<div class="occ"><div>To Clean <b>'+P.toClean+'</b>'+adj(P.recv,P.drop)+'</div>'
+    +'<div>Departures <b>'+P.toCleanDep+'</b>'+adj(P.recvDep,P.dropDep)+'</div>'
     +'<div>Ladies <b>'+ladies+'</b></div>'
-    +'<div>Rooms/lady <b>'+(ladies&&occ?(Number(occ)/ladies).toFixed(2):'&mdash;')+'</b></div>'
-    +'<div>Dep/lady <b>'+(ladies&&dep?(Number(dep)/ladies).toFixed(2):'&mdash;')+'</b></div></div>'
+    +'<div>Rooms/lady <b>'+(ladies?(P.toClean/ladies).toFixed(2):'&mdash;')+'</b></div>'
+    +'<div>Dep/lady <b>'+(ladies?(P.toCleanDep/ladies).toFixed(2):'&mdash;')+'</b></div></div>'
     +'<div class="cols"><div class="side"><h2>&lt; AM Shift &gt;</h2>'
     +col('Coordinator',P.am_coord)+col('Floor supervisors',P.sup)+col('House attendants',P.hm)+col('Lobby AM',P.lobby_am)
     +'</div><div class="side"><h2>&lt; PM Shift &gt;</h2>'
@@ -18454,16 +18525,17 @@ function dlExportExcel(){
         var S=function(ref,val){ dlSetCell(doc,ref,val,false); };
         var N=function(ref,val){ dlSetCell(doc,ref,val,true); };
         var d=parseLocalDate(ds);
-        var occ=P.occOverride!=null?P.occOverride:P.occ;
-        var dep=P.depOverride!=null?P.depOverride:P.dep;
-
         S('J6',d.toLocaleDateString('en-US',{weekday:'long'}));
         S('J7',ds.slice(5,7)+'.'+ds.slice(8,10)+'.'+ds.slice(0,4));
-        /* Written into the F cells so Carlos's own To Clean / Departures
-           formulas still drive off them and he can correct on the day. */
-        N('F6',occ); S('E6',''); S('G6','');
-        N('F7',dep); S('E7',''); S('G7','');
-        N('J49',occ);
+        /* The three header cells Carlos's own To Clean / Departures
+           formulas read: (HR/Day of + OCC before) - HR/Next Day. An
+           earlier version wrote only the middle one and BLANKED the other
+           two, silently wiping his drop-room adjustment on every export.
+           All three are written now, so the sheet reproduces the same To
+           Clean the app shows. */
+        N('E6',P.recv); N('F6',P.occBase); N('G6',P.drop);
+        N('E7',P.recvDep); N('F7',P.depBase); N('G7',P.dropDep);
+        N('J49',P.toClean);
         S('C9',P.am_coord.join(', ')); S('J9',P.pm_coord.join(', '));
         function fill(refs,arr){ refs.forEach(function(ref,ix){ S(ref,(arr&&arr[ix])||''); }); }
         fill(['B12','B13','B14','B15','B16','B17'],P.sup);
