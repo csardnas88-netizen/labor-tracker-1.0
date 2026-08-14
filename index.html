@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.3.5"/>
+<meta name="app-version" content="7.3.6"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4300,6 +4300,13 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.3.6', date:'2026-08-14',
+    features:[
+      'Floor Supervisors AND House Attendants now both get a "Floors" field beside each name — which floors each ends up with, Carlos\'s own call once he\'s counted the day\'s rooms. Optional on screen; the printed line stays blank and ready for a pen either way, and a typed value lands in its own cell in the generated Excel too.',
+      'The printed Daily Lineup got a full visual pass — a navy header band with a gold accent, gold-tinted section bars, card-style occupancy numbers, a navy table header, and shaded rows for uncovered floors and finished assignments. Meant to be handed to managers and hung on a wall, so it now looks like the app\'s own design rather than a plain black-and-white table.'
+    ]
+  },
   {
     v:'7.3.5', date:'2026-08-13',
     features:[
@@ -18128,6 +18135,15 @@ function dlBuildPlan(ds){
   P.tdOccAuto=(saved.tdOcc==null);
   P.lady=saved.lady||{};
   P.extras=saved.extras||{};
+  /* Which floors each Floor Supervisor AND each House Attendant ends up
+     covering — this is Carlos's own call, decided AFTER he's counted
+     the day's real rooms, not something the weekly Section assignment
+     file can predict. One shared map keyed by name since it's the same
+     "Floors" column on his template for both roles (E12:E17 beside the
+     supervisors, E20:E25 beside the housemen). Kept per DATE like the
+     lady rows, and the printed sheet always leaves the line blank even
+     when nothing's been typed yet, since he often fills it by hand. */
+  P.floorsByName=saved.floors||{};
   return P;
 }
 function dlPrevDs(ds){ var d=parseLocalDate(ds); d.setDate(d.getDate()-1); return dateStr(d); }
@@ -18242,6 +18258,18 @@ function dlSetExtra(field,val){
   var t=String(val==null?'':val).trim();
   if(t==='')delete rec.extras[field]; else rec.extras[field]=t;
   dlSaveDay(ds,rec);
+}
+/* Which floors a Floor Supervisor or House Attendant ends up covering —
+   Carlos's own decision, made after counting the day's rooms, so it's
+   typed in (optional) rather than derived from anything on file. One
+   shared map keyed by name, since both roles use it. Per date. */
+function dlSetFloors(name,val){
+  var ds=dlCurrentDate(), rec=dlLoadDay(ds)||{};
+  rec.floors=rec.floors||{};
+  var t=String(val==null?'':val).trim();
+  if(t==='')delete rec.floors[name]; else rec.floors[name]=t;
+  dlSaveDay(ds,rec);
+  renderDailyLineup();
 }
 function dlSetOcc(which,val){
   var ds=dlCurrentDate(), rec=dlLoadDay(ds)||{};
@@ -18426,11 +18454,38 @@ function renderDailyLineup(){
       +((has&&each)?'<span style="font-size:10px;color:var(--text2);">'+each+'</span>':'')+'</div>'
       +'<div style="font-size:12px;font-weight:600;color:var(--text1);margin-top:2px;line-height:1.5;">'+names+'</div></div>';
   }
+  /* Floor supervisors AND house attendants both get a "Floors" field
+     beside each name — Carlos's own call on who ends up covering what,
+     decided once he's counted the day's actual rooms, so it's typed in
+     here (optional) rather than pulled from the weekly Section
+     assignment file, which can't know that ahead of time. Its own row
+     per person since it's per-person, not the single shared line the
+     other roles use. */
+  function dlFloorsRoleBlock(label,arr,each){
+    var has=arr&&arr.length;
+    var body=has
+      ? arr.map(function(n){
+          var val=P.floorsByName[n]||'';
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:3px;">'
+            +'<span style="font-size:12px;font-weight:600;color:var(--text1);">'+escHtml(n)+'</span>'
+            +'<input type="text" value="'+escHtml(val)+'" placeholder="floors" title="Which floors '+escHtml(n)+' ends up covering"'
+            +' onchange="dlSetFloors(\''+escHtml(n).replace(/'/g,"\\'")+'\',this.value)"'
+            +' style="width:110px;padding:2px 6px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '
+            +(val?'#C9A84C':'var(--border2)')+';border-radius:5px;background:'+(val?'var(--gt)':'#fff')+';">'
+            +'</div>';
+        }).join('')
+      : '<div style="color:var(--text3);font-style:italic;font-size:12px;margin-top:3px;">nobody in</div>';
+    return '<div style="border-left:3px solid '+(has?'var(--gold)':'var(--border2)')+';background:'+(has?'var(--surface)':'transparent')+';border-radius:0 6px 6px 0;padding:6px 10px;margin-bottom:6px;">'
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
+      +'<span style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">'+label+'</span>'
+      +((has&&each)?'<span style="font-size:10px;color:var(--text2);">'+each+'</span>':'')+'</div>'
+      +body+'</div>';
+  }
   html+=dlBar('&lt; AM Shift &gt;');
   html+='<div style="padding:10px 16px;">';
   html+=dlRoleBlock('Coordinator',P.am_coord);
-  html+=dlRoleBlock('Floor supervisors',P.sup,dlEach(P.toCleanDep,P.sup.length,'departures'));
-  html+=dlRoleBlock('House attendants',P.hm,dlEach(P.toCleanDep,P.hm.length,'departures'));
+  html+=dlFloorsRoleBlock('Floor supervisors',P.sup,dlEach(P.toCleanDep,P.sup.length,'departures'));
+  html+=dlFloorsRoleBlock('House attendants',P.hm,dlEach(P.toCleanDep,P.hm.length,'departures'));
   html+=dlRoleBlock('Lobby AM',P.lobby_am);
   html+='</div>';
 
@@ -18587,7 +18642,7 @@ function dlPrint(){
     var bits=[];
     if(recv)bits.push('+'+recv+' received');
     if(drop)bits.push('&minus;'+drop+' dropped');
-    return bits.length?' <span style="font-size:10px;color:#666;">('+bits.join(', ')+')</span>':'';
+    return bits.length?'<div class="adjnote">('+bits.join(', ')+')</div>':'';
   }
   /* Same per-person load the screen shows, beside the same crew — this
      is the sheet the managers are actually handed, so it must not be the
@@ -18596,8 +18651,21 @@ function dlPrint(){
     return n?'<span class="ea">'+(total/n).toFixed(2)+' '+noun+' each</span>':'';
   }
   function col(t,arr,ea){
-    return '<div class="grp"><div class="lbl">'+t+(ea||'')+'</div>'
+    return '<div class="grp'+((arr&&arr.length)?'':' em0')+'"><div class="lbl">'+t+(ea||'')+'</div>'
       +((arr&&arr.length)?arr.map(function(n,i){return '<div class="nm">'+(i+1)+'. '+escHtml(n)+'</div>';}).join(''):'<div class="nm em">&mdash;</div>')
+      +'</div>';
+  }
+  /* Floor supervisors AND house attendants both print with a line
+     beside their name — it's Carlos's own call which floors each ends
+     up with, made after he's counted the day's real rooms, so the line
+     stays blank and ready for a pen even when nothing's been typed into
+     the app yet. */
+  function colFloors(t,arr,ea){
+    return '<div class="grp'+((arr&&arr.length)?'':' em0')+'"><div class="lbl">'+t+(ea||'')+'</div>'
+      +((arr&&arr.length)?arr.map(function(n,i){
+          var fl=P.floorsByName[n]||'';
+          return '<div class="nm">'+(i+1)+'. '+escHtml(n)+' <span class="fllbl">Floors</span><span class="flline">'+(fl?escHtml(fl):'&nbsp;')+'</span></div>';
+        }).join(''):'<div class="nm em">&mdash;</div>')
       +'</div>';
   }
   /* EVERY floor prints, covered or not. An uncovered floor still has
@@ -18610,7 +18678,8 @@ function dlPrint(){
     var nm=floors[fl];
     if(nm)task++;
     var ld=P.lady[fl]||{};
-    rows+='<tr'+(nm?'':' class="open"')+'><td class="fl">'+fl+'</td>'
+    var cls=nm?(ld.done?' class="done"':''):' class="open"';
+    rows+='<tr'+cls+'><td class="fl">'+fl+'</td>'
       +'<td class="tk">'+(nm?task:'')+'</td>'
       +'<td>'+(nm?escHtml(nm):'')+'</td>'
       +'<td class="wr">'+escHtml(ld.rooms||'')+'</td>'
@@ -18619,7 +18688,7 @@ function dlPrint(){
   });
   dlUnplacedFloaters(P).forEach(function(nm,ix){
     var ld=P.lady['float'+(ix+1)]||{};
-    rows+='<tr><td class="fl">Float</td><td class="tk"></td><td>'+escHtml(nm)+'</td>'
+    rows+='<tr'+(ld.done?' class="done"':'')+'><td class="fl">Float</td><td class="tk"></td><td>'+escHtml(nm)+'</td>'
       +'<td class="wr">'+escHtml(ld.rooms||'')+'</td><td class="wr">'+escHtml(ld.dep||'')+'</td>'
       +'<td class="ck">'+(ld.done?'&#10003;':'')+'</td></tr>';
   });
@@ -18632,41 +18701,63 @@ function dlPrint(){
      since it never declares its own theme, turning "black text on white
      paper" into pale grey on near-black. Printers don't care about the
      OS's dark mode, but the on-screen preview Carlos checks before
-     printing does. */
+     printing does.
+
+     print-color-adjust:exact is the other half of that: Chrome and
+     Safari strip background colors from a print job by default (to save
+     ink), which would silently flatten the whole navy/gold treatment
+     below back to plain black-on-white the moment it actually reaches
+     paper. Without it this looks right on screen and wrong once printed
+     — the one place that can't be caught by looking at the preview. */
   var h='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Daily Lineup '+ds+'</title><style>'
-    +'*{box-sizing:border-box;margin:0;padding:0;}'
+    +'*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
     +'html{color-scheme:light;}'
-    +'body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;background:#fff;padding:14px 18px;}'
-    +'h1{font-size:17px;margin-bottom:2px;}'
-    +'.sub{font-size:11px;color:#666;margin-bottom:10px;}'
-    +'.occ{display:flex;gap:22px;border:1px solid #999;padding:7px 10px;margin-bottom:12px;font-size:12px;}'
-    +'.occ b{font-size:15px;}'
-    +'.cols{display:flex;gap:26px;align-items:flex-start;}'
-    +'.side{flex:1;}.side h2{font-size:12px;border-bottom:1px solid #333;margin-bottom:6px;padding-bottom:2px;}'
-    +'.grp{margin-bottom:8px;}'
-    +'.lbl{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:#666;}'
-    +'.ea{float:right;text-transform:none;letter-spacing:0;font-weight:700;color:#8A6F20;}'
-    +'.perlady{font-size:10px;font-weight:700;color:#8A6F20;margin-bottom:4px;}'
-    +'.nm{font-size:12px;}.em{color:#999;}'
-    +'table{border-collapse:collapse;width:100%;margin-top:4px;}'
-    +'td{border:1px solid #bbb;padding:3px 6px;font-size:11px;}'
-    +'td.fl{width:38px;color:#666;}td.tk{width:22px;color:#666;}'
-    +'th{border:1px solid #bbb;padding:2px 6px;font-size:8px;text-transform:uppercase;letter-spacing:.3px;color:#666;background:#f4f2ec;}'
-    +'td.wr{width:34px;}td.ck{width:22px;text-align:center;}'
-    +'tr.open td{background:#fafafa;}'
-    +'.xt{margin-top:8px;}.xt td{font-size:10px;}.xt td.xl{width:96px;color:#666;text-transform:uppercase;font-size:8px;letter-spacing:.3px;}'
-    +'.warn{margin-top:10px;border:1px solid #999;padding:6px 9px;font-size:11px;}'
-    +'@media print{body{padding:0;}}'
+    +'body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1A1714;background:#fff;}'
+    +'.hdr{background:#1E2D4A;color:#fff;padding:14px 22px 12px;border-bottom:4px solid #C9A84C;}'
+    +'.hdr h1{font-size:19px;font-weight:800;letter-spacing:.2px;}'
+    +'.hdr .sub{font-size:10.5px;color:#D9C68A;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-top:3px;}'
+    +'.wrap{padding:14px 20px 16px;}'
+    +'.occ{display:flex;gap:12px;margin-bottom:14px;}'
+    +'.occ .card{flex:1;border:1px solid #E4DDD1;border-left:4px solid #C9A84C;background:#F7F4EF;border-radius:0 5px 5px 0;padding:7px 12px;}'
+    +'.occ .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;color:#8C8680;font-weight:700;}'
+    +'.occ b{font-size:18px;color:#1E2D4A;display:block;margin-top:1px;}'
+    +'.adjnote{font-size:9px;color:#8C8680;margin-top:1px;}'
+    +'.cols{display:flex;gap:18px;align-items:flex-start;}'
+    +'.side{flex:1;min-width:0;}'
+    +'.side h2{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#1E2D4A;background:#F5ECD4;border-left:3px solid #C9A84C;padding:5px 9px;margin-bottom:8px;}'
+    +'.grp{border-left:3px solid #C9A84C;background:#F7F4EF;border-radius:0 4px 4px 0;padding:6px 10px;margin-bottom:7px;}'
+    +'.grp.em0{border-left-color:#D6CCBC;background:transparent;}'
+    +'.lbl{font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;color:#8C8680;font-weight:700;}'
+    +'.ea{float:right;text-transform:none;letter-spacing:0;font-weight:800;color:#8A6F20;}'
+    +'.perlady{font-size:10px;font-weight:800;color:#8A6F20;margin-bottom:5px;}'
+    +'.nm{font-size:12px;color:#1A1714;font-weight:600;margin-top:2px;}'
+    +'.em{color:#8C8680;font-weight:500;}'
+    +'.fllbl{font-size:8px;text-transform:uppercase;letter-spacing:.3px;color:#8C8680;font-weight:700;margin-left:7px;}'
+    +'.flline{display:inline-block;min-width:70px;border-bottom:1px solid #8C8680;margin-left:3px;color:#1E2D4A;font-weight:700;}'
+    +'table{border-collapse:collapse;width:100%;margin-top:2px;}'
+    +'td{border:1px solid #D6CCBC;padding:3px 6px;font-size:11px;}'
+    +'td.fl{width:38px;color:#5C5652;font-weight:700;}td.tk{width:22px;color:#5C5652;}'
+    +'th{border:1px solid #1E2D4A;padding:3px 6px;font-size:8px;text-transform:uppercase;letter-spacing:.3px;color:#fff;background:#1E2D4A;}'
+    +'td.wr{width:34px;text-align:center;}td.ck{width:22px;text-align:center;color:#2D9E45;font-weight:800;}'
+    +'tr.open td{background:#F5ECD4;}'
+    +'tr.done td{background:#EFF7F2;}'
+    +'.xt{margin-top:8px;}.xt td{font-size:10px;}.xt td.xl{width:96px;color:#5C5652;text-transform:uppercase;font-size:8px;letter-spacing:.3px;font-weight:700;background:#F7F4EF;}'
+    +'.warn{margin-top:10px;border:1px solid #E7B65C;background:#FBF0DC;border-radius:4px;padding:7px 10px;font-size:11px;color:#8A6F20;}'
+    +'.warn b{color:#1E2D4A;}'
+    +'.ftr{margin-top:14px;padding-top:7px;border-top:1px solid #E4DDD1;font-size:9px;color:#8C8680;text-align:right;}'
+    +'@media print{.wrap{padding:12px 16px;}}'
     +'</style></head><body>'
-    +'<h1>Daily Lineup &mdash; '+d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})+'</h1>'
-    +'<div class="sub">Housekeeping</div>'
-    +'<div class="occ"><div>To Clean <b>'+P.toClean+'</b>'+adj(P.recv,P.drop)+'</div>'
-    +'<div>Departures <b>'+P.toCleanDep+'</b>'+adj(P.recvDep,P.dropDep)+'</div>'
-    +'<div>Ladies <b>'+ladies+'</b></div></div>'
+    +'<div class="hdr"><h1>Daily Lineup</h1><div class="sub">Housekeeping &middot; '+d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})+'</div></div>'
+    +'<div class="wrap">'
+    +'<div class="occ">'
+    +'<div class="card"><div class="k">To Clean</div><b>'+P.toClean+'</b>'+adj(P.recv,P.drop)+'</div>'
+    +'<div class="card"><div class="k">Departures</div><b>'+P.toCleanDep+'</b>'+adj(P.recvDep,P.dropDep)+'</div>'
+    +'<div class="card"><div class="k">Ladies</div><b>'+ladies+'</b></div>'
+    +'</div>'
     +'<div class="cols"><div class="side"><h2>&lt; AM Shift &gt;</h2>'
     +col('Coordinator',P.am_coord)
-    +col('Floor supervisors',P.sup,each(P.toCleanDep,P.sup.length,'dep'))
-    +col('House attendants',P.hm,each(P.toCleanDep,P.hm.length,'dep'))
+    +colFloors('Floor supervisors',P.sup,each(P.toCleanDep,P.sup.length,'dep'))
+    +colFloors('House attendants',P.hm,each(P.toCleanDep,P.hm.length,'dep'))
     +col('Lobby AM',P.lobby_am)
     +'</div><div class="side"><h2>&lt; PM Shift &gt;</h2>'
     +col('Coordinator',P.pm_coord)+col('Floor supervisor',P.sup_pm)+col('Lobby PM',P.lobby_pm)
@@ -18678,7 +18769,9 @@ function dlPrint(){
     +'<table><tr><th class="fl">Fl</th><th class="tk">Tk</th><th>GRA Name</th><th class="wr">Rms</th><th class="wr">Dep</th><th class="ck">&#10003;</th></tr>'+rows+'</table>'
     +'<table class="xt">'+extraRows+'</table>'
     +(open.length?'<div class="warn"><b>Uncovered ('+open.length+'):</b> '+open.join(', ')+'</div>':'')
-    +'</div></div></body></html>';
+    +'</div></div>'
+    +'<div class="ftr">Printed '+new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+'</div>'
+    +'</div></body></html>';
   var w=window.open('','_blank');
   if(!w){ showToast('❌ Allow pop-ups to print'); return; }
   w.document.write(h); w.document.close();
@@ -18790,8 +18883,10 @@ function dlExportExcel(){
         S('C9',P.am_coord.join(', ')); S('J9',P.pm_coord.join(', '));
         function fill(refs,arr){ refs.forEach(function(ref,ix){ S(ref,(arr&&arr[ix])||''); }); }
         fill(['B12','B13','B14','B15','B16','B17'],P.sup);
+        fill(['E12','E13','E14','E15','E16','E17'],P.sup.map(function(n){return P.floorsByName[n]||'';}));
         fill(['I12','I13'],P.sup_pm);
         fill(['B20','B21','B22','B23','B24','B25'],P.hm);
+        fill(['E20','E21','E22','E23','E24','E25'],P.hm.map(function(n){return P.floorsByName[n]||'';}));
         fill(['I15','I16'],P.lobby_am);
         fill(['I18','I19'],P.lobby_pm);
         fill(['I21','I22'],P.hm_pm);

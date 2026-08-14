@@ -397,6 +397,54 @@ module.exports = {
     win.dlSetExtra('anz', '');
     t.assert(!win.dlBuildPlan('2026-08-14').extras.anz, 'and clear back out');
 
+    // ── Which floors each Floor Supervisor AND House Attendant ends up
+    // covering ──
+    // This is Carlos's own call, made after he's counted the day's real
+    // rooms — not something the weekly Section assignment file can know
+    // ahead of time. Both roles share the same map, since it's the same
+    // "Floors" column on his template for both (right of the
+    // supervisors AND right of the housemen). Typed in per date; the
+    // printed line stays blank and ready for a pen even when nothing's
+    // been typed.
+    win.dlDate = '2026-08-14';
+    t.eq(win.dlBuildPlan('2026-08-14').sup.join(','), 'Jose,Susan,Rolando', 'the supervisor fixture for this day');
+    t.eq(win.dlBuildPlan('2026-08-14').hm.join(','), 'Mauricia,David,Diana', 'the houseman fixture for this day');
+    win.dlSetFloors('Jose', '2-6');
+    win.dlSetFloors('Susan', '7, 9-11');
+    win.dlSetFloors('David', '14-17');
+    let floorsPlan = win.dlBuildPlan('2026-08-14');
+    t.eq(floorsPlan.floorsByName.Jose, '2-6', "Jose's range is kept against his name");
+    t.eq(floorsPlan.floorsByName.Susan, '7, 9-11', 'a non-contiguous range is stored exactly as typed');
+    t.assert(!floorsPlan.floorsByName.Rolando, 'a supervisor nobody typed a range for stays unset');
+    t.eq(floorsPlan.floorsByName.David, '14-17', "a houseman's range is kept the same way, in the same map");
+    t.assert(!floorsPlan.floorsByName.Mauricia, 'a houseman nobody typed a range for stays unset too');
+
+    win.dlSetFloors('Jose', '');
+    t.assert(!win.dlBuildPlan('2026-08-14').floorsByName.Jose, 'clearing one range leaves the others untouched');
+    t.eq(win.dlBuildPlan('2026-08-14').floorsByName.Susan, '7, 9-11', "Susan's is still there");
+    t.eq(win.dlBuildPlan('2026-08-14').floorsByName.David, '14-17', "and David's");
+
+    // Per DATE, not permanently pinned to the name.
+    win.dlSetFloors('Susan', '3-5');
+    t.assert(!(win.dlBuildPlan('2026-08-13').floorsByName || {}).Susan,
+      "another day's sheet does not inherit today's floor range");
+    win.dlDate = '2026-08-14';
+
+    win.renderDailyLineup();
+    const floorsHtml = win.document.getElementById('dailyLineupContent').innerHTML;
+    t.assert(/3-5/.test(floorsHtml), "Susan's floor range shows on the page");
+    t.assert(/14-17/.test(floorsHtml), "and David's, under House attendants");
+
+    let floorsPrinted = '';
+    const realOpenFloors = win.open;
+    win.open = () => ({ document: { write: (h) => { floorsPrinted = h; }, close() {} }, focus() {}, print() {} });
+    try { win.dlPrint(); } finally { win.open = realOpenFloors; }
+    t.assert(/flline">3-5<\/span>/.test(floorsPrinted), "the printed lineup shows Susan's typed-in floors on her line");
+    t.assert(/flline">14-17<\/span>/.test(floorsPrinted), "and David's, under House attendants");
+    t.assert(/flline">&nbsp;<\/span>/.test(floorsPrinted), "and Rolando's line — nothing typed — prints blank and ready for a pen");
+    win.dlSetFloors('Susan', '');
+    win.dlSetFloors('David', '');
+
     // ── Every floor stays on the sheet, covered or not ──
     // An uncovered floor still has rooms that must go somewhere; Carlos
     // writes a name on that line by hand, so the row cannot vanish.
