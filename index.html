@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.3.4"/>
+<meta name="app-version" content="7.3.5"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4300,6 +4300,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.3.5', date:'2026-08-13',
+    features:[
+      'The Daily Lineup now carries the columns Carlos fills in during the Opera opening: beside each lady, her room total on one side and her departures on the other, plus a tick to mark her assignment finished (the row turns green). All of it is saved against that date, so reopening a past day shows what actually went out rather than a blank sheet.',
+      'Added the four room lists from the bottom of his own sheet — Anz Room, Stayover, Feather Free and Rooms Found Vacant. They take room NUMBERS rather than a count, the same way the DND list does, so the record says which rooms. They print, and they land in their own cells in the generated Excel.'
+    ],
+    improvements:['Every floor now stays on the printed lineup, covered or not. Uncovered floors used to drop off the printout entirely and appear only as a warning line at the bottom, which left nowhere to write the name in by hand — those rooms still have to go to somebody. They now print as an empty row, lightly shaded, with the Rooms/Departures/tick boxes blank and ready.']
+  },
   {
     v:'7.3.4', date:'2026-08-13',
     improvements:[
@@ -18118,6 +18126,8 @@ function dlBuildPlan(ds){
   P.tdOcc=saved.tdOcc!=null?dlNumOr(saved.tdOcc,P.toClean)
          :(P.tdOccSched!=null?P.tdOccSched:P.toClean);
   P.tdOccAuto=(saved.tdOcc==null);
+  P.lady=saved.lady||{};
+  P.extras=saved.extras||{};
   return P;
 }
 function dlPrevDs(ds){ var d=parseLocalDate(ds); d.setDate(d.getDate()-1); return dateStr(d); }
@@ -18205,6 +18215,33 @@ function dlAssignFloater(name,floor){
   rec.assign=rec.assign||{};
   if(floor)rec.assign[name]=floor; else delete rec.assign[name];
   dlSaveDay(ds,rec); renderDailyLineup();
+}
+/* What Carlos fills in during the Opera opening: beside each lady, her
+   total rooms and her departures, plus a tick once her assignment is
+   finished. Keyed by floor (floaters still waiting for one use their
+   slot, float1..3) and stored per DATE, so reopening a past day shows
+   what actually went out rather than a blank sheet. */
+function dlSetLady(key,field,val){
+  var ds=dlCurrentDate(), rec=dlLoadDay(ds)||{};
+  rec.lady=rec.lady||{};
+  var row=rec.lady[key]||{};
+  var t=String(val==null?'':val).trim();
+  if(field==='done'){ if(val)row.done=true; else delete row.done; }
+  else if(t===''){ delete row[field]; }
+  else { row[field]=t; }
+  if(!row.rooms&&!row.dep&&!row.done)delete rec.lady[key]; else rec.lady[key]=row;
+  dlSaveDay(ds,rec);
+  renderDailyLineup();
+}
+/* Anz Room / Stayover / Feather Free / Rooms Found Vacant — the four
+   lists along the bottom of Carlos's sheet. Room NUMBERS, not counts
+   (his answer), same convention as the DND room list. */
+function dlSetExtra(field,val){
+  var ds=dlCurrentDate(), rec=dlLoadDay(ds)||{};
+  rec.extras=rec.extras||{};
+  var t=String(val==null?'':val).trim();
+  if(t==='')delete rec.extras[field]; else rec.extras[field]=t;
+  dlSaveDay(ds,rec);
 }
 function dlSetOcc(which,val){
   var ds=dlCurrentDate(), rec=dlLoadDay(ds)||{};
@@ -18325,6 +18362,12 @@ function renderDailyLineup(){
      out they were missing. Division is by the crew ACTUALLY in that day
      (the same COUNTA-over-the-filled-names his formulas do), so a
      call-off moves the figure the same way it moves his. */
+  function dlLadyBox(key,field,val){
+    return '<input type="text" inputmode="numeric" value="'+escHtml(val||'')+'"'
+      +' onchange="dlSetLady(\''+key+'\',\''+field+'\',this.value)"'
+      +' style="width:100%;min-width:0;padding:2px 1px;font-size:10.5px;font-weight:700;text-align:center;color:var(--navy);'
+      +'border:1px solid '+(val?'#C9A84C':'var(--border)')+';border-radius:4px;background:'+(val?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+  }
   function dlEach(total,n,noun){
     if(!n)return '';
     return '<b style="color:var(--gd);font-weight:800;">'+(total/n).toFixed(2)+'</b> '+noun+' each';
@@ -18418,19 +18461,25 @@ function renderDailyLineup(){
   var task=0, taskFor={};
   DL_FLOORS.forEach(function(fl){ if(floors[fl])taskFor[fl]=++task; });
   function graRows(list,extra){
-    var rows=list.map(function(fl){ return [fl,taskFor[fl],floors[fl]]; });
-    (extra||[]).forEach(function(nm){ rows.push([null,null,nm]); });
+    var rows=list.map(function(fl){ return [fl,taskFor[fl],floors[fl],fl]; });
+    (extra||[]).forEach(function(nm,ix){ rows.push([null,null,nm,'float'+(ix+1)]); });
     return rows;
   }
   var leftRows=graRows(LEFT_FLOORS), rightRows=graRows(RIGHT_FLOORS,dlUnplacedFloaters(P));
   var rowCount=Math.max(leftRows.length,rightRows.length);
-  var graCols='46px 24px 1fr';
+  /* Rooms / Dep / tick are what Carlos fills in during the Opera
+     opening: her room total on one side, her departures on the other,
+     and the tick once he has finished assigning her. Every floor stays
+     on the sheet even when nobody owns it that day — an uncovered floor
+     still has rooms that have to go somewhere, so he writes a name in by
+     hand rather than finding the row missing. */
+  var graCols='40px 20px 1fr 38px 34px 24px';
   html+='<div style="padding:8px 16px;overflow-x:auto;">';
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;min-width:420px;">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px;min-width:660px;">';
   [leftRows,rightRows].forEach(function(rows,side){
     var h='<div>';
-    h+='<div style="display:grid;grid-template-columns:'+graCols+';gap:4px;padding:4px 6px;background:var(--surface);border:1px solid var(--border);border-bottom:none;font-size:8px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">'
-      +'<div>Floor</div><div>Tk</div><div>GRA Name</div></div>';
+    h+='<div style="display:grid;grid-template-columns:'+graCols+';gap:3px;padding:4px 6px;background:var(--surface);border:1px solid var(--border);border-bottom:none;font-size:8px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">'
+      +'<div>Floor</div><div>Tk</div><div>GRA Name</div><div style="text-align:center;">Rms</div><div style="text-align:center;">Dep</div><div style="text-align:center;">&#10003;</div></div>';
     for(var i=0;i<rowCount;i++){
       var r=rows[i];
       if(!r){ h+='<div style="border:1px solid var(--border);border-top:none;padding:5px 6px;">&nbsp;</div>'; continue; }
@@ -18442,10 +18491,17 @@ function renderDailyLineup(){
          a note that has content). */
       var isFloater=!P.gra[r[0]];
       var filled=!!r[2];
-      h+='<div style="display:grid;grid-template-columns:'+graCols+';gap:4px;align-items:center;padding:5px 6px;border:1px solid var(--border);border-top:none;background:'+(isFloater&&filled?'var(--gt)':'transparent')+';">';
+      var key=r[3], row=P.lady[key]||{}, done=!!row.done;
+      var bg=done?'var(--grd)':(isFloater&&filled?'var(--gt)':'transparent');
+      h+='<div style="display:grid;grid-template-columns:'+graCols+';gap:3px;align-items:center;padding:4px 6px;border:1px solid var(--border);border-top:none;background:'+bg+';">';
       h+='<div style="font-size:9.5px;color:var(--text3);">'+(r[0]||(filled?'Float':''))+'</div>';
       h+='<div style="font-size:9.5px;color:var(--text3);">'+(r[1]||'')+'</div>';
       h+='<div style="font-size:11.5px;font-weight:700;color:'+(filled?'var(--text1)':'var(--text3)')+';">'+(filled?escHtml(r[2]):'&mdash;')+'</div>';
+      h+=dlLadyBox(key,'rooms',row.rooms);
+      h+=dlLadyBox(key,'dep',row.dep);
+      h+='<div style="text-align:center;"><input type="checkbox" '+(done?'checked ':'')
+        +'onchange="dlSetLady(\''+key+'\',\'done\',this.checked)" title="Assignment finished for this lady"'
+        +' style="width:14px;height:14px;cursor:pointer;accent-color:var(--green);"></div>';
       h+='</div>';
     }
     h+='</div>';
@@ -18487,6 +18543,20 @@ function renderDailyLineup(){
     html+='<div style="padding:8px 16px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);">Pulled elsewhere by the schedule: '
       +P.pulled.map(function(p){return escHtml(p[0])+' &rarr; '+escHtml(p[1]);}).join(' &middot; ')+'</div>';
   }
+
+  /* ── The four room lists along the bottom of Carlos's own sheet.
+     Room NUMBERS rather than counts, same convention as the DND list, so
+     the record says WHICH rooms — the point of writing them down. ── */
+  html+=dlBar('Room Lists');
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;padding:10px 16px;">';
+  DL_EXTRA_FIELDS.forEach(function(f){
+    var val=P.extras[f.key]||'';
+    html+='<div><div style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;">'+f.label+'</div>'
+      +'<input type="text" value="'+escHtml(val)+'" placeholder="1204, 1508&hellip;" onchange="dlSetExtra(\''+f.key+'\',this.value)"'
+      +' style="width:100%;padding:5px 7px;font-size:11px;font-family:inherit;color:var(--text1);border:1px solid '
+      +(val?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(val?'var(--gt)':'#fff')+';box-sizing:border-box;"></div>';
+  });
+  html+='</div>';
   html+='</div>';
 
   /* Files, out of the way. Visible enough to re-upload the schedule when
@@ -18530,13 +18600,33 @@ function dlPrint(){
       +((arr&&arr.length)?arr.map(function(n,i){return '<div class="nm">'+(i+1)+'. '+escHtml(n)+'</div>';}).join(''):'<div class="nm em">&mdash;</div>')
       +'</div>';
   }
+  /* EVERY floor prints, covered or not. An uncovered floor still has
+     rooms that have to go somewhere, and Carlos writes the name in by
+     hand during the Opera opening — a row that simply vanished would
+     leave him no line to write on. Rms / Dep / tick print as empty
+     boxes for the same reason: they are filled in on paper. */
   var task=0,rows='';
   DL_FLOORS.forEach(function(fl){
-    if(!floors[fl])return;
-    task++;
-    rows+='<tr><td class="fl">'+fl+'</td><td class="tk">'+task+'</td><td>'+escHtml(floors[fl])+'</td></tr>';
+    var nm=floors[fl];
+    if(nm)task++;
+    var ld=P.lady[fl]||{};
+    rows+='<tr'+(nm?'':' class="open"')+'><td class="fl">'+fl+'</td>'
+      +'<td class="tk">'+(nm?task:'')+'</td>'
+      +'<td>'+(nm?escHtml(nm):'')+'</td>'
+      +'<td class="wr">'+escHtml(ld.rooms||'')+'</td>'
+      +'<td class="wr">'+escHtml(ld.dep||'')+'</td>'
+      +'<td class="ck">'+(ld.done?'&#10003;':'')+'</td></tr>';
+  });
+  dlUnplacedFloaters(P).forEach(function(nm,ix){
+    var ld=P.lady['float'+(ix+1)]||{};
+    rows+='<tr><td class="fl">Float</td><td class="tk"></td><td>'+escHtml(nm)+'</td>'
+      +'<td class="wr">'+escHtml(ld.rooms||'')+'</td><td class="wr">'+escHtml(ld.dep||'')+'</td>'
+      +'<td class="ck">'+(ld.done?'&#10003;':'')+'</td></tr>';
   });
   var open=DL_FLOORS.filter(function(fl){return !floors[fl];});
+  var extraRows=DL_EXTRA_FIELDS.map(function(f){
+    return '<tr><td class="xl">'+f.label+'</td><td>'+escHtml(P.extras[f.key]||'')+'</td></tr>';
+  }).join('');
   /* color-scheme:light + an explicit white background — without both,
      a browser (or OS) set to dark mode force-inverts this popup's colors
      since it never declares its own theme, turning "black text on white
@@ -18560,7 +18650,11 @@ function dlPrint(){
     +'.nm{font-size:12px;}.em{color:#999;}'
     +'table{border-collapse:collapse;width:100%;margin-top:4px;}'
     +'td{border:1px solid #bbb;padding:3px 6px;font-size:11px;}'
-    +'td.fl{width:42px;color:#666;}td.tk{width:26px;color:#666;}'
+    +'td.fl{width:38px;color:#666;}td.tk{width:22px;color:#666;}'
+    +'th{border:1px solid #bbb;padding:2px 6px;font-size:8px;text-transform:uppercase;letter-spacing:.3px;color:#666;background:#f4f2ec;}'
+    +'td.wr{width:34px;}td.ck{width:22px;text-align:center;}'
+    +'tr.open td{background:#fafafa;}'
+    +'.xt{margin-top:8px;}.xt td{font-size:10px;}.xt td.xl{width:96px;color:#666;text-transform:uppercase;font-size:8px;letter-spacing:.3px;}'
     +'.warn{margin-top:10px;border:1px solid #999;padding:6px 9px;font-size:11px;}'
     +'@media print{body{padding:0;}}'
     +'</style></head><body>'
@@ -18581,7 +18675,8 @@ function dlPrint(){
     +col('Overnight',P.night)
     +'</div><div class="side"><h2>GRA Sections</h2>'
     +(ladies?'<div class="perlady">'+(P.toClean/ladies).toFixed(2)+' rooms &middot; '+(P.toCleanDep/ladies).toFixed(2)+' departures each</div>':'')
-    +'<table>'+rows+'</table>'
+    +'<table><tr><th class="fl">Fl</th><th class="tk">Tk</th><th>GRA Name</th><th class="wr">Rms</th><th class="wr">Dep</th><th class="ck">&#10003;</th></tr>'+rows+'</table>'
+    +'<table class="xt">'+extraRows+'</table>'
     +(open.length?'<div class="warn"><b>Uncovered ('+open.length+'):</b> '+open.join(', ')+'</div>':'')
     +'</div></div></body></html>';
   var w=window.open('','_blank');
@@ -18600,6 +18695,16 @@ var DL_GRA_CELL={'2nd':'E35','3rd':'E36','4th':'E37','5th':'E38','6th':'E39','7t
   '8th':'E41','9th':'E42','10th':'E43','11th':'E44','12th':'E45','13th':'I35','14th':'I36',
   '15th':'I37','16th':'I38','17th':'I39','18th':'I40','19th':'I41','20th':'I42','21st':'I43','22nd':'I44'};
 var DL_FLOATER_CELL=['I45','I46','I47'];
+/* The four room lists along the bottom of the template. Each label sits
+   above the space its rooms get written into (C58 'Anz Room' -> C59,
+   and so on), matching how "Pm GRA's" and "Turn Down" are laid out
+   further up the same sheet. */
+var DL_EXTRA_FIELDS=[
+  {key:'anz',     label:'Anz Room',           cell:'C59'},
+  {key:'stay',    label:'Stayover',           cell:'F59'},
+  {key:'feather', label:'Feather Free',       cell:'J59'},
+  {key:'vacant',  label:'Rooms Found Vacant', cell:'G50'}
+];
 var DL_XNS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 var DL_RNS='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
@@ -18695,6 +18800,7 @@ function dlExportExcel(){
         var floors=dlFinalFloors(P);
         Object.keys(DL_GRA_CELL).forEach(function(fl){ S(DL_GRA_CELL[fl],floors[fl]||''); });
         fill(DL_FLOATER_CELL,dlUnplacedFloaters(P));
+        DL_EXTRA_FIELDS.forEach(function(f){ S(f.cell,P.extras[f.key]||''); });
 
         /* Cached formula results are stale now; make Excel recalculate. */
         var calc=wbDoc.getElementsByTagNameNS(DL_XNS,'calcPr')[0];

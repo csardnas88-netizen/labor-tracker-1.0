@@ -353,6 +353,68 @@ module.exports = {
     win.dlSetOcc('tdOcc', '');
     t.eq(win.dlBuildPlan('2026-08-14').tdOcc, 133, "clearing it falls back to the schedule's figure, not to zero and not to To Clean");
 
+    // ── What Carlos fills in during the Opera opening ──
+    // Beside each lady: her room total, her departures, and a tick once
+    // her assignment is done. Kept per DATE, so reopening a past day
+    // shows what actually went out.
+    win.dlDate = '2026-08-14';
+    win.dlSetLady('7th', 'rooms', '13');
+    win.dlSetLady('7th', 'dep', '9');
+    win.dlSetLady('7th', 'done', true);
+    const opened = win.dlBuildPlan('2026-08-14');
+    t.eq(opened.lady['7th'].rooms, '13', "the lady's room total is kept against her floor");
+    t.eq(opened.lady['7th'].dep, '9', 'and her departures');
+    t.eq(opened.lady['7th'].done, true, 'and the finished tick');
+
+    win.dlSetLady('7th', 'done', false);
+    t.assert(!(win.dlBuildPlan('2026-08-14').lady['7th'] || {}).done, 'unticking clears it');
+    win.dlSetLady('7th', 'rooms', '');
+    win.dlSetLady('7th', 'dep', '');
+    t.assert(!win.dlBuildPlan('2026-08-14').lady['7th'],
+      'clearing every field drops the row entirely rather than leaving an empty husk behind');
+
+    // Numbers belong to the DAY, not to the floor forever — a different
+    // date must not inherit yesterday's counts.
+    win.dlSetLady('7th', 'rooms', '13');
+    t.assert(!(win.dlBuildPlan('2026-08-13').lady['7th'] || {}).rooms,
+      "another day's sheet starts clean");
+    win.dlDate = '2026-08-14';
+    win.dlSetLady('7th', 'rooms', '');
+
+    // ── The four room lists along the bottom of his sheet ──
+    // Room NUMBERS, not counts — the point is which rooms.
+    t.eq(win.DL_EXTRA_FIELDS.length, 4, 'all four lists are carried');
+    const labels = win.DL_EXTRA_FIELDS.map((f) => f.label).join('|');
+    t.assert(/Anz Room/.test(labels) && /Stayover/.test(labels)
+      && /Feather Free/.test(labels) && /Rooms Found Vacant/.test(labels),
+      'Anz Room, Stayover, Feather Free and Rooms Found Vacant');
+    win.DL_EXTRA_FIELDS.forEach((f) => {
+      t.assert(/^[A-Z]+\d+$/.test(f.cell), f.label + ' knows which template cell it writes into');
+    });
+
+    win.dlSetExtra('anz', '1204, 1508');
+    t.eq(win.dlBuildPlan('2026-08-14').extras.anz, '1204, 1508', 'room numbers are stored as written');
+    win.dlSetExtra('anz', '');
+    t.assert(!win.dlBuildPlan('2026-08-14').extras.anz, 'and clear back out');
+
+    // ── Every floor stays on the sheet, covered or not ──
+    // An uncovered floor still has rooms that must go somewhere; Carlos
+    // writes a name on that line by hand, so the row cannot vanish.
+    const openingPlan = win.dlBuildPlan('2026-08-14');
+    const covered = win.dlFinalFloors(openingPlan);
+    t.assert(Object.keys(covered).length < win.DL_FLOORS.length, 'this day genuinely has uncovered floors');
+    const printed = (() => {
+      let cap = '';
+      const realOpen = win.open;
+      win.open = () => ({ document: { write: (h) => { cap = h; }, close() {} }, focus() {}, print() {} });
+      try { win.dlPrint(); } finally { win.open = realOpen; }
+      return cap;
+    })();
+    win.DL_FLOORS.forEach((fl) => {
+      t.assert(new RegExp('>' + fl + '<').test(printed), fl + ' has a row on the printed sheet even when nobody owns it');
+    });
+    t.assert(/Anz Room/.test(printed) && /Feather Free/.test(printed), 'the four room lists print too');
+
     // ── A day the schedule does not cover must say so, not draw a blank
     // lineup that looks like nobody is working. ──
     t.eq(win.dlBuildPlan('2026-12-25'), null, 'a date outside the loaded schedule yields no plan at all');
