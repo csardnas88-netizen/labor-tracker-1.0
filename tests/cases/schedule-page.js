@@ -171,7 +171,7 @@ module.exports = {
     t.assert(graIdx >= 0, 'Debora is on the room attendant block');
     t.eq(win.dlBuildPlan ? 'ok' : 'ok', 'ok');
 
-    win.schedSetCell('gra', graIdx, sat, 'OFF', null);
+    win.schedSetCell('gra', graIdx, 'Debora', sat, 'OFF', null);
     const after = win.dlLoadSchedule();
     t.eq(after.days[sat].gra[graIdx][1], 'OFF', 'the edit is saved against that day');
     t.eq(after.days[sat].gra[graIdx][0], 'Debora', 'against the right person');
@@ -180,7 +180,7 @@ module.exports = {
       "Sunday already had her off and is untouched — an edit changes one day, not the row");
 
     // Editing back restores it, and the header numbers are editable too.
-    win.schedSetCell('gra', graIdx, sat, '1', null);
+    win.schedSetCell('gra', graIdx, 'Debora', sat, '1', null);
     t.eq(win.dlLoadSchedule().days[sat].gra[graIdx][1], '1', 'an edit is reversible');
 
     win.schedSetNum(sat, 'occ', '175');
@@ -206,5 +206,100 @@ module.exports = {
     win.renderSchedule();
     t.assert(/isn't in the loaded file/.test(html()),
       'a week outside the file says so plainly rather than drawing an empty schedule that reads as "nobody works"');
+
+    // ── 7) Borrowing someone into another crew ──
+    // People cross departments here constantly: a Room Attendant covers
+    // Laundry, a Laundry attendant works as Houseman. The person is
+    // already on the schedule, just on a different crew.
+    win.schedViewWeekStart = new Date(2026, 7, 15);
+    win.renderSchedule();
+
+    const laundryNames = () => win.dlLoadSchedule().days[sat].laundry.map((p) => p[0]);
+    t.assert(!laundryNames().includes('Karla Varela'), 'Karla is a room attendant, not on laundry');
+
+    win.schedAddPerson('laundry', 'Karla Varela');
+    t.assert(laundryNames().includes('Karla Varela'), 'she can be borrowed onto laundry');
+    t.assert(win.dlLoadSchedule().days[sat].gra.some((p) => p[0] === 'Karla Varela'),
+      'and stays on her own crew — borrowing is not a transfer');
+
+    // Added to EVERY day of the week, so the seven columns keep the same
+    // shape and the days she actually covers get filled in after.
+    const weekDates = win.schedWeekDates();
+    weekDates.forEach((ds) => {
+      const arr = win.dlLoadSchedule().days[ds];
+      if (!arr) return;
+      t.assert(arr.laundry.some((p) => p[0] === 'Karla Varela'), 'present on ' + ds);
+    });
+
+    // She lands with no days set — borrowed onto the crew, not yet working.
+    t.eq(win.dlLoadSchedule().days[sat].laundry.filter((p) => p[0] === 'Karla Varela')[0][1], '',
+      'and starts blank rather than being assumed in');
+    t.eq(win.schedDayTotal(win.dlLoadSchedule(), sat, 'laundry'), 2,
+      'so the crew total does not move until a day is actually given to her');
+
+    // Editing her day must find HER row, not whatever sits at that index
+    // on another day — she was appended, so the index is only a hint.
+    const kIdx = win.dlLoadSchedule().days[sat].laundry.findIndex((p) => p[0] === 'Karla Varela');
+    win.schedSetCell('laundry', kIdx, 'Karla Varela', sat, '1', null);
+    t.eq(win.dlLoadSchedule().days[sat].laundry[kIdx][1], '1', 'her Saturday is set');
+    t.eq(win.schedDayTotal(win.dlLoadSchedule(), sat, 'laundry'), 3, 'and now she counts on the crew');
+    t.eq(win.dlLoadSchedule().days[sat].gra.filter((p) => p[0] === 'Karla Varela')[0][1], '1',
+      'her room-attendant day is untouched by the laundry edit');
+
+    // A wrong index must not write to the wrong person.
+    win.schedSetCell('laundry', 0, 'Karla Varela', sat, 'OFF', null);
+    t.eq(win.dlLoadSchedule().days[sat].laundry.filter((p) => p[0] === 'Karla Varela')[0][1], 'OFF',
+      'a stale index still resolves to the named person');
+    t.eq(win.dlLoadSchedule().days[sat].laundry[0][1], '1',
+      "and the person actually at that index keeps her own value");
+    win.schedSetCell('laundry', kIdx, 'Karla Varela', sat, '1', null);
+
+    // Twice is a mistake, not a second row.
+    win.schedAddPerson('laundry', 'Karla Varela');
+    t.eq(laundryNames().filter((n) => n === 'Karla Varela').length, 1, 'adding her again does not duplicate the row');
+
+    // ── 8) A borrowed row survives the next workbook upload ──
+    // He rebuilds the schedule in Excel every Wednesday and re-uploads.
+    // Wiping his cross-department cover every time would make the whole
+    // feature pointless.
+    const fresh = win.dlParseSchedule(scheduleWb(), new Date(2026, 7, 15));
+    t.assert(!fresh.days[sat].laundry.some((p) => p[0] === 'Karla Varela'),
+      'a straight re-parse of the workbook does not know about her');
+    const merged = win.schedCarryAddedRows(win.dlLoadSchedule(), fresh);
+    t.assert(merged.days[sat].laundry.some((p) => p[0] === 'Karla Varela'),
+      'but the carry-over keeps her on the crew through the re-upload');
+    t.eq(merged.days[sat].laundry.filter((p) => p[0] === 'Karla Varela')[0][1], '1',
+      'with the day she was given still set');
+    t.eq(merged.days[sat].laundry.filter((p) => p[0] === 'Isabel D').length, 1,
+      'and the workbook rows are not duplicated by the merge');
+
+    // If the workbook itself now names her on that crew, the carry-over
+    // must not add a second copy of her.
+    const wbWithHer = win.dlParseSchedule(scheduleWb(), new Date(2026, 7, 15));
+    wbWithHer.days[sat].laundry.push(['Karla Varela', '1']);
+    const merged2 = win.schedCarryAddedRows(win.dlLoadSchedule(), wbWithHer);
+    t.eq(merged2.days[sat].laundry.filter((p) => p[0] === 'Karla Varela').length, 1,
+      'once Excel carries her too, she is not added a second time');
+
+    // ── 9) Removing ──
+    // Only a borrowed row can be removed here. Workbook rows stay Excel's
+    // to manage — that is the same rule that makes hiding a row work.
+    win.confirm = () => true;
+    win.schedRemovePerson('laundry', 'Karla Varela');
+    t.assert(!laundryNames().includes('Karla Varela'), 'a borrowed person can be taken back off');
+    t.assert(win.dlLoadSchedule().days[sat].gra.some((p) => p[0] === 'Karla Varela'),
+      'and removing the loan leaves her own crew alone');
+
+    win.schedRemovePerson('laundry', 'Isabel D');
+    t.assert(laundryNames().includes('Isabel D'),
+      'a row that came from the workbook is not removable here — Excel stays its source');
+
+    // ── 10) The picker offers people from OTHER crews ──
+    win.renderSchedule();
+    const grid = html();
+    t.assert(/Add someone to this crew/.test(grid), 'every crew card offers to add someone');
+    t.assert(/<optgroup label="AM Room Attendant">/.test(grid),
+      'grouped by the crew each person normally works, which is how Carlos identifies them');
+    t.assert(/Someone else/.test(grid), 'with a way to name somebody not on the schedule at all');
   }
 };

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.4.0"/>
+<meta name="app-version" content="7.4.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4312,6 +4312,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.4.1', date:'2026-08-15',
+    features:['Anyone can now be added to any crew on the Schedule, for the weeks people cross departments — a Room Attendant covering Laundry, a Laundry attendant working as Houseman. Each crew has an "Add someone to this crew" picker listing everyone else on the schedule, grouped by the crew they normally work, so you pick the person rather than typing a name; anyone not on the schedule at all can still be typed in. Borrowing does not move them — they stay on their own crew too — and they arrive with no days set, so the crew total only moves once you actually give them a day. Added people are marked in gold with an × to take them back off. Rows that came from the workbook stay Excel\'s to manage.'],
+    improvements:['A borrowed person now survives the next workbook upload. Re-uploading replaces the weeks the file covers, which would otherwise wipe every cross-department cover each time the schedule is rebuilt — they are carried across instead, unless the workbook has since named them on that crew itself.']
+  },
   {
     v:'7.4.0', date:'2026-08-15',
     features:['New Schedule section: the whole week laid out the way the Schedule Draft lays it out — all nine crews, Saturday through Friday — with arrows to move between weeks and every cell editable right there. Change a day and the total underneath moves with it, along with the rooms-per-person and departures-per-person figures that hang off it. Edits save and sync as you make them, into the same record the Daily Lineup reads, so correcting a day here corrects the lineup too. Laundry and PM Houseman are read for the first time; they were never needed for the lineup.'],
@@ -18251,6 +18256,7 @@ function dlUploadSchedule(input){
       try{
         var SCH=dlParseSchedule(wb);
         if(!SCH.count)throw new Error('No dates found in range. Is this the Schedule Draft?');
+        try{ SCH=schedCarryAddedRows(dlLoadSchedule(),SCH); }catch(e){}
         dlSaveSchedule(SCH);
         showToast('✓ Schedule loaded — '+SCH.count+' days');
         renderDailyLineup();
@@ -18322,10 +18328,30 @@ function schedDayTotal(SCH,ds,bk){
   return t;
 }
 function schedFmtTotal(n){ return (Math.round(n*100)/100).toString(); }
-function schedSetCell(bk,idx,ds,val,el){
+/* Embedding a name in an inline handler: escape it for JS first, then
+   the whole attribute gets HTML-escaped on the way out. Names here are
+   typed by hand and this app already carries an "O'Brien" class of
+   problem in its roster. */
+function schedJs(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+/* Rows line up by index across the seven days, because all seven are
+   parsed from the same spreadsheet rows. Adding a person breaks that
+   assumption the moment one day already has them and another does not,
+   so the row is found by index and then CONFIRMED by name, falling back
+   to a name lookup. Editing the wrong person's day is the one mistake
+   this grid must never make. */
+function _schedRow(SCH,ds,bk,idx,name){
+  var arr=SCH.days&&SCH.days[ds]&&SCH.days[ds][bk];
+  if(!arr)return null;
+  var at=arr[idx];
+  if(at&&(name==null||dlNorm(at[0])===dlNorm(name)))return at;
+  for(var i=0;i<arr.length;i++) if(dlNorm(arr[i][0])===dlNorm(name))return arr[i];
+  return null;
+}
+function schedSetCell(bk,idx,name,ds,val,el){
   var SCH=dlLoadSchedule();
-  if(!SCH||!SCH.days||!SCH.days[ds]||!SCH.days[ds][bk]||!SCH.days[ds][bk][idx])return;
-  SCH.days[ds][bk][idx][1]=String(val==null?'':val).trim();
+  var row=_schedRow(SCH,ds,bk,idx,name);
+  if(!row)return;
+  row[1]=String(val==null?'':val).trim();
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   /* Repaint only what changed. A full re-render would throw away the
@@ -18341,6 +18367,104 @@ function schedSetNum(ds,field,val){
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   _schedRefreshTotals(SCH,null);
+}
+
+/* ── borrowing someone into another crew ──
+   People cross departments constantly here: a Room Attendant covers
+   Laundry, a Laundry attendant works as Houseman. The person already
+   exists on the schedule, just on a different crew, so the picker is
+   built from the week's own roster and grouped by the crew each person
+   normally sits on — picking "Karla Varela (AM Room Attendant)" into
+   Laundry is the whole gesture.
+
+   The added row is tagged so it can be told apart from a row that came
+   out of the workbook. That tag does two things: it is what lets the
+   row be removed again from here (workbook rows stay Excel's to
+   manage), and it is what survives a re-upload. */
+function schedPeopleByCrew(SCH){
+  var dates=schedWeekDates(),out=[],seen={};
+  SCHED_BLOCKS.forEach(function(b){
+    var names=[],nseen={};
+    dates.forEach(function(ds){
+      var day=SCH.days&&SCH.days[ds]; if(!day)return;
+      (day[b.key]||[]).forEach(function(p){
+        var n=String(p[0]||'').trim(); if(!n)return;
+        var k=dlNorm(n); if(nseen[k])return; nseen[k]=1; names.push(n);
+      });
+    });
+    if(names.length)out.push({label:b.label,names:names});
+    names.forEach(function(n){ seen[dlNorm(n)]=1; });
+  });
+  return out;
+}
+function schedAddPerson(bk,name){
+  name=String(name==null?'':name).trim();
+  if(!name)return;
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days){ showToast('&#9888; No schedule loaded'); return; }
+  var dates=schedWeekDates(),loaded=dates.filter(function(ds){return !!SCH.days[ds];});
+  if(!loaded.length){ showToast('&#9888; This week is not in the loaded file'); return; }
+  var already=loaded.some(function(ds){
+    return (SCH.days[ds][bk]||[]).some(function(p){ return dlNorm(p[0])===dlNorm(name); });
+  });
+  if(already){ showToast('&#9888; '+name+' is already on that crew'); return; }
+  /* Appended to every day of the week at once, so the seven columns stay
+     the same shape and the row means "available to this crew this week",
+     with the days she actually works filled in after. */
+  loaded.forEach(function(ds){
+    if(!SCH.days[ds][bk])SCH.days[ds][bk]=[];
+    SCH.days[ds][bk].push([name,'','added']);
+  });
+  SCH.savedAt=new Date().toISOString();
+  dlSaveSchedule(SCH);
+  renderSchedule();
+  showToast('&#10003; '+name+' added');
+}
+function schedRemovePerson(bk,name){
+  name=String(name==null?'':name).trim();
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days)return;
+  if(!confirm('Remove '+name+' from this crew for this week?'))return;
+  schedWeekDates().forEach(function(ds){
+    var arr=SCH.days[ds]&&SCH.days[ds][bk]; if(!arr)return;
+    for(var i=arr.length-1;i>=0;i--) if(dlNorm(arr[i][0])===dlNorm(name)&&arr[i][2]==='added')arr.splice(i,1);
+  });
+  SCH.savedAt=new Date().toISOString();
+  dlSaveSchedule(SCH);
+  renderSchedule();
+  showToast('&#10003; '+name+' removed');
+}
+function schedPickPerson(bk,sel){
+  var v=sel.value; sel.selectedIndex=0;
+  if(!v)return;
+  if(v==='__other__'){
+    var n=prompt('Name of the person to add to this crew:');
+    if(n)schedAddPerson(bk,n);
+    return;
+  }
+  schedAddPerson(bk,v);
+}
+/* A re-upload replaces the weeks the workbook covers — that is the
+   intended direction, Excel is still where a new week gets built. But
+   people borrowed into another crew live only in the app, so replacing
+   the week wholesale would silently delete them every Wednesday. They
+   are carried across, unless the workbook now names them there itself. */
+function schedCarryAddedRows(oldSch,newSch){
+  if(!oldSch||!oldSch.days||!newSch||!newSch.days)return newSch;
+  Object.keys(newSch.days).forEach(function(ds){
+    var od=oldSch.days[ds],nd=newSch.days[ds];
+    if(!od)return;
+    SCHED_BLOCKS.forEach(function(b){
+      var oldArr=od[b.key]||[],newArr=nd[b.key];
+      if(!newArr)return;
+      oldArr.forEach(function(p){
+        if(p[2]!=='added')return;
+        var here=newArr.some(function(q){ return dlNorm(q[0])===dlNorm(p[0]); });
+        if(!here)newArr.push([p[0],p[1],'added']);
+      });
+    });
+  });
+  return newSch;
 }
 /* Totals and the per-person ratios that hang off them. */
 function _schedRefreshTotals(SCH,onlyBk){
@@ -18454,10 +18578,19 @@ function renderSchedule(){
   html+='</div></div>';
 
   /* ── one card per crew ── */
+  var crewRoster=schedPeopleByCrew(SCH);
   SCHED_BLOCKS.forEach(function(b){
-    var ref=null;
-    for(var i=0;i<loaded.length;i++){ var a=SCH.days[loaded[i]][b.key]; if(a&&a.length){ ref=a; break; } }
-    if(!ref)return;
+    var ref=null,present=false;
+    for(var i=0;i<loaded.length;i++){
+      var a=SCH.days[loaded[i]][b.key];
+      if(!a)continue;
+      present=true;
+      if(a.length){ ref=a; break; }
+    }
+    /* A crew that exists on the sheet but has nobody in it still gets a
+       card — that is exactly when someone needs borrowing into it. */
+    if(!present)return;
+    ref=ref||[];
 
     html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
     html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(b.label)+'</div>';
@@ -18465,16 +18598,24 @@ function renderSchedule(){
     html+=headRow();
 
     ref.forEach(function(p,idx){
+      var nm=p[0], nmJs=escHtml(schedJs(nm)), borrowed=(p[2]==='added');
       html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:3px;">';
-      html+='<div style="font-size:11px;font-weight:600;color:var(--text1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+escHtml(p[0])+'">'+escHtml(p[0])+'</div>';
+      html+='<div style="display:flex;align-items:center;gap:3px;min-width:0;">'
+        +'<span style="font-size:11px;font-weight:600;color:'+(borrowed?'var(--gd)':'var(--text1)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"'
+        +' title="'+escHtml(nm)+(borrowed?' — borrowed into this crew':'')+'">'+escHtml(nm)+'</span>'
+        +(borrowed?'<button onclick="schedRemovePerson(\''+b.key+'\',\''+nmJs+'\')" title="Remove from this crew"'
+            +' style="flex-shrink:0;border:none;background:transparent;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0 2px;">&times;</button>':'')
+        +'</div>';
       dates.forEach(function(ds,di){
         var day=SCH.days[ds];
-        var cell=day&&day[b.key]&&day[b.key][idx];
+        var cell=day&&day[b.key]&&(day[b.key][idx]&&dlNorm(day[b.key][idx][0])===dlNorm(nm)
+                 ? day[b.key][idx]
+                 : day[b.key].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0]);
         if(!cell){ html+='<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>'; return; }
         var v=String(cell[1]||'').trim();
         var opts=SCHED_VALUES.slice();
         if(v&&opts.indexOf(v)===-1)opts.push(v);
-        html+='<select onchange="schedSetCell(\''+b.key+'\','+idx+',\''+ds+'\',this.value,this)" style="'+_schedCellCss(v)+'">'
+        html+='<select onchange="schedSetCell(\''+b.key+'\','+idx+',\''+nmJs+'\',\''+ds+'\',this.value,this)" style="'+_schedCellCss(v)+'">'
           +opts.map(function(o){
             return '<option value="'+escHtml(o)+'"'+(o===v?' selected':'')+'>'+(o===''?'&mdash;':escHtml(o))+'</option>';
           }).join('')
@@ -18503,7 +18644,32 @@ function renderSchedule(){
       });
       html+='</div>';
     });
-    html+='</div></div></div>';
+    html+='</div></div>';
+
+    /* Borrow someone in. Grouped by the crew each person normally works,
+       since that is how Carlos thinks of them ("a Room Attendant who can
+       cover Laundry"), and anyone already on this crew is left off the
+       list so the same person cannot be added twice. */
+    var here={};
+    ref.forEach(function(p){ here[dlNorm(p[0])]=1; });
+    var groups='';
+    crewRoster.forEach(function(g){
+      if(g.label===b.label)return;
+      var avail=g.names.filter(function(n){ return !here[dlNorm(n)]; });
+      if(!avail.length)return;
+      groups+='<optgroup label="'+escHtml(g.label)+'">'
+        +avail.map(function(n){ return '<option value="'+escHtml(n)+'">'+escHtml(n)+'</option>'; }).join('')
+        +'</optgroup>';
+    });
+    html+='<div style="padding:0 14px 12px;">';
+    html+='<select onchange="schedPickPerson(\''+b.key+'\',this)"'
+      +' style="width:100%;max-width:320px;padding:5px 8px;font-size:11px;font-weight:700;color:var(--gd);'
+      +'border:1px dashed var(--gold);border-radius:7px;background:var(--gt);font-family:inherit;cursor:pointer;">';
+    html+='<option value="">+ Add someone to this crew</option>';
+    html+=groups;
+    html+='<option value="__other__">Someone else&hellip;</option>';
+    html+='</select></div>';
+    html+='</div>';
   });
 
   html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--text3);margin-top:2px;">';
