@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.3.7"/>
+<meta name="app-version" content="7.3.8"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4300,6 +4300,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.3.8', date:'2026-08-14',
+    fixes:['"Generate Excel" was producing a file Excel refused to open at all ("cannot be opened or repaired because it is corrupt") — every single export, not just some. Traced it to the shipped blank template (lineup-template.xlsx): back when it was scrubbed of real names to make it safe for the public repo, the tool used for that mangled the file\'s internal XML in two places — relationship references lost their real prefix (e.g. a drawing reference read `ns4:id` instead of `r:id`) and, deeper than that, something else was silently stripped too, since even a straight repair attempt came back with a blank sheet. Rebuilt the template from Carlos\'s real working file with a plain text-level scrub this time — only the name/date text inside sharedStrings.xml, his username in a stray SharePoint path, and the last-modified-by field, nothing else touched — so every formula, style and namespace stays byte-for-byte what Excel itself wrote. Verified by actually opening the exported file in Excel, not just checking the XML.']
+  },
   {
     v:'7.3.7', date:'2026-08-14',
     improvements:['Every "X.XX each" figure on the Daily Lineup (Floor Supervisors, House Attendants, Turndown, and GRA Sections) now spells out what that decimal means in practice — "43.33 departures each (2 at 43, 1 at 44)" — since the .33 was never a number anyone actually gets. Carlos asked who ends up with more and who ends up with less; this answers it directly instead of leaving the split to be worked out by hand. Same note on the printed sheet, in every section that has one.']
