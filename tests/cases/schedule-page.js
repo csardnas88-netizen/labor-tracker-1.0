@@ -323,5 +323,57 @@ module.exports = {
     t.assert(/<optgroup label="AM Room Attendant">/.test(grid),
       'grouped by the crew each person normally works, which is how Carlos identifies them');
     t.assert(/Someone else/.test(grid), 'with a way to name somebody not on the schedule at all');
+
+    // ── 11) Unifocus standard, checked against what's actually scheduled ──
+    // Carlos's ask: at a glance, is each position on standard, over, or
+    // short. Values below were computed once via the app's own functions
+    // and pinned here — this is a regression check, not a re-derivation
+    // of Unifocus's math (that lives in the unifocus-* test files).
+    // Restore OCC/Departures to the fixture's original numbers — an
+    // earlier step in this same test edited them to prove they're
+    // editable, and left them changed.
+    win.schedSetNum(sat, 'occ', '158');
+    win.schedSetNum(sat, 'dep', '68');
+
+    const SCH2 = win.dlLoadSchedule();
+    t.eq(SCH2.days[sat].occ, '158', 'sanity: the OCC this is computed from');
+    t.eq(SCH2.days[sat].dep, '68', 'and the Departures');
+    t.eq(SCH2.days[sat].tdOcc, '161', "and Turndown's own same-day OCC row");
+
+    const uf = {};
+    win.SCHED_UF_POS.forEach((p) => {
+      uf[p.label] = { actual: win.schedUfActual(SCH2, sat, p.crews), std: win.schedUfExpected(SCH2, p.label, sat) };
+    });
+    t.eq(uf['Room Attendant'].actual, 3, 'three GRAs are actually in Saturday');
+    t.eq(uf['Room Attendant'].std, 7, '158 rooms / 68 departures -> 59.5h -> 7 people at 8h — short by 4');
+    t.eq(uf['House Attendant'].actual, 3, 'AM Houseman (2) + PM Houseman (1) combined');
+    t.eq(uf['House Attendant'].std, 3, '16h (departures band) + 8h (flat rooms) = 24h -> 3 people — exactly on standard');
+    t.eq(uf['Housekeeping Supervisor'].actual, 2);
+    t.eq(uf['Housekeeping Supervisor'].std, 3, '16h + 8h = 24h -> 3 — short by 1');
+    t.eq(uf['Laundry Attendant'].actual, 2);
+    t.eq(uf['Laundry Attendant'].std, 5, '40h flat rooms component (68 departures is below the 175 threshold) -> 5 — short by 3');
+    t.eq(uf['Turndown Attendant'].actual, 2);
+    t.eq(uf['Turndown Attendant'].std, 5,
+      "161 (Turndown's OWN same-day OCC, not the header 158) -> 136-180 band -> 32h -> truncated to 30 at 6h shifts -> 5 — short by 3");
+    t.eq(uf['Public Area Attendant'].actual, 1, "AM Lobby's own total — confirmed as the Public Area Attendant crew");
+    t.eq(uf['Public Area Attendant'].std, 4, "Saturday's day-of-week bands: 8h + 8h + 16h = 32h -> 4 — short by 3");
+
+    // A day with no OCC/Departures typed in yet must not compute a false
+    // standard — "short by 7" on a blank day would be actively wrong.
+    win.schedSetNum('2026-08-18', 'occ', '');
+    win.schedSetNum('2026-08-18', 'dep', '');
+    const blankDay = win.dlLoadSchedule();
+    t.eq(win.schedUfExpected(blankDay, 'Room Attendant', '2026-08-18'), null,
+      'no departures typed in -> no standard computed, not a misleading 0');
+
+    // Rendered: the card shows the position, the scheduled number, and
+    // the standard beneath it, colored by status.
+    win.renderSchedule();
+    const ufHtml = html();
+    t.assert(/Unifocus Standard/.test(ufHtml), 'the card is titled plainly');
+    t.assert(/House Attendant/.test(ufHtml) && /Room Attendant/.test(ufHtml), 'positions are named, not abbreviated to the crew key');
+    t.assert(/std 7/.test(ufHtml), "the standard prints beneath the actual number");
+    t.assert(/AM Houseman \+ PM Houseman combined/.test(ufHtml),
+      'the combined-crew caveat is stated on the page, not left implicit');
   }
 };

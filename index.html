@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.4.2"/>
+<meta name="app-version" content="7.5.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4313,6 +4313,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.5.0', date:'2026-08-15',
+    features:['A Unifocus Standard card on the Schedule, one row per position with a standard on file (Room Attendant, House Attendant, Housekeeping Supervisor, Laundry Attendant, Turndown Attendant, Public Area Attendant) — each day shows how many you\'ve actually scheduled against what Unifocus expects for that day\'s occupancy, colored green when you\'re on it, amber when over, red when short. Runs off the Schedule\'s own forecasted OCC/Departures rather than an actual report, since the schedule is built weeks before those reports exist. House Attendant combines AM Houseman and PM Houseman into one number, matching how Unifocus states it as a single AM+PM standard; Room Attendant, which has no shift length of its own in the app, uses the same 8h every other housekeeping shift does. A day with nothing typed in yet shows a dash rather than a false "short by 7."']
+  },
+  {
     v:'7.4.2', date:'2026-08-15',
     improvements:['PM Houseman now reads like every other crew on the Schedule. The workbook writes 0.75 there — three quarters of a shift — which is real in Excel\'s hour math but looked like a broken cell sitting next to every other crew\'s plain 1. A number there now means "in" and shows as 1, and the crew total is a headcount like the rest. Schedules already loaded are tidied up on their own, so there is no need to re-upload. Note this makes the app\'s PM Houseman total a headcount rather than the 0.75 on the workbook\'s own "Total PM HM" row.']
   },
@@ -7716,13 +7720,22 @@ var UNIFOCUS_STANDARDS={
 var RA_STAYOVER_PCT=0.85;
 var RA_STAYOVER_MIN=20;
 var RA_DEPARTURE_MIN=30;
-function unifocusRoomAttendantHours(ds){
-  var dep=getDeparturesForDay(ds);
-  if(dep===null)return null; /* stayovers can't be derived without departures */
-  var rooms=getRoomsForDay(ds)||0;
-  var stayovers=Math.max(0,rooms-dep);
+/* Core formula, split out so the Schedule page can run the same standard
+   against its own forecasted OCC/Departures — entered weeks ahead, before
+   any R106 report exists for those dates — instead of the actual-report
+   figures this function itself uses. Same math either way; only where
+   the numbers come from differs. */
+function unifocusRoomAttendantHoursFromVolumes(rooms,dep){
+  if(dep==null)return null; /* stayovers can't be derived without departures */
+  var stayovers=Math.max(0,(rooms||0)-dep);
   var minutes=(stayovers*RA_STAYOVER_PCT*RA_STAYOVER_MIN)+(dep*RA_DEPARTURE_MIN);
   return minutes/60;
+}
+function unifocusRoomAttendantHours(ds){
+  var dep=getDeparturesForDay(ds);
+  if(dep===null)return null;
+  var rooms=getRoomsForDay(ds)||0;
+  return unifocusRoomAttendantHoursFromVolumes(rooms,dep);
 }
 /* A band's hours value is either a plain number (every day the same, every
    position before Public Area Attendant) or a 7-element
@@ -8164,20 +8177,20 @@ function getSameDayRoomsForDay(ds){
   if(mData.rooms&&mData.rooms[ds]!==undefined)return parseInt(mData.rooms[ds])||0;
   return 0;
 }
-function unifocusHoursForPosition(pos,ds){
-  if(pos==='Room Attendant')return unifocusRoomAttendantHours(ds);
+/* Core standard, split out from its data source the same way the Room
+   Attendant formula above is — the Schedule page runs this against its
+   own forecasted OCC/Departures/Turndown-OCC rather than actual R106
+   figures, since a schedule is built weeks before those reports exist. */
+function unifocusHoursFromVolumes(pos,rooms,dep,roomsSameDay,dow){
+  if(pos==='Room Attendant')return unifocusRoomAttendantHoursFromVolumes(rooms,dep);
   var shifts=UNIFOCUS_STANDARDS[pos];
   if(!shifts)return null; /* no Unifocus standard shared for this position yet */
-  /* Only fetch/require departures if some component actually uses it —
-     Turndown and Public Area Attendant have none, and previously bailed to
-     null unnecessarily on any date whose R106 upload predated departures
-     parsing, even though their Rooms-only math never needed that field. */
+  /* Only require departures if some component actually uses it — Turndown
+     and Public Area Attendant have none, and previously bailed to null
+     unnecessarily whenever departures data was missing, even though their
+     Rooms-only math never needed that field. */
   var needsDep=shifts.some(function(s){return s.driver==='departures';});
-  var dep=needsDep?getDeparturesForDay(ds):null;
-  if(needsDep&&dep===null)return null;
-  var rooms=getRoomsForDay(ds); /* same day, same existing prevDs-offset convention as today's Rooms-based budget */
-  var roomsSameDay=getSameDayRoomsForDay(ds); /* Turndown only — see getSameDayRoomsForDay */
-  var dow=parseLocalDate(ds).getDay(); /* Public Area Attendant only — see UNIFOCUS_STANDARDS */
+  if(needsDep&&dep==null)return null;
   var total=0;
   shifts.forEach(function(shift){
     var vol=shift.driver==='departures'?dep:(shift.driver==='rooms_sameday'?roomsSameDay:rooms);
@@ -8190,6 +8203,15 @@ function unifocusHoursForPosition(pos,ds){
     total+=h;
   });
   return total;
+}
+function unifocusHoursForPosition(pos,ds){
+  var shifts=UNIFOCUS_STANDARDS[pos];
+  var needsDep=(pos==='Room Attendant')||(shifts&&shifts.some(function(s){return s.driver==='departures';}));
+  var dep=needsDep?getDeparturesForDay(ds):null;
+  var rooms=getRoomsForDay(ds); /* same day, same existing prevDs-offset convention as today's Rooms-based budget */
+  var roomsSameDay=getSameDayRoomsForDay(ds); /* Turndown only — see getSameDayRoomsForDay */
+  var dow=parseLocalDate(ds).getDay(); /* Public Area Attendant only — see UNIFOCUS_STANDARDS */
+  return unifocusHoursFromVolumes(pos,rooms,dep,roomsSameDay,dow);
 }
 
 /* Which standard Labor is currently showing — 'current' (LABOR_STD, the
@@ -18300,6 +18322,61 @@ var SCHED_BLOCKS=[
   {key:'gra',    label:'AM Room Attendant', ratios:[{label:'rooms each',num:'occ'},{label:'departures each',num:'dep'}]},
   {key:'hp',     label:'Houseman', ratios:[{label:'departures each',num:'dep'}]}
 ];
+/* ── Unifocus standard, checked against what's actually scheduled ──
+   Carlos's ask: while looking at a week, know at a glance whether he's
+   staffed to standard, over, or short — per position, per day.
+
+   Confirmed with Carlos rather than assumed (three real ambiguities):
+   - House Attendant spans two crews here (AM "Houseman" + "PM
+     Houseman"), Unifocus states it as one AM+PM standard — compared as
+     one combined number, not split by shift.
+   - "AM Lobby" is Public Area Attendant.
+   - Room Attendant has no shift length anywhere in the app (its
+     standard is a per-room rate, not a banded shift) — headcount uses
+     the same 8h every other housekeeping shift uses.
+   Managers, Laundry's own crew total, and Overnight have no Unifocus
+   standard on file and are left out entirely, same as everywhere else
+   in the app a position without a standard shows nothing rather than a
+   fabricated one. */
+var SCHED_UF_POS=[
+  {label:'Room Attendant',          crews:['gra']},
+  {label:'House Attendant',         crews:['hp','pmhm']},
+  {label:'Housekeeping Supervisor', crews:['sup']},
+  {label:'Laundry Attendant',       crews:['laundry']},
+  {label:'Turndown Attendant',      crews:['td']},
+  {label:'Public Area Attendant',   crews:['lobby']}
+];
+function ufShiftHoursForPos(pos){
+  if(pos==='Room Attendant')return 8;
+  var shifts=UNIFOCUS_STANDARDS[pos];
+  return (shifts&&shifts[0])?shifts[0].shiftHours:null;
+}
+/* The number Carlos is actually bringing in — the same TOTAL already
+   printed under each crew card, just added across the crews that make
+   up this position. Deliberately NOT a separate headcount rule: if it
+   disagreed with the crew's own on-screen total, the two numbers would
+   contradict each other on the same page. */
+function schedUfActual(SCH,ds,crews){
+  var t=0; crews.forEach(function(bk){ t+=schedDayTotal(SCH,ds,bk); }); return t;
+}
+/* Same standard as Labor's By Position, run against the SCHEDULE's own
+   forecasted numbers instead of an actual R106 report — a schedule is
+   built weeks before that report exists for these dates. Turndown's
+   same-day figure comes from the "PM Turndown /GRA" block's own OCC row
+   already carried on the day record (day.tdOcc), falling back to the
+   header OCC the same way the Daily Lineup's tdOcc does when that row is
+   missing for a given week's layout. */
+function schedUfExpected(SCH,pos,ds){
+  var day=SCH.days&&SCH.days[ds]; if(!day)return null;
+  var occ=parseInt(day.occ,10); if(isNaN(occ))occ=0;
+  var dep=parseInt(day.dep,10); if(isNaN(dep))dep=null;
+  var tdOcc=parseInt(day.tdOcc,10); if(isNaN(tdOcc))tdOcc=occ;
+  var dow=parseLocalDate(ds).getDay();
+  var hours=unifocusHoursFromVolumes(pos,occ,dep,tdOcc,dow);
+  if(hours==null)return null;
+  var sh=ufShiftHoursForPos(pos);
+  return _ufPeople(hours,sh);
+}
 /* The vocabulary his sheet actually uses. A value already in a cell but
    not on this list (a stray "0.75", a lowercase "off") is offered as an
    extra option on that cell, so opening the picker can never silently
@@ -18614,6 +18691,51 @@ function renderSchedule(){
     html+='</div>';
   });
   html+='</div></div>';
+
+  /* ── Unifocus standard, checked against what's actually scheduled ──
+     One row per position with a Unifocus band on file. Each cell shows
+     the number Carlos is bringing in (bold) over the standard for that
+     day (small, beneath it), colored by whether he's on it, over, or
+     short — the three states he asked to see at a glance. A day with no
+     OCC/Departures typed in yet shows a dash rather than a wrong 0. */
+  var ufRows=SCHED_UF_POS.map(function(p){
+    return {label:p.label, crews:p.crews, cells:dates.map(function(ds){
+      if(!SCH.days[ds])return null;
+      var actual=schedUfActual(SCH,ds,p.crews);
+      var std=schedUfExpected(SCH,p.label,ds);
+      return {actual:actual, std:std};
+    })};
+  }).filter(function(r){ return r.cells.some(function(c){ return c&&c.std!=null; }); });
+
+  if(ufRows.length){
+    html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
+    html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Unifocus Standard</div>';
+    html+='<div style="padding:10px 14px 12px;overflow-x:auto;"><div style="min-width:520px;">';
+    html+=headRow();
+    ufRows.forEach(function(r){
+      html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:3px;">';
+      html+='<div style="font-size:10.5px;font-weight:700;color:var(--text1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+escHtml(r.label)+'">'+escHtml(r.label)+'</div>';
+      r.cells.forEach(function(c){
+        if(!c||c.std==null){ html+='<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>'; return; }
+        var diff=c.actual-c.std;
+        var bg='var(--green-bg)',fg='var(--green)';
+        if(diff>0){ bg='var(--yellow-bg)'; fg='var(--yellow)'; }
+        else if(diff<0){ bg='var(--red-bg)'; fg='var(--red)'; }
+        html+='<div style="text-align:center;border-radius:6px;padding:2px 1px;background:'+bg+';" title="'+r.label+': '+c.actual+' scheduled vs. '+c.std+' standard">'
+          +'<div style="font-size:11.5px;font-weight:800;color:'+fg+';">'+c.actual+'</div>'
+          +'<div style="font-size:8px;color:var(--text3);">std '+c.std+'</div>'
+          +'</div>';
+      });
+      html+='</div>';
+    });
+    html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:9px;color:var(--text3);margin-top:8px;padding-top:7px;border-top:1px solid var(--border);">'
+      +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--green);margin-right:3px;"></span>On standard</span>'
+      +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--yellow);margin-right:3px;"></span>Over</span>'
+      +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--red);margin-right:3px;"></span>Short</span>'
+      +'<span>&middot; House Attendant is AM Houseman + PM Houseman combined</span>'
+      +'</div>';
+    html+='</div></div></div>';
+  }
 
   /* ── one card per crew ── */
   var crewRoster=schedPeopleByCrew(SCH);
