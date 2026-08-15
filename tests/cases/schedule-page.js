@@ -78,7 +78,8 @@ function scheduleWb() {
         42: [[1, 'Jazmin'], [SAT, '1'], [SUN, '1']],
         43: [[1, 'Total  TD attd']],
         45: [[1, 'PM Houseman']],
-        // Not whole people — Excel SUMs these, so 0.75 must add as 0.75.
+        // The workbook writes three quarters of a shift here rather than
+        // a 1, the only crew that does.
         46: [[1, 'Paty'], [SAT, '0.75'], [SUN, '0.75']],
         47: [[1, 'Total PM HM']],
         49: [[1, 'Overnight']],
@@ -142,11 +143,32 @@ module.exports = {
 
     // ── 3) Totals follow Excel's SUM, which ignores text ──
     t.eq(win.schedDayTotal(SCH, sat, 'gra'), 3, 'three room attendants in on Saturday — "OFF" is text and does not count');
-    t.eq(win.schedDayTotal(SCH, sat, 'pmhm'), 0.75,
-      'PM Houseman sums to 0.75, not to 1 — counting bodies here would overstate the crew');
     t.eq(win.schedDayTotal(SCH, sat, 'td'), 2, 'turndown counts only the two working');
     t.eq(win.schedDayTotal(SCH, sat, 'laundry'), 2,
       'and laundry counts two, not three — the hidden row cannot pad the total');
+
+    // ── PM Houseman reads like every other crew ──
+    // The workbook writes 0.75 there — three quarters of a shift, real
+    // in Excel's hour math but a broken-looking cell next to every other
+    // crew's plain 1. Carlos asked for it to match the rest, so a number
+    // means "in" and lands as 1, and the total becomes a headcount.
+    t.eq(day.pmhm[0][1], '1', '0.75 comes through as a plain 1');
+    t.assert(!JSON.stringify(SCH.days).includes('0.75'),
+      'and no 0.75 survives anywhere in the parsed week');
+    t.eq(win.schedDayTotal(SCH, sat, 'pmhm'), 1,
+      'so the crew reads as one person in, the way every other crew does');
+
+    // A schedule stored before this must be repaired without waiting for
+    // the next upload — he would otherwise keep seeing 0.75 until
+    // Wednesday.
+    const stale = JSON.parse(JSON.stringify(SCH));
+    stale.days[sat].pmhm[0][1] = '0.75';
+    const staleStamp = stale.savedAt;
+    t.eq(win.schedNormalizePmHm(stale), true, 'an old record reports that it needed repairing');
+    t.eq(stale.days[sat].pmhm[0][1], '1', 'and comes out normalised');
+    t.eq(stale.savedAt, staleStamp,
+      'without touching savedAt — tidying a local copy must not win a sync race against another device');
+    t.eq(win.schedNormalizePmHm(stale), false, 'a record already clean reports no change, so it is not re-saved on every render');
 
     // ── 4) Week navigation ──
     win.schedViewWeekStart = null;

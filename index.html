@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.4.1"/>
+<meta name="app-version" content="7.4.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4312,6 +4312,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.4.2', date:'2026-08-15',
+    improvements:['PM Houseman now reads like every other crew on the Schedule. The workbook writes 0.75 there — three quarters of a shift — which is real in Excel\'s hour math but looked like a broken cell sitting next to every other crew\'s plain 1. A number there now means "in" and shows as 1, and the crew total is a headcount like the rest. Schedules already loaded are tidied up on their own, so there is no need to re-upload. Note this makes the app\'s PM Houseman total a headcount rather than the 0.75 on the workbook\'s own "Total PM HM" row.']
+  },
   {
     v:'7.4.1', date:'2026-08-15',
     features:['Anyone can now be added to any crew on the Schedule, for the weeks people cross departments — a Room Attendant covering Laundry, a Laundry attendant working as Houseman. Each crew has an "Add someone to this crew" picker listing everyone else on the schedule, grouped by the crew they normally work, so you pick the person rather than typing a name; anyone not on the schedule at all can still be typed in. Borrowing does not move them — they stay on their own crew too — and they arrive with no days set, so the crew total only moves once you actually give them a day. Added people are marked in gold with an × to take them back off. Rows that came from the workbook stay Excel\'s to manage.'],
@@ -18092,7 +18096,9 @@ function dlParseSchedule(wb,todayRef){
       out[dateStr(d)]=rec; days++;
     }
   });
-  return {days:out,count:days,savedAt:new Date().toISOString()};
+  var parsed={days:out,count:days,savedAt:new Date().toISOString()};
+  schedNormalizePmHm(parsed);
+  return parsed;
 }
 
 /* ── the lineup itself ──
@@ -18318,9 +18324,35 @@ function schedWeekDates(){
   for(var i=0;i<7;i++){ var d=new Date(s); d.setDate(s.getDate()+i); out.push(dateStr(d)); }
   return out;
 }
+/* PM Houseman carries 0.75 in the workbook — three quarters of a shift,
+   which is real in Excel's hour math but reads as a broken cell sitting
+   next to every other crew's plain 1. Carlos asked for it to work like
+   the rest, so a number here means "in" and is stored as 1.
+
+   Safe to normalise because nothing downstream reads the fraction: the
+   Daily Lineup resolves its PM houseman from the Turndown and Houseman
+   blocks, never from this one. The crew total becomes a headcount, like
+   every other crew's — which does mean it no longer matches the 0.75 on
+   his own "Total PM HM" row. */
+function schedNormalizePmHm(SCH){
+  if(!SCH||!SCH.days)return false;
+  var changed=false;
+  Object.keys(SCH.days).forEach(function(ds){
+    var arr=SCH.days[ds]&&SCH.days[ds].pmhm;
+    if(!arr)return;
+    arr.forEach(function(p){
+      var v=String(p[1]==null?'':p[1]).trim();
+      if(!v)return;
+      var n=parseFloat(v);
+      if(isNaN(n)||String(n)==='1')return;
+      p[1]=n>0?'1':'';
+      changed=true;
+    });
+  });
+  return changed;
+}
 /* Excel's own totals here are SUM() over the block's rows, which ignores
-   text — so "1" counts, "OFF" does not, and PM Houseman's 0.75 adds as
-   0.75 rather than being miscounted as a whole person. Same rule. */
+   text — so "1" counts and "OFF" does not. Same rule. */
 function schedDayTotal(SCH,ds,bk){
   var day=SCH.days&&SCH.days[ds]; if(!day)return 0;
   var arr=day[bk]||[],t=0;
@@ -18499,6 +18531,12 @@ function renderSchedule(){
   var el=document.getElementById('scheduleContent');
   if(!el)return;
   var SCH=dlLoadSchedule();
+  /* Repair a schedule imported before PM Houseman was normalised, so the
+     0.75s go without waiting for the next upload. Saved locally only and
+     savedAt is deliberately left alone: this is each device tidying its
+     own copy, not an edit that should win a sync race against another
+     device's newer data. */
+  if(SCH&&schedNormalizePmHm(SCH)){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   var html='';
   html+='<input type="file" id="schedFileInput" accept=".xlsx,.xls" style="display:none;" onchange="dlUploadSchedule(this)">';
 
