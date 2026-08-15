@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.3.8"/>
+<meta name="app-version" content="7.4.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1233,6 +1233,9 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   </div>
 
   <div class="nav-section-label">Operations</div>
+  <div class="nav-item" id="nav-schedule" onclick="showPage('schedule')">
+    <span class="nav-icon">&#128197;</span> Schedule
+  </div>
   <div class="nav-item" id="nav-dailylineup" onclick="showPage('dailylineup')">
     <span class="nav-icon">&#128203;</span> Daily Lineup
   </div>
@@ -1528,6 +1531,15 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     </div>
 
     <!-- ══ DAILY LINEUP ══ -->
+    <div id="page-schedule" style="display:none;">
+      <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
+      <div class="page-header">
+        <div class="page-title">&#128197; Schedule</div>
+        <div class="page-sub">One week at a time, straight from the Schedule Draft</div>
+      </div>
+      <div id="scheduleContent"></div>
+    </div>
+
     <div id="page-dailylineup" style="display:none;">
       <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
       <div class="page-header">
@@ -4300,6 +4312,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.4.0', date:'2026-08-15',
+    features:['New Schedule section: the whole week laid out the way the Schedule Draft lays it out — all nine crews, Saturday through Friday — with arrows to move between weeks and every cell editable right there. Change a day and the total underneath moves with it, along with the rooms-per-person and departures-per-person figures that hang off it. Edits save and sync as you make them, into the same record the Daily Lineup reads, so correcting a day here corrects the lineup too. Laundry and PM Houseman are read for the first time; they were never needed for the lineup.'],
+    fixes:['Hidden rows in the Schedule Draft are no longer read as part of the schedule. Carlos takes someone off the team by hiding their row in Excel rather than deleting it, but the app ignored that flag — so a departed Overnight attendant kept showing up on the Daily Lineup: invisible in Excel, invisible in every screenshot, but still carrying a "1" in the file. His current week had nine such rows.']
+  },
   {
     v:'7.3.8', date:'2026-08-14',
     fixes:['"Generate Excel" was producing a file Excel refused to open at all ("cannot be opened or repaired because it is corrupt") — every single export, not just some. Traced it to the shipped blank template (lineup-template.xlsx): back when it was scrubbed of real names to make it safe for the public repo, the tool used for that mangled the file\'s internal XML in two places — relationship references lost their real prefix (e.g. a drawing reference read `ns4:id` instead of `r:id`) and, deeper than that, something else was silently stripped too, since even a straight repair attempt came back with a blank sheet. Rebuilt the template from Carlos\'s real working file with a plain text-level scrub this time — only the name/date text inside sharedStrings.xml, his username in a stray SharePoint path, and the last-modified-by field, nothing else touched — so every formula, style and namespace stays byte-for-byte what Excel itself wrote. Verified by actually opening the exported file in Excel, not just checking the XML.']
@@ -7248,6 +7265,11 @@ function _syncFromSheetsPull(){
       if(typeof currentPage!=='undefined'&&currentPage==='staffing'){try{renderStaffing();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='training'){try{renderTraining();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='wtc'){try{renderWtc();}catch(e){}}
+      /* A schedule edit from another device has to land on screen — two
+         managers editing the same week is exactly the case this page
+         exists for. */
+      if(typeof currentPage!=='undefined'&&currentPage==='schedule'){try{renderSchedule();}catch(e){}}
+      if(typeof currentPage!=='undefined'&&currentPage==='dailylineup'){try{renderDailyLineup();}catch(e){}}
       try{updateTrainingBadge();}catch(e){}
     }
   });
@@ -9643,7 +9665,7 @@ function toggleSidebarSmart(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','labormodel','pnl','staffing','projects','trainhours','training','calloffs','dailylineup','assignments','tutorial','settings'];
+var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','dailylineup','assignments','tutorial','settings'];
 var _pinGateBypass=false;
 var pendingGatePage=null;
 var PIN_GATED_PAGES=['labormodel','pnl','settings'];
@@ -9673,6 +9695,7 @@ function showPage(page){
   if(page==='recap')renderRecap();
   if(page==='occupancy')renderOccupancy();
   if(page==='dnds')renderDnds();
+  if(page==='schedule')renderSchedule();
   if(page==='dailylineup')renderDailyLineup();
   if(page==='labormodel')renderLaborModel();
   if(page==='pnl'){renderPnl();renderPaychexRecon();}
@@ -17996,6 +18019,13 @@ function dlParseSchedule(wb,todayRef){
     if(!ws)return;
     var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
     if(!rows.length)return;
+    /* Hiding a row is how Carlos takes someone off the team without
+       losing their history, so a hidden row is NOT part of the schedule.
+       Reading them anyway is what kept putting a departed Overnight
+       attendant on the lineup: her row was hidden in Excel, invisible on
+       screen and in every screenshot, but still carrying a "1". */
+    var hiddenRows=ws['!rows']||[];
+    var isHidden=function(r){ var p=hiddenRows[r-1]; return !!(p&&p.hidden); };
     var A=function(r){ var row=rows[r-1]; return row&&row[0]!=null?String(row[0]).trim():''; };
     var V=function(r,c){ var row=rows[r-1]; return row&&row[c-1]!=null?String(row[c-1]).trim():''; };
     /* label -> every row carrying it */
@@ -18010,6 +18040,7 @@ function dlParseSchedule(wb,todayRef){
       for(var r4=s+1;r4<e;r4++){
         var nm=A(r4);
         if(!nm)continue;
+        if(isHidden(r4))continue;
         if(skip&&skip.indexOf(nm)!==-1)continue;
         if(/^(IDEAL|ACTUAL|OCC|Room att|Departures|Total)/.test(nm))continue;
         res.push(r4);
@@ -18028,11 +18059,16 @@ function dlParseSchedule(wb,todayRef){
       for(var rr=st+1;rr<en;rr++) if(A(rr)==='OCC')return rr;
       return null;
     })();
+    /* Laundry and PM Houseman were never read before: the Daily Lineup
+       has no use for them. The Schedule page shows the whole week the
+       way Carlos's own sheet does, so they are captured too. */
     var blocks={
+      laundry:block('Laundry','Total  Linen Att',0),
       mgr:block('Managers','Departures',0),
       sup:block('Departures','Missing Supervisor',mgrRow),
       lobby:block('AM lobby','Total  Lobby Att',0),
       td:block('PM Turndown /GRA','Total  TD attd',0),
+      pmhm:block('PM Houseman','Total PM HM',0),
       night:block('Overnight','Total  ON Attd',0),
       gra:block('AM ROOM ATTENDANT','Total Room Att',0),
       hp:block('Houseman','Total HP',0,['Supervisor'])
@@ -18176,10 +18212,14 @@ function dlUnplacedFloaters(P){
 }
 
 /* ── uploads ── */
+/* cellStyles is what populates ws['!rows'], and that is the only place
+   a row's hidden flag lives. Without it every hidden row reads as a
+   normal one — which is exactly how a person Carlos had taken off the
+   team by HIDING her row kept showing up on the lineup for weeks. */
 function dlReadWorkbook(file,cb){
   var rd=new FileReader();
   rd.onload=function(e){
-    try{ cb(null,XLSX.read(new Uint8Array(e.target.result),{type:'array'})); }
+    try{ cb(null,XLSX.read(new Uint8Array(e.target.result),{type:'array',cellStyles:true})); }
     catch(err){ cb(err); }
   };
   rd.onerror=function(){ cb(new Error('Could not read the file.')); };
@@ -18214,9 +18254,264 @@ function dlUploadSchedule(input){
         dlSaveSchedule(SCH);
         showToast('✓ Schedule loaded — '+SCH.count+' days');
         renderDailyLineup();
+        try{ if(currentPage==='schedule')renderSchedule(); }catch(e){}
       }catch(e){ showToast('❌ '+e.message); }
     });
   },50);
+}
+
+/* ══════════════════════════════════════════════════════
+   SCHEDULE DRAFT
+   The weekly schedule, laid out the way Carlos's own workbook lays it
+   out — same nine crews, same Saturday-to-Friday week — and editable
+   in place.
+
+   It reads and writes the SAME record the Daily Lineup already parses
+   from his upload (hk_dl_schedule), rather than keeping a second copy.
+   A parallel store would mean deciding which of the two is true every
+   time they disagree, and this app has already been bitten once by a
+   schedule write clobbering another device's; one record, one answer.
+
+   Uploading the workbook again replaces the weeks it covers. That is
+   the intended direction — Excel is still where he builds a new week —
+   so an edit made here is a correction on top of the last import, not
+   a fork of it.
+   ══════════════════════════════════════════════════════ */
+var SCHED_BLOCKS=[
+  {key:'laundry',label:'Laundry'},
+  {key:'mgr',    label:'Managers'},
+  {key:'sup',    label:'Supervisors', ratios:[{label:'departures each',num:'dep'}]},
+  {key:'lobby',  label:'AM Lobby'},
+  {key:'td',     label:'PM Turndown / GRA', occField:'tdOcc', ratios:[{label:'rooms each',num:'tdOcc'}]},
+  {key:'pmhm',   label:'PM Houseman'},
+  {key:'night',  label:'Overnight'},
+  {key:'gra',    label:'AM Room Attendant', ratios:[{label:'rooms each',num:'occ'},{label:'departures each',num:'dep'}]},
+  {key:'hp',     label:'Houseman', ratios:[{label:'departures each',num:'dep'}]}
+];
+/* The vocabulary his sheet actually uses. A value already in a cell but
+   not on this list (a stray "0.75", a lowercase "off") is offered as an
+   extra option on that cell, so opening the picker can never silently
+   throw away something he typed in Excel. */
+var SCHED_VALUES=['','1','OFF','R-OFF','PM','LOBBY','HOUSEMAN','TAILOR','LAUNDRY'];
+var SCHED_DAYNAMES=['Saturday','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday'];
+var schedViewWeekStart=null;
+
+function _schedWeekStart(){
+  if(!schedViewWeekStart)schedViewWeekStart=getHotelWeekStart(new Date());
+  return schedViewWeekStart;
+}
+function changeSchedWeek(delta){
+  var d=new Date(_schedWeekStart());
+  d.setDate(d.getDate()+delta*7);
+  schedViewWeekStart=d;
+  renderSchedule();
+}
+function schedGoToThisWeek(){ schedViewWeekStart=getHotelWeekStart(new Date()); renderSchedule(); }
+function schedWeekDates(){
+  var s=_schedWeekStart(),out=[];
+  for(var i=0;i<7;i++){ var d=new Date(s); d.setDate(s.getDate()+i); out.push(dateStr(d)); }
+  return out;
+}
+/* Excel's own totals here are SUM() over the block's rows, which ignores
+   text — so "1" counts, "OFF" does not, and PM Houseman's 0.75 adds as
+   0.75 rather than being miscounted as a whole person. Same rule. */
+function schedDayTotal(SCH,ds,bk){
+  var day=SCH.days&&SCH.days[ds]; if(!day)return 0;
+  var arr=day[bk]||[],t=0;
+  arr.forEach(function(p){ var n=parseFloat(p[1]); if(!isNaN(n))t+=n; });
+  return t;
+}
+function schedFmtTotal(n){ return (Math.round(n*100)/100).toString(); }
+function schedSetCell(bk,idx,ds,val,el){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days||!SCH.days[ds]||!SCH.days[ds][bk]||!SCH.days[ds][bk][idx])return;
+  SCH.days[ds][bk][idx][1]=String(val==null?'':val).trim();
+  SCH.savedAt=new Date().toISOString();
+  dlSaveSchedule(SCH);
+  /* Repaint only what changed. A full re-render would throw away the
+     scroll position of a grid that is deliberately wider than the
+     screen — losing your place on every single cell you touch. */
+  if(el)el.style.cssText=_schedCellCss(String(val||'').trim());
+  _schedRefreshTotals(SCH,bk);
+}
+function schedSetNum(ds,field,val){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days||!SCH.days[ds])return;
+  SCH.days[ds][field]=String(val==null?'':val).trim();
+  SCH.savedAt=new Date().toISOString();
+  dlSaveSchedule(SCH);
+  _schedRefreshTotals(SCH,null);
+}
+/* Totals and the per-person ratios that hang off them. */
+function _schedRefreshTotals(SCH,onlyBk){
+  var dates=schedWeekDates();
+  SCHED_BLOCKS.forEach(function(b){
+    if(onlyBk&&b.key!==onlyBk&&!b.ratios)return;
+    dates.forEach(function(ds,di){
+      var tot=schedDayTotal(SCH,ds,b.key);
+      var tEl=document.getElementById('sct_'+b.key+'_'+di);
+      if(tEl)tEl.textContent=tot?schedFmtTotal(tot):'';
+      (b.ratios||[]).forEach(function(rt,ri){
+        var rEl=document.getElementById('scr_'+b.key+'_'+ri+'_'+di);
+        if(!rEl)return;
+        var day=SCH.days&&SCH.days[ds];
+        var num=day?parseFloat(day[rt.num]):NaN;
+        rEl.textContent=(!isNaN(num)&&tot>0)?(num/tot).toFixed(2):'';
+      });
+    });
+  });
+}
+function _schedCellCss(v){
+  var base='width:100%;min-width:0;padding:3px 2px;font-size:10.5px;font-weight:700;text-align:center;'
+    +'border-radius:5px;font-family:inherit;-webkit-appearance:none;appearance:none;box-sizing:border-box;';
+  if(v==='1')      return base+'border:1px solid var(--green-border);background:var(--green-bg);color:var(--green);';
+  if(v==='OFF'||v==='off') return base+'border:1px solid var(--border);background:var(--s3);color:var(--text3);';
+  if(v==='R-OFF')  return base+'border:1px solid var(--border2);background:var(--s3);color:var(--text2);';
+  if(v==='')       return base+'border:1px dashed var(--border2);background:transparent;color:var(--text3);';
+  return base+'border:1px solid var(--gold);background:var(--gt);color:var(--gd);'; /* PM / LOBBY / HOUSEMAN / TAILOR / LAUNDRY */
+}
+
+function renderSchedule(){
+  var el=document.getElementById('scheduleContent');
+  if(!el)return;
+  var SCH=dlLoadSchedule();
+  var html='';
+  html+='<input type="file" id="schedFileInput" accept=".xlsx,.xls" style="display:none;" onchange="dlUploadSchedule(this)">';
+
+  if(!SCH||!SCH.days){
+    html+='<div class="card" style="padding:24px;text-align:center;">'
+      +'<div style="font-size:14px;font-weight:700;color:var(--text1);margin-bottom:6px;">No schedule loaded yet</div>'
+      +'<div style="font-size:12px;color:var(--text2);margin-bottom:14px;">Upload the Schedule Draft workbook and the week shows up here, ready to edit.</div>'
+      +'<button class="btn btn-navy" onclick="document.getElementById(\'schedFileInput\').click()">Upload Schedule Draft</button>'
+      +'</div>';
+    el.innerHTML=html; return;
+  }
+
+  var dates=schedWeekDates();
+  var start=parseLocalDate(dates[0]), end=parseLocalDate(dates[6]);
+  var thisWeek=dateStr(getHotelWeekStart(new Date()));
+  var loaded=dates.filter(function(ds){return !!SCH.days[ds];});
+  var sheetName=(loaded.length&&SCH.days[loaded[0]].sheet)||'';
+  var todayDs=dateStr(new Date());
+
+  /* ── week picker ── */
+  html+='<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">';
+  html+='<button onclick="changeSchedWeek(-1)" title="Previous week" style="padding:6px 13px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:14px;cursor:pointer;color:var(--text1);">&larr;</button>';
+  html+='<div style="text-align:center;min-width:0;">';
+  html+='<div style="font-size:14px;font-weight:800;color:var(--text1);">'
+    +start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' &ndash; '
+    +end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>';
+  html+='<div style="font-size:10px;color:var(--text3);margin-top:2px;">'
+    +(sheetName?('sheet '+escHtml(sheetName)):'not in the loaded file')+'</div>';
+  if(dates[0]!==thisWeek)
+    html+='<button onclick="schedGoToThisWeek()" style="margin-top:5px;padding:2px 10px;border:1px solid var(--gold);border-radius:99px;background:var(--gt);font-size:10px;font-weight:700;color:var(--gd);cursor:pointer;">Back to this week</button>';
+  html+='</div>';
+  html+='<button onclick="changeSchedWeek(1)" title="Next week" style="padding:6px 13px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:14px;cursor:pointer;color:var(--text1);">&rarr;</button>';
+  html+='</div>';
+
+  if(!loaded.length){
+    html+='<div class="card" style="padding:20px;text-align:center;">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:5px;">This week isn\'t in the loaded file</div>'
+      +'<div style="font-size:11.5px;color:var(--text2);margin-bottom:12px;">The app keeps a window of weeks around today. Use the arrows, or re-upload the workbook if this week has since been built.</div>'
+      +'<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'schedFileInput\').click()">Update schedule</button>'
+      +'</div>';
+    el.innerHTML=html; return;
+  }
+
+  /* Wider than any phone on purpose — the week only reads as a week when
+     all seven days are side by side, so the grid scrolls inside its own
+     box rather than being folded into something narrower. */
+  var COLS='118px repeat(7,minmax(52px,1fr))';
+  function headRow(){
+    var h='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:end;margin-bottom:5px;">';
+    h+='<div></div>';
+    dates.forEach(function(ds,i){
+      var d=parseLocalDate(ds), isToday=(ds===todayDs);
+      h+='<div style="text-align:center;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:'+(isToday?'var(--gd)':'var(--text3)')+';">'
+        +SCHED_DAYNAMES[i].slice(0,3)
+        +'<div style="font-size:10px;font-weight:800;color:'+(isToday?'var(--gd)':'var(--text2)')+';">'+d.getDate()+'</div></div>';
+    });
+    return h+'</div>';
+  }
+
+  html+='<div class="card" style="padding:12px 14px;margin-bottom:12px;overflow-x:auto;">';
+  html+='<div style="min-width:520px;">';
+  html+=headRow();
+
+  /* ── the two numbers everything else divides by ── */
+  [['occ','OCC'],['dep','Departures']].forEach(function(f){
+    html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:4px;">';
+    html+='<div style="font-size:10.5px;font-weight:800;color:var(--navy);">'+f[1]+'</div>';
+    dates.forEach(function(ds){
+      var day=SCH.days[ds];
+      if(!day){ html+='<div></div>'; return; }
+      html+='<input type="number" min="0" value="'+escHtml(day[f[0]]||'')+'" onchange="schedSetNum(\''+ds+'\',\''+f[0]+'\',this.value)"'
+        +' style="width:100%;min-width:0;padding:3px 2px;font-size:11px;font-weight:800;text-align:center;color:var(--navy);'
+        +'border:1px solid var(--border);border-radius:5px;background:#fff;box-sizing:border-box;font-family:inherit;">';
+    });
+    html+='</div>';
+  });
+  html+='</div></div>';
+
+  /* ── one card per crew ── */
+  SCHED_BLOCKS.forEach(function(b){
+    var ref=null;
+    for(var i=0;i<loaded.length;i++){ var a=SCH.days[loaded[i]][b.key]; if(a&&a.length){ ref=a; break; } }
+    if(!ref)return;
+
+    html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
+    html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(b.label)+'</div>';
+    html+='<div style="padding:10px 14px 12px;overflow-x:auto;"><div style="min-width:520px;">';
+    html+=headRow();
+
+    ref.forEach(function(p,idx){
+      html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:3px;">';
+      html+='<div style="font-size:11px;font-weight:600;color:var(--text1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+escHtml(p[0])+'">'+escHtml(p[0])+'</div>';
+      dates.forEach(function(ds,di){
+        var day=SCH.days[ds];
+        var cell=day&&day[b.key]&&day[b.key][idx];
+        if(!cell){ html+='<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>'; return; }
+        var v=String(cell[1]||'').trim();
+        var opts=SCHED_VALUES.slice();
+        if(v&&opts.indexOf(v)===-1)opts.push(v);
+        html+='<select onchange="schedSetCell(\''+b.key+'\','+idx+',\''+ds+'\',this.value,this)" style="'+_schedCellCss(v)+'">'
+          +opts.map(function(o){
+            return '<option value="'+escHtml(o)+'"'+(o===v?' selected':'')+'>'+(o===''?'&mdash;':escHtml(o))+'</option>';
+          }).join('')
+          +'</select>';
+      });
+      html+='</div>';
+    });
+
+    /* total + the per-person load it drives */
+    html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">';
+    html+='<div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);">Total</div>';
+    dates.forEach(function(ds,di){
+      var tot=SCH.days[ds]?schedDayTotal(SCH,ds,b.key):0;
+      html+='<div id="sct_'+b.key+'_'+di+'" style="text-align:center;font-size:11.5px;font-weight:800;color:var(--navy);">'+(tot?schedFmtTotal(tot):'')+'</div>';
+    });
+    html+='</div>';
+    (b.ratios||[]).forEach(function(rt,ri){
+      html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-top:2px;">';
+      html+='<div style="font-size:9px;color:var(--text3);">'+escHtml(rt.label)+'</div>';
+      dates.forEach(function(ds,di){
+        var day=SCH.days[ds];
+        var tot=day?schedDayTotal(SCH,ds,b.key):0;
+        var num=day?parseFloat(day[rt.num]):NaN;
+        var txt=(!isNaN(num)&&tot>0)?(num/tot).toFixed(2):'';
+        html+='<div id="scr_'+b.key+'_'+ri+'_'+di+'" style="text-align:center;font-size:9.5px;font-weight:700;color:var(--gd);">'+txt+'</div>';
+      });
+      html+='</div>';
+    });
+    html+='</div></div></div>';
+  });
+
+  html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--text3);margin-top:2px;">';
+  html+='<span>Edits save and sync as you make them.</span>';
+  html+='<button onclick="document.getElementById(\'schedFileInput\').click()" style="padding:3px 10px;border:1px solid var(--border);border-radius:99px;background:#fff;font-size:10px;font-weight:700;color:var(--text2);cursor:pointer;">Re-upload workbook</button>';
+  html+='</div>';
+
+  el.innerHTML=html;
 }
 
 /* ── page ── */
