@@ -506,5 +506,62 @@ module.exports = {
     const removeHtml = html();
     t.assert(/schedRemovePerson\('laundry','Olga A'\)/.test(removeHtml),
       "a workbook row (Olga A, never borrowed) still offers its own × — removability no longer depends on where the row came from");
+
+    // ── 16) Building a week without Excel ──
+    // Carlos's larger goal: the app should replace Excel entirely, not
+    // just view what's already built there. A week outside the loaded
+    // file can be built directly, cloning the CREW LIST from the most
+    // recently loaded week — not the values, which stay blank.
+    win.schedViewWeekStart = new Date(2026, 8, 5); // a week with no data at all
+    win.renderSchedule();
+    const emptyHtml = html();
+    t.assert(/isn't in the loaded file/.test(emptyHtml), 'still says plainly that nothing is loaded here');
+    t.assert(/schedCreateWeek\(\)/.test(emptyHtml),
+      'and now offers to build it, since a reference week (08.15-08.21) exists to copy the crew list from');
+
+    win.schedCreateWeek();
+    const built = win.dlLoadSchedule();
+    const newDates = win.schedWeekDates();
+    t.eq(newDates.length, 7, 'sanity: still a seven-day week');
+    newDates.forEach((ds) => {
+      t.assert(!!built.days[ds], ds + ' now exists');
+      t.eq(built.days[ds].occ, '', ds + ": OCC is blank, not guessed at");
+      t.eq(built.days[ds].dep, '', ds + ": Departures is blank too");
+    });
+
+    // The crew LIST carried over — and reflects the CURRENT state (after
+    // this test's own earlier edits), not blindly the original upload.
+    const newLaundry = built.days[newDates[0]].laundry.map((p) => p[0]);
+    t.assert(newLaundry.includes('Olga A'), "Olga A (still on laundry) carried into the new week");
+    t.assert(!newLaundry.includes('Isabel D'), "Isabel D (removed earlier in this test) did NOT come back");
+    const newGra = built.days[newDates[0]].gra.map((p) => p[0]);
+    t.assert(newGra.includes('Rolando'), "Rolando, borrowed onto Room Attendant earlier, carried over into the new week too");
+
+    // Every value is blank — nothing about who's actually working that
+    // NEW week is invented.
+    let anyValue = false;
+    Object.keys(built.days[newDates[0]]).forEach((k) => {
+      if (!Array.isArray(built.days[newDates[0]][k])) return;
+      built.days[newDates[0]][k].forEach((p) => { if (p[1] !== '') anyValue = true; });
+    });
+    t.assert(!anyValue, 'every day, for every person, starts blank — only the roster is copied, not a guess at who works when');
+
+    // Calling it again must not silently clobber a week that now has
+    // real data in it.
+    win.schedSetCell('gra', 0, newGra[0], newDates[0], '1', null);
+    win.schedCreateWeek();
+    t.eq(win.dlLoadSchedule().days[newDates[0]].gra[0][1], '1',
+      'a week that already has data is left alone — building again would have silently erased the edit just made');
+    t.assert(/already has data/.test(win.document.getElementById('toastMsg').textContent),
+      'and he is told why, rather than nothing visibly happening');
+
+    // With no reference week at all, there is nothing to copy the crew
+    // list from, and that has to be said plainly rather than building
+    // an empty schedule that reads as "nobody works this week either."
+    win.localStorage.removeItem('hk_dl_schedule');
+    win.schedViewWeekStart = new Date(2026, 9, 3);
+    win.schedCreateWeek();
+    t.assert(/Upload a Schedule Draft/.test(win.document.getElementById('toastMsg').textContent),
+      'with nothing loaded anywhere, he is pointed back to uploading once, not left to guess why the button did nothing');
   }
 };
