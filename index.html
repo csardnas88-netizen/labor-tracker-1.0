@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.13.0"/>
+<meta name="app-version" content="7.13.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4325,6 +4325,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.13.1', date:'2026-08-16',
+    features:['Request Off: "Save request" now works even if you never tapped "Add day"/"Add range" — whatever\'s sitting in the date field(s) is picked up automatically, the same as if Add had been clicked first.']
+  },
   {
     v:'7.13.0', date:'2026-08-16',
     features:['Added "Request Off" — a shared notebook for R-OFF/Flex/Vacation requests, Phase 1 of bringing Schedule Builder\'s Libreta into this app. Search an employee (pulled from the Schedule\'s own current roster), pick a type, add the day(s), save — R-OFF writes straight to the Schedule cell immediately (no separate pending/grant step yet); Flex and Vacation are logged in the notebook but not written to the grid, since there\'s no cell value for either yet. Deleting an entry only clears a cell still marked R-OFF, never a day already hand-edited since. Not yet included: the tap-calendar picker, capture-time conflict alerts, and realtime multi-device sync Schedule Builder\'s own notebook has — sequenced in as their own steps.']
@@ -19922,6 +19926,13 @@ function rnAddRequest(){
   var crewKey=(document.getElementById('rnEmpCrew')||{}).value||'';
   var crewLabel=(document.getElementById('rnEmpCrewLabel')||{}).value||'';
   if(!name){showToast('Search and pick an employee first.');return;}
+  /* Carlos's ask: picking a date and going straight to Save shouldn't
+     require the separate "Add day"/"Add range" tap first — whatever's
+     still sitting in the date field(s), unconfirmed, is picked up here
+     the same as if he had clicked Add. */
+  if(!rnPickedDates.length){
+    if(rnSelectedType==='vac')rnAddRange(); else rnAddDay();
+  }
   if(!rnPickedDates.length){showToast('Add at least one day.');return;}
   var dates=rnPickedDates.slice().sort();
   var entry={id:Date.now(),name:name,crewKey:crewKey,crewLabel:crewLabel,type:rnSelectedType,dates:dates,capturedAt:new Date().toISOString()};

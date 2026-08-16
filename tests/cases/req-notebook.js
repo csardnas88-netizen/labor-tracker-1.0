@@ -101,5 +101,32 @@ module.exports = {
     t.eq(afterDelete.days[dates[2]].sup.filter((p) => p[0] === 'Rolando')[0][1], 'PM',
       "the hand-edited day is left exactly as Carlos set it, not reverted");
     t.assert(!win.loadReqNotebook().some((r) => r.id === rolandoEntry.id), 'the entry itself is gone from the notebook');
+
+    // ── Save request works straight off the date field, without a separate Add day/Add range tap first ──
+    win.rnPickedDates = [];
+    win.rnSelectedType = 'roff';
+    win.renderReqNotebook();
+    doc.getElementById('rnEmp').value = 'Karla Varela';
+    doc.getElementById('rnEmpCrew').value = 'gra';
+    doc.getElementById('rnEmpCrewLabel').value = 'AM Room Attendant';
+    doc.getElementById('rnOneDay').value = dates[4];
+    win.rnAddRequest();
+    let list2 = win.loadReqNotebook();
+    t.assert(list2.some((r) => r.name === 'Karla Varela' && r.dates.includes(dates[4])),
+      'Save request alone picks up whatever is still sitting in the date field, same as clicking Add day first would have');
+
+    win.rnPickedDates = [];
+    win.rnSelectedType = 'vac';
+    win.renderReqNotebook();
+    doc.getElementById('rnEmp').value = 'Karla Varela';
+    doc.getElementById('rnEmpCrew').value = 'gra';
+    doc.getElementById('rnEmpCrewLabel').value = 'AM Room Attendant';
+    doc.getElementById('rnRangeStart').value = dates[0];
+    doc.getElementById('rnRangeEnd').value = dates[2];
+    win.rnAddRequest();
+    list2 = win.loadReqNotebook();
+    const vacEntry = list2.find((r) => r.type === 'vac' && r.dates.length === 3);
+    t.assert(!!vacEntry, 'the same shortcut expands an unconfirmed Start/End range for Vacation, not just a single day');
+    t.eq(vacEntry.dates.join(','), [dates[0], dates[1], dates[2]].join(','), 'the whole range lands, day by day');
   },
 };
