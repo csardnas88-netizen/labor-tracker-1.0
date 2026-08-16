@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.9.0"/>
+<meta name="app-version" content="7.10.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4312,6 +4312,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.10.0', date:'2026-08-16',
+    features:['Added "Auto-fill this week" to the Schedule page — it can now build Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant and Houseman on its own from OCC/Departures, no Schedule Builder or Excel required, ported from Schedule Builder\'s own real generator (same weekend-rotation fairness, minimum-days-off placement, and shortfall-repair logic it already uses). Deliberately does NOT copy Schedule Builder\'s saved roster or weekend history — verified against Carlos\'s real Schedule Draft that Schedule Builder\'s own copy has drifted out of date (missing real Laundry staff, old spellings of others\' names) — this instead uses whoever is actually on each crew this week and this app\'s own saved history, the same sources every other Schedule feature already trusts. Managers, PM Houseman, Overnight, and the cross-department cover arrangements (Gabriela C, Andrea, Jorge G, Yesenia, the HP-overflow backups, low-season seniority trim) are left untouched for now — those all hinge on specific people holding specific roles today, worth confirming before wiring in rather than guessing from a source already shown to be stale.']
+  },
   {
     v:'7.9.0', date:'2026-08-16',
     features:['Added "Schedule Checks" to the Schedule page — the fairness rules Carlos\'s other app, Schedule Builder, builds a week around (a minimum number of days off, and a full Saturday+Sunday off that should rotate instead of landing on the same people) are now checked here too, since this page is filled by hand instead of auto-generated. A warning card shows up only when something is actually short: a crew member with fewer days off than usual this week, or someone who hasn\'t had a full weekend off in a while, judged against this app\'s own saved weeks. Verified against the real Schedule Draft that several real people — mutual cover pairs, low-season stand-ins — never fit the plain rule by design, the same people Schedule Builder itself already excludes from it; a new small icon next to a name marks someone as one of those irregular arrangements so they stop showing up here, and the mark holds across every future upload, not just this week\'s.']
@@ -18745,6 +18749,241 @@ function schedScheduleChecks(SCH,dates){
   });
   return out;
 }
+
+/* ── Auto-fill: generating a week without Schedule Builder or Excel ──
+   Carlos's ask: the Schedule page should be able to build a week on its
+   own, not just view/edit and check one built somewhere else.
+
+   Ported from Schedule Builder's real autoFill/scheduleDept/
+   repairShortfalls/weekendDueOrder — the same engine that already
+   generates his real schedule today, not a new invention. Two things
+   were deliberately NOT ported as-is, checked against his real data
+   before writing a line of this:
+
+   1. ROSTER. Schedule Builder's own saved roster is stale — verified
+      against his real current Schedule Draft: Laundry there is missing
+      Julia and Sandra entirely and still has "Jorge"/"Olga Yac" where
+      the real file has "Jorge Gonzalez"/"Olga Y". Seeding names from
+      Schedule Builder would auto-fill the WRONG people. This uses
+      whoever is actually on the crew in the week being filled (already
+      loaded or built via schedCreateWeek) instead — the same roster
+      every other Schedule feature here already trusts.
+
+   2. WEEKEND HISTORY. Schedule Builder tracks its own weekendHistory
+      map, keyed by ids this app doesn't have. Rather than import a
+      second, separately-maintained history that could disagree with
+      the first, this reuses schedWeekendGap/schedHasFullWeekend — the
+      exact same lookback already built for Schedule Checks — so the
+      generator and the warnings it's checked against can never quietly
+      contradict each other.
+
+   NOT included in this first version, on purpose: the alias/cover
+   cascades (Gabriela C -> Lobby, Andrea -> Lobby PM, Jorge G ->
+   Laundry), Overnight's fixed pattern, Yesenia's Houseman-PM cover, and
+   the HP-overflow/low-season seniority trim. Those all hinge on
+   specific named individuals holding specific roles, which is exactly
+   the kind of thing just proven stale above — safer to ask Carlos to
+   confirm who holds each of those roles TODAY before wiring them in,
+   rather than guess from a source already shown to be wrong. Managers,
+   PM Houseman and Overnight are therefore left untouched by Auto-fill,
+   same as they're excluded from Schedule Checks. */
+
+/* Needs formulas, unchanged from Schedule Builder's computeNeeds — pure
+   arithmetic on OCC/Departures, no names involved, so nothing here
+   carries the staleness risk above. */
+var SCHED_RA_LOAD_TARGETS=[
+  {rooms:14,dueouts:7,priority:1},{rooms:15,dueouts:7,priority:1},{rooms:16,dueouts:7,priority:2},
+  {rooms:14,dueouts:8,priority:2},{rooms:14,dueouts:9,priority:2},{rooms:17,dueouts:2,priority:3},
+  {rooms:18,dueouts:1,priority:3},{rooms:14,dueouts:11,priority:4}
+];
+var SCHED_LAUNDRY_FIXED=5;
+function schedScoreCombo(roomsPerRA,doPerRA,t){ return Math.abs(roomsPerRA-t.rooms)+Math.abs(doPerRA-t.dueouts)*1.5; }
+function schedRaNeeded(rooms,dueouts){
+  var bestN=6,bestScore=Infinity;
+  for(var n=6;n<=24;n++){
+    var minT=Infinity;
+    SCHED_RA_LOAD_TARGETS.forEach(function(t){
+      var s=schedScoreCombo(rooms/n,dueouts/n,t)+t.priority*0.1;
+      if(s<minT)minT=s;
+    });
+    if(minT<bestScore-1e-9||Math.abs(minT-bestScore)<=1e-9){ bestScore=minT; bestN=n; }
+  }
+  return bestN;
+}
+function schedSupHpNeeded(dueouts){
+  if(dueouts<=20)return 1; if(dueouts<=70)return 2; if(dueouts<=110)return 3;
+  if(dueouts<=150)return 4; if(dueouts<=199)return 5; return 9999;
+}
+function schedTurndownNeeded(rooms){ return Math.ceil(rooms/48); }
+/* Turndown gets its own same-day OCC field (day.tdOcc) where Schedule
+   Builder has only one rooms number for everything — this app's data
+   already carries the more accurate figure Turndown actually uses
+   elsewhere (schedUfExpected), so it's used here too rather than
+   flattened back down to match Schedule Builder's simpler model. */
+function schedAutoNeed(day,bk){
+  var rooms=parseInt(day.occ,10); if(isNaN(rooms))rooms=0;
+  var dueouts=parseInt(day.dep,10); if(isNaN(dueouts))dueouts=0;
+  if(!rooms)return 0;
+  if(bk==='gra')return schedRaNeeded(rooms,dueouts);
+  if(bk==='sup'||bk==='hp')return schedSupHpNeeded(dueouts);
+  if(bk==='td'){ var tdOcc=parseInt(day.tdOcc,10); if(isNaN(tdOcc))tdOcc=rooms; return schedTurndownNeeded(tdOcc); }
+  if(bk==='laundry')return SCHED_LAUNDRY_FIXED;
+  return 0;   // lobby has no computed floor in Schedule Builder's own autoFill either
+}
+/* Crews Auto-fill touches, and each one's minimum days off — identical
+   to Schedule Builder's own scheduleDept() call sites in autoFill().
+   Managers, PM Houseman and Overnight are absent on purpose (see the
+   comment above this section). */
+var SCHED_AUTO_OFFCOUNT={laundry:2,sup:2,lobby:2,td:1,gra:2,hp:2};
+
+function schedRawCell(SCH,ds,bk,name){ return _schedRow(SCH,ds,bk,null,name); }
+function schedWeekIndexOf(ds){ return Math.floor(parseLocalDate(ds).getTime()/86400000/7); }
+
+/* Most-overdue-for-a-full-weekend-off first, using this app's own
+   history (schedWeekendGap) rather than a second imported source — see
+   the header comment above. No history anywhere yet reads as equally
+   "never had one" for the whole crew, same as a fresh Schedule Builder
+   would, and just falls back to the crew's own list order. */
+function schedWeekendDueOrder(SCH,bk,names,weekStartDs){
+  return names.map(function(nm,idx){
+    var gap=schedWeekendGap(SCH,bk,nm,parseLocalDate(weekStartDs));
+    return {nm:nm,idx:idx,key:(gap.weeksAgo==null?9999:gap.weeksAgo)};
+  }).sort(function(a,b){ return (b.key-a.key)||(a.idx-b.idx); }).map(function(o){return o.nm;});
+}
+
+/* Gives each person on this crew `offCount` days off, biased toward the
+   highest-surplus day and (for the most-overdue half) toward a full
+   Sat+Sun weekend — a direct port of Schedule Builder's scheduleDept.
+   R-OFF cells are never touched; OFF cells are freely overwritten,
+   which is what makes re-running Auto-fill on the same week safe. */
+function schedAutoFillCrew(SCH,dates,bk,names,offCount,wk){
+  var days=[0,1,2,3,4,5,6];
+  var cellVal=function(nm,i){ return schedCellFor(SCH,dates[i],bk,nm); };
+  var isFixedOff=function(nm,i){ return cellVal(nm,i)==='R-OFF'; };
+  /* schedSupHpNeeded's 9999 stands for "everyone" (Schedule Builder's own
+     'ALL') — clamped to the crew's actual size here, where names.length
+     is known. */
+  var needFn=function(i){ var day=SCH.days[dates[i]]; if(!day)return 0; return Math.min(schedAutoNeed(day,bk),names.length); };
+  var working=days.map(function(i){ return names.filter(function(nm){return !isFixedOff(nm,i);}).length; });
+  var order=schedWeekendDueOrder(SCH,bk,names,dates[0]);
+  var weekendGrant={};
+  order.slice(0,Math.floor(order.length/2)).forEach(function(nm){ weekendGrant[dlNorm(nm)]=1; });
+  var assign={};
+
+  order.forEach(function(nm){
+    var off={}, offCnt=0;
+    days.forEach(function(i){ if(isFixedOff(nm,i)){ off[i]=1; offCnt++; } });
+    var pref=weekendGrant[dlNorm(nm)]?'preferOff':'indifferent';
+    var anchor=(((wk+names.indexOf(nm))%7)+7)%7;
+    var guard=0;
+    while(offCnt<offCount&&guard++<20){
+      var cand=days.filter(function(i){ return !off[i]; });
+      if(!cand.length)break;
+      cand.sort(function(a,b){
+        if(pref==='preferOff'){
+          var aw=((a===0||a===1)&&(working[a]-needFn(a))>0)?1:0;
+          var bw=((b===0||b===1)&&(working[b]-needFn(b))>0)?1:0;
+          if(aw!==bw)return bw-aw;
+        }
+        var sa=working[a]-needFn(a), sb=working[b]-needFn(b);
+        if(sb!==sa)return sb-sa;
+        var adjA=(off[a-1]||off[a+1])?1:0, adjB=(off[b-1]||off[b+1])?1:0;
+        if(adjA!==adjB)return adjB-adjA;
+        var da=(a-anchor+7)%7, db=(b-anchor+7)%7;
+        return da-db;
+      });
+      var pick=cand[0];
+      off[pick]=1; offCnt++; working[pick]--;
+    }
+    assign[dlNorm(nm)]=off;
+  });
+
+  names.forEach(function(nm){
+    var off=assign[dlNorm(nm)]||{};
+    days.forEach(function(i){
+      if(isFixedOff(nm,i))return;
+      var row=schedRawCell(SCH,dates[i],bk,nm);
+      if(row)row[1]=off[i]?'OFF':'1';
+    });
+  });
+
+  schedRepairShortfalls(SCH,dates,bk,names);
+}
+
+/* Closes a remaining shortfall by chaining discretionary OFF-day swaps
+   (never R-OFF) — a direct port of Schedule Builder's own
+   repairShortfalls, same breadth-first shortest-chain search. */
+function schedRepairShortfalls(SCH,dates,bk,names){
+  var days=[0,1,2,3,4,5,6];
+  var cellVal=function(nm,i){ return schedCellFor(SCH,dates[i],bk,nm); };
+  var isOffCellFn=function(nm,i){ return schedIsOff(cellVal(nm,i)); };
+  var isFixedOffFn=function(nm,i){ return cellVal(nm,i)==='R-OFF'; };
+  var needFn=function(i){ var day=SCH.days[dates[i]]; if(!day)return 0; return Math.min(schedAutoNeed(day,bk),names.length); };
+  var working=days.map(function(i){ return names.filter(function(nm){return !isOffCellFn(nm,i);}).length; });
+  var guard=0;
+  for(var i=0;i<7;i++){
+    while(working[i]<needFn(i)&&guard++<300){
+      var cameFrom={}, visited={}; visited[i]=1;
+      var queue=[i], target=-1;
+      while(queue.length&&target===-1){
+        var d=queue.shift();
+        for(var ni=0;ni<names.length&&target===-1;ni++){
+          var nm=names[ni];
+          if(isFixedOffFn(nm,d)||!isOffCellFn(nm,d))continue;
+          for(var dpi=0;dpi<days.length;dpi++){
+            var dPrime=days[dpi];
+            if(dPrime===d||visited[dPrime])continue;
+            if(isFixedOffFn(nm,dPrime)||isOffCellFn(nm,dPrime))continue;
+            visited[dPrime]=1;
+            cameFrom[dPrime]={prevDay:d,nm:nm};
+            if(working[dPrime]-1>=needFn(dPrime)){ target=dPrime; break; }
+            queue.push(dPrime);
+          }
+          if(target!==-1)break;
+        }
+      }
+      if(target===-1)break;
+      for(var dd=target;dd!==i;){
+        var step=cameFrom[dd];
+        var rowA=schedRawCell(SCH,dates[step.prevDay],bk,step.nm); if(rowA)rowA[1]='1';
+        var rowB=schedRawCell(SCH,dates[dd],bk,step.nm); if(rowB)rowB[1]='OFF';
+        dd=step.prevDay;
+      }
+      working[i]++; working[target]--;
+    }
+  }
+}
+
+function schedAutoFill(){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days){ showToast('&#9888; Build or upload this week first.'); return; }
+  var dates=schedWeekDates();
+  var loaded=dates.filter(function(ds){ return !!SCH.days[ds]; });
+  if(!loaded.length){ showToast('&#9888; Build or upload this week first.'); return; }
+  var hasOcc=loaded.some(function(ds){ return (parseInt(SCH.days[ds].occ,10)||0)>0; });
+  if(!hasOcc){ showToast('&#9888; Enter OCC for at least one day first.'); return; }
+  if(!confirm('Auto-fill Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant and Houseman for this week?\n\nAny R-OFF already on the grid is kept; everything else on those crews is replaced. Managers, PM Houseman and Overnight are not touched.'))return;
+
+  var wk=schedWeekIndexOf(dates[0]);
+  Object.keys(SCHED_AUTO_OFFCOUNT).forEach(function(bk){
+    var names=[],seen={};
+    dates.forEach(function(ds){
+      var day=SCH.days[ds]; if(!day)return;
+      (day[bk]||[]).forEach(function(p){
+        var n=String(p[0]||'').trim(); if(!n)return;
+        var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n);
+      });
+    });
+    if(!names.length)return;
+    schedAutoFillCrew(SCH,dates,bk,names,SCHED_AUTO_OFFCOUNT[bk],wk);
+  });
+
+  SCH.savedAt=new Date().toISOString();
+  dlSaveSchedule(SCH);
+  renderSchedule();
+  showToast('&#10003; Week auto-filled — check it over and adjust by hand where needed');
+}
+
 /* The most recently loaded week, by its latest date — not necessarily
    the week right before the one being built, if a gap was left in
    between. That's still the right roster to start from: it's the
@@ -19091,6 +19330,10 @@ function renderSchedule(){
     });
     html+='</div>';
   });
+  html+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;">'
+    +'<button class="btn btn-navy btn-sm" onclick="schedAutoFill()">Auto-fill this week</button>'
+    +'<div style="font-size:9.5px;color:var(--text3);margin-top:5px;">Fills Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant &amp; Houseman from OCC/Departures &mdash; R-OFF is always kept</div>'
+    +'</div>';
   html+='</div></div>';
 
   /* ── Unifocus standard, checked against what's actually scheduled ──

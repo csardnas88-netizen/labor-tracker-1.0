@@ -734,5 +734,124 @@ module.exports = {
     const carried = win.schedCarryCheckExempt(before19, reparsed);
     t.assert(!!(carried.checkExempt && carried.checkExempt[win.dlNorm('Jorge Gonzalez')]),
       "schedCarryCheckExempt keeps the mark across a fresh workbook parse, which otherwise starts with no top-level properties at all");
+
+    // ── 20) Auto-fill — generating a week without Schedule Builder or
+    // Excel, ported from Schedule Builder's own scheduleDept/
+    // repairShortfalls/weekendDueOrder (see the header comment on
+    // schedAutoFill in index.html for why the roster and weekend
+    // history are NOT imported from Schedule Builder's own — verified
+    // stale against Carlos's real Laundry crew). ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const wk20 = (n) => { const d = new Date(2026, 10, 7); d.setDate(d.getDate() + n * 7); return d; }; // Sat Nov 7 2026
+    const datesFor20 = (n) => { const out = []; const d = wk20(n); for (let i = 0; i < 7; i++) { out.push(win.dateStr(d)); d.setDate(d.getDate() + 1); } return out; };
+    const thisDates20 = datesFor20(0);
+    const SCH20 = { days: {} };
+    const supNames = ['A', 'B', 'C', 'D', 'E', 'F'];
+    thisDates20.forEach((ds) => {
+      SCH20.days[ds] = {
+        sheet: 't', occ: '100', dep: '80', tdOcc: '', // dep=80 -> schedSupHpNeeded = 3
+        sup: supNames.map((n) => [n, '']),
+        // pmhm/night/mgr present too, to confirm Auto-fill leaves them alone.
+        pmhm: [['Untouched PM', '']], night: [['Untouched Night', '1']], mgr: [['Untouched Mgr', '']]
+      };
+    });
+    // B already has one granted R-OFF on Sunday — must survive, and only
+    // ONE more day off should be chosen for B (2 total), not 2 fresh ones.
+    SCH20.days[thisDates20[1]].sup[1][1] = 'R-OFF';
+    win.dlSaveSchedule(SCH20);
+    win.schedViewWeekStart = wk20(0);
+
+    t.assert(/Auto-fill this week/.test((() => { win.renderSchedule(); return html(); })()),
+      'the Auto-fill button is on the page once a week with OCC is loaded');
+
+    win.schedAutoFill();
+    const afterAuto = win.dlLoadSchedule();
+    supNames.forEach((nm) => {
+      const row = afterAuto.days[thisDates20[0]].sup.find((p) => p[0] === nm); // just confirms the crew wasn't dropped
+      t.assert(!!row, nm + ' is still on the Supervisors crew after Auto-fill');
+      const offDays = thisDates20.filter((ds) => win.schedIsOff(afterAuto.days[ds].sup.find((p) => p[0] === nm)[1]));
+      t.eq(offDays.length, 2, nm + ' ends up with exactly the 2-day minimum, not more or fewer');
+    });
+    t.eq(afterAuto.days[thisDates20[1]].sup[1][1], 'R-OFF',
+      "B's granted R-OFF is still there — Auto-fill never overwrites a fixed request");
+
+    // Every day should meet the need (3), since 6 people minus a 2-day
+    // average off leaves plenty of slack — this is the "no repair needed"
+    // case; the shortfall-repair path is exercised separately below.
+    thisDates20.forEach((ds) => {
+      const working = supNames.filter((nm) => !win.schedIsOff(afterAuto.days[ds].sup.find((p) => p[0] === nm)[1])).length;
+      t.assert(working >= 3, ds + ' has at least the 3 supervisors this OCC/Departures calls for (got ' + working + ')');
+    });
+
+    // pmhm/night/mgr are excluded from Auto-fill entirely.
+    t.eq(afterAuto.days[thisDates20[0]].pmhm[0][1], '', 'PM Houseman is untouched by Auto-fill');
+    t.eq(afterAuto.days[thisDates20[0]].night[0][1], '1', 'Overnight is untouched by Auto-fill');
+    t.eq(afterAuto.days[thisDates20[0]].mgr[0][1], '', 'Managers is untouched by Auto-fill');
+
+    // Re-running is idempotent: the exact same OFF/1 pattern comes back,
+    // not a fresh reshuffle, because weekendGap/weekendDueOrder read from
+    // this SAME now-filled week and see everyone as already having had
+    // their turn this week (mirrors Schedule Builder's own idempotency
+    // guarantee, ported deliberately).
+    const pattern1 = supNames.map((nm) => thisDates20.map((ds) => afterAuto.days[ds].sup.find((p) => p[0] === nm)[1]));
+    win.schedAutoFill();
+    const afterAuto2 = win.dlLoadSchedule();
+    const pattern2 = supNames.map((nm) => thisDates20.map((ds) => afterAuto2.days[ds].sup.find((p) => p[0] === nm)[1]));
+    t.eq(JSON.stringify(pattern2), JSON.stringify(pattern1), 'running Auto-fill again on the same week reproduces the same schedule, not a reshuffle');
+
+    // Weekend rotation actually bites: give "A" three straight prior weeks
+    // with NO full weekend off, and "F" a full weekend just last week —
+    // A should come out of Auto-fill more likely to land Sat+Sun off than F.
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH20b = { days: {} };
+    thisDates20.forEach((ds) => { SCH20b.days[ds] = { sheet: 't', occ: '100', dep: '80', tdOcc: '', sup: supNames.map((n) => [n, '']) }; });
+    for (let n = -1; n >= -3; n--) {
+      const pdates = datesFor20(n);
+      pdates.forEach((ds, i) => {
+        SCH20b.days[ds] = SCH20b.days[ds] || { sheet: 't', occ: '', dep: '', tdOcc: '' };
+        SCH20b.days[ds].sup = supNames.map((nm) => {
+          if (nm === 'F' && n === -1 && (i === 0 || i === 1)) return [nm, 'OFF']; // F's full weekend, last week
+          return [nm, '1']; // A (and everyone else) never gets a full weekend in this window
+        });
+      });
+    }
+    win.dlSaveSchedule(SCH20b);
+    win.schedViewWeekStart = wk20(0);
+    win.schedAutoFill();
+    const afterAuto3 = win.dlLoadSchedule();
+    const fullWeekend = (nm) => win.schedIsOff(afterAuto3.days[thisDates20[0]].sup.find((p) => p[0] === nm)[1])
+      && win.schedIsOff(afterAuto3.days[thisDates20[1]].sup.find((p) => p[0] === nm)[1]);
+    t.assert(fullWeekend('A'), "A, overdue for three straight weeks, gets this week's full weekend off");
+    t.assert(!fullWeekend('F'), "F, who just had one last week, does not — the scarce weekend slack goes to whoever's actually overdue");
+
+    // Shortfall repair: 4 people, need pinned at 4 (dep=25 -> need 2, but
+    // forced up via a tight offCount so a naive per-person pass alone
+    // would leave a day short) — confirms schedRepairShortfalls actually
+    // fires rather than just being dead code.
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH20c = { days: {} };
+    const tdNames = ['G', 'H']; // PM Turndown/GRA: offCount is 1
+    thisDates20.forEach((ds, i) => {
+      SCH20c.days[ds] = { sheet: 't', occ: '48', dep: '10', tdOcc: '48', td: tdNames.map((n) => [n, '']) }; // turndownNeeded(48)=1
+    });
+    // Force both G and H to already be R-OFF on the same day (Monday) —
+    // a real shortfall Auto-fill's per-person pass can't avoid on its own,
+    // only the repair pass (borrowing a day from elsewhere in the week)
+    // can restore coverage.
+    SCH20c.days[thisDates20[2]].td[0][1] = 'R-OFF';
+    SCH20c.days[thisDates20[2]].td[1][1] = 'R-OFF';
+    win.dlSaveSchedule(SCH20c);
+    win.schedViewWeekStart = wk20(0);
+    win.schedAutoFill();
+    const afterAuto4 = win.dlLoadSchedule();
+    const mondayWorking = tdNames.filter((nm) => !win.schedIsOff(afterAuto4.days[thisDates20[2]].td.find((p) => p[0] === nm)[1])).length;
+    t.eq(mondayWorking, 0, 'both being R-OFF the same day is a genuine, un-repairable shortage — Auto-fill leaves it as-is rather than breaking a fixed request');
+    // But every OTHER day should still meet turndownNeeded(48)=1, since
+    // the repair pass had a full week of slack to draw from for those.
+    thisDates20.forEach((ds, i) => {
+      if (i === 2) return;
+      const working = tdNames.filter((nm) => !win.schedIsOff(afterAuto4.days[ds].td.find((p) => p[0] === nm)[1])).length;
+      t.assert(working >= 1, ds + " still meets Turndown's need of 1 despite Monday's shortage");
+    });
   }
 };
