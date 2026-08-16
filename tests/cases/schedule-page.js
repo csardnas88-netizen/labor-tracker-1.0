@@ -448,5 +448,47 @@ module.exports = {
     const scuAfter = win.document.getElementById('scu_gra_0').innerHTML;
     t.assert(scuAfter !== scuBefore, 'taking a room attendant off Saturday moves the inline standard cell, not just the Total row');
     win.schedSetCell('gra', kIdx2, 'Karla Varela', sat, '1', null);
+
+    // ── 14) "Fill week" — Carlos's own workflow from Unifocus ──
+    // Type one day, then replicate it across the rest of that person's
+    // week in one click instead of opening seven dropdowns for the same
+    // value. Copies the first day that already has something in it.
+    win.confirm = () => true;
+    const mayraBefore = win.dlLoadSchedule().days[sat].gra.filter((p) => p[0] === 'Mayra')[0];
+    t.eq(mayraBefore[1], '1', "Mayra's Saturday is the fixture's own value — the thing to copy");
+    t.eq(win.dlLoadSchedule().days['2026-08-17'].gra.filter((p) => p[0] === 'Mayra')[0][1], '',
+      "Monday starts blank — nothing typed for her yet that day");
+
+    win.schedFillWeek('gra', 'Mayra');
+    const afterFill = win.dlLoadSchedule();
+    win.schedWeekDates().forEach((ds) => {
+      const row = afterFill.days[ds] && afterFill.days[ds].gra.filter((p) => p[0] === 'Mayra')[0];
+      if (row) t.eq(row[1], '1', ds + " is filled with Saturday's value, the whole week in one click");
+    });
+
+    // It is a real copy-paste, not a "fill blanks only" — a day already
+    // set to something ELSE gets overwritten too, same as Excel/Unifocus.
+    win.schedSetCell('gra', kIdx2, 'Karla Varela', '2026-08-18', 'OFF', null);
+    win.schedFillWeek('gra', 'Karla Varela');
+    t.eq(win.dlLoadSchedule().days['2026-08-18'].gra.filter((p) => p[0] === 'Karla Varela')[0][1], '1',
+      "a day deliberately set to OFF is overwritten by the fill too — real copy-paste, not a smart merge");
+
+    // Someone with nothing typed anywhere has nothing to copy, and the
+    // week must not be silently touched.
+    win.schedAddPerson('gra', 'Rolando');
+    const beforeEmpty = JSON.stringify(win.dlLoadSchedule().days[sat].gra);
+    win.schedFillWeek('gra', 'Rolando');
+    t.eq(JSON.stringify(win.dlLoadSchedule().days[sat].gra), beforeEmpty,
+      'a blank row is left alone — there is nothing to copy from');
+    t.assert(/Nothing to copy/.test(win.document.getElementById('toastMsg').textContent),
+      'and he is told why, rather than the button silently doing nothing');
+
+    // Rendered: the button sits next to the name, and only for a row
+    // that actually has something to copy.
+    win.renderSchedule();
+    const fillHtml = html();
+    t.assert(/schedFillWeek\('gra','Mayra'\)/.test(fillHtml), "Mayra's row offers the fill button");
+    t.assert(!/schedFillWeek\('gra','Rolando'\)/.test(fillHtml),
+      "Rolando's row does not — an all-blank row has nothing worth offering to copy");
   }
 };
