@@ -616,5 +616,123 @@ module.exports = {
     win.schedCreateWeek();
     t.assert(/Upload a Schedule Draft/.test(win.document.getElementById('toastMsg').textContent),
       'with nothing loaded anywhere, he is pointed back to uploading once, not left to guess why the button did nothing');
+
+    // ── 18) Schedule Checks — Schedule Builder's fairness principles,
+    // checked here rather than enforced ── Two rules, ported from
+    // Schedule Builder's own autoFill (scheduleDept's offCount, and
+    // weekendDueOrder/weekendHistory's full-weekend rotation): a minimum
+    // number of days off per crew (2, or 1 for PM Turndown/GRA), and a
+    // full Saturday+Sunday off that shouldn't go missing for too long
+    // without one showing up somewhere in the app's own history. Built
+    // from scratch here rather than reusing the earlier fixture, which
+    // only ever fills in Saturday and Sunday. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const wk = (n) => { const d = new Date(2026, 9, 3); d.setDate(d.getDate() + n * 7); return d; }; // Sat Oct 3 2026 as "this week"
+    const datesFor = (n) => { const out = []; const d = wk(n); for (let i = 0; i < 7; i++) { out.push(win.dateStr(d)); d.setDate(d.getDate() + 1); } return out; };
+    const mkRow = (vals) => vals; // [Sat..Fri]
+
+    const SCH18 = { days: {}, count: 0 };
+    const thisDates = datesFor(0);
+    // sup: minimum is 2. Rolando gets exactly 1 (short); Jose B gets 2 (meets it).
+    thisDates.forEach((ds, i) => {
+      SCH18.days[ds] = {
+        sheet: 't', occ: '100', dep: '40', tdOcc: '',
+        sup: [['Rolando', i === 0 ? 'OFF' : '1'], ['Jose B', (i === 0 || i === 2) ? 'OFF' : '1']],
+        // td: minimum is 1. Aura gets exactly 1 — meets it, no warning expected.
+        td: [['Aura', i === 0 ? 'OFF' : '1']],
+        // mgr: excluded from the rule entirely — zero days off should never warn.
+        mgr: [['Carlos', '1']],
+        // hp: used below for the weekend-rotation check; every day worked this week.
+        hp: [['Elmer Galindo', '1'], ['Vanessa', '1']]
+      };
+    });
+    win.dlSaveSchedule(SCH18);
+    win.schedViewWeekStart = wk(0);
+
+    let checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
+    t.assert(checks.some((c) => c.type === 'off' && /Rolando has 1 day off this week \(usually 2\)/.test(c.text)),
+      'a supervisor with only one day off this week is flagged against the 2-day minimum');
+    t.assert(!checks.some((c) => /Jose B/.test(c.text) && c.type === 'off'),
+      'a supervisor who got the full 2 days off is not flagged');
+    t.assert(!checks.some((c) => /Aura/.test(c.text) && c.type === 'off'),
+      "PM Turndown/GRA's own lower minimum (1) is honored — one day off there is not a shortfall");
+    t.assert(!checks.some((c) => /Carlos/.test(c.text)),
+      'Managers carries no days-off rule at all, same as Schedule Builder — zero off days there never warns');
+
+    win.renderSchedule();
+    t.assert(/Schedule Checks/.test(html()) && /Rolando has 1 day off this week/.test(html()),
+      'the warning actually reaches the rendered page, not just the underlying function');
+
+    // Weekend rotation: three prior weeks (checked >= 3) where Elmer never
+    // gets a full Saturday+Sunday off, same as this week — flagged as
+    // overdue. Vanessa gets a full weekend two weeks back — recent enough
+    // (<= 3 weeks) that she is NOT flagged despite also working this
+    // week's Sat/Sun.
+    for (let n = -1; n >= -3; n--) {
+      const ds = datesFor(n);
+      const SCHn = win.dlLoadSchedule();
+      ds.forEach((d, i) => {
+        SCHn.days[d] = SCHn.days[d] || { sheet: 't', occ: '', dep: '', tdOcc: '' };
+        const elmerOff = false; // never a full weekend for Elmer in any prior week
+        const vanessaOff = (n === -2 && (i === 0 || i === 1)); // Vanessa's one full weekend, 2 weeks back
+        SCHn.days[d].hp = [
+          ['Elmer Galindo', elmerOff ? 'OFF' : '1'],
+          ['Vanessa', vanessaOff ? 'OFF' : '1']
+        ];
+      });
+      win.dlSaveSchedule(SCHn);
+    }
+    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
+    t.assert(checks.some((c) => c.type === 'weekend' && /Elmer Galindo hasn't had a full weekend off/.test(c.text)),
+      "three weeks of history with no full weekend anywhere is enough to flag him as overdue — Schedule Builder's own weekendHistory idea");
+    t.assert(!checks.some((c) => /Vanessa/.test(c.text) && c.type === 'weekend'),
+      'a full weekend just two weeks back is recent enough that she is not flagged, even though this week has none either');
+
+    // Not enough history at all (fewer than 3 prior weeks on file) should
+    // never read as "never had one" — that would punish a schedule the
+    // app simply hasn't seen much of yet.
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH18b = { days: {}, count: 0 };
+    thisDates.forEach((ds) => { SCH18b.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', hp: [['Elmer Galindo', '1']] }; });
+    win.dlSaveSchedule(SCH18b);
+    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
+    t.assert(!checks.some((c) => c.type === 'weekend'),
+      'with no prior weeks on file at all, there is nothing to judge "overdue" against, so nobody is flagged');
+
+    // ── 19) Exempting a person — real people (mutual cover pairs, low-
+    // season aliases in Schedule Builder's own ALIAS_PEOPLE/exclusion
+    // lists) never fit the plain rule by design, and this app has no way
+    // to know that on its own. Carlos marks them once; the mark is a
+    // property of the PERSON, holds on every crew, and survives a
+    // re-upload the same way a borrowed row does. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH19 = { days: {} };
+    thisDates.forEach((ds, i) => { SCH19.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', sup: [['Jorge Gonzalez', '1']] }; });
+    win.dlSaveSchedule(SCH19);
+    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
+    t.assert(checks.some((c) => /Jorge Gonzalez/.test(c.text)),
+      'before exempting, Jorge (0 real off days here) is flagged like anyone else');
+
+    win.schedToggleCheckExempt('Jorge Gonzalez');
+    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
+    t.assert(!checks.some((c) => /Jorge Gonzalez/.test(c.text)),
+      'once marked exempt, he drops out of Schedule Checks entirely — days-off AND weekend both');
+    win.renderSchedule();
+    t.assert(!/Jorge Gonzalez has\b/.test(html()) && !/Jorge Gonzalez hasn't\b/.test(html()),
+      'and the rendered page agrees — his plain name can still appear in the crew card, just not in a Schedule Checks line');
+
+    win.schedToggleCheckExempt('Jorge Gonzalez');
+    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
+    t.assert(checks.some((c) => /Jorge Gonzalez/.test(c.text)),
+      'toggling again un-exempts him — this is a switch, not a one-way mark');
+
+    // Survives a re-upload, same idea as a borrowed row surviving one.
+    win.schedToggleCheckExempt('Jorge Gonzalez'); // exempt again before the "upload"
+    const before19 = win.dlLoadSchedule();
+    t.assert(before19.checkExempt && before19.checkExempt[win.dlNorm('Jorge Gonzalez')], 'exempt flag is set going into the reload');
+    const reparsed = { days: { [thisDates[0]]: { sheet: 'reuploaded', occ: '', dep: '', tdOcc: '', sup: [['Jorge Gonzalez', '1']] } }, count: 1 };
+    const carried = win.schedCarryCheckExempt(before19, reparsed);
+    t.assert(!!(carried.checkExempt && carried.checkExempt[win.dlNorm('Jorge Gonzalez')]),
+      "schedCarryCheckExempt keeps the mark across a fresh workbook parse, which otherwise starts with no top-level properties at all");
   }
 };

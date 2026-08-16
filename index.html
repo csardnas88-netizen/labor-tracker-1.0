@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.8.0"/>
+<meta name="app-version" content="7.9.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4312,6 +4312,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.9.0', date:'2026-08-16',
+    features:['Added "Schedule Checks" to the Schedule page — the fairness rules Carlos\'s other app, Schedule Builder, builds a week around (a minimum number of days off, and a full Saturday+Sunday off that should rotate instead of landing on the same people) are now checked here too, since this page is filled by hand instead of auto-generated. A warning card shows up only when something is actually short: a crew member with fewer days off than usual this week, or someone who hasn\'t had a full weekend off in a while, judged against this app\'s own saved weeks. Verified against the real Schedule Draft that several real people — mutual cover pairs, low-season stand-ins — never fit the plain rule by design, the same people Schedule Builder itself already excludes from it; a new small icon next to a name marks someone as one of those irregular arrangements so they stop showing up here, and the mark holds across every future upload, not just this week\'s.']
+  },
   {
     v:'7.8.0', date:'2026-08-16',
     features:['Added "Copy last week" next to a person\'s name on the Schedule — Carlos\'s own ask, and his own words for it: not just multiplying the first Saturday or Friday shift across the whole week. A real week alternates, days off land where they land, so this copies last week\'s ACTUAL day-by-day pattern for that person onto this week — Saturday gets last Saturday\'s value, Sunday gets last Sunday\'s, and so on, not one value repeated seven times. A day last week has nothing for is left alone this week rather than blanked, so it can only ever bring information over, never erase it by omission. Sits beside the existing "Fill week" button — that one still covers "she works every day this week," this one covers everything else. Third and last piece of replacing Excel on this page: build a week without it, edit any row in it, and now fill it in the way an actual week actually looks.']
@@ -18318,7 +18322,7 @@ function dlUploadSchedule(input){
       try{
         var SCH=dlParseSchedule(wb);
         if(!SCH.count)throw new Error('No dates found in range. Is this the Schedule Draft?');
-        try{ SCH=schedCarryAddedRows(dlLoadSchedule(),SCH); }catch(e){}
+        try{ SCH=schedCarryAddedRows(dlLoadSchedule(),SCH); SCH=schedCarryCheckExempt(dlLoadSchedule(),SCH); }catch(e){}
         dlSaveSchedule(SCH);
         showToast('✓ Schedule loaded — '+SCH.count+' days');
         renderDailyLineup();
@@ -18629,6 +18633,116 @@ function schedRosterForDates(SCH,dates){
 function _schedDatesForWeekStart(weekStart){
   var d=new Date(weekStart),out=[];
   for(var i=0;i<7;i++){ out.push(dateStr(d)); d.setDate(d.getDate()+1); }
+  return out;
+}
+
+/* ── Schedule Builder's fairness principles, checked here rather than
+   enforced ── Schedule Builder's own autoFill (scheduleDept/weekendDueOrder)
+   builds a week around two rules: everyone gets a minimum number of days
+   off, and a full Saturday+Sunday off rotates across a crew instead of
+   landing on the same people every time. This Schedule page is filled in
+   by hand or copied from Excel, not generated, so nothing here can be
+   enforced — but it can be checked and flagged, the same way the Unifocus
+   Standard card checks against a standard without editing anyone's shift.
+   Minimums match Schedule Builder's own autoFill call sites exactly: 2
+   days off for every crew except PM Turndown/GRA, which gets 1. Managers
+   and Overnight are excluded — both are 100% manual/fixed in Schedule
+   Builder too, so neither one carries a days-off rule there either. */
+var SCHED_MIN_OFF={laundry:2,sup:2,lobby:2,td:1,pmhm:2,gra:2,hp:2};
+
+/* ── exempting someone from Schedule Checks ──
+   Verified against Carlos's real workbook: several real people never
+   fit the plain 2-days-off / weekend-rotation rule by design — mutual
+   cover pairs and low-season aliases his OTHER app (Schedule Builder)
+   already knows to exclude from that same rule (see ALIAS_PEOPLE and the
+   'lnd_jorge'/'lnd_susan'/'td_andrea'/'td_yesenia_p' exclusions in its
+   autoFill). This app's Schedule data has no way to know who those
+   people are on its own, so Carlos marks them once instead. Exemption is
+   a property of the PERSON, not of any one week's file or crew — the
+   same irregular arrangement holds wherever their name shows up — so it
+   lives at the top of the record (not inside a single day) and survives
+   a re-upload via schedCarryCheckExempt below, same idea as
+   schedCarryAddedRows for borrows. */
+function schedIsCheckExempt(SCH,name){ return !!(SCH&&SCH.checkExempt&&SCH.checkExempt[dlNorm(name)]); }
+function schedToggleCheckExempt(name){
+  var SCH=dlLoadSchedule(); if(!SCH)return;
+  if(!SCH.checkExempt)SCH.checkExempt={};
+  var k=dlNorm(name);
+  if(SCH.checkExempt[k])delete SCH.checkExempt[k]; else SCH.checkExempt[k]=true;
+  SCH.savedAt=new Date().toISOString();
+  dlSaveSchedule(SCH);
+  renderSchedule();
+}
+function schedCarryCheckExempt(oldSch,newSch){
+  if(oldSch&&oldSch.checkExempt)newSch.checkExempt=Object.assign({},oldSch.checkExempt);
+  return newSch;
+}
+function schedIsOff(v){ v=String(v||'').trim(); return v==='OFF'||v==='R-OFF'; }
+function schedCellFor(SCH,ds,bk,name){
+  var day=SCH.days&&SCH.days[ds]; if(!day)return '';
+  var row=(day[bk]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
+  return row?String(row[1]||'').trim():'';
+}
+function schedOffCount(SCH,dates,bk,name){
+  var n=0;
+  dates.forEach(function(ds){ if(schedIsOff(schedCellFor(SCH,ds,bk,name)))n++; });
+  return n;
+}
+/* Saturday and Sunday are always dates[0] and dates[1] — schedWeekDates()
+   and _schedDatesForWeekStart() both start every week on a Saturday. */
+function schedHasFullWeekend(SCH,dates,bk,name){
+  return schedIsOff(schedCellFor(SCH,dates[0],bk,name))&&schedIsOff(schedCellFor(SCH,dates[1],bk,name));
+}
+/* Looks back through this app's own previously-loaded/built weeks (the
+   closest thing it has to Schedule Builder's weekendHistory) for the most
+   recent full weekend `name` had on this crew. Also reports how many of
+   those look-back weeks actually had data, so the caller can tell "never
+   had one, and we have plenty of history to judge that from" apart from
+   "we simply don't have enough history yet" — a fresh app, or someone
+   new to a crew, should never come back flagged as overdue from silence
+   alone. */
+function schedWeekendGap(SCH,bk,name,beforeWeekStart){
+  var w=new Date(beforeWeekStart), weeksChecked=0;
+  for(var back=1;back<=10;back++){
+    w.setDate(w.getDate()-7);
+    var wdates=_schedDatesForWeekStart(w);
+    if(!SCH.days[wdates[0]])continue;
+    weeksChecked++;
+    if(schedHasFullWeekend(SCH,wdates,bk,name))return {weeksAgo:back,checked:weeksChecked};
+  }
+  return {weeksAgo:null,checked:weeksChecked};
+}
+/* One pass over every crew that carries a days-off rule, for the week
+   currently on screen. Returns plain warnings — text plus a `type` used
+   only to pick a dot color — never touches the schedule itself. */
+function schedScheduleChecks(SCH,dates){
+  var out=[];
+  SCHED_BLOCKS.forEach(function(b){
+    var minOff=SCHED_MIN_OFF[b.key]; if(!minOff)return;
+    var names=[],seen={};
+    dates.forEach(function(ds){
+      var day=SCH.days[ds]; if(!day)return;
+      (day[b.key]||[]).forEach(function(p){
+        var n=String(p[0]||'').trim(); if(!n)return;
+        var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n);
+      });
+    });
+    names.forEach(function(nm){
+      if(schedIsCheckExempt(SCH,nm))return;
+      var off=schedOffCount(SCH,dates,b.key,nm);
+      if(off<minOff){
+        out.push({crew:b.label,type:'off',
+          text:nm+' has '+off+' day'+(off===1?'':'s')+' off this week (usually '+minOff+')'});
+      }
+      if(!schedHasFullWeekend(SCH,dates,b.key,nm)){
+        var gap=schedWeekendGap(SCH,b.key,nm,parseLocalDate(dates[0]));
+        if(gap.checked>=3&&(gap.weeksAgo==null||gap.weeksAgo>3)){
+          out.push({crew:b.label,type:'weekend',
+            text:nm+' hasn\'t had a full weekend off '+(gap.weeksAgo?('in '+gap.weeksAgo+' weeks'):'in the weeks on file')});
+        }
+      }
+    });
+  });
   return out;
 }
 /* The most recently loaded week, by its latest date — not necessarily
@@ -19021,6 +19135,26 @@ function renderSchedule(){
     html+='</div></div></div>';
   }
 
+  /* ── Schedule Builder's fairness principles, checked not enforced ──
+     Days-off minimums and weekend rotation, same rules Schedule Builder's
+     own autoFill builds a week around (see schedScheduleChecks). Nothing
+     here is a hard rule this page enforces — it's a heads-up, same spirit
+     as the Unifocus Standard card above it. Hidden entirely when there's
+     nothing to flag, same as every other warnings list in the app. */
+  var scheduleChecks=schedScheduleChecks(SCH,dates);
+  if(scheduleChecks.length){
+    html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
+    html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Schedule Checks</div>';
+    html+='<div style="padding:10px 14px 12px;">';
+    scheduleChecks.forEach(function(w){
+      var dot=(w.type==='off')?'var(--red)':'var(--yellow)';
+      html+='<div style="display:flex;align-items:flex-start;gap:7px;font-size:11px;color:var(--text1);margin-bottom:6px;">'
+        +'<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:'+dot+';margin-top:4px;"></span>'
+        +'<span><b>'+escHtml(w.crew)+'</b> &mdash; '+escHtml(w.text)+'</span></div>';
+    });
+    html+='</div></div>';
+  }
+
   /* ── one card per crew ── */
   var crewRoster=schedPeopleByCrew(SCH);
   SCHED_BLOCKS.forEach(function(b){
@@ -19043,6 +19177,7 @@ function renderSchedule(){
 
     ref.forEach(function(p,idx){
       var nm=p[0], nmJs=escHtml(schedJs(nm)), borrowed=(p[2]==='added');
+      var minOff=SCHED_MIN_OFF[b.key], exempt=schedIsCheckExempt(SCH,nm);
       /* Whether there's anything to fill the rest of the week WITH —
          the first day (Sat->Fri) that already carries a value. Carlos's
          own workflow, brought over from Unifocus: set one day, then
@@ -19074,6 +19209,10 @@ function renderSchedule(){
             +' style="flex-shrink:0;border:none;background:transparent;color:var(--gd);font-size:11px;line-height:1;cursor:pointer;padding:0 2px;">&#8676;</button>':'')
         +(hasLastWeek?'<button onclick="schedCopyLastWeek(\''+b.key+'\',\''+nmJs+'\')" title="Copy '+escHtml(nm)+'\'s pattern from last week, day for day"'
             +' style="flex-shrink:0;border:none;background:transparent;color:var(--navy);font-size:11px;line-height:1;cursor:pointer;padding:0 2px;">&#8635;</button>':'')
+        +(minOff?'<button onclick="schedToggleCheckExempt(\''+nmJs+'\')" title="'
+            +(exempt?'Irregular arrangement — excluded from Schedule Checks. Click to include '+escHtml(nm)+' again.'
+                    :'Mark '+escHtml(nm)+' as an irregular arrangement (mutual cover, alias) — exclude from Schedule Checks')+'"'
+            +' style="flex-shrink:0;border:none;background:transparent;color:'+(exempt?'var(--gd)':'var(--text3)')+';font-size:11px;line-height:1;cursor:pointer;padding:0 2px;opacity:'+(exempt?'1':'.5')+';">&#8856;</button>':'')
         +'<button onclick="schedRemovePerson(\''+b.key+'\',\''+nmJs+'\')" title="Remove '+escHtml(nm)+' from this crew for this week"'
             +' style="flex-shrink:0;border:none;background:transparent;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0 2px;">&times;</button>'
         +'</div>';
