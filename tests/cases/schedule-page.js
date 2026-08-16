@@ -304,17 +304,14 @@ module.exports = {
       'once Excel carries her too, she is not added a second time');
 
     // ── 9) Removing ──
-    // Only a borrowed row can be removed here. Workbook rows stay Excel's
-    // to manage — that is the same rule that makes hiding a row work.
+    // Undo the borrow — the checks below (Unifocus standard, the DOM
+    // render) are computed against the crew's ORIGINAL composition, so
+    // this has to happen before them, not as an afterthought.
     win.confirm = () => true;
     win.schedRemovePerson('laundry', 'Karla Varela');
     t.assert(!laundryNames().includes('Karla Varela'), 'a borrowed person can be taken back off');
     t.assert(win.dlLoadSchedule().days[sat].gra.some((p) => p[0] === 'Karla Varela'),
       'and removing the loan leaves her own crew alone');
-
-    win.schedRemovePerson('laundry', 'Isabel D');
-    t.assert(laundryNames().includes('Isabel D'),
-      'a row that came from the workbook is not removable here — Excel stays its source');
 
     // ── 10) The picker offers people from OTHER crews ──
     win.renderSchedule();
@@ -490,5 +487,24 @@ module.exports = {
     t.assert(/schedFillWeek\('gra','Mayra'\)/.test(fillHtml), "Mayra's row offers the fill button");
     t.assert(!/schedFillWeek\('gra','Rolando'\)/.test(fillHtml),
       "Rolando's row does not — an all-blank row has nothing worth offering to copy");
+
+    // ── 15) A row that came from the workbook is removable too ──
+    // Carlos's stated goal: the app should REPLACE Excel, not defer to
+    // it. "Only app-added rows are removable" stopped making sense the
+    // moment that became the plan — there has to be a way to take a
+    // Turndown attendant back out of Laundry even though that row came
+    // straight out of the file, not from a borrow.
+    const laundryTotalBefore = win.schedDayTotal(win.dlLoadSchedule(), sat, 'laundry');
+    win.schedRemovePerson('laundry', 'Isabel D');
+    t.assert(!laundryNames().includes('Isabel D'),
+      'a workbook row is removable now — only the app\'s own copy is touched, the Excel file itself is never modified');
+    t.eq(win.schedDayTotal(win.dlLoadSchedule(), sat, 'laundry'), laundryTotalBefore - 1,
+      'and the crew total drops with her, same as removing anyone else');
+
+    // Rendered: every row gets the × now, not just borrowed ones.
+    win.renderSchedule();
+    const removeHtml = html();
+    t.assert(/schedRemovePerson\('laundry','Olga A'\)/.test(removeHtml),
+      "a workbook row (Olga A, never borrowed) still offers its own × — removability no longer depends on where the row came from");
   }
 };

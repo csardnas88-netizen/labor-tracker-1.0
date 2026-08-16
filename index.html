@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.6.0"/>
+<meta name="app-version" content="7.6.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4312,6 +4312,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.6.1', date:'2026-08-16',
+    improvements:['Every row on the Schedule can now be removed from its crew, not just people borrowed in from the app — a Turndown attendant who worked Laundry that week (because that\'s what the uploaded workbook said) can be taken back out too. This was intentionally blocked before, on the theory that a row from the file was Excel\'s to manage. Carlos\'s stated goal is for the app to replace Excel, which makes that distinction pointless — the × next to a name works the same everywhere now, whether the row came from a borrow or straight out of the workbook. Only the app\'s own copy is touched; the Excel file itself is never modified, and a row removed here can come back if that same file is re-uploaded later.']
+  },
   {
     v:'7.6.0', date:'2026-08-15',
     features:['Added a "fill week" shortcut on the Schedule, the same workflow Carlos used in Unifocus: type one day for a person, then copy it across the rest of their week in one click instead of opening seven dropdowns to pick the same value. A small &#8676; button appears next to a name as soon as any day has something in it, copies that day\'s value (the first one found, Saturday through Friday), and fills every day in the row — asking to confirm first, since it overwrites any day already set to something else, same as a real copy-paste. A row with nothing typed anywhere shows no button, since there\'s nothing yet to copy.']
@@ -18567,9 +18571,11 @@ function schedSetNum(ds,field,val){
    Laundry is the whole gesture.
 
    The added row is tagged so it can be told apart from a row that came
-   out of the workbook. That tag does two things: it is what lets the
-   row be removed again from here (workbook rows stay Excel's to
-   manage), and it is what survives a re-upload. */
+   out of the workbook — shown in gold, so a borrowed person still
+   reads as a loan rather than a permanent member of the crew. Every
+   row is removable from here now regardless of that tag (see
+   schedRemovePerson); the tag's remaining job is surviving a
+   re-upload — see schedCarryAddedRows. */
 function schedPeopleByCrew(SCH){
   var dates=schedWeekDates(),out=[],seen={};
   SCHED_BLOCKS.forEach(function(b){
@@ -18640,6 +18646,18 @@ function schedAddPerson(bk,name){
   renderSchedule();
   showToast('&#10003; '+name+' added');
 }
+/* Removes anyone from a crew, not just people added from the app.
+   Originally this only touched borrowed ("added") rows — a row that
+   came out of the workbook was Excel's to manage, on the theory that
+   the file was the real source of truth. Carlos's own goal is for the
+   app to REPLACE Excel, which makes that distinction pointless: if
+   he's not going back to the file, there has to be a way to take a
+   Turndown attendant back out of Laundry regardless of where that row
+   came from.
+   This only ever touches the copy stored in the app. A workbook row
+   removed here can come back if that same file is re-uploaded later
+   (dlParseSchedule reads the file fresh every time) — expected, not a
+   bug, and only matters at all if he goes back to uploading. */
 function schedRemovePerson(bk,name){
   name=String(name==null?'':name).trim();
   var SCH=dlLoadSchedule();
@@ -18647,7 +18665,7 @@ function schedRemovePerson(bk,name){
   if(!confirm('Remove '+name+' from this crew for this week?'))return;
   schedWeekDates().forEach(function(ds){
     var arr=SCH.days[ds]&&SCH.days[ds][bk]; if(!arr)return;
-    for(var i=arr.length-1;i>=0;i--) if(dlNorm(arr[i][0])===dlNorm(name)&&arr[i][2]==='added')arr.splice(i,1);
+    for(var i=arr.length-1;i>=0;i--) if(dlNorm(arr[i][0])===dlNorm(name))arr.splice(i,1);
   });
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
@@ -18914,8 +18932,8 @@ function renderSchedule(){
         +' title="'+escHtml(nm)+(borrowed?' — borrowed into this crew':'')+'">'+escHtml(nm)+'</span>'
         +(fillSrc!=null?'<button onclick="schedFillWeek(\''+b.key+'\',\''+nmJs+'\')" title="Fill the rest of '+escHtml(nm)+'\'s week with &quot;'+escHtml(fillSrc)+'&quot;"'
             +' style="flex-shrink:0;border:none;background:transparent;color:var(--gd);font-size:11px;line-height:1;cursor:pointer;padding:0 2px;">&#8676;</button>':'')
-        +(borrowed?'<button onclick="schedRemovePerson(\''+b.key+'\',\''+nmJs+'\')" title="Remove from this crew"'
-            +' style="flex-shrink:0;border:none;background:transparent;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0 2px;">&times;</button>':'')
+        +'<button onclick="schedRemovePerson(\''+b.key+'\',\''+nmJs+'\')" title="Remove '+escHtml(nm)+' from this crew for this week"'
+            +' style="flex-shrink:0;border:none;background:transparent;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0 2px;">&times;</button>'
         +'</div>';
       dates.forEach(function(ds,di){
         var day=SCH.days[ds];
