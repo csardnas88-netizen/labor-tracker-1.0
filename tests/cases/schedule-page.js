@@ -555,6 +555,59 @@ module.exports = {
     t.assert(/already has data/.test(win.document.getElementById('toastMsg').textContent),
       'and he is told why, rather than nothing visibly happening');
 
+    // ── 17) "Copy last week" — day-for-day, not one value repeated ──
+    // Carlos's own words: not just multiplying the first Saturday or
+    // Friday shift. A real week alternates; last week's actual pattern
+    // for this person is the best guess for this week's.
+    const thisWeekDates = win.schedWeekDates(); // Sep 5-11, built blank in step 16
+    const lwStart = new Date(2026, 7, 29); // the week immediately before it, Aug 29-Sep 4
+    const lwDatesForTest = [];
+    for (let i = 0; i < 7; i++) { const d = new Date(lwStart); d.setDate(d.getDate() + i); lwDatesForTest.push(win.dateStr(d)); }
+
+    // Fabricate last week directly — a distinct, alternating pattern for
+    // Rolando (already on this week's Room Attendant roster, carried
+    // over from the borrow in step 14/16), so a uniform "Fill week"
+    // could never produce the same result as this.
+    const lwPattern = ['1', 'OFF', '1', '1', 'OFF', 'R-OFF', '1'];
+    const beforeCopy = win.dlLoadSchedule();
+    lwDatesForTest.forEach((ds, i) => {
+      beforeCopy.days[ds] = beforeCopy.days[ds] || { sheet: 'test', occ: '', dep: '', tdOcc: '' };
+      beforeCopy.days[ds].gra = [['Rolando', lwPattern[i]]];
+    });
+    win.dlSaveSchedule(beforeCopy);
+
+    t.assert(!win.dlLoadSchedule().days[thisWeekDates[0]].gra.some((p) => p[0] === 'Rolando' && p[1] !== ''),
+      "Rolando's row this week starts blank, same as everyone else in the week built in step 16");
+
+    win.renderSchedule();
+    const copyHtml = html();
+    t.assert(/schedCopyLastWeek\('gra','Rolando'\)/.test(copyHtml),
+      'the copy-last-week button appears now that last week has something to copy');
+
+    win.schedCopyLastWeek('gra', 'Rolando');
+    const afterCopy = win.dlLoadSchedule();
+    thisWeekDates.forEach((ds, i) => {
+      const row = afterCopy.days[ds].gra.filter((p) => p[0] === 'Rolando')[0];
+      t.eq(row[1], lwPattern[i], ds + " gets last week's SAME day of week (" + lwDatesForTest[i] + "'s value), not a single value repeated");
+    });
+
+    // A day last week has NOTHING for is left untouched, not blanked —
+    // there's nothing to copy FROM. Pin this with an eighth day: clear
+    // last week's Wednesday and confirm this week's Wednesday survives
+    // whatever it already had rather than being wiped to blank.
+    win.schedSetCell('gra', 0, 'Rolando', thisWeekDates[3], 'PM', null);
+    const clearedLw = win.dlLoadSchedule();
+    clearedLw.days[lwDatesForTest[3]].gra[0][1] = '';
+    win.dlSaveSchedule(clearedLw);
+    win.schedCopyLastWeek('gra', 'Rolando');
+    t.eq(win.dlLoadSchedule().days[thisWeekDates[3]].gra.filter((p) => p[0] === 'Rolando')[0][1], 'PM',
+      "a day with nothing to copy from last week is left as-is this week, not overwritten to blank");
+
+    // Nobody with a fully blank last week gets the button at all.
+    t.assert(!win.dlLoadSchedule().days[thisWeekDates[0]].gra.some((p) => p[0] === 'Debora')
+      || !/schedCopyLastWeek\('gra','Debora'\)/.test(html()),
+      'someone with nothing in last week (never loaded for these dates) offers no copy-last-week button');
+
     // With no reference week at all, there is nothing to copy the crew
     // list from, and that has to be said plainly rather than building
     // an empty schedule that reads as "nobody works this week either."

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.7.0"/>
+<meta name="app-version" content="7.8.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4312,6 +4312,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.8.0', date:'2026-08-16',
+    features:['Added "Copy last week" next to a person\'s name on the Schedule — Carlos\'s own ask, and his own words for it: not just multiplying the first Saturday or Friday shift across the whole week. A real week alternates, days off land where they land, so this copies last week\'s ACTUAL day-by-day pattern for that person onto this week — Saturday gets last Saturday\'s value, Sunday gets last Sunday\'s, and so on, not one value repeated seven times. A day last week has nothing for is left alone this week rather than blanked, so it can only ever bring information over, never erase it by omission. Sits beside the existing "Fill week" button — that one still covers "she works every day this week," this one covers everything else. Third and last piece of replacing Excel on this page: build a week without it, edit any row in it, and now fill it in the way an actual week actually looks.']
+  },
   {
     v:'7.7.0', date:'2026-08-16',
     features:['A week that isn\'t in the loaded Schedule Draft can now be built directly in the app — no Excel required. "Build this week" copies the crew LIST (who\'s on which crew) from the most recently loaded week; every day starts blank, and OCC/Departures are empty too, since nothing about who actually works or how busy the hotel is should ever be guessed. Second piece of Carlos\'s stated goal for the Schedule page: replace Excel, not just view what\'s already built there. With no week loaded anywhere yet, the button explains there\'s nothing to copy from and points back to uploading once to get started.']
@@ -18698,6 +18702,45 @@ function schedFillWeek(bk,name){
   renderSchedule();
   showToast('&#10003; Filled with "'+src+'"');
 }
+/* "Copy last week" — Carlos's ask for something smarter than "Fill
+   week": a real week is rarely one value repeated seven times, days
+   off land where they land, and what someone actually worked last
+   week is the best guess for what they'll work again. Maps day of
+   week to day of week (last Saturday onto this Saturday, and so on),
+   not by position, so it can't shift onto the wrong day.
+   A day last week has NOTHING for is left untouched here, not
+   blanked — there's nothing to copy FROM, so nothing changes TO. A
+   day this week already has something for gets overwritten, same as
+   Fill Week — it's copy-paste, not a merge. */
+function schedCopyLastWeek(bk,name){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days)return;
+  var dates=schedWeekDates();
+  var lwStart=new Date(_schedWeekStart()); lwStart.setDate(lwStart.getDate()-7);
+  var lwDates=_schedDatesForWeekStart(lwStart);
+  var findRow=function(ds){
+    var arr=SCH.days[ds]&&SCH.days[ds][bk];
+    if(!arr)return null;
+    for(var i=0;i<arr.length;i++) if(dlNorm(arr[i][0])===dlNorm(name))return arr[i];
+    return null;
+  };
+  var pattern=lwDates.map(function(ds){ var row=findRow(ds); return row?String(row[1]||'').trim():''; });
+  if(!pattern.some(function(v){return v!=='';})){
+    showToast('&#9888; Nothing to copy — last week is blank for '+name);
+    return;
+  }
+  if(!confirm('Copy '+name+'’s pattern from last week onto this week?\n\nSaturday gets last Saturday\'s value, Sunday gets last Sunday\'s, and so on — overwriting any day this week that already has something else, wherever last week has a value to bring over.'))return;
+  dates.forEach(function(ds,i){
+    var v=pattern[i];
+    if(v==='')return;
+    var row=findRow(ds);
+    if(row)row[1]=v;
+  });
+  SCH.savedAt=new Date().toISOString();
+  dlSaveSchedule(SCH);
+  renderSchedule();
+  showToast('&#10003; Copied last week\'s pattern for '+name);
+}
 function schedAddPerson(bk,name){
   name=String(name==null?'':name).trim();
   if(!name)return;
@@ -18865,6 +18908,8 @@ function renderSchedule(){
   var thisWeek=dateStr(getHotelWeekStart(new Date()));
   var loaded=dates.filter(function(ds){return !!SCH.days[ds];});
   var sheetName=(loaded.length&&SCH.days[loaded[0]].sheet)||'';
+  var lastWeekStart=new Date(_schedWeekStart()); lastWeekStart.setDate(lastWeekStart.getDate()-7);
+  var lastWeekDates=_schedDatesForWeekStart(lastWeekStart);
   var todayDs=dateStr(new Date());
 
   /* ── week picker ── */
@@ -19009,12 +19054,26 @@ function renderSchedule(){
         var fcell=fday&&fday[b.key]&&fday[b.key].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0];
         if(fcell&&String(fcell[1]||'').trim()!=='')fillSrc=String(fcell[1]).trim();
       }
+      /* Whether LAST week has anything for this person on this crew —
+         the "copy last week" button, Carlos's ask for something smarter
+         than multiplying one shift across the whole week. A real week
+         is rarely one value repeated seven times (days off land where
+         they land), and what she actually worked last week is the best
+         guess for what she'll work again. */
+      var lwDates=lastWeekDates,hasLastWeek=false;
+      for(var li=0;li<lwDates.length&&!hasLastWeek;li++){
+        var lday=SCH.days[lwDates[li]];
+        var lcell=lday&&lday[b.key]&&lday[b.key].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0];
+        if(lcell&&String(lcell[1]||'').trim()!=='')hasLastWeek=true;
+      }
       html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:3px;">';
       html+='<div style="display:flex;align-items:center;gap:3px;min-width:0;">'
         +'<span style="font-size:11px;font-weight:600;color:'+(borrowed?'var(--gd)':'var(--text1)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"'
         +' title="'+escHtml(nm)+(borrowed?' — borrowed into this crew':'')+'">'+escHtml(nm)+'</span>'
         +(fillSrc!=null?'<button onclick="schedFillWeek(\''+b.key+'\',\''+nmJs+'\')" title="Fill the rest of '+escHtml(nm)+'\'s week with &quot;'+escHtml(fillSrc)+'&quot;"'
             +' style="flex-shrink:0;border:none;background:transparent;color:var(--gd);font-size:11px;line-height:1;cursor:pointer;padding:0 2px;">&#8676;</button>':'')
+        +(hasLastWeek?'<button onclick="schedCopyLastWeek(\''+b.key+'\',\''+nmJs+'\')" title="Copy '+escHtml(nm)+'\'s pattern from last week, day for day"'
+            +' style="flex-shrink:0;border:none;background:transparent;color:var(--navy);font-size:11px;line-height:1;cursor:pointer;padding:0 2px;">&#8635;</button>':'')
         +'<button onclick="schedRemovePerson(\''+b.key+'\',\''+nmJs+'\')" title="Remove '+escHtml(nm)+' from this crew for this week"'
             +' style="flex-shrink:0;border:none;background:transparent;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0 2px;">&times;</button>'
         +'</div>';
