@@ -987,5 +987,32 @@ module.exports = {
     win.schedApplyHpOverflow(SCH21i, ds21);
     t.eq(SCH21i.days[ds21[0]].gra[0][1], 'OFF', "Rubia being off her own shift means she isn't pulled — only someone already working can be relabeled");
     t.eq(SCH21i.days[ds21[0]].gra[1][1], 'HOUSEMAN', 'so Julia covers instead');
+
+    // ── 22) Full-weekend-off rows shade pale blue — Carlos's ask, using
+    // the exact same schedHasFullWeekend check Schedule Checks and the
+    // weekend-rotation history already use, so the highlight can never
+    // disagree with either. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH22 = { days: {} };
+    thisDates20.forEach((ds, i) => {
+      SCH22.days[ds] = { sheet: 't', occ: '100', dep: '80', tdOcc: '', sup: [
+        ['Weekend Off', i === 0 || i === 1 ? 'OFF' : '1'],
+        ['Working Weekend', '1'],
+      ] };
+    });
+    win.dlSaveSchedule(SCH22);
+    win.schedViewWeekStart = wk20(0);
+    win.renderSchedule();
+    const rowsHtml = html();
+    t.assert(/Weekend Off<\/span>/.test(rowsHtml) && /Working Weekend<\/span>/.test(rowsHtml), 'both rows render');
+    const rowHtmlFor = (name) => {
+      const nameIdx = rowsHtml.indexOf(name);
+      const rowStart = rowsHtml.lastIndexOf('<div style="display:grid', nameIdx);
+      return rowsHtml.slice(rowStart, rowStart + 200);
+    };
+    t.assert(/background:rgba\(21,101,192,/.test(rowHtmlFor('Weekend Off')),
+      "the row for someone with Sat+Sun off gets the pale-blue background");
+    t.assert(!/background:rgba\(21,101,192,/.test(rowHtmlFor('Working Weekend')),
+      'someone working the weekend gets no blue shading at all');
   }
 };
