@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.16.0"/>
+<meta name="app-version" content="7.17.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.17.0', date:'2026-08-16',
+    features:['Request Off notebook: tap calendar (Phase 2, the last piece of the Libreta port). Replaces the plain date-input picker — tap a day to add/remove it for R-OFF/Flex, or tap a first day then a last day to fill in a whole Vacation range, same interaction as Schedule Builder\'s own capture calendar. Found and fixed a real bug while testing this live: a day picked under one Request type stayed highlighted after switching to another, looking like a confirmed range anchor, but the next tap silently wiped it instead of extending a range from it — switching type now always starts day-picking fresh.']
+  },
   {
     v:'7.16.0', date:'2026-08-16',
     features:['Request Off notebook: capture-time conflict alerts (Phase 3). While filling the form, a red "Coverage conflict" alert appears live if the person being logged is one side of a cover chain (the same Marroquin/Gabriela Cuevas/Sandra S, Sarahi/Andrea, Victoriano Ch/Jorge Gonzalez relationships Auto-fill already uses) and the other side already has that day logged — Save itself pauses on a plain yes/no confirm naming who the conflict is with, rather than silently letting both sides of a cover pair end up off the same day. A softer amber warning (never blocking) also shows when 2+ people from the same crew already have that day logged. Also fixed a real bug this surfaced: switching Request type used to silently drop whichever employee was already picked — selection now survives it.']
@@ -20043,33 +20047,105 @@ function rnRefreshPickedDays(){
 }
 function rnRemovePickedDay(ds){
   rnPickedDates=rnPickedDates.filter(function(d){return d!==ds;});
+  if(rnRangeAnchor===ds)rnRangeAnchor=null;
   rnRefreshPickedDays();
+  rnRenderCal();
   rnRefreshAlerts();
 }
-function rnAddDay(){
-  var v=(document.getElementById('rnOneDay')||{}).value;
-  if(!v)return;
-  if(rnPickedDates.indexOf(v)===-1)rnPickedDates.push(v);
-  rnRefreshPickedDays();
-  rnRefreshAlerts();
-}
-function rnAddRange(){
-  var s=(document.getElementById('rnRangeStart')||{}).value;
-  var e=(document.getElementById('rnRangeEnd')||{}).value;
-  if(!s||!e){showToast('Pick a start and end date first.');return;}
-  var d=parseLocalDate(s), end=parseLocalDate(e);
-  if(d>end){showToast('The start date has to come before the end date.');return;}
-  var guard=0;
-  while(d<=end&&guard++<400){
-    var ds=dateStr(d);
-    if(rnPickedDates.indexOf(ds)===-1)rnPickedDates.push(ds);
-    d.setDate(d.getDate()+1);
+/* ── tap calendar (Libreta Phase 2) ── Replaces the plain date-input +
+   "Add day"/"Add range" flow with the same tap-a-day interaction
+   Schedule Builder's own capture calendar uses. R-OFF/Flex: each tap
+   toggles that day in/out of the picked set — pick as many as needed.
+   Vacation: the first tap sets the range anchor; the second tap fills
+   in every day between the two (inclusive, regardless of which one was
+   tapped first); tapping a third time starts a new range from scratch. */
+var rnCalYear=null, rnCalMonth=null, rnRangeAnchor=null;
+function rnCalInit(){
+  if(rnCalYear==null){
+    var d=new Date();
+    rnCalYear=d.getFullYear(); rnCalMonth=d.getMonth();
   }
+}
+function rnCalNav(delta){
+  rnCalInit();
+  var d=new Date(rnCalYear,rnCalMonth+delta,1);
+  rnCalYear=d.getFullYear(); rnCalMonth=d.getMonth();
+  rnRenderCal();
+}
+function rnCalTap(ds){
+  if(rnSelectedType==='vac'){
+    if(!rnRangeAnchor){
+      rnRangeAnchor=ds;
+      rnPickedDates=[ds];
+    } else {
+      var a=parseLocalDate(rnRangeAnchor), b=parseLocalDate(ds);
+      var start=a<=b?a:b, end=a<=b?b:a;
+      var out=[],d=new Date(start),guard=0;
+      while(d<=end&&guard++<400){ out.push(dateStr(d)); d.setDate(d.getDate()+1); }
+      rnPickedDates=out;
+      rnRangeAnchor=null;
+    }
+  } else {
+    var idx=rnPickedDates.indexOf(ds);
+    if(idx===-1)rnPickedDates.push(ds); else rnPickedDates.splice(idx,1);
+  }
+  rnRenderCal();
   rnRefreshPickedDays();
   rnRefreshAlerts();
+}
+function rnCalHtml(){
+  rnCalInit();
+  var first=new Date(rnCalYear,rnCalMonth,1);
+  var startOffset=(first.getDay()+1)%7;   // week starts Saturday, matching the Schedule elsewhere in this app
+  var daysInMonth=new Date(rnCalYear,rnCalMonth+1,0).getDate();
+  var todayDs=dateStr(new Date());
+  var html='<div style="border:1px solid var(--border);border-radius:10px;padding:10px;">';
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+    +'<button type="button" onclick="rnCalNav(-1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:2px 10px;">&lsaquo;</button>'
+    +'<div style="font-size:12px;font-weight:800;color:var(--text1);">'+MONTH_NAMES[rnCalMonth]+' '+rnCalYear+'</div>'
+    +'<button type="button" onclick="rnCalNav(1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:2px 10px;">&rsaquo;</button>'
+    +'</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:3px;">';
+  ['Sat','Sun','Mon','Tue','Wed','Thu','Fri'].forEach(function(d){
+    html+='<div style="text-align:center;font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;">'+d+'</div>';
+  });
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">';
+  for(var i=0;i<startOffset;i++)html+='<div></div>';
+  for(var day=1;day<=daysInMonth;day++){
+    var dObj=new Date(rnCalYear,rnCalMonth,day);
+    var ds=dateStr(dObj);
+    var picked=rnPickedDates.indexOf(ds)!==-1;
+    var isAnchor=(rnSelectedType==='vac'&&rnRangeAnchor===ds);
+    var isToday=(ds===todayDs);
+    var bg=picked?'var(--navy)':'transparent';
+    var fg=picked?'#fff':(isToday?'var(--gd)':'var(--text1)');
+    var border=isAnchor?'1.5px solid var(--gold)':'1px solid transparent';
+    html+='<div onclick="rnCalTap(\''+ds+'\')" style="text-align:center;padding:6px 0;border-radius:6px;font-size:11px;font-weight:'+(picked||isToday?'800':'600')+';cursor:pointer;background:'+bg+';color:'+fg+';border:'+border+';">'+day+'</div>';
+  }
+  html+='</div>';
+  if(rnSelectedType==='vac')html+='<div style="font-size:9.5px;color:var(--text3);margin-top:6px;">Vacation: tap the first day, then the last day — the whole range fills in.</div>';
+  html+='</div>';
+  return html;
+}
+function rnRenderCal(){
+  var el=document.getElementById('rnCalWrap');
+  if(el)el.innerHTML=rnCalHtml();
 }
 function rnSetType(t){
+  if(t===rnSelectedType)return;
   rnSelectedType=t;
+  rnRangeAnchor=null;
+  /* R-OFF/Flex's multi-day set and Vacation's range mean different
+     things — carrying picked days across a type switch produced a real
+     bug found live: a day picked under R-OFF stayed highlighted after
+     switching to Vacation, looking like it was already the range
+     anchor, but the next tap silently wiped it instead of completing a
+     range from it (rnRangeAnchor had just been cleared above, so that
+     tap started a brand-new anchor). Clearing here makes every type
+     switch start day-picking fresh, so there's nothing ambiguous left
+     on screen to misread. */
+  rnPickedDates=[];
   renderReqNotebook();
 }
 function rnEmpFilter(){
@@ -20169,14 +20245,7 @@ function rnRefreshAlerts(){
 function rnAddRequest(){
   var name=rnSelName, crewKey=rnSelCrewKey, crewLabel=rnSelCrewLabel;
   if(!name){showToast('Search and pick an employee first.');return;}
-  /* Carlos's ask: picking a date and going straight to Save shouldn't
-     require the separate "Add day"/"Add range" tap first — whatever's
-     still sitting in the date field(s), unconfirmed, is picked up here
-     the same as if he had clicked Add. */
-  if(!rnPickedDates.length){
-    if(rnSelectedType==='vac')rnAddRange(); else rnAddDay();
-  }
-  if(!rnPickedDates.length){showToast('Add at least one day.');return;}
+  if(!rnPickedDates.length){showToast('Tap at least one day on the calendar.');return;}
   var dates=rnPickedDates.slice().sort();
   var conflicts=rnCascadeConflicts(name,dates);
   if(conflicts.length){
@@ -20198,6 +20267,7 @@ function rnAddRequest(){
   list.unshift(entry);
   saveReqNotebook(list);
   rnPickedDates=[];
+  rnRangeAnchor=null;
   rnSelName=''; rnSelCrewKey=''; rnSelCrewLabel='';
   showToast(msg);
   renderReqNotebook();
@@ -20249,19 +20319,8 @@ function renderReqNotebook(){
   });
   html+='</div>';
 
-  html+='<label style="font-size:10.5px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px;">Day(s)</label>';
-  if(rnSelectedType==='vac'){
-    html+='<div style="display:flex;gap:6px;margin-bottom:6px;">'
-      +'<input id="rnRangeStart" type="date" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">'
-      +'<input id="rnRangeEnd" type="date" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">'
-      +'<button type="button" class="btn btn-ghost btn-sm" onclick="rnAddRange()">Add range</button>'
-      +'</div>';
-  } else {
-    html+='<div style="display:flex;gap:6px;margin-bottom:6px;">'
-      +'<input id="rnOneDay" type="date" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">'
-      +'<button type="button" class="btn btn-ghost btn-sm" onclick="rnAddDay()">Add day</button>'
-      +'</div>';
-  }
+  html+='<label style="font-size:10.5px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px;">Day(s) &mdash; tap to select</label>';
+  html+='<div id="rnCalWrap" style="margin-bottom:8px;">'+rnCalHtml()+'</div>';
   html+='<div id="rnPickedDays" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;">'+rnPickedDaysHtml()+'</div>';
   html+='<div id="rnCaptureAlerts">'+rnAlertsHtml()+'</div>';
   html+='<button class="btn btn-navy" style="width:100%;" onclick="rnAddRequest()">Save request</button>';

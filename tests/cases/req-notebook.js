@@ -106,28 +106,44 @@ module.exports = {
       "the hand-edited day is left exactly as Carlos set it, not reverted");
     t.assert(!win.loadReqNotebook().some((r) => r.id === rolandoEntry.id), 'the entry itself is gone from the notebook');
 
-    // ── Save request works straight off the date field, without a separate Add day/Add range tap first ──
+    // ── Tap calendar (Libreta Phase 2) — a single tap toggles an R-OFF/Flex day straight in, no separate Add step ──
     win.rnPickedDates = [];
     win.rnSelectedType = 'roff';
     win.renderReqNotebook();
     selectRn(win, 'Karla Varela', 'gra', 'AM Room Attendant');
-    doc.getElementById('rnOneDay').value = dates[4];
+    win.rnCalTap(dates[4]);
+    t.assert(win.rnPickedDates.includes(dates[4]), 'one tap adds the day to the picked set');
+    win.rnCalTap(dates[4]);
+    t.assert(!win.rnPickedDates.includes(dates[4]), 'tapping the same day again removes it — a toggle, not a one-way add');
+    win.rnCalTap(dates[4]);
     win.rnAddRequest();
     let list2 = win.loadReqNotebook();
-    t.assert(list2.some((r) => r.name === 'Karla Varela' && r.dates.includes(dates[4])),
-      'Save request alone picks up whatever is still sitting in the date field, same as clicking Add day first would have');
+    t.assert(list2.some((r) => r.name === 'Karla Varela' && r.dates.includes(dates[4])), 'the tapped day is saved');
 
+    // Vacation: first tap sets the range anchor, second tap fills the whole range in between (inclusive).
     win.rnPickedDates = [];
     win.rnSelectedType = 'vac';
     win.renderReqNotebook();
     selectRn(win, 'Karla Varela', 'gra', 'AM Room Attendant');
-    doc.getElementById('rnRangeStart').value = dates[0];
-    doc.getElementById('rnRangeEnd').value = dates[2];
+    win.rnCalTap(dates[0]);
+    t.eq(win.rnPickedDates.join(','), dates[0], 'the first tap alone just picks that one day, awaiting the second tap');
+    t.eq(win.rnRangeAnchor, dates[0]);
+    win.rnCalTap(dates[2]);
+    t.eq(win.rnPickedDates.join(','), [dates[0], dates[1], dates[2]].join(','), 'the second tap fills in every day between the two, inclusive');
+    t.eq(win.rnRangeAnchor, null, 'the anchor clears once the range is confirmed, ready for a fresh range next time');
     win.rnAddRequest();
     list2 = win.loadReqNotebook();
     const vacEntry = list2.find((r) => r.type === 'vac' && r.dates.length === 3);
-    t.assert(!!vacEntry, 'the same shortcut expands an unconfirmed Start/End range for Vacation, not just a single day');
-    t.eq(vacEntry.dates.join(','), [dates[0], dates[1], dates[2]].join(','), 'the whole range lands, day by day');
+    t.assert(!!vacEntry, 'the whole tapped range is saved as one Vacation entry');
+    t.eq(vacEntry.dates.join(','), [dates[0], dates[1], dates[2]].join(','), 'day by day, not just the two endpoints');
+
+    // Tapping the LATER day first still produces the same range, in order.
+    win.rnPickedDates = [];
+    win.rnSelectedType = 'vac';
+    win.renderReqNotebook();
+    win.rnCalTap(dates[2]);
+    win.rnCalTap(dates[0]);
+    t.eq(win.rnPickedDates.join(','), [dates[0], dates[1], dates[2]].join(','), 'tap order does not matter — the range always comes out chronological');
 
     // ── Selecting an employee survives a Request-type toggle (the bug that motivated promoting selection to JS state) ──
     win.rnPickedDates = [];
@@ -138,6 +154,20 @@ module.exports = {
     t.eq(win.rnSelName, 'Rolando', 'the employee pick survives a type toggle instead of being silently wiped');
     t.assert(new RegExp('value="Rolando \\(Supervisors\\)"').test(win.document.getElementById('reqNotebookContent').innerHTML),
       'and the search box itself shows the still-selected employee after the re-render');
+    win.rnSetType('roff');
+
+    // ── A day already picked under one type does not carry into another —
+    // found live: switching to Vacation after picking an R-OFF day left it
+    // highlighted on screen looking like a confirmed range anchor, but the
+    // next tap silently wiped it instead of completing a range from it. ──
+    win.rnPickedDates = [];
+    win.rnSelectedType = 'roff';
+    win.renderReqNotebook();
+    win.rnCalTap(dates[0]);
+    t.assert(win.rnPickedDates.includes(dates[0]), 'a day picked under R-OFF is in the set');
+    win.rnSetType('vac');
+    t.eq(win.rnPickedDates.length, 0, 'switching type clears the picked-days set — nothing ambiguous carries over');
+    t.eq(win.rnRangeAnchor, null);
     win.rnSetType('roff');
 
     // ── Capture-time cover-chain conflict (Phase 3) — reuses the exact
