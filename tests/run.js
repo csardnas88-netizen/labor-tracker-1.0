@@ -65,6 +65,7 @@ const cases = [
   require('./cases/occupancy-forecast'),
   require('./cases/daily-lineup'),
   require('./cases/schedule-page'),
+  require('./cases/req-notebook'),
   require('./cases/toast-entities'),
 ];
 

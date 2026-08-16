@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.12.0"/>
+<meta name="app-version" content="7.13.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1236,6 +1236,9 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   <div class="nav-item" id="nav-schedule" onclick="showPage('schedule')">
     <span class="nav-icon">&#128197;</span> Schedule
   </div>
+  <div class="nav-item" id="nav-reqnotebook" onclick="showPage('reqnotebook')">
+    <span class="nav-icon">&#128221;</span> Request Off
+  </div>
   <div class="nav-item" id="nav-dailylineup" onclick="showPage('dailylineup')">
     <span class="nav-icon">&#128203;</span> Daily Lineup
   </div>
@@ -1538,6 +1541,16 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div class="page-sub">One week at a time, straight from the Schedule Draft</div>
       </div>
       <div id="scheduleContent"></div>
+    </div>
+
+    <!-- ══ REQUEST OFF NOTEBOOK ══ -->
+    <div id="page-reqnotebook" style="display:none;">
+      <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
+      <div class="page-header">
+        <div class="page-title">&#128221; Request Off</div>
+        <div class="page-sub">R-OFF requests, logged once and written straight to the Schedule</div>
+      </div>
+      <div id="reqNotebookContent"></div>
     </div>
 
     <div id="page-dailylineup" style="display:none;">
@@ -4312,6 +4325,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.13.0', date:'2026-08-16',
+    features:['Added "Request Off" — a shared notebook for R-OFF/Flex/Vacation requests, Phase 1 of bringing Schedule Builder\'s Libreta into this app. Search an employee (pulled from the Schedule\'s own current roster), pick a type, add the day(s), save — R-OFF writes straight to the Schedule cell immediately (no separate pending/grant step yet); Flex and Vacation are logged in the notebook but not written to the grid, since there\'s no cell value for either yet. Deleting an entry only clears a cell still marked R-OFF, never a day already hand-edited since. Not yet included: the tap-calendar picker, capture-time conflict alerts, and realtime multi-device sync Schedule Builder\'s own notebook has — sequenced in as their own steps.']
+  },
   {
     v:'7.12.0', date:'2026-08-16',
     features:['Added a "prefers to work weekends" mark for anyone on a crew Auto-fill covers — a sun icon next to their name in the crew card, matching Schedule Builder\'s own gear-menu weekendPref. Once marked, Auto-fill never hands that person a full Saturday+Sunday off, overriding its own fairness rotation for them specifically; everyone else\'s rotation is unaffected. Survives a re-upload the same way the Schedule Checks exemption mark does.']
@@ -9750,7 +9767,7 @@ function toggleSidebarSmart(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','dailylineup','assignments','tutorial','settings'];
+var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','reqnotebook','dailylineup','assignments','tutorial','settings'];
 var _pinGateBypass=false;
 var pendingGatePage=null;
 var PIN_GATED_PAGES=['labormodel','pnl','settings'];
@@ -9781,6 +9798,7 @@ function showPage(page){
   if(page==='occupancy')renderOccupancy();
   if(page==='dnds')renderDnds();
   if(page==='schedule')renderSchedule();
+  if(page==='reqnotebook')renderReqNotebook();
   if(page==='dailylineup')renderDailyLineup();
   if(page==='labormodel')renderLaborModel();
   if(page==='pnl'){renderPnl();renderPaychexRecon();}
@@ -19748,6 +19766,267 @@ function renderSchedule(){
   html+='<span>Edits save and sync as you make them.</span>';
   html+='<button onclick="document.getElementById(\'schedFileInput\').click()" style="padding:3px 10px;border:1px solid var(--border);border-radius:99px;background:#fff;font-size:10px;font-weight:700;color:var(--text2);cursor:pointer;">Re-upload workbook</button>';
   html+='</div>';
+
+  el.innerHTML=html;
+}
+
+/* ══════════════════ Request Off notebook ══════════════════
+   Phase 1 of Carlos's ask to bring Schedule Builder's shared notebook
+   into labor-tracker: capture a request and see the list. Deliberately
+   NOT the tap-calendar/realtime-sync/conflict-alert version Schedule
+   Builder eventually grew into over 5 phases — that's a much bigger
+   build, sequenced in on request. This uses plain date inputs instead
+   of a custom calendar grid, and writes straight to the Schedule the
+   moment it's saved rather than sitting as "pending" first (matching
+   what Carlos actually asked for here, not the newer 2-step pending/
+   grant flow Schedule Builder has today).
+
+   Employees come from the Schedule's own most-recently-loaded roster
+   (schedRosterForDates), the same real source of truth every other
+   Schedule feature already trusts — not Schedule Builder's own
+   (already proven stale) roster.
+
+   Only R-OFF writes through to a Schedule cell — it's the only value
+   in SCHED_VALUES that means "day off, don't touch." Flex and Vacation
+   are tracked in the notebook for Carlos's own record but have no
+   matching cell value yet, so they're logged, not written. */
+function loadReqNotebook(){ try{var s=localStorage.getItem('req_notebook');if(s)return JSON.parse(s);}catch(e){} return []; }
+function saveReqNotebook(list){
+  safeSetItem('req_notebook',JSON.stringify(list));
+  try{supaPut('req_notebook',list);}catch(e){}
+  (list||[]).forEach(function(r){ if(r&&r.id){ try{supaPut('reqnb_'+r.id,r);}catch(e){} } });
+}
+function rnTypeLabel(t){ return t==='vac'?'Vacation':(t==='flex'?'Flex':'R-OFF'); }
+function reqEmpOptions(){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days)return [];
+  var refStart=schedLatestLoadedWeekStart(SCH);
+  if(!refStart)return [];
+  var roster=schedRosterForDates(SCH,_schedDatesForWeekStart(refStart));
+  var out=[],seen={};
+  SCHED_BLOCKS.forEach(function(b){
+    (roster[b.key]||[]).forEach(function(n){
+      var k=dlNorm(n); if(seen[k])return; seen[k]=1;
+      out.push({name:n,crewKey:b.key,crewLabel:b.label});
+    });
+  });
+  return out;
+}
+/* Writes 'R-OFF' onto this person's cell for every date that's actually
+   part of a built/loaded week. A date the Schedule hasn't reached yet
+   (a future week not built, or a past one never uploaded) is reported
+   back as missing rather than silently skipped — the notebook entry
+   still gets saved either way, so nothing typed is lost, but the list
+   below flags exactly which days still need the Schedule caught up to
+   them. */
+function reqWriteToSchedule(name,crewKey,dates){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days)return {written:[],missing:dates.slice()};
+  var written=[],missing=[];
+  dates.forEach(function(ds){
+    var day=SCH.days[ds];
+    var row=day&&(day[crewKey]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
+    if(!row){ missing.push(ds); return; }
+    row[1]='R-OFF';
+    written.push(ds);
+  });
+  if(written.length){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
+  return {written:written,missing:missing};
+}
+/* Undoes a request's write-through, but only cells that still say
+   R-OFF — if Carlos already changed one by hand since, deleting the
+   notebook entry must not silently erase that edit. Same rule Schedule
+   Builder's own removeRequest already uses. */
+function reqClearFromSchedule(name,crewKey,dates){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days||!dates||!dates.length)return;
+  var touched=false;
+  dates.forEach(function(ds){
+    var day=SCH.days[ds];
+    var row=day&&(day[crewKey]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
+    if(row&&row[1]==='R-OFF'){ row[1]=''; touched=true; }
+  });
+  if(touched){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
+}
+
+var rnPickedDates=[];
+var rnSelectedType='roff';
+function rnPickedDaysHtml(){
+  if(!rnPickedDates.length)return '<span style="font-size:11px;color:var(--text3);">No days added yet</span>';
+  return rnPickedDates.slice().sort().map(function(ds){
+    return '<span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;background:var(--s3);color:var(--text1);display:inline-flex;align-items:center;gap:5px;">'+ds
+      +'<span onclick="rnRemovePickedDay(\''+ds+'\')" style="cursor:pointer;color:var(--text3);">&times;</span></span>';
+  }).join('');
+}
+function rnRefreshPickedDays(){
+  var el=document.getElementById('rnPickedDays');
+  if(el)el.innerHTML=rnPickedDaysHtml();
+}
+function rnRemovePickedDay(ds){
+  rnPickedDates=rnPickedDates.filter(function(d){return d!==ds;});
+  rnRefreshPickedDays();
+}
+function rnAddDay(){
+  var v=(document.getElementById('rnOneDay')||{}).value;
+  if(!v)return;
+  if(rnPickedDates.indexOf(v)===-1)rnPickedDates.push(v);
+  rnRefreshPickedDays();
+}
+function rnAddRange(){
+  var s=(document.getElementById('rnRangeStart')||{}).value;
+  var e=(document.getElementById('rnRangeEnd')||{}).value;
+  if(!s||!e){showToast('Pick a start and end date first.');return;}
+  var d=parseLocalDate(s), end=parseLocalDate(e);
+  if(d>end){showToast('The start date has to come before the end date.');return;}
+  var guard=0;
+  while(d<=end&&guard++<400){
+    var ds=dateStr(d);
+    if(rnPickedDates.indexOf(ds)===-1)rnPickedDates.push(ds);
+    d.setDate(d.getDate()+1);
+  }
+  rnRefreshPickedDays();
+}
+function rnSetType(t){
+  rnSelectedType=t;
+  renderReqNotebook();
+}
+function rnEmpFilter(){
+  var h=document.getElementById('rnEmp'); if(h)h.value='';
+  rnEmpRenderList(document.getElementById('rnEmpSearch').value);
+}
+function rnEmpOpenList(){ rnEmpRenderList(document.getElementById('rnEmpSearch').value); }
+function rnEmpCloseList(){ var l=document.getElementById('rnEmpList'); if(l)l.style.display='none'; }
+function rnEmpRenderList(query){
+  var list=document.getElementById('rnEmpList'); if(!list)return;
+  function strip(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();}
+  var all=window._rnEmpAll||[];
+  var q=strip(query);
+  var matches=all.filter(function(e){return !q||strip(e.name).indexOf(q)!==-1;});
+  list.innerHTML=matches.length
+    ? matches.map(function(e){
+        return '<div data-name="'+escHtml(e.name)+'" data-crew="'+escHtml(e.crewKey)+'" data-crewlabel="'+escHtml(e.crewLabel)+'" onmousedown="selectRnEmpOption(this)" style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);">'+escHtml(e.name)+' <span style="color:var(--text3);">('+escHtml(e.crewLabel)+')</span></div>';
+      }).join('')
+    : '<div style="padding:9px 12px;font-size:13px;color:var(--text3);">No matches</div>';
+  list.style.display='block';
+}
+function selectRnEmpOption(el){
+  var name=el.getAttribute('data-name'),crew=el.getAttribute('data-crew'),crewLabel=el.getAttribute('data-crewlabel');
+  document.getElementById('rnEmp').value=name;
+  document.getElementById('rnEmpCrew').value=crew;
+  document.getElementById('rnEmpCrewLabel').value=crewLabel;
+  document.getElementById('rnEmpSearch').value=name+' ('+crewLabel+')';
+  rnEmpCloseList();
+}
+function rnAddRequest(){
+  var name=(document.getElementById('rnEmp')||{}).value||'';
+  var crewKey=(document.getElementById('rnEmpCrew')||{}).value||'';
+  var crewLabel=(document.getElementById('rnEmpCrewLabel')||{}).value||'';
+  if(!name){showToast('Search and pick an employee first.');return;}
+  if(!rnPickedDates.length){showToast('Add at least one day.');return;}
+  var dates=rnPickedDates.slice().sort();
+  var entry={id:Date.now(),name:name,crewKey:crewKey,crewLabel:crewLabel,type:rnSelectedType,dates:dates,capturedAt:new Date().toISOString()};
+  var msg='&#10003; Request saved';
+  if(rnSelectedType==='roff'){
+    var res=reqWriteToSchedule(name,crewKey,dates);
+    entry.writtenDates=res.written;
+    entry.missingDates=res.missing;
+    if(res.written.length)msg+=' — R-OFF written to '+res.written.length+' day'+(res.written.length===1?'':'s')+' on the Schedule';
+    if(res.missing.length)msg+=(res.written.length?', ':' — ')+res.missing.length+' day'+(res.missing.length===1?'':'s')+' not in a built week yet';
+  } else {
+    msg+=' — logged as '+rnTypeLabel(rnSelectedType)+' (not written to the Schedule grid; only R-OFF is)';
+  }
+  var list=loadReqNotebook();
+  list.unshift(entry);
+  saveReqNotebook(list);
+  rnPickedDates=[];
+  showToast(msg);
+  renderReqNotebook();
+}
+function rnDeleteRequest(id){
+  var list=loadReqNotebook();
+  var entry=list.filter(function(r){return r.id===id;})[0];
+  if(!entry)return;
+  if(!confirm('Delete this request?\n\n'+entry.name+' · '+rnTypeLabel(entry.type)+' · '+(entry.dates||[]).join(', ')+'\n\nThis can\'t be undone.'))return;
+  if(entry.type==='roff'&&(entry.writtenDates||[]).length)reqClearFromSchedule(entry.name,entry.crewKey,entry.writtenDates);
+  list=list.filter(function(r){return r.id!==id;});
+  saveReqNotebook(list);
+  showToast('Request removed');
+  renderReqNotebook();
+}
+function renderReqNotebook(){
+  var el=document.getElementById('reqNotebookContent');
+  if(!el)return;
+  var empOptions=reqEmpOptions();
+  window._rnEmpAll=empOptions;
+  var html='';
+  if(!empOptions.length){
+    html+='<div class="card" style="padding:20px;text-align:center;">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:5px;">No Schedule loaded yet</div>'
+      +'<div style="font-size:11.5px;color:var(--text2);">Upload or build a week on the Schedule page first — Request Off picks employees from that same real roster.</div>'
+      +'</div>';
+    el.innerHTML=html; return;
+  }
+
+  html+='<div class="card" style="padding:14px;margin-bottom:12px;">';
+  html+='<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Record a request</div>';
+
+  html+='<label style="font-size:10.5px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px;">Employee</label>';
+  html+='<div style="position:relative;margin-bottom:10px;">';
+  html+='<input id="rnEmpSearch" type="text" autocomplete="off" placeholder="&#128269; Search by name…" oninput="rnEmpFilter()" onfocus="rnEmpOpenList()" onblur="setTimeout(rnEmpCloseList,150)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">';
+  html+='<input type="hidden" id="rnEmp" value="">';
+  html+='<input type="hidden" id="rnEmpCrew" value="">';
+  html+='<input type="hidden" id="rnEmpCrewLabel" value="">';
+  html+='<div id="rnEmpList" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.15);"></div>';
+  html+='</div>';
+
+  html+='<label style="font-size:10.5px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px;">Request type</label>';
+  html+='<div style="display:flex;gap:6px;margin-bottom:10px;">';
+  ['roff','flex','vac'].forEach(function(t){
+    var active=(rnSelectedType===t);
+    html+='<button type="button" onclick="rnSetType(\''+t+'\')" style="flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid '+(active?'var(--navy)':'var(--border)')+';background:'+(active?'var(--navy)':'#fff')+';color:'+(active?'#fff':'var(--text1)')+';">'+rnTypeLabel(t)+'</button>';
+  });
+  html+='</div>';
+
+  html+='<label style="font-size:10.5px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px;">Day(s)</label>';
+  if(rnSelectedType==='vac'){
+    html+='<div style="display:flex;gap:6px;margin-bottom:6px;">'
+      +'<input id="rnRangeStart" type="date" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">'
+      +'<input id="rnRangeEnd" type="date" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">'
+      +'<button type="button" class="btn btn-ghost btn-sm" onclick="rnAddRange()">Add range</button>'
+      +'</div>';
+  } else {
+    html+='<div style="display:flex;gap:6px;margin-bottom:6px;">'
+      +'<input id="rnOneDay" type="date" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;">'
+      +'<button type="button" class="btn btn-ghost btn-sm" onclick="rnAddDay()">Add day</button>'
+      +'</div>';
+  }
+  html+='<div id="rnPickedDays" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;">'+rnPickedDaysHtml()+'</div>';
+  html+='<button class="btn btn-navy" style="width:100%;" onclick="rnAddRequest()">Save request</button>';
+  html+='</div>';
+
+  var list=loadReqNotebook();
+  html+='<div class="card" style="padding:0;overflow:hidden;">';
+  html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+(list.length===1?'1 request':list.length+' requests')+'</div>';
+  html+='<div style="padding:10px 14px 12px;">';
+  if(!list.length){
+    html+='<div style="font-size:12px;color:var(--text3);text-align:center;padding:12px 0;">The notebook is empty — add the days employees requested</div>';
+  } else {
+    list.forEach(function(r){
+      html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);">';
+      html+='<div style="min-width:0;">';
+      html+='<div style="font-size:12.5px;font-weight:700;color:var(--text1);">'+escHtml(r.name)+'</div>';
+      html+='<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">'+escHtml(r.crewLabel||'')+' &middot; '+rnTypeLabel(r.type)+'</div>';
+      html+='<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+      (r.dates||[]).forEach(function(ds){
+        var missed=r.type==='roff'&&(r.missingDates||[]).indexOf(ds)!==-1;
+        html+='<span style="font-size:10px;padding:2px 7px;border-radius:99px;background:'+(missed?'var(--yellow-bg)':'var(--s3)')+';color:'+(missed?'var(--yellow)':'var(--text2)')+';" title="'+(missed?'Not in a built week yet — not written to the Schedule':'')+'">'+ds+(missed?' &#9888;':'')+'</span>';
+      });
+      html+='</div></div>';
+      html+='<button onclick="rnDeleteRequest('+r.id+')" title="Delete" style="flex-shrink:0;border:none;background:transparent;color:var(--text3);font-size:15px;cursor:pointer;padding:2px 4px;">&times;</button>';
+      html+='</div>';
+    });
+  }
+  html+='</div></div>';
 
   el.innerHTML=html;
 }
