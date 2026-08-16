@@ -1,7 +1,9 @@
-/* Request Off notebook — Phase 1 of bringing Schedule Builder's shared
-   notebook into labor-tracker: capture a request (employee + type +
-   day(s)), see the list, and have R-OFF write straight through to the
-   Schedule using its own real, currently-loaded roster. */
+/* Request Off notebook — Phases 1, 3 and 4 of bringing Schedule
+   Builder's shared notebook into labor-tracker: capture a request
+   (employee + type + day(s)), see the list, have R-OFF write straight
+   through to the Schedule using its own real, currently-loaded roster,
+   get warned about cover-chain conflicts before saving, and sync
+   across devices in realtime. */
 const { loadApp, fakeSession } = require('../_harness');
 
 function buildWeek(win, weekStart, people) {
@@ -19,8 +21,17 @@ function buildWeek(win, weekStart, people) {
   return dates;
 }
 
+// Selecting an employee is now JS state (rnSelName/rnSelCrewKey/
+// rnSelCrewLabel), not hidden DOM inputs — a type toggle re-renders the
+// whole form, which used to wipe a hidden input's value out from under it.
+function selectRn(win, name, crewKey, crewLabel) {
+  win.rnSelName = name;
+  win.rnSelCrewKey = crewKey;
+  win.rnSelCrewLabel = crewLabel;
+}
+
 module.exports = {
-  name: "Request Off notebook: employees come from the Schedule's real roster, R-OFF writes through, other types don't, and deleting undoes only what it wrote",
+  name: "Request Off notebook: real roster, R-OFF write-through, capture-time cover-chain conflict alerts, and realtime multi-device sync",
   async run(t) {
     const { win } = await loadApp({ seed: Object.assign(fakeSession(), { hk_rooms_migrated_v2: '1' }) });
     await new Promise((r) => setTimeout(r, 60));
@@ -42,11 +53,8 @@ module.exports = {
     // ── R-OFF writes straight to the Schedule cell for each picked day ──
     win.rnPickedDates = [dates[0], dates[2]];
     const doc = win.document;
-    doc.getElementById('rnEmpSearch') || win.renderReqNotebook(); // ensure form markup exists
     win.renderReqNotebook();
-    doc.getElementById('rnEmp').value = 'Rolando';
-    doc.getElementById('rnEmpCrew').value = 'sup';
-    doc.getElementById('rnEmpCrewLabel').value = 'Supervisors';
+    selectRn(win, 'Rolando', 'sup', 'Supervisors');
     win.rnAddRequest();
 
     const afterRoff = win.dlLoadSchedule();
@@ -62,9 +70,7 @@ module.exports = {
 
     // ── A day outside any loaded week is reported as missing, not silently dropped ──
     win.rnPickedDates = ['2099-01-01'];
-    doc.getElementById('rnEmp').value = 'Karla Varela';
-    doc.getElementById('rnEmpCrew').value = 'gra';
-    doc.getElementById('rnEmpCrewLabel').value = 'AM Room Attendant';
+    selectRn(win, 'Karla Varela', 'gra', 'AM Room Attendant');
     win.rnAddRequest();
     list = win.loadReqNotebook();
     const karlaEntry = list.find((r) => r.name === 'Karla Varela');
@@ -74,9 +80,7 @@ module.exports = {
     // ── Flex/Vacation are logged but never touch the Schedule grid — there's no cell value for them ──
     win.rnPickedDates = [dates[3]];
     win.rnSelectedType = 'vac';
-    doc.getElementById('rnEmp').value = 'Jose B';
-    doc.getElementById('rnEmpCrew').value = 'sup';
-    doc.getElementById('rnEmpCrewLabel').value = 'Supervisors';
+    selectRn(win, 'Jose B', 'sup', 'Supervisors');
     win.rnAddRequest();
     const afterVac = win.dlLoadSchedule();
     t.eq(afterVac.days[dates[3]].sup.filter((p) => p[0] === 'Jose B')[0][1], '1',
@@ -106,9 +110,7 @@ module.exports = {
     win.rnPickedDates = [];
     win.rnSelectedType = 'roff';
     win.renderReqNotebook();
-    doc.getElementById('rnEmp').value = 'Karla Varela';
-    doc.getElementById('rnEmpCrew').value = 'gra';
-    doc.getElementById('rnEmpCrewLabel').value = 'AM Room Attendant';
+    selectRn(win, 'Karla Varela', 'gra', 'AM Room Attendant');
     doc.getElementById('rnOneDay').value = dates[4];
     win.rnAddRequest();
     let list2 = win.loadReqNotebook();
@@ -118,9 +120,7 @@ module.exports = {
     win.rnPickedDates = [];
     win.rnSelectedType = 'vac';
     win.renderReqNotebook();
-    doc.getElementById('rnEmp').value = 'Karla Varela';
-    doc.getElementById('rnEmpCrew').value = 'gra';
-    doc.getElementById('rnEmpCrewLabel').value = 'AM Room Attendant';
+    selectRn(win, 'Karla Varela', 'gra', 'AM Room Attendant');
     doc.getElementById('rnRangeStart').value = dates[0];
     doc.getElementById('rnRangeEnd').value = dates[2];
     win.rnAddRequest();
@@ -128,6 +128,75 @@ module.exports = {
     const vacEntry = list2.find((r) => r.type === 'vac' && r.dates.length === 3);
     t.assert(!!vacEntry, 'the same shortcut expands an unconfirmed Start/End range for Vacation, not just a single day');
     t.eq(vacEntry.dates.join(','), [dates[0], dates[1], dates[2]].join(','), 'the whole range lands, day by day');
+
+    // ── Selecting an employee survives a Request-type toggle (the bug that motivated promoting selection to JS state) ──
+    win.rnPickedDates = [];
+    win.rnSelectedType = 'roff';
+    win.renderReqNotebook();
+    selectRn(win, 'Rolando', 'sup', 'Supervisors');
+    win.rnSetType('vac'); // re-renders the whole form
+    t.eq(win.rnSelName, 'Rolando', 'the employee pick survives a type toggle instead of being silently wiped');
+    t.assert(new RegExp('value="Rolando \\(Supervisors\\)"').test(win.document.getElementById('reqNotebookContent').innerHTML),
+      'and the search box itself shows the still-selected employee after the re-render');
+    win.rnSetType('roff');
+
+    // ── Capture-time cover-chain conflict (Phase 3) — reuses the exact
+    // SCHED_COVER_CHAINS Auto-fill's own cover chains use, so it can never
+    // disagree with what Auto-fill would actually do. ──
+    win.rnPickedDates = [];
+    win.renderReqNotebook();
+    // Gabriela Cuevas already has this date logged as her R-OFF — she's the
+    // cover for Marroquin's Lobby AM slot, so logging Marroquin off the same
+    // day is exactly the conflict this alert exists for.
+    const gcEntry = { id: 5001, name: 'Gabriela Cuevas', crewKey: 'gra', crewLabel: 'AM Room Attendant', type: 'roff', dates: [dates[0]], writtenDates: [], missingDates: [] };
+    win.saveReqNotebook([gcEntry]);
+
+    selectRn(win, 'Marroquin', 'lobby', 'AM Lobby');
+    win.rnPickedDates = [dates[0]];
+    win.rnRefreshAlerts();
+    const alertsHtml = win.document.getElementById('rnCaptureAlerts').innerHTML;
+    t.assert(/Coverage conflict/.test(alertsHtml) && /Gabriela Cuevas/.test(alertsHtml),
+      'the live alert box shows the cascade conflict before Save is even clicked');
+
+    const conflicts = win.rnCascadeConflicts('Marroquin', [dates[0]]);
+    t.eq(conflicts.length, 1, 'rnCascadeConflicts finds exactly the one hit');
+    t.eq(conflicts[0].otherName, 'Gabriela Cuevas');
+
+    // Save blocks on a plain confirm() unless it's answered yes — declining leaves nothing saved.
+    let confirmMsg = '';
+    win.confirm = (m) => { confirmMsg = m; return false; };
+    const beforeCount = win.loadReqNotebook().length;
+    win.rnAddRequest();
+    t.eq(win.loadReqNotebook().length, beforeCount, 'declining the conflict confirm saves nothing');
+    t.assert(/Gabriela Cuevas/.test(confirmMsg), 'the confirm dialog itself names who the conflict is with');
+
+    // Confirming yes goes ahead and saves — Carlos's call, not a hard block.
+    win.confirm = () => true;
+    win.rnAddRequest();
+    t.assert(win.loadReqNotebook().some((r) => r.name === 'Marroquin'), 'confirming yes saves the request despite the conflict');
+    win.confirm = confirmFn;
+
+    // No conflict at all when the two people covering each other are NOT both off the same day.
+    win.rnPickedDates = [];
+    win.renderReqNotebook();
+    selectRn(win, 'Marroquin', 'lobby', 'AM Lobby');
+    t.eq(win.rnCascadeConflicts('Marroquin', [dates[1]]).length, 0,
+      'a day Gabriela Cuevas has nothing logged for is not flagged at all');
+
+    // ── Small-team early warning — informational, never blocks Save ──
+    win.saveReqNotebook([
+      { id: 5002, name: 'Isabel D', crewKey: 'laundry', crewLabel: 'Laundry', type: 'roff', dates: [dates[5]], writtenDates: [], missingDates: [] },
+      { id: 5003, name: 'Olga A', crewKey: 'laundry', crewLabel: 'Laundry', type: 'roff', dates: [dates[5]], writtenDates: [], missingDates: [] },
+    ]);
+    const early = win.rnEarlyWarnings('A Third Laundry Person', 'laundry', [dates[5]]);
+    t.eq(early.length, 1, 'two other people from the same crew already off that day triggers the warning');
+    t.eq(early[0].count, 3, 'the count includes the person being logged, not just the other two');
+    win.confirm = () => { throw new Error('early warning must never block Save with a confirm()'); };
+    selectRn(win, 'A Third Laundry Person', 'laundry', 'Laundry');
+    win.rnPickedDates = [dates[6]]; // a day nobody else has logged — isolates this from the confirm-throwing setup above
+    win.rnAddRequest();
+    win.confirm = confirmFn;
+    t.assert(win.loadReqNotebook().some((r) => r.name === 'A Third Laundry Person'), 'and the early warning alone never stops Save from going through');
 
     // ── Realtime multi-device sync (Phase 4) — a remote reqnb_<id> row folds into the local list ──
     win.localStorage.removeItem('req_notebook');

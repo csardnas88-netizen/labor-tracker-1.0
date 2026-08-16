@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.15.0"/>
+<meta name="app-version" content="7.16.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.16.0', date:'2026-08-16',
+    features:['Request Off notebook: capture-time conflict alerts (Phase 3). While filling the form, a red "Coverage conflict" alert appears live if the person being logged is one side of a cover chain (the same Marroquin/Gabriela Cuevas/Sandra S, Sarahi/Andrea, Victoriano Ch/Jorge Gonzalez relationships Auto-fill already uses) and the other side already has that day logged — Save itself pauses on a plain yes/no confirm naming who the conflict is with, rather than silently letting both sides of a cover pair end up off the same day. A softer amber warning (never blocking) also shows when 2+ people from the same crew already have that day logged. Also fixed a real bug this surfaced: switching Request type used to silently drop whichever employee was already picked — selection now survives it.']
+  },
   {
     v:'7.15.0', date:'2026-08-16',
     features:['Request Off notebook: realtime multi-device sync (Phase 4 of the Libreta port). A request logged on one device shows up on another within a couple seconds, riding the same realtime channel and per-row sync every other list in this app already uses — nothing new to connect, just taught to fold req_notebook rows in. Deletes now push a tombstone too, so removing a request on one device can\'t be silently resurrected by another device\'s stale copy.']
@@ -20022,6 +20026,10 @@ function reqClearFromSchedule(name,crewKey,dates){
 
 var rnPickedDates=[];
 var rnSelectedType='roff';
+/* Promoted to JS state rather than left in hidden DOM inputs — a type
+   toggle (rnSetType) re-renders the whole form, which used to wipe a
+   just-picked employee out from under the hidden inputs holding it. */
+var rnSelName='', rnSelCrewKey='', rnSelCrewLabel='';
 function rnPickedDaysHtml(){
   if(!rnPickedDates.length)return '<span style="font-size:11px;color:var(--text3);">No days added yet</span>';
   return rnPickedDates.slice().sort().map(function(ds){
@@ -20036,12 +20044,14 @@ function rnRefreshPickedDays(){
 function rnRemovePickedDay(ds){
   rnPickedDates=rnPickedDates.filter(function(d){return d!==ds;});
   rnRefreshPickedDays();
+  rnRefreshAlerts();
 }
 function rnAddDay(){
   var v=(document.getElementById('rnOneDay')||{}).value;
   if(!v)return;
   if(rnPickedDates.indexOf(v)===-1)rnPickedDates.push(v);
   rnRefreshPickedDays();
+  rnRefreshAlerts();
 }
 function rnAddRange(){
   var s=(document.getElementById('rnRangeStart')||{}).value;
@@ -20056,14 +20066,16 @@ function rnAddRange(){
     d.setDate(d.getDate()+1);
   }
   rnRefreshPickedDays();
+  rnRefreshAlerts();
 }
 function rnSetType(t){
   rnSelectedType=t;
   renderReqNotebook();
 }
 function rnEmpFilter(){
-  var h=document.getElementById('rnEmp'); if(h)h.value='';
+  rnSelName=''; rnSelCrewKey=''; rnSelCrewLabel='';
   rnEmpRenderList(document.getElementById('rnEmpSearch').value);
+  rnRefreshAlerts();
 }
 function rnEmpOpenList(){ rnEmpRenderList(document.getElementById('rnEmpSearch').value); }
 function rnEmpCloseList(){ var l=document.getElementById('rnEmpList'); if(l)l.style.display='none'; }
@@ -20081,17 +20093,81 @@ function rnEmpRenderList(query){
   list.style.display='block';
 }
 function selectRnEmpOption(el){
-  var name=el.getAttribute('data-name'),crew=el.getAttribute('data-crew'),crewLabel=el.getAttribute('data-crewlabel');
-  document.getElementById('rnEmp').value=name;
-  document.getElementById('rnEmpCrew').value=crew;
-  document.getElementById('rnEmpCrewLabel').value=crewLabel;
-  document.getElementById('rnEmpSearch').value=name+' ('+crewLabel+')';
+  rnSelName=el.getAttribute('data-name');
+  rnSelCrewKey=el.getAttribute('data-crew');
+  rnSelCrewLabel=el.getAttribute('data-crewlabel');
+  var box=document.getElementById('rnEmpSearch');
+  if(box)box.value=rnSelName+' ('+rnSelCrewLabel+')';
   rnEmpCloseList();
+  rnRefreshAlerts();
+}
+/* ── capture-time conflict alerts (Libreta Phase 3) ── Live, non-
+   blocking as the form is filled; Save itself only pauses for the
+   cascade case, and only with a plain confirm() — a deliberate second
+   tap, not a silent override, same spirit as Schedule Builder's inline
+   gate but built from the confirm() dialog already used everywhere
+   else in this app rather than a new custom bar.
+   1) Cascade conflict: the person being logged is one side of a cover
+      chain (SCHED_COVER_CHAINS — the exact same relationships
+      Auto-fill's cover chains already use, not a second copy) and the
+      OTHER side already has a request logged for the same day.
+   2) Small-team warning: 2+ people from the SAME crew already have
+      that date logged. Informational only — never blocks. */
+function rnCascadeConflicts(name,dates){
+  var hits=[],list=loadReqNotebook();
+  SCHED_COVER_CHAINS.forEach(function(cc){
+    var inChain=cc.chain.some(function(c){return dlNorm(c.name)===dlNorm(name);});
+    if(!inChain)return;
+    var others=cc.chain.filter(function(c){return dlNorm(c.name)!==dlNorm(name);});
+    (dates||[]).forEach(function(ds){
+      others.forEach(function(o){
+        list.forEach(function(en){
+          if(dlNorm(en.name)!==dlNorm(o.name))return;
+          if((en.dates||[]).indexOf(ds)===-1)return;
+          hits.push({otherName:o.name,ds:ds});
+        });
+      });
+    });
+  });
+  return hits;
+}
+function rnEarlyWarnings(name,crewKey,dates){
+  if(!crewKey)return [];
+  var list=loadReqNotebook(),out=[];
+  (dates||[]).forEach(function(ds){
+    var others={};
+    list.forEach(function(en){
+      if(en.crewKey!==crewKey)return;
+      if(dlNorm(en.name)===dlNorm(name))return;
+      if((en.dates||[]).indexOf(ds)===-1)return;
+      others[dlNorm(en.name)]=1;
+    });
+    var n=Object.keys(others).length;
+    if(n)out.push({ds:ds,count:n+1});
+  });
+  return out;
+}
+function rnAlertsHtml(){
+  if(!rnSelName||!rnPickedDates.length)return '';
+  var cascade=rnCascadeConflicts(rnSelName,rnPickedDates);
+  var early=rnEarlyWarnings(rnSelName,rnSelCrewKey,rnPickedDates);
+  var html='';
+  cascade.forEach(function(c){
+    html+='<div style="display:flex;gap:7px;align-items:flex-start;padding:7px 9px;border-radius:8px;background:var(--red-bg);margin-bottom:5px;font-size:11.5px;color:var(--red);">'
+      +'<span>&#9940;</span><span><b>Coverage conflict</b> — '+escHtml(c.otherName)+' already has '+c.ds+' logged, and '+escHtml(rnSelName)+' is their cover.</span></div>';
+  });
+  early.forEach(function(w){
+    html+='<div style="display:flex;gap:7px;align-items:flex-start;padding:7px 9px;border-radius:8px;background:var(--yellow-bg);margin-bottom:5px;font-size:11.5px;color:var(--yellow);">'
+      +'<span>&#9888;</span><span>'+w.count+' people from this crew already have '+w.ds+' logged.</span></div>';
+  });
+  return html;
+}
+function rnRefreshAlerts(){
+  var el=document.getElementById('rnCaptureAlerts');
+  if(el)el.innerHTML=rnAlertsHtml();
 }
 function rnAddRequest(){
-  var name=(document.getElementById('rnEmp')||{}).value||'';
-  var crewKey=(document.getElementById('rnEmpCrew')||{}).value||'';
-  var crewLabel=(document.getElementById('rnEmpCrewLabel')||{}).value||'';
+  var name=rnSelName, crewKey=rnSelCrewKey, crewLabel=rnSelCrewLabel;
   if(!name){showToast('Search and pick an employee first.');return;}
   /* Carlos's ask: picking a date and going straight to Save shouldn't
      require the separate "Add day"/"Add range" tap first — whatever's
@@ -20102,6 +20178,11 @@ function rnAddRequest(){
   }
   if(!rnPickedDates.length){showToast('Add at least one day.');return;}
   var dates=rnPickedDates.slice().sort();
+  var conflicts=rnCascadeConflicts(name,dates);
+  if(conflicts.length){
+    var c=conflicts[0];
+    if(!confirm(escHtml(c.otherName)+' already has '+c.ds+' logged, and '+name+' is their cover for that day.\n\nSave '+name+'\'s request anyway?'))return;
+  }
   var entry={id:Date.now(),name:name,crewKey:crewKey,crewLabel:crewLabel,type:rnSelectedType,dates:dates,capturedAt:new Date().toISOString()};
   var msg='&#10003; Request saved';
   if(rnSelectedType==='roff'){
@@ -20117,6 +20198,7 @@ function rnAddRequest(){
   list.unshift(entry);
   saveReqNotebook(list);
   rnPickedDates=[];
+  rnSelName=''; rnSelCrewKey=''; rnSelCrewLabel='';
   showToast(msg);
   renderReqNotebook();
 }
@@ -20155,10 +20237,7 @@ function renderReqNotebook(){
 
   html+='<label style="font-size:10.5px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px;">Employee</label>';
   html+='<div style="position:relative;margin-bottom:10px;">';
-  html+='<input id="rnEmpSearch" type="text" autocomplete="off" placeholder="&#128269; Search by name…" oninput="rnEmpFilter()" onfocus="rnEmpOpenList()" onblur="setTimeout(rnEmpCloseList,150)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">';
-  html+='<input type="hidden" id="rnEmp" value="">';
-  html+='<input type="hidden" id="rnEmpCrew" value="">';
-  html+='<input type="hidden" id="rnEmpCrewLabel" value="">';
+  html+='<input id="rnEmpSearch" type="text" autocomplete="off" value="'+(rnSelName?escHtml(rnSelName+' ('+rnSelCrewLabel+')'):'')+'" placeholder="&#128269; Search by name…" oninput="rnEmpFilter()" onfocus="rnEmpOpenList()" onblur="setTimeout(rnEmpCloseList,150)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">';
   html+='<div id="rnEmpList" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.15);"></div>';
   html+='</div>';
 
@@ -20184,6 +20263,7 @@ function renderReqNotebook(){
       +'</div>';
   }
   html+='<div id="rnPickedDays" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;">'+rnPickedDaysHtml()+'</div>';
+  html+='<div id="rnCaptureAlerts">'+rnAlertsHtml()+'</div>';
   html+='<button class="btn btn-navy" style="width:100%;" onclick="rnAddRequest()">Save request</button>';
   html+='</div>';
 
