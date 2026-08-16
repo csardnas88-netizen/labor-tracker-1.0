@@ -128,5 +128,37 @@ module.exports = {
     const vacEntry = list2.find((r) => r.type === 'vac' && r.dates.length === 3);
     t.assert(!!vacEntry, 'the same shortcut expands an unconfirmed Start/End range for Vacation, not just a single day');
     t.eq(vacEntry.dates.join(','), [dates[0], dates[1], dates[2]].join(','), 'the whole range lands, day by day');
+
+    // ── Realtime multi-device sync (Phase 4) — a remote reqnb_<id> row folds into the local list ──
+    win.localStorage.removeItem('req_notebook');
+    win.localStorage.removeItem('req_notebook_deleted_ids');
+    win.saveReqNotebook([{ id: 1001, name: 'Local Only', type: 'roff', dates: [dates[0]], writtenDates: [], missingDates: [] }]);
+    const remoteAll = {
+      reqnb_1002: { id: 1002, name: 'From Other Device', type: 'roff', dates: [dates[1]], writtenDates: [], missingDates: [] },
+    };
+    const changed = win._mergeReqNotebookFromRemote(remoteAll);
+    t.assert(changed, 'a genuinely new remote row reports a change');
+    const merged = win.loadReqNotebook();
+    t.assert(merged.some((r) => r.id === 1001), "the device's own entry survives the merge");
+    t.assert(merged.some((r) => r.id === 1002), "the other device's entry is folded in");
+
+    // A delete on another device (tombstone) removes it here too, even if
+    // the stale reqnb_<id> row is still sitting in Supabase (deletes there
+    // are eventually-consistent, same as Call-Offs).
+    const remoteWithDelete = {
+      reqnb_1002: remoteAll.reqnb_1002,
+      req_notebook_deleted_ids: [1002],
+    };
+    win._mergeReqNotebookFromRemote(remoteWithDelete);
+    const afterRemoteDelete = win.loadReqNotebook();
+    t.assert(!afterRemoteDelete.some((r) => r.id === 1002), 'the remote tombstone wins — the row is gone locally too');
+    t.assert(afterRemoteDelete.some((r) => r.id === 1001), "and it didn't touch anything else");
+
+    // Deleting locally pushes its own tombstone, so it's the local side
+    // of the same mechanism that just protected against resurrection above.
+    const confirmFn2 = win.confirm; win.confirm = () => true;
+    win.rnDeleteRequest(1001);
+    win.confirm = confirmFn2;
+    t.assert(win.getDeletedIds('req_notebook_deleted_ids').includes(1001), 'deleting locally records a tombstone for other devices to pick up');
   },
 };

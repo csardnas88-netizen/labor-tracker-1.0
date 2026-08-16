@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.14.0"/>
+<meta name="app-version" content="7.15.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4334,6 +4334,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.15.0', date:'2026-08-16',
+    features:['Request Off notebook: realtime multi-device sync (Phase 4 of the Libreta port). A request logged on one device shows up on another within a couple seconds, riding the same realtime channel and per-row sync every other list in this app already uses — nothing new to connect, just taught to fold req_notebook rows in. Deletes now push a tombstone too, so removing a request on one device can\'t be silently resurrected by another device\'s stale copy.']
+  },
+  {
     v:'7.14.0', date:'2026-08-16',
     features:['Added "Export Excel" to the Schedule page — a styled workbook (navy header, gold department blocks, colored cells) in the same visual language as Schedule Builder\'s own export, generated fresh from this app\'s own data rather than patching a template. Shows this app\'s real cell values (1/OFF/R-OFF/PM/LOBBY/HOUSEMAN/LAUNDRY/TAILOR) instead of Schedule Builder\'s shift-time labels, since that\'s what this Schedule actually stores — nothing invented. Verified by reading the generated file back with an independent parser, not just the code that wrote it.']
   },
@@ -7016,6 +7020,38 @@ function _mergeCallOffsFromRemote(all){
   return true;
 }
 
+/* Phase 4 of the Request Off notebook: realtime multi-device sync. Rides
+   the SAME infra every other list here already uses (per-row supaPut,
+   a tombstone list for deletes, folded in on every pull) — nothing new
+   to build, since the realtime channel already fires on ANY labor_data
+   change and syncFromSheets already runs on that signal; this is just
+   teaching it to fold req_notebook rows in, same as
+   _mergeCallOffsFromRemote does for calloffs. */
+function _mergeReqNotebookFromRemote(all){
+  var remoteRows={};
+  Object.keys(all).forEach(function(k){
+    if(k.indexOf('reqnb_')===0)remoteRows[k.replace('reqnb_','')]=all[k];
+  });
+  var legacyArr=Array.isArray(all['req_notebook'])?all['req_notebook']:[];
+  legacyArr.forEach(function(r){ if(r&&r.id&&!remoteRows[r.id])remoteRows[r.id]=r; });
+  if(Object.keys(remoteRows).length===0)return false;
+
+  var localList=loadReqNotebook();
+  var rDeletedIds=getDeletedIds('req_notebook_deleted_ids');
+  var remoteRDeletedIds=all['req_notebook_deleted_ids'];
+  if(Array.isArray(remoteRDeletedIds)){
+    remoteRDeletedIds.forEach(function(id){if(rDeletedIds.indexOf(id)===-1)rDeletedIds.push(id);});
+    safeSetItem('req_notebook_deleted_ids',JSON.stringify(rDeletedIds));
+  }
+  var mergedR={};
+  localList.forEach(function(r){ if(r.id)mergedR[r.id]=r; });
+  Object.keys(remoteRows).forEach(function(rid){ mergedR[rid]=remoteRows[rid]; });
+  rDeletedIds.forEach(function(id){ delete mergedR[id]; });
+  var mergedRArr=Object.values(mergedR).sort(function(a,b){return b.id-a.id;});
+  safeSetItem('req_notebook',JSON.stringify(mergedRArr));
+  return true;
+}
+
 /* Pull latest data from Supabase on load */
 function syncFromSheets(){
   setSyncStatus("syncing");
@@ -7348,6 +7384,7 @@ function _syncFromSheetsPull(){
     });
     try{ if(_mergeProjectsFromRemote(all))updated=true; }catch(e){console.warn('[sync] projects merge',e);}
     try{ if(_mergeCallOffsFromRemote(all))updated=true; }catch(e){console.warn('[sync] calloffs merge',e);}
+    try{ if(_mergeReqNotebookFromRemote(all))updated=true; }catch(e){console.warn('[sync] req notebook merge',e);}
     setSyncStatus("synced");
     if(updated){
       try{renderLaborDash();}catch(e){try{renderMonthDashboard();}catch(e2){}}
@@ -7364,6 +7401,7 @@ function _syncFromSheetsPull(){
          managers editing the same week is exactly the case this page
          exists for. */
       if(typeof currentPage!=='undefined'&&currentPage==='schedule'){try{renderSchedule();}catch(e){}}
+      if(typeof currentPage!=='undefined'&&currentPage==='reqnotebook'){try{renderReqNotebook();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='dailylineup'){try{renderDailyLineup();}catch(e){}}
       try{updateTrainingBadge();}catch(e){}
     }
@@ -20090,6 +20128,11 @@ function rnDeleteRequest(id){
   if(entry.type==='roff'&&(entry.writtenDates||[]).length)reqClearFromSchedule(entry.name,entry.crewKey,entry.writtenDates);
   list=list.filter(function(r){return r.id!==id;});
   saveReqNotebook(list);
+  /* Without a tombstone, the NEXT pull from another device would just
+     see this id missing from OUR list and assume nothing happened —
+     meanwhile that device's own copy (or the still-live reqnb_<id> row)
+     would silently resurrect it. Same fix Call-Offs already needed. */
+  addDeletedId('req_notebook_deleted_ids',id);
   showToast('Request removed');
   renderReqNotebook();
 }
