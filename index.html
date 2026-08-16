@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.5.1"/>
+<meta name="app-version" content="7.5.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4312,6 +4312,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.5.2', date:'2026-08-15',
+    improvements:['The Unifocus standard row for House Attendant now spells out where its number comes from, on both the Houseman (AM) and PM Houseman cards. Carlos caught it: AM Houseman\'s own Total read 2, but the standard cell said "3, on standard" with no way to tell that meant 2 AM plus 1 PM. It now shows the combined number in bold with the split underneath (2+1), and the tooltip states it in full — "2 Houseman + 1 PM Houseman = 3 scheduled vs. 3 standard".']
+  },
   {
     v:'7.5.1', date:'2026-08-15',
     improvements:['The Unifocus standard now rides along inside each crew card on the Schedule, right under that crew\'s own Total — Carlos\'s ask, looking at Supervisors he had the headcount and the departures-each figure right there but had to scroll up to the summary card to check it against standard. Same colors, same numbers as that card; a position without a Unifocus standard on file (Managers, Overnight) simply has no row.'],
@@ -18641,14 +18645,34 @@ function _ufDiffColor(diff){
 }
 /* Shared between the initial render and the repaint above, so the two
    can never drift into showing different colors for the same day. */
+function _schedBlockLabel(bk){
+  for(var i=0;i<SCHED_BLOCKS.length;i++) if(SCHED_BLOCKS[i].key===bk)return SCHED_BLOCKS[i].label;
+  return bk;
+}
+/* For a position that spans more than one crew (House Attendant: AM
+   Houseman + PM Houseman), the standard's actual headcount is NOT the
+   number sitting in the card's own Total row above it — Carlos caught
+   this: AM Houseman's Total read 2, but the standard row said "3, on
+   standard", with no way to tell that the 3 was 2 AM plus 1 PM without
+   asking. So a combined position shows its own actual (bold) with the
+   per-crew breakdown spelled out beneath it, the same way the two
+   crews would be read off his own sheet — a single-crew position skips
+   this, since its actual already IS the Total row directly above. */
 function _schedUfCellHTML(SCH,ufPos,ds){
   if(!SCH.days[ds])return '';
   var actual=schedUfActual(SCH,ds,ufPos.crews);
   var std=schedUfExpected(SCH,ufPos.label,ds);
   if(std==null)return '<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>';
   var c=_ufDiffColor(actual-std);
-  return '<div style="text-align:center;border-radius:5px;padding:1px 0;background:'+c.bg+';" title="'+ufPos.label+': '+actual+' scheduled vs. '+std+' standard">'
-    +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+std+'</div></div>';
+  if(ufPos.crews.length<=1){
+    return '<div style="text-align:center;border-radius:5px;padding:1px 0;background:'+c.bg+';" title="'+ufPos.label+': '+actual+' scheduled vs. '+std+' standard">'
+      +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+std+'</div></div>';
+  }
+  var parts=ufPos.crews.map(function(bk){ return schedDayTotal(SCH,ds,bk); });
+  var breakdown=parts.map(function(n,i){ return n+' '+_schedBlockLabel(ufPos.crews[i]); }).join(' + ');
+  return '<div style="text-align:center;border-radius:5px;padding:1px 0;background:'+c.bg+';" title="'+ufPos.label+': '+breakdown+' = '+actual+' scheduled vs. '+std+' standard">'
+    +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+actual+'</div>'
+    +'<div style="font-size:6.5px;line-height:1.1;color:var(--text3);">'+parts.join('+')+'</div></div>';
 }
 function _schedCellCss(v){
   var base='width:100%;min-width:0;padding:3px 2px;font-size:10.5px;font-weight:700;text-align:center;'

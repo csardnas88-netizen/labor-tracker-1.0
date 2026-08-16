@@ -422,6 +422,16 @@ module.exports = {
     t.assert(hpCard && /Unifocus std.*\(combined\)/s.test(hpCard[0]),
       'Houseman is flagged combined, since House Attendant spans the AM and PM crews');
 
+    // Carlos's actual complaint: the AM Houseman card's own Total reads 2,
+    // but a combined position's "actual" is 2 AM + 1 PM = 3 — shown bare
+    // that reads as a mismatch with the Total two lines up. The combined
+    // cell must show its OWN actual (not just the standard) plus the
+    // per-crew split, so 3 is legibly "2 Houseman + 1 PM Houseman", not a
+    // number that seems to disagree with the card it's sitting in.
+    t.assert(hpCard && /2\+1/.test(hpCard[0]), 'the AM+PM split (2 Houseman, 1 PM Houseman) is spelled out beneath the combined total');
+    t.assert(hpCard && /2 Houseman \+ 1 PM Houseman = 3 scheduled/.test(hpCard[0]),
+      'and the full breakdown is in the tooltip: which crew contributed which number');
+
     t.assert(!/>Managers<\/div>[\s\S]{0,900}?Unifocus std/.test(cardHtml),
       'Managers has no Unifocus standard on file and gets no row, same as everywhere else in the app');
 
