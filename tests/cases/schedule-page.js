@@ -413,24 +413,28 @@ module.exports = {
     const supCard = cardHtml.match(/>Supervisors<\/div>.*?(?=<div style="background:var\(--navy\))/s);
     t.assert(supCard, 'the Supervisors card is found');
     t.assert(/Unifocus std/.test(supCard[0]), 'and it carries its own standard row');
-    t.assert(!/\(combined\)/.test(supCard[0]),
-      'Supervisors maps to one crew one position, so it is not flagged as combined');
+    t.assert(!/AM shift|PM shift/.test(supCard[0]),
+      'Supervisors is a single-shift position, so no AM/PM shift label is needed');
 
     // Houseman is the LAST crew card, so there is no next navy header to
     // bound the match against — stop at one or the end of the string.
     const hpCard = cardHtml.match(/>Houseman<\/div>[\s\S]*?(?=<div style="background:var\(--navy\)|$)/);
-    t.assert(hpCard && /Unifocus std.*\(combined\)/s.test(hpCard[0]),
-      'Houseman is flagged combined, since House Attendant spans the AM and PM crews');
+    const pmhmCard = cardHtml.match(/>PM Houseman<\/div>[\s\S]*?(?=<div style="background:var\(--navy\))/s);
 
     // Carlos's actual complaint: the AM Houseman card's own Total reads 2,
-    // but a combined position's "actual" is 2 AM + 1 PM = 3 — shown bare
-    // that reads as a mismatch with the Total two lines up. The combined
-    // cell must show its OWN actual (not just the standard) plus the
-    // per-crew split, so 3 is legibly "2 Houseman + 1 PM Houseman", not a
-    // number that seems to disagree with the card it's sitting in.
-    t.assert(hpCard && /2\+1/.test(hpCard[0]), 'the AM+PM split (2 Houseman, 1 PM Houseman) is spelled out beneath the combined total');
-    t.assert(hpCard && /2 Houseman \+ 1 PM Houseman = 3 scheduled/.test(hpCard[0]),
-      'and the full breakdown is in the tooltip: which crew contributed which number');
+    // and a combined House Attendant number ("3, split 2+1") needed
+    // explaining to make sense of that. House Attendant's two shifts are
+    // independent in Unifocus's own standard (AM is departures-driven,
+    // PM is a flat 8h/1 person), so each crew is now measured against
+    // its OWN shift's standard, exactly like every other crew — no
+    // combining, no breakdown to read.
+    t.assert(hpCard && /Unifocus std[\s\S]*?\(AM shift\)/.test(hpCard[0]), 'Houseman is labeled as the AM shift');
+    t.assert(pmhmCard && /Unifocus std[\s\S]*?\(PM shift\)/.test(pmhmCard[0]), 'PM Houseman is labeled as the PM shift');
+    t.assert(hpCard && !/2\+1|\(combined\)/.test(hpCard[0]), 'no combined number or split to read anymore');
+    t.assert(hpCard && /House Attendant: 2 scheduled vs\. 2 standard/.test(hpCard[0]),
+      "AM Houseman's own total (2) is judged against the AM shift's own standard (2) — on standard");
+    t.assert(pmhmCard && /House Attendant: 1 scheduled vs\. 1 standard/.test(pmhmCard[0]),
+      "and PM Houseman's own total (1) against the PM shift's own standard, independently");
 
     t.assert(!/>Managers<\/div>[\s\S]{0,900}?Unifocus std/.test(cardHtml),
       'Managers has no Unifocus standard on file and gets no row, same as everywhere else in the app');

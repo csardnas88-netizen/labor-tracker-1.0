@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.5.2"/>
+<meta name="app-version" content="7.5.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4313,6 +4313,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.5.3', date:'2026-08-15',
+    improvements:['Simplified the House Attendant standard on the Schedule. The combined "3 (2+1)" cell from the last version needed explaining to make sense of — Carlos said so directly. Turns out there was never a real need to combine anything: House Attendant\'s two shifts are independent in Unifocus\'s own standard (AM is departures-driven, PM is a flat 8h/1 person), so the Houseman card now reads its own AM-shift standard and the PM Houseman card reads its own PM-shift standard, each an ordinary number against its own crew\'s own total — same as every other crew, nothing to add up.']
+  },
+  {
     v:'7.5.2', date:'2026-08-15',
     improvements:['The Unifocus standard row for House Attendant now spells out where its number comes from, on both the Houseman (AM) and PM Houseman cards. Carlos caught it: AM Houseman\'s own Total read 2, but the standard cell said "3, on standard" with no way to tell that meant 2 AM plus 1 PM. It now shows the combined number in bold with the split underneath (2+1), and the tooltip states it in full — "2 Houseman + 1 PM Houseman = 3 scheduled vs. 3 standard".']
   },
@@ -8190,6 +8194,20 @@ function getSameDayRoomsForDay(ds){
    Attendant formula above is — the Schedule page runs this against its
    own forecasted OCC/Departures/Turndown-OCC rather than actual R106
    figures, since a schedule is built weeks before those reports exist. */
+/* One shift's own truncated hours — pulled out of the position-level sum
+   below so a single shift's number can be read on its own (the Schedule
+   page needs exactly that: House Attendant's AM shift and PM shift are
+   two different crews there, not one pool). */
+function unifocusShiftHours(shift,rooms,dep,roomsSameDay,dow){
+  var vol=shift.driver==='departures'?dep:(shift.driver==='rooms_sameday'?roomsSameDay:rooms);
+  var h=unifocusBandLookup(shift.bands, vol, dow);
+  /* Unifocus can only staff WHOLE shifts, so a band's hours get truncated
+     down to a multiple of the shift length before they count. Only matters
+     where the band values aren't already multiples of the shift (i.e.
+     Turndown's 6h shift) — see shiftHours in UNIFOCUS_STANDARDS. */
+  if(shift.shiftHours>0)h=Math.floor(h/shift.shiftHours)*shift.shiftHours;
+  return h;
+}
 function unifocusHoursFromVolumes(pos,rooms,dep,roomsSameDay,dow){
   if(pos==='Room Attendant')return unifocusRoomAttendantHoursFromVolumes(rooms,dep);
   var shifts=UNIFOCUS_STANDARDS[pos];
@@ -8201,16 +8219,7 @@ function unifocusHoursFromVolumes(pos,rooms,dep,roomsSameDay,dow){
   var needsDep=shifts.some(function(s){return s.driver==='departures';});
   if(needsDep&&dep==null)return null;
   var total=0;
-  shifts.forEach(function(shift){
-    var vol=shift.driver==='departures'?dep:(shift.driver==='rooms_sameday'?roomsSameDay:rooms);
-    var h=unifocusBandLookup(shift.bands, vol, dow);
-    /* Unifocus can only staff WHOLE shifts, so a band's hours get truncated
-       down to a multiple of the shift length before they count. Only matters
-       where the band values aren't already multiples of the shift (i.e.
-       Turndown's 6h shift) — see shiftHours in UNIFOCUS_STANDARDS. */
-    if(shift.shiftHours>0)h=Math.floor(h/shift.shiftHours)*shift.shiftHours;
-    total+=h;
-  });
+  shifts.forEach(function(shift){ total+=unifocusShiftHours(shift,rooms,dep,roomsSameDay,dow); });
   return total;
 }
 function unifocusHoursForPosition(pos,ds){
@@ -18335,10 +18344,7 @@ var SCHED_BLOCKS=[
    Carlos's ask: while looking at a week, know at a glance whether he's
    staffed to standard, over, or short — per position, per day.
 
-   Confirmed with Carlos rather than assumed (three real ambiguities):
-   - House Attendant spans two crews here (AM "Houseman" + "PM
-     Houseman"), Unifocus states it as one AM+PM standard — compared as
-     one combined number, not split by shift.
+   Confirmed with Carlos rather than assumed:
    - "AM Lobby" is Public Area Attendant.
    - Room Attendant has no shift length anywhere in the app (its
      standard is a per-room rate, not a banded shift) — headcount uses
@@ -18346,7 +18352,11 @@ var SCHED_BLOCKS=[
    Managers, Laundry's own crew total, and Overnight have no Unifocus
    standard on file and are left out entirely, same as everywhere else
    in the app a position without a standard shows nothing rather than a
-   fabricated one. */
+   fabricated one.
+
+   Used by the week-overview card at the top of the page, which shows
+   ONE row per POSITION — House Attendant's AM and PM shifts summed into
+   one number, the same way Unifocus's own report states it. */
 var SCHED_UF_POS=[
   {label:'Room Attendant',          crews:['gra']},
   {label:'House Attendant',         crews:['hp','pmhm']},
@@ -18355,14 +18365,28 @@ var SCHED_UF_POS=[
   {label:'Turndown Attendant',      crews:['td']},
   {label:'Public Area Attendant',   crews:['lobby']}
 ];
-/* Which Unifocus position (if any) a given crew card's own headcount
-   feeds into. One crew never belongs to two positions here — House
-   Attendant is the only position spanning more than one crew, not the
-   other direction. */
-function _schedUfForCrew(bk){
-  for(var i=0;i<SCHED_UF_POS.length;i++) if(SCHED_UF_POS[i].crews.indexOf(bk)!==-1)return SCHED_UF_POS[i];
-  return null;
-}
+/* Used by the inline row INSIDE each crew card, which shows the crew's
+   OWN standard rather than a shared position total. First tried showing
+   House Attendant's combined number there too ("3, split 2+1") — Carlos
+   rejected it as needing explanation instead of just being readable.
+   House Attendant actually has two INDEPENDENT shifts in
+   UNIFOCUS_STANDARDS (0815-1645, departures-driven; 1430-2300,
+   rooms-driven, always 8h/1 person) that map 1:1 onto the AM Houseman
+   and PM Houseman crews — so there was never a real need to combine
+   them for this view. shiftIndex picks out that one shift; a position
+   with only one shift (everything below House Attendant) leaves it
+   null and is measured against its usual combined standard, which for
+   a single-shift position is the same number either way. */
+var SCHED_CREW_UF={
+  gra:    {label:'Room Attendant',          shiftIndex:null},
+  hp:     {label:'House Attendant',         shiftIndex:0},
+  pmhm:   {label:'House Attendant',         shiftIndex:1},
+  sup:    {label:'Housekeeping Supervisor', shiftIndex:null},
+  laundry:{label:'Laundry Attendant',       shiftIndex:null},
+  td:     {label:'Turndown Attendant',      shiftIndex:null},
+  lobby:  {label:'Public Area Attendant',   shiftIndex:null}
+};
+function _schedUfForCrew(bk){ return SCHED_CREW_UF[bk]||null; }
 function ufShiftHoursForPos(pos){
   if(pos==='Room Attendant')return 8;
   var shifts=UNIFOCUS_STANDARDS[pos];
@@ -18393,6 +18417,26 @@ function schedUfExpected(SCH,pos,ds){
   if(hours==null)return null;
   var sh=ufShiftHoursForPos(pos);
   return _ufPeople(hours,sh);
+}
+/* ONE shift's own standard, not the position's combined total — this is
+   what a crew that only covers part of a position (House Attendant's AM
+   shift is the "hp" crew, its PM shift is "pmhm") should be measured
+   against. Carlos rejected the combined "3 (2+1)" cell outright: simpler
+   was the actual ask, and the honest simple answer is that AM Houseman
+   and PM Houseman are each their OWN ordinary standard, exactly like
+   every other crew's — 2 vs. 2, 1 vs. 1 — not a shared pool that needs
+   explaining. */
+function schedUfExpectedForShift(SCH,pos,shiftIndex,ds){
+  var day=SCH.days&&SCH.days[ds]; if(!day)return null;
+  var shift=UNIFOCUS_STANDARDS[pos]&&UNIFOCUS_STANDARDS[pos][shiftIndex];
+  if(!shift)return null;
+  var occ=parseInt(day.occ,10); if(isNaN(occ))occ=0;
+  var dep=parseInt(day.dep,10); if(isNaN(dep))dep=null;
+  if(shift.driver==='departures'&&dep==null)return null;
+  var tdOcc=parseInt(day.tdOcc,10); if(isNaN(tdOcc))tdOcc=occ;
+  var dow=parseLocalDate(ds).getDay();
+  var hours=unifocusShiftHours(shift,occ,dep,tdOcc,dow);
+  return _ufPeople(hours,shift.shiftHours);
 }
 /* The vocabulary his sheet actually uses. A value already in a cell but
    not on this list (a stray "0.75", a lowercase "off") is offered as an
@@ -18611,12 +18655,8 @@ function schedCarryAddedRows(oldSch,newSch){
 function _schedRefreshTotals(SCH,onlyBk){
   var dates=schedWeekDates();
   SCHED_BLOCKS.forEach(function(b){
+    if(onlyBk&&b.key!==onlyBk&&!b.ratios)return;
     var ufPos=_schedUfForCrew(b.key);
-    /* House Attendant's standard is combined across two crews (AM
-       Houseman + PM Houseman), and shows on both cards — so editing
-       either one has to repaint both, not just the crew that changed. */
-    var touchesUf=ufPos&&(!onlyBk||ufPos.crews.indexOf(onlyBk)!==-1);
-    if(onlyBk&&b.key!==onlyBk&&!b.ratios&&!touchesUf)return;
     dates.forEach(function(ds,di){
       var tot=schedDayTotal(SCH,ds,b.key);
       var tEl=document.getElementById('sct_'+b.key+'_'+di);
@@ -18630,7 +18670,7 @@ function _schedRefreshTotals(SCH,onlyBk){
       });
       if(ufPos){
         var uEl=document.getElementById('scu_'+b.key+'_'+di);
-        if(uEl)uEl.innerHTML=_schedUfCellHTML(SCH,ufPos,ds);
+        if(uEl)uEl.innerHTML=_schedUfCellHTML(SCH,ufPos,b.key,ds);
       }
     });
   });
@@ -18644,35 +18684,21 @@ function _ufDiffColor(diff){
   return {bg:'var(--green-bg)',fg:'var(--green)'};
 }
 /* Shared between the initial render and the repaint above, so the two
-   can never drift into showing different colors for the same day. */
-function _schedBlockLabel(bk){
-  for(var i=0;i<SCHED_BLOCKS.length;i++) if(SCHED_BLOCKS[i].key===bk)return SCHED_BLOCKS[i].label;
-  return bk;
-}
-/* For a position that spans more than one crew (House Attendant: AM
-   Houseman + PM Houseman), the standard's actual headcount is NOT the
-   number sitting in the card's own Total row above it — Carlos caught
-   this: AM Houseman's Total read 2, but the standard row said "3, on
-   standard", with no way to tell that the 3 was 2 AM plus 1 PM without
-   asking. So a combined position shows its own actual (bold) with the
-   per-crew breakdown spelled out beneath it, the same way the two
-   crews would be read off his own sheet — a single-crew position skips
-   this, since its actual already IS the Total row directly above. */
-function _schedUfCellHTML(SCH,ufPos,ds){
+   can never drift into showing different colors for the same day.
+
+   Ordinary and uniform on purpose: the crew's own Total (printed right
+   above this) IS the actual being judged here, whether that crew is a
+   whole position (Supervisors) or one shift of a two-shift position
+   (Houseman is just the AM shift of House Attendant) — so there is
+   nothing left to explain, unlike the combined number this used to show. */
+function _schedUfCellHTML(SCH,ufPos,bk,ds){
   if(!SCH.days[ds])return '';
-  var actual=schedUfActual(SCH,ds,ufPos.crews);
-  var std=schedUfExpected(SCH,ufPos.label,ds);
+  var actual=schedDayTotal(SCH,ds,bk);
+  var std=ufPos.shiftIndex==null?schedUfExpected(SCH,ufPos.label,ds):schedUfExpectedForShift(SCH,ufPos.label,ufPos.shiftIndex,ds);
   if(std==null)return '<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>';
   var c=_ufDiffColor(actual-std);
-  if(ufPos.crews.length<=1){
-    return '<div style="text-align:center;border-radius:5px;padding:1px 0;background:'+c.bg+';" title="'+ufPos.label+': '+actual+' scheduled vs. '+std+' standard">'
-      +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+std+'</div></div>';
-  }
-  var parts=ufPos.crews.map(function(bk){ return schedDayTotal(SCH,ds,bk); });
-  var breakdown=parts.map(function(n,i){ return n+' '+_schedBlockLabel(ufPos.crews[i]); }).join(' + ');
-  return '<div style="text-align:center;border-radius:5px;padding:1px 0;background:'+c.bg+';" title="'+ufPos.label+': '+breakdown+' = '+actual+' scheduled vs. '+std+' standard">'
-    +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+actual+'</div>'
-    +'<div style="font-size:6.5px;line-height:1.1;color:var(--text3);">'+parts.join('+')+'</div></div>';
+  return '<div style="text-align:center;border-radius:5px;padding:1px 0;background:'+c.bg+';" title="'+ufPos.label+': '+actual+' scheduled vs. '+std+' standard">'
+    +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+std+'</div></div>';
 }
 function _schedCellCss(v){
   var base='width:100%;min-width:0;padding:3px 2px;font-size:10.5px;font-weight:700;text-align:center;'
@@ -18890,11 +18916,16 @@ function renderSchedule(){
        amber over, red short. */
     var ufPos=_schedUfForCrew(b.key);
     if(ufPos){
+      /* House Attendant's two shifts run on different drivers (AM is
+         departures, PM is a flat 8h/1 person) — naming which shift this
+         is says why the two cards' numbers move independently, without
+         making Carlos work that out from the crew name alone. */
+      var shiftNote=b.key==='hp'?' <span style="font-weight:400;text-transform:none;">(AM shift)</span>'
+        :b.key==='pmhm'?' <span style="font-weight:400;text-transform:none;">(PM shift)</span>':'';
       html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border);">';
-      html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">Unifocus std'
-        +(ufPos.crews.length>1?' <span style="font-weight:400;text-transform:none;">(combined)</span>':'')+'</div>';
+      html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">Unifocus std'+shiftNote+'</div>';
       dates.forEach(function(ds,di){
-        html+='<div id="scu_'+b.key+'_'+di+'">'+_schedUfCellHTML(SCH,ufPos,ds)+'</div>';
+        html+='<div id="scu_'+b.key+'_'+di+'">'+_schedUfCellHTML(SCH,ufPos,b.key,ds)+'</div>';
       });
       html+='</div>';
     }
