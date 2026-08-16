@@ -1014,5 +1014,45 @@ module.exports = {
       "the row for someone with Sat+Sun off gets the pale-blue background");
     t.assert(!/background:rgba\(21,101,192,/.test(rowHtmlFor('Working Weekend')),
       'someone working the weekend gets no blue shading at all');
+
+    // ── 23) "Prefers to work weekends" — an explicit per-person mark
+    // that Auto-fill always honors over its own fairness rotation, same
+    // as Schedule Builder's gear-menu weekendPref overriding
+    // weekendDueOrder. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH23 = { days: {} };
+    thisDates20.forEach((ds) => { SCH23.days[ds] = { sheet: 't', occ: '100', dep: '80', tdOcc: '', sup: [['Amara', '1'], ['Beto', '1']] }; });
+    win.dlSaveSchedule(SCH23);
+    win.schedViewWeekStart = wk20(0);
+
+    t.eq(win.schedWeekendPrefFor(win.dlLoadSchedule(), 'Amara'), null, 'nobody has a weekend preference before it is set');
+    win.schedToggleWeekendPref('Amara');
+    t.eq(win.schedWeekendPrefFor(win.dlLoadSchedule(), 'Amara'), 'preferWork', 'toggling once marks Amara as preferring to work weekends');
+    win.renderSchedule();
+    t.assert(/Prefers to work weekends/.test(html()), 'the button title reflects the mark once set');
+    win.schedToggleWeekendPref('Amara');
+    t.eq(win.schedWeekendPrefFor(win.dlLoadSchedule(), 'Amara'), null, 'toggling again clears it — a switch, not a one-way mark');
+
+    // Auto-fill itself has to honor it: mark Amara again, then run
+    // enough weeks of Auto-fill that the fairness rotation alone would
+    // eventually hand her a full weekend off (it doesn't wait — the
+    // very first week already proves the override, since weekendGrant
+    // would otherwise put whoever is "most overdue" — everyone, on a
+    // brand-new crew — first in line for Saturday+Sunday).
+    win.schedToggleWeekendPref('Amara');
+    const confirmed = win.confirm; win.confirm = () => true;
+    win.schedAutoFill();
+    win.confirm = confirmed;
+    const afterAuto23 = win.dlLoadSchedule();
+    const amaraSat = afterAuto23.days[thisDates20[0]].sup.filter((p) => p[0] === 'Amara')[0][1];
+    const amaraSun = afterAuto23.days[thisDates20[1]].sup.filter((p) => p[0] === 'Amara')[0][1];
+    t.assert(!(amaraSat === 'OFF' && amaraSun === 'OFF'),
+      "Auto-fill never gives Amara a full weekend off once she's marked as preferring to work it, even though she'd otherwise be first in line");
+
+    // Survives a re-upload, same as the exempt mark.
+    const before23 = win.dlLoadSchedule();
+    const reparsed23 = { days: { [thisDates20[0]]: { sheet: 'reuploaded', occ: '', dep: '', tdOcc: '', sup: [['Amara', '1']] } }, count: 1 };
+    const carried23 = win.schedCarryWeekendPref(before23, reparsed23);
+    t.eq(carried23.weekendPref[win.dlNorm('Amara')], 'preferWork', 'schedCarryWeekendPref keeps the mark across a fresh workbook parse');
   }
 };
