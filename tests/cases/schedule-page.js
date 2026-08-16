@@ -375,5 +375,64 @@ module.exports = {
     t.assert(/std 7/.test(ufHtml), "the standard prints beneath the actual number");
     t.assert(/AM Houseman \+ PM Houseman combined/.test(ufHtml),
       'the combined-crew caveat is stated on the page, not left implicit');
+
+    // ── 12) "PM" is a real body, not a blank ──
+    // Excel's own SUM() drops "PM" the same way it drops "OFF" — both are
+    // text — but a PM supervisor is not absent, and Unifocus's
+    // Housekeeping Supervisor standard is one headcount across BOTH
+    // shifts. Undercounting the PM half made every day with a PM
+    // supervisor read as short by exactly that one person.
+    const supTotalBefore = win.schedDayTotal(win.dlLoadSchedule(), sat, 'sup');
+    t.eq(supTotalBefore, 2, 'Rolando and Jose B are OFF Saturday in the fixture; Rubidia G and Maria T are in');
+
+    const rolandoIdx = win.dlLoadSchedule().days[sat].sup.findIndex((p) => p[0] === 'Rolando');
+    win.schedSetCell('sup', rolandoIdx, 'Rolando', sat, 'PM', null);
+    t.eq(win.schedDayTotal(win.dlLoadSchedule(), sat, 'sup'), 3,
+      'Rolando on "PM" counts as a third supervisor, not zero');
+    t.eq(win.document.getElementById('sct_sup_0').textContent, '3', 'and the on-screen Total repaints to match');
+
+    // The inline standard row under the Supervisors card has to move with
+    // it — it reads Rolando's PM day through the very same total.
+    t.eq(win.schedUfActual(win.dlLoadSchedule(), sat, ['sup']), 3,
+      'the Unifocus actual figure counts him too, since it is the same total');
+
+    // "PM" must NOT be miscounted as a crew-redirect. Only LOBBY / HOUSEMAN
+    // / TAILOR / LAUNDRY mean "covering somewhere else today" and stay
+    // excluded; PM specifically means "here, the PM half of the shift".
+    win.schedSetCell('sup', rolandoIdx, 'Rolando', sat, 'LOBBY', null);
+    t.eq(win.schedDayTotal(win.dlLoadSchedule(), sat, 'sup'), 2,
+      'a genuine redirect (LOBBY) still does not count toward this crew, unlike PM');
+    win.schedSetCell('sup', rolandoIdx, 'Rolando', sat, 'OFF', null);
+
+    // ── 13) The standard rides along inside each crew card, not only in
+    // the week-overview card at the top — Carlos's actual ask: looking at
+    // Supervisors, he wants the standard right there next to that crew's
+    // own total, not a scroll back up to cross-reference. ──
+    win.renderSchedule();
+    const cardHtml = html();
+    const supCard = cardHtml.match(/>Supervisors<\/div>.*?(?=<div style="background:var\(--navy\))/s);
+    t.assert(supCard, 'the Supervisors card is found');
+    t.assert(/Unifocus std/.test(supCard[0]), 'and it carries its own standard row');
+    t.assert(!/\(combined\)/.test(supCard[0]),
+      'Supervisors maps to one crew one position, so it is not flagged as combined');
+
+    // Houseman is the LAST crew card, so there is no next navy header to
+    // bound the match against — stop at one or the end of the string.
+    const hpCard = cardHtml.match(/>Houseman<\/div>[\s\S]*?(?=<div style="background:var\(--navy\)|$)/);
+    t.assert(hpCard && /Unifocus std.*\(combined\)/s.test(hpCard[0]),
+      'Houseman is flagged combined, since House Attendant spans the AM and PM crews');
+
+    t.assert(!/>Managers<\/div>[\s\S]{0,900}?Unifocus std/.test(cardHtml),
+      'Managers has no Unifocus standard on file and gets no row, same as everywhere else in the app');
+
+    // Editing a cell must repaint the inline row too, not just the Total —
+    // this is the same DOM ids _schedRefreshTotals targets, exercised
+    // through the real event path rather than by calling it directly.
+    const kIdx2 = win.dlLoadSchedule().days[sat].gra.findIndex((p) => p[0] === 'Karla Varela');
+    const scuBefore = win.document.getElementById('scu_gra_0').innerHTML;
+    win.schedSetCell('gra', kIdx2, 'Karla Varela', sat, 'OFF', null);
+    const scuAfter = win.document.getElementById('scu_gra_0').innerHTML;
+    t.assert(scuAfter !== scuBefore, 'taking a room attendant off Saturday moves the inline standard cell, not just the Total row');
+    win.schedSetCell('gra', kIdx2, 'Karla Varela', sat, '1', null);
   }
 };

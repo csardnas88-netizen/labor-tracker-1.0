@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.5.0"/>
+<meta name="app-version" content="7.5.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4312,6 +4312,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.5.1', date:'2026-08-15',
+    improvements:['The Unifocus standard now rides along inside each crew card on the Schedule, right under that crew\'s own Total — Carlos\'s ask, looking at Supervisors he had the headcount and the departures-each figure right there but had to scroll up to the summary card to check it against standard. Same colors, same numbers as that card; a position without a Unifocus standard on file (Managers, Overnight) simply has no row.'],
+    fixes:['A supervisor or manager marked "PM" was being counted as absent. Excel\'s own SUM() can\'t tell "working, PM shift" apart from "OFF" — both are text — and the app was following that same rule, which undercounted every crew total by exactly its PM person. This mattered most for Supervisors: Unifocus\'s Housekeeping Supervisor standard is one headcount across BOTH the AM and PM shift, so a day with a PM supervisor on it was reading as short when it was actually on standard. "PM" now counts as one person; a genuine redirect to another crew (LOBBY / HOUSEMAN / TAILOR / LAUNDRY) still does not, since that person is not working this crew that day.']
+  },
   {
     v:'7.5.0', date:'2026-08-15',
     features:['A Unifocus Standard card on the Schedule, one row per position with a standard on file (Room Attendant, House Attendant, Housekeeping Supervisor, Laundry Attendant, Turndown Attendant, Public Area Attendant) — each day shows how many you\'ve actually scheduled against what Unifocus expects for that day\'s occupancy, colored green when you\'re on it, amber when over, red when short. Runs off the Schedule\'s own forecasted OCC/Departures rather than an actual report, since the schedule is built weeks before those reports exist. House Attendant combines AM Houseman and PM Houseman into one number, matching how Unifocus states it as a single AM+PM standard; Room Attendant, which has no shift length of its own in the app, uses the same 8h every other housekeeping shift does. A day with nothing typed in yet shows a dash rather than a false "short by 7."']
@@ -18346,6 +18351,14 @@ var SCHED_UF_POS=[
   {label:'Turndown Attendant',      crews:['td']},
   {label:'Public Area Attendant',   crews:['lobby']}
 ];
+/* Which Unifocus position (if any) a given crew card's own headcount
+   feeds into. One crew never belongs to two positions here — House
+   Attendant is the only position spanning more than one crew, not the
+   other direction. */
+function _schedUfForCrew(bk){
+  for(var i=0;i<SCHED_UF_POS.length;i++) if(SCHED_UF_POS[i].crews.indexOf(bk)!==-1)return SCHED_UF_POS[i];
+  return null;
+}
 function ufShiftHoursForPos(pos){
   if(pos==='Room Attendant')return 8;
   var shifts=UNIFOCUS_STANDARDS[pos];
@@ -18429,11 +18442,26 @@ function schedNormalizePmHm(SCH){
   return changed;
 }
 /* Excel's own totals here are SUM() over the block's rows, which ignores
-   text — so "1" counts and "OFF" does not. Same rule. */
+   text — so "1" counts and "OFF" does not. Same rule, with one addition:
+   "PM" is a real body on shift, just the PM half of the day (Ingrid on
+   Managers, Yanira on Supervisors), and Excel's own SUM() drops it for
+   the same reason it drops "OFF" — SUM() can't tell "working, PM" from
+   "not working" apart, they're both text. This total has to, because
+   Unifocus's Housekeeping Supervisor standard is one headcount across
+   BOTH the AM and PM shift, and comparing it against a total that
+   silently excludes every PM supervisor would read as short every day
+   someone is legitimately covering the PM shift.
+   "LOBBY" / "HOUSEMAN" / "TAILOR" / "LAUNDRY" stay excluded on purpose —
+   those mean this person is covering a DIFFERENT crew that day, not
+   this one. */
 function schedDayTotal(SCH,ds,bk){
   var day=SCH.days&&SCH.days[ds]; if(!day)return 0;
   var arr=day[bk]||[],t=0;
-  arr.forEach(function(p){ var n=parseFloat(p[1]); if(!isNaN(n))t+=n; });
+  arr.forEach(function(p){
+    var v=String(p[1]||'').trim();
+    if(v==='PM'){ t+=1; return; }
+    var n=parseFloat(v); if(!isNaN(n))t+=n;
+  });
   return t;
 }
 function schedFmtTotal(n){ return (Math.round(n*100)/100).toString(); }
@@ -18579,7 +18607,12 @@ function schedCarryAddedRows(oldSch,newSch){
 function _schedRefreshTotals(SCH,onlyBk){
   var dates=schedWeekDates();
   SCHED_BLOCKS.forEach(function(b){
-    if(onlyBk&&b.key!==onlyBk&&!b.ratios)return;
+    var ufPos=_schedUfForCrew(b.key);
+    /* House Attendant's standard is combined across two crews (AM
+       Houseman + PM Houseman), and shows on both cards — so editing
+       either one has to repaint both, not just the crew that changed. */
+    var touchesUf=ufPos&&(!onlyBk||ufPos.crews.indexOf(onlyBk)!==-1);
+    if(onlyBk&&b.key!==onlyBk&&!b.ratios&&!touchesUf)return;
     dates.forEach(function(ds,di){
       var tot=schedDayTotal(SCH,ds,b.key);
       var tEl=document.getElementById('sct_'+b.key+'_'+di);
@@ -18591,8 +18624,31 @@ function _schedRefreshTotals(SCH,onlyBk){
         var num=day?parseFloat(day[rt.num]):NaN;
         rEl.textContent=(!isNaN(num)&&tot>0)?(num/tot).toFixed(2):'';
       });
+      if(ufPos){
+        var uEl=document.getElementById('scu_'+b.key+'_'+di);
+        if(uEl)uEl.innerHTML=_schedUfCellHTML(SCH,ufPos,ds);
+      }
     });
   });
+}
+/* One place deciding green/amber/red, used by both the crew-card row
+   and the week-overview card — so a day can never read "on standard"
+   in one and "short" in the other. */
+function _ufDiffColor(diff){
+  if(diff>0)return {bg:'var(--yellow-bg)',fg:'var(--yellow)'};
+  if(diff<0)return {bg:'var(--red-bg)',fg:'var(--red)'};
+  return {bg:'var(--green-bg)',fg:'var(--green)'};
+}
+/* Shared between the initial render and the repaint above, so the two
+   can never drift into showing different colors for the same day. */
+function _schedUfCellHTML(SCH,ufPos,ds){
+  if(!SCH.days[ds])return '';
+  var actual=schedUfActual(SCH,ds,ufPos.crews);
+  var std=schedUfExpected(SCH,ufPos.label,ds);
+  if(std==null)return '<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>';
+  var c=_ufDiffColor(actual-std);
+  return '<div style="text-align:center;border-radius:5px;padding:1px 0;background:'+c.bg+';" title="'+ufPos.label+': '+actual+' scheduled vs. '+std+' standard">'
+    +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+std+'</div></div>';
 }
 function _schedCellCss(v){
   var base='width:100%;min-width:0;padding:3px 2px;font-size:10.5px;font-weight:700;text-align:center;'
@@ -18717,12 +18773,9 @@ function renderSchedule(){
       html+='<div style="font-size:10.5px;font-weight:700;color:var(--text1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+escHtml(r.label)+'">'+escHtml(r.label)+'</div>';
       r.cells.forEach(function(c){
         if(!c||c.std==null){ html+='<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>'; return; }
-        var diff=c.actual-c.std;
-        var bg='var(--green-bg)',fg='var(--green)';
-        if(diff>0){ bg='var(--yellow-bg)'; fg='var(--yellow)'; }
-        else if(diff<0){ bg='var(--red-bg)'; fg='var(--red)'; }
-        html+='<div style="text-align:center;border-radius:6px;padding:2px 1px;background:'+bg+';" title="'+r.label+': '+c.actual+' scheduled vs. '+c.std+' standard">'
-          +'<div style="font-size:11.5px;font-weight:800;color:'+fg+';">'+c.actual+'</div>'
+        var col=_ufDiffColor(c.actual-c.std);
+        html+='<div style="text-align:center;border-radius:6px;padding:2px 1px;background:'+col.bg+';" title="'+r.label+': '+c.actual+' scheduled vs. '+c.std+' standard">'
+          +'<div style="font-size:11.5px;font-weight:800;color:'+col.fg+';">'+c.actual+'</div>'
           +'<div style="font-size:8px;color:var(--text3);">std '+c.std+'</div>'
           +'</div>';
       });
@@ -18804,6 +18857,23 @@ function renderSchedule(){
       });
       html+='</div>';
     });
+
+    /* The Unifocus standard for THIS crew, right where its own total
+       already is — Carlos's ask: looking at Supervisors, he had the
+       headcount and the departures-each ratio right there, but had to
+       scroll back up to the summary card to see whether that headcount
+       was actually enough. Same colors as that card: green on standard,
+       amber over, red short. */
+    var ufPos=_schedUfForCrew(b.key);
+    if(ufPos){
+      html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border);">';
+      html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">Unifocus std'
+        +(ufPos.crews.length>1?' <span style="font-weight:400;text-transform:none;">(combined)</span>':'')+'</div>';
+      dates.forEach(function(ds,di){
+        html+='<div id="scu_'+b.key+'_'+di+'">'+_schedUfCellHTML(SCH,ufPos,ds)+'</div>';
+      });
+      html+='</div>';
+    }
     html+='</div></div>';
 
     /* Borrow someone in. Grouped by the crew each person normally works,
