@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.10.0"/>
+<meta name="app-version" content="7.11.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4312,6 +4312,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.11.0', date:'2026-08-16',
+    features:['Auto-fill now covers the special roles too, confirmed directly with Carlos (not from Schedule Builder\'s stale config): Overnight\'s fixed pattern (Melvin off Mon/Tue, Luis off Sat/Sun), Yanira\'s Supervisors PM shift, PM Houseman (Yesenia\'s 6-day week with Paty covering her day off, provided Paty is actually working hers), and the cross-department cover chains — Marroquin\'s Lobby AM covered by Gabriela Cuevas, then Sandra S if she\'s off too; Sarahi\'s Lobby PM covered by Andrea; Victoriano Ch\'s Laundry covered by Jorge Gonzalez — plus the Room Attendant-to-Houseman overflow backups (Rubia, then Julia) on a day Houseman is still short after everything else. A cover shows up as a relabeled cell on their OWN crew (e.g. Andrea\'s Turndown row reads "LOBBY" the day she covers Sarahi), the same convention already sitting in Carlos\'s real file, not a new row added elsewhere. Every name here was checked against his actual current Schedule Draft rather than guessed — Yorlin A, previously the second-tier Houseman-PM cover in Schedule Builder\'s config, no longer works at the hotel and was dropped rather than carried over stale.']
+  },
   {
     v:'7.10.0', date:'2026-08-16',
     features:['Added "Auto-fill this week" to the Schedule page — it can now build Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant and Houseman on its own from OCC/Departures, no Schedule Builder or Excel required, ported from Schedule Builder\'s own real generator (same weekend-rotation fairness, minimum-days-off placement, and shortfall-repair logic it already uses). Deliberately does NOT copy Schedule Builder\'s saved roster or weekend history — verified against Carlos\'s real Schedule Draft that Schedule Builder\'s own copy has drifted out of date (missing real Laundry staff, old spellings of others\' names) — this instead uses whoever is actually on each crew this week and this app\'s own saved history, the same sources every other Schedule feature already trusts. Managers, PM Houseman, Overnight, and the cross-department cover arrangements (Gabriela C, Andrea, Jorge G, Yesenia, the HP-overflow backups, low-season seniority trim) are left untouched for now — those all hinge on specific people holding specific roles today, worth confirming before wiring in rather than guessing from a source already shown to be stale.']
@@ -18651,8 +18655,13 @@ function _schedDatesForWeekStart(weekStart){
    Minimums match Schedule Builder's own autoFill call sites exactly: 2
    days off for every crew except PM Turndown/GRA, which gets 1. Managers
    and Overnight are excluded — both are 100% manual/fixed in Schedule
-   Builder too, so neither one carries a days-off rule there either. */
-var SCHED_MIN_OFF={laundry:2,sup:2,lobby:2,td:1,pmhm:2,gra:2,hp:2};
+   Builder too, so neither one carries a days-off rule there either.
+   PM Houseman is Yesenia's own 6-days-on/1-day-off arrangement
+   (confirmed directly with Carlos, 2026-08-16 — see schedApplyYesenia),
+   not the general 2-day minimum every other crew gets — corrected here
+   from an earlier, wrong default of 2 that would have flagged her
+   normal 1 day off as a shortfall every single week. */
+var SCHED_MIN_OFF={laundry:2,sup:2,lobby:2,td:1,pmhm:1,gra:2,hp:2};
 
 /* ── exempting someone from Schedule Checks ──
    Verified against Carlos's real workbook: several real people never
@@ -18954,6 +18963,132 @@ function schedRepairShortfalls(SCH,dates,bk,names){
   }
 }
 
+/* ── special-role machinery, confirmed directly with Carlos on
+   2026-08-16 — NOT ported from Schedule Builder's own config, which was
+   already proven stale for the base roster (see the header comment on
+   this section above). Every name below is what Carlos typed in chat
+   that day, not a Schedule Builder id, so a week whose real spelling
+   drifts from these again will just quietly skip that one arrangement
+   (see schedCellFor returning '' for a name not on the roster) rather
+   than guess — same defensive posture as the cover chains below. */
+
+/* Overnight is two people on a fixed pattern, not a needs-driven crew —
+   nobody else in 'night' (if anyone else were ever added there) is
+   touched by Auto-fill at all, same as Schedule Builder's own
+   applyOvernight only ever knew about these same two ids. */
+var SCHED_OVERNIGHT_DEFAULT_OFF={'Melvin':[2,3],'Luis':[0,1]};
+/* Yanira works Supervisors' PM shift. Labor-tracker's own vocabulary
+   already has a value for exactly this — 'PM' — used elsewhere in the
+   app and already counted as a staffed body (the v7.5.1 fix), so this
+   is a plain relabel of her working days, not a different rule. */
+var SCHED_PM_SUPERVISOR='Yanira';
+/* Cross-department cover chains. A cover's OWN crew cell gets the
+   crew-label value on the day they cover — the exact convention
+   already sitting in Carlos's real file (Paty's Turndown row already
+   reads "HOUSEMAN" the day she covers Yesenia, not a new row added to
+   PM Houseman) — so nothing about totals or rendering needed to change,
+   only who gets marked and when. Each chain is titular first, then
+   backups in escalating order; the first name actually on this week's
+   roster AND not off that day covers, and if the titular themselves is
+   working, no cover is needed at all. */
+/* Names here are spelled exactly as they appear in Carlos's real
+   Schedule Draft (checked against his real current file, 2026-08-16) —
+   NOT how he described them in chat, which turned out to differ in
+   several cases ("Maria Marroquin" is just "Marroquin" there; Gabriela
+   is "Gabriela Cuevas" on her own Room Attendant row though "Gabriela"
+   on Lobby's; "Victoriano C" is "Victoriano Ch"; "Jorge G" is "Jorge
+   Gonzalez"; "Rubia T"/"Julia S" are plain "Rubia"/"Julia"). Room
+   Attendant has two different "Sandra"s — confirmed with Carlos that
+   Sandra Silva is "Sandra S", not the other one. */
+var SCHED_COVER_CHAINS=[
+  {crew:'lobby',   label:'LOBBY',   chain:[{name:'Marroquin',homeCrew:'lobby'},{name:'Gabriela Cuevas',homeCrew:'gra'},{name:'Sandra S',homeCrew:'gra'}]},
+  {crew:'lobby',   label:'LOBBY',   chain:[{name:'Sarahi',homeCrew:'lobby'},{name:'Andrea',homeCrew:'td'}]},
+  {crew:'laundry', label:'LAUNDRY', chain:[{name:'Victoriano Ch',homeCrew:'laundry'},{name:'Jorge Gonzalez',homeCrew:'hp'}]}
+];
+/* Pulled from Room Attendant into Houseman, in this order, ONLY on a day
+   Houseman is still short after its own min-days-off + repair pass —
+   same last-resort role Schedule Builder's applyHpOverflow gives them. */
+var SCHED_HP_OVERFLOW_BACKUPS=['Rubia','Julia'];
+
+function schedApplyOvernight(SCH,dates){
+  var names=[],seen={};
+  dates.forEach(function(ds){
+    var day=SCH.days[ds]; if(!day)return;
+    (day.night||[]).forEach(function(p){ var n=String(p[0]||'').trim(); if(!n)return; var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n); });
+  });
+  names.forEach(function(nm){
+    var offDays=null;
+    Object.keys(SCHED_OVERNIGHT_DEFAULT_OFF).forEach(function(k){ if(dlNorm(k)===dlNorm(nm))offDays=SCHED_OVERNIGHT_DEFAULT_OFF[k]; });
+    if(!offDays)return;   // not one of the two fixed-pattern people — left alone
+    dates.forEach(function(ds,i){
+      var row=schedRawCell(SCH,ds,'night',nm);
+      if(!row||row[1]==='R-OFF')return;
+      row[1]=offDays.indexOf(i)!==-1?'OFF':'1';
+    });
+  });
+}
+function schedApplyPmSupervisor(SCH,dates){
+  dates.forEach(function(ds){
+    var row=schedRawCell(SCH,ds,'sup',SCHED_PM_SUPERVISOR);
+    if(row&&row[1]==='1')row[1]='PM';
+  });
+}
+/* Yesenia (PM Houseman) gets exactly 1 day off — reuses the same
+   min-days-off placement as every other crew (needFn naturally returns
+   0 for 'pmhm', since schedAutoNeed only has a formula for the five
+   needs-driven crews, so there's no repair pressure — just a fair day
+   picked the same way). On whichever day that lands, Paty covers by
+   getting "HOUSEMAN" on her OWN Turndown row for that day, PROVIDED
+   she's actually working that day; if Paty is off too, the day is left
+   as Carlos said to leave it — nobody automatic. */
+function schedApplyYesenia(SCH,dates,wk){
+  var names=[],seen={};
+  dates.forEach(function(ds){
+    var day=SCH.days[ds]; if(!day)return;
+    (day.pmhm||[]).forEach(function(p){ var n=String(p[0]||'').trim(); if(!n)return; var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n); });
+  });
+  if(!names.length)return;
+  schedAutoFillCrew(SCH,dates,'pmhm',names,1,wk);
+  var yesName=names.filter(function(n){ return dlNorm(n)===dlNorm('Yesenia'); })[0];
+  if(!yesName)return;
+  dates.forEach(function(ds){
+    if(!schedIsOff(schedCellFor(SCH,ds,'pmhm',yesName)))return;   // Yesenia is off that day (plain OFF, or a granted R-OFF)
+    if(schedCellFor(SCH,ds,'td','Paty')!=='1')return;   // Paty off/unavailable too — left manual
+    var row=schedRawCell(SCH,ds,'td','Paty');
+    if(row)row[1]='HOUSEMAN';
+  });
+}
+function schedApplyCoverChains(SCH,dates){
+  SCHED_COVER_CHAINS.forEach(function(cc){
+    var titular=cc.chain[0];
+    dates.forEach(function(ds){
+      var titularCell=schedCellFor(SCH,ds,titular.homeCrew,titular.name);
+      if(titularCell===''||(titularCell!=='OFF'&&titularCell!=='R-OFF'))return;
+      for(var i=1;i<cc.chain.length;i++){
+        var c=cc.chain[i];
+        var cell=schedCellFor(SCH,ds,c.homeCrew,c.name);
+        if(cell!=='1')continue;   // not on this week's roster, or off/already covering elsewhere
+        var row=schedRawCell(SCH,ds,c.homeCrew,c.name);
+        if(row)row[1]=cc.label;
+        return;
+      }
+    });
+  });
+}
+function schedApplyHpOverflow(SCH,dates){
+  dates.forEach(function(ds){
+    var day=SCH.days[ds]; if(!day)return;
+    var need=schedAutoNeed(day,'hp');
+    var have=(day.hp||[]).filter(function(p){ return !schedIsOff(String(p[1]||'').trim()); }).length;
+    for(var bi=0;bi<SCHED_HP_OVERFLOW_BACKUPS.length&&have<need;bi++){
+      var nm=SCHED_HP_OVERFLOW_BACKUPS[bi];
+      if(schedCellFor(SCH,ds,'gra',nm)!=='1')continue;
+      var row=schedRawCell(SCH,ds,'gra',nm);
+      if(row){ row[1]='HOUSEMAN'; have++; }
+    }
+  });
+}
+
 function schedAutoFill(){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days){ showToast('&#9888; Build or upload this week first.'); return; }
@@ -18962,7 +19097,7 @@ function schedAutoFill(){
   if(!loaded.length){ showToast('&#9888; Build or upload this week first.'); return; }
   var hasOcc=loaded.some(function(ds){ return (parseInt(SCH.days[ds].occ,10)||0)>0; });
   if(!hasOcc){ showToast('&#9888; Enter OCC for at least one day first.'); return; }
-  if(!confirm('Auto-fill Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant and Houseman for this week?\n\nAny R-OFF already on the grid is kept; everything else on those crews is replaced. Managers, PM Houseman and Overnight are not touched.'))return;
+  if(!confirm('Auto-fill this week?\n\nAny R-OFF already on the grid is kept. Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant, Houseman and PM Houseman are filled or replaced, plus Overnight\'s fixed pattern, Yanira\'s PM shift, the Lobby/Laundry cover chains, and the Houseman overflow backups. Managers is left untouched.'))return;
 
   var wk=schedWeekIndexOf(dates[0]);
   Object.keys(SCHED_AUTO_OFFCOUNT).forEach(function(bk){
@@ -18977,6 +19112,18 @@ function schedAutoFill(){
     if(!names.length)return;
     schedAutoFillCrew(SCH,dates,bk,names,SCHED_AUTO_OFFCOUNT[bk],wk);
   });
+
+  /* Special roles, in dependency order: Yesenia/Paty needs Turndown
+     already filled; the PM-supervisor relabel and cover chains need
+     Supervisors/Lobby/Laundry/Room Attendant/Houseman already filled;
+     the Houseman overflow backfill reacts to Houseman's state AFTER a
+     cover chain may have pulled someone (Jorge G) out of it, so it runs
+     last, same order Schedule Builder's own autoFill uses. */
+  schedApplyYesenia(SCH,dates,wk);
+  schedApplyOvernight(SCH,dates);
+  schedApplyPmSupervisor(SCH,dates);
+  schedApplyCoverChains(SCH,dates);
+  schedApplyHpOverflow(SCH,dates);
 
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
@@ -19332,7 +19479,7 @@ function renderSchedule(){
   });
   html+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;">'
     +'<button class="btn btn-navy btn-sm" onclick="schedAutoFill()">Auto-fill this week</button>'
-    +'<div style="font-size:9.5px;color:var(--text3);margin-top:5px;">Fills Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant &amp; Houseman from OCC/Departures &mdash; R-OFF is always kept</div>'
+    +'<div style="font-size:9.5px;color:var(--text3);margin-top:5px;">Fills every crew except Managers from OCC/Departures, including Overnight, Yanira\'s PM shift and the cover chains &mdash; R-OFF is always kept</div>'
     +'</div>';
   html+='</div></div>';
 

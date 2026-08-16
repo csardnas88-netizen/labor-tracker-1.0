@@ -784,7 +784,8 @@ module.exports = {
     });
 
     // pmhm/night/mgr are excluded from Auto-fill entirely.
-    t.eq(afterAuto.days[thisDates20[0]].pmhm[0][1], '', 'PM Houseman is untouched by Auto-fill');
+    t.assert(win.schedIsOff(afterAuto.days[thisDates20[0]].pmhm[0][1]) || afterAuto.days[thisDates20[0]].pmhm[0][1] === '1',
+      "PM Houseman IS filled by Auto-fill (Yesenia's own 1-day-off arrangement, or a plain min-off fill for whoever's actually there) — a stand-in name like 'Untouched PM' just gets the same generic treatment as any other PM Houseman crew member");
     t.eq(afterAuto.days[thisDates20[0]].night[0][1], '1', 'Overnight is untouched by Auto-fill');
     t.eq(afterAuto.days[thisDates20[0]].mgr[0][1], '', 'Managers is untouched by Auto-fill');
 
@@ -853,5 +854,138 @@ module.exports = {
       const working = tdNames.filter((nm) => !win.schedIsOff(afterAuto4.days[ds].td.find((p) => p[0] === nm)[1])).length;
       t.assert(working >= 1, ds + " still meets Turndown's need of 1 despite Monday's shortage");
     });
+
+    // ── 21) Special-role machinery — confirmed directly with Carlos on
+    // 2026-08-16 (Overnight's fixed pattern, Yanira's PM shift, the
+    // Lobby/Laundry cover chains, Yesenia/Paty, the Houseman overflow
+    // backups). Each piece is exercised as its own unit against
+    // hand-built, fully-determined cell values rather than through the
+    // full randomized Auto-fill pipeline — the escalation logic (does
+    // the SECOND backup trigger only when the first is also off) needs
+    // exact control that a real Auto-fill run can't guarantee day to
+    // day. ──
+    const ds21 = thisDates20; // reuse the same seven dates from step 20
+
+    // Overnight: fixed pattern, R-OFF still wins over it.
+    const SCH21a = { days: {} };
+    ds21.forEach((ds) => { SCH21a.days[ds] = { night: [['Melvin', '1'], ['Luis', '1']] }; });
+    SCH21a.days[ds21[5]].night[0][1] = 'R-OFF'; // Melvin, Thursday — not one of his default off days
+    win.schedApplyOvernight(SCH21a, ds21);
+    t.eq(SCH21a.days[ds21[2]].night[0][1], 'OFF', "Melvin's default pattern (Mon off) applies");
+    t.eq(SCH21a.days[ds21[3]].night[0][1], 'OFF', "Melvin's default pattern (Tue off) applies");
+    t.eq(SCH21a.days[ds21[0]].night[0][1], '1', 'Melvin works Saturday, his normal pattern');
+    t.eq(SCH21a.days[ds21[5]].night[0][1], 'R-OFF', "Melvin's Thursday R-OFF survives even though it's not his default off day");
+    t.eq(SCH21a.days[ds21[0]].night[1][1], 'OFF', "Luis's default pattern (Sat off) applies");
+    t.eq(SCH21a.days[ds21[1]].night[1][1], 'OFF', "Luis's default pattern (Sun off) applies");
+    t.eq(SCH21a.days[ds21[2]].night[1][1], '1', 'Luis works Monday, his normal pattern');
+
+    // PM Supervisor: Yanira's working days relabel to 'PM'; her OFF days
+    // and everyone else's cells are untouched.
+    const SCH21b = { days: { [ds21[0]]: { sup: [['Yanira', '1'], ['Other', '1']] }, [ds21[1]]: { sup: [['Yanira', 'OFF']] } } };
+    win.schedApplyPmSupervisor(SCH21b, ds21);
+    t.eq(SCH21b.days[ds21[0]].sup[0][1], 'PM', "Yanira's working day relabels to PM — the value this app already counts as staffed");
+    t.eq(SCH21b.days[ds21[0]].sup[1][1], '1', 'everyone else on Supervisors is untouched');
+    t.eq(SCH21b.days[ds21[1]].sup[0][1], 'OFF', "Yanira's own OFF day is left alone, not relabeled");
+
+    // Cover chains: single-tier (Sarahi -> Andrea, Victoriano Ch ->
+    // Jorge Gonzalez), two-tier escalation (Marroquin -> Gabriela Cuevas
+    // -> Sandra S), no-cover-needed, and no-one-available-to-cover.
+    // Names here are spelled exactly as they appear in Carlos's real
+    // Schedule Draft, confirmed 2026-08-16 — see the header comment on
+    // SCHED_COVER_CHAINS in index.html for why these differ from how he
+    // described them in chat.
+    const SCH21c = {
+      days: {
+        [ds21[0]]: { // titular off, first-tier cover available
+          lobby: [['Marroquin', 'OFF'], ['Sarahi', '1']],
+          gra: [['Gabriela Cuevas', '1'], ['Sandra S', '1']],
+        },
+        [ds21[1]]: { // titular off, first-tier cover ALSO off — escalates to second tier
+          lobby: [['Marroquin', 'OFF']],
+          gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', '1']],
+        },
+        [ds21[2]]: { // titular off, both covers off — nobody covers
+          lobby: [['Marroquin', 'OFF']],
+          gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', 'OFF']],
+        },
+        [ds21[3]]: { // titular working — no cover needed
+          lobby: [['Marroquin', '1']],
+          gra: [['Gabriela Cuevas', '1'], ['Sandra S', '1']],
+        },
+        [ds21[4]]: { // Lobby PM chain + Laundry chain, same day
+          lobby: [['Sarahi', 'OFF']],
+          td: [['Andrea', '1'], ['Paty', '1']],
+          laundry: [['Victoriano Ch', 'OFF']],
+          hp: [['Jorge Gonzalez', '1']],
+        },
+      },
+    };
+    win.schedApplyCoverChains(SCH21c, ds21);
+    t.eq(SCH21c.days[ds21[0]].gra[0][1], 'LOBBY', "Gabriela Cuevas covers Lobby AM on Marroquin's day off");
+    t.eq(SCH21c.days[ds21[0]].gra[1][1], '1', 'Sandra S is untouched when Gabriela Cuevas already covered');
+    t.eq(SCH21c.days[ds21[1]].gra[1][1], 'LOBBY', "Sandra S covers when BOTH Marroquin and Gabriela Cuevas are off");
+    t.eq(SCH21c.days[ds21[2]].gra[0][1], 'OFF', 'with nobody available in the chain, everyone just stays off — nothing forced');
+    t.eq(SCH21c.days[ds21[2]].gra[1][1], 'OFF', 'same for the second tier — no cover fabricated out of thin air');
+    t.eq(SCH21c.days[ds21[3]].gra[0][1], '1', "Marroquin working means no cover triggers at all — Gabriela Cuevas stays on her own crew");
+    t.eq(SCH21c.days[ds21[4]].td[0][1], 'LOBBY', "Andrea covers Lobby PM on Sarahi's day off");
+    t.eq(SCH21c.days[ds21[4]].hp[0][1], 'LAUNDRY', "Jorge Gonzalez covers Laundry on Victoriano Ch's day off — a different chain, same day, doesn't interfere");
+    t.eq(SCH21c.days[ds21[4]].td[1][1], '1', "Paty is unrelated to either chain that day and stays untouched");
+
+    // A titular missing from this week's roster entirely is skipped, not
+    // guessed at — schedCellFor returns '' and the chain never fires.
+    const SCH21d = { days: { [ds21[0]]: { lobby: [], gra: [['Gabriela Cuevas', '1']] } } };
+    win.schedApplyCoverChains(SCH21d, ds21);
+    t.eq(SCH21d.days[ds21[0]].gra[0][1], '1', "no Marroquin row this week at all — Gabriela Cuevas is left alone rather than assumed covering");
+
+    // Yesenia (PM Houseman): exactly 1 day off, forced deterministic via
+    // a pre-set R-OFF so the cover check lands on a known day. Paty
+    // covers on that day if she's actually working her own Turndown
+    // shift; if she's off too, the day is left for Carlos, per his
+    // answer that nobody covers automatically in that case.
+    const SCH21e = { days: {} };
+    ds21.forEach((ds) => { SCH21e.days[ds] = { pmhm: [['Yesenia', '']], td: [['Paty', '1']] }; });
+    SCH21e.days[ds21[3]].pmhm[0][1] = 'R-OFF'; // Yesenia's one day off, forced to Tuesday
+    win.schedApplyYesenia(SCH21e, ds21, 0);
+    t.eq(SCH21e.days[ds21[3]].pmhm[0][1], 'R-OFF', "Yesenia's forced day off is unchanged");
+    t.eq(SCH21e.days[ds21[3]].td[0][1], 'HOUSEMAN', "Paty covers on Yesenia's day off, since Paty is working her own Turndown shift that day");
+    ds21.forEach((ds, i) => { if (i !== 3) t.eq(SCH21e.days[ds].pmhm[0][1], '1', ds + ': Yesenia works every other day, exactly the 6-day pattern'); });
+
+    const SCH21f = { days: {} };
+    ds21.forEach((ds) => { SCH21f.days[ds] = { pmhm: [['Yesenia', '']], td: [['Paty', '1']] }; });
+    SCH21f.days[ds21[3]].pmhm[0][1] = 'R-OFF';
+    SCH21f.days[ds21[3]].td[0][1] = 'OFF'; // Paty off too, same day
+    win.schedApplyYesenia(SCH21f, ds21, 0);
+    t.eq(SCH21f.days[ds21[3]].td[0][1], 'OFF', "Paty being off too is left exactly as Carlos said — nobody automatic, no HOUSEMAN forced onto her OFF day");
+
+    // Houseman overflow: Rubia then Julia, pulled only as far as needed
+    // and only from an actually-working Room Attendant day. ("Rubia" and
+    // "Julia" — not "Rubia T"/"Julia S" — the exact spelling in Carlos's
+    // real Room Attendant roster.)
+    const SCH21g = { days: { [ds21[0]]: {
+      occ: '100', dep: '80', tdOcc: '', // dep=80 -> schedSupHpNeeded = 3
+      hp: [['H1', 'OFF'], ['H2', 'OFF']],
+      gra: [['Rubia', '1'], ['Julia', '1'], ['Other RA', '1']],
+    } } };
+    win.schedApplyHpOverflow(SCH21g, ds21);
+    t.eq(SCH21g.days[ds21[0]].gra[0][1], 'HOUSEMAN', 'Rubia is pulled first');
+    t.eq(SCH21g.days[ds21[0]].gra[1][1], 'HOUSEMAN', 'Julia is pulled second, since Houseman is still short of 3 after Rubia alone');
+    t.eq(SCH21g.days[ds21[0]].gra[2][1], '1', "Other RA isn't a designated backup and is never touched");
+
+    const SCH21h = { days: { [ds21[0]]: {
+      occ: '100', dep: '80', tdOcc: '',
+      hp: [['H1', '1'], ['H2', '1'], ['H3', '1']], // already meets need=3 on its own
+      gra: [['Rubia', '1'], ['Julia', '1']],
+    } } };
+    win.schedApplyHpOverflow(SCH21h, ds21);
+    t.eq(SCH21h.days[ds21[0]].gra[0][1], '1', 'Houseman already at standard — the backups are never pulled at all');
+
+    const SCH21i = { days: { [ds21[0]]: {
+      occ: '100', dep: '80', tdOcc: '',
+      hp: [['H1', 'OFF']],
+      gra: [['Rubia', 'OFF'], ['Julia', '1']], // Rubia is off her own RA shift that day
+    } } };
+    win.schedApplyHpOverflow(SCH21i, ds21);
+    t.eq(SCH21i.days[ds21[0]].gra[0][1], 'OFF', "Rubia being off her own shift means she isn't pulled — only someone already working can be relabeled");
+    t.eq(SCH21i.days[ds21[0]].gra[1][1], 'HOUSEMAN', 'so Julia covers instead');
   }
 };
