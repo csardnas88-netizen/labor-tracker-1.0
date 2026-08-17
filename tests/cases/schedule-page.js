@@ -363,15 +363,22 @@ module.exports = {
     t.eq(win.schedUfExpected(blankDay, 'Room Attendant', '2026-08-18'), null,
       'no departures typed in -> no standard computed, not a misleading 0');
 
-    // Rendered: the card shows the position, the scheduled number, and
-    // the standard beneath it, colored by status.
+    // Rendered: the card shows the position and how far off standard it
+    // is (a signed delta, Carlos's own ask — "existe otra manera... está
+    // un poco confusa" about the old actual/std pair he had to subtract
+    // himself), with the exact scheduled/standard figures on hover.
     win.renderSchedule();
     const ufHtml = html();
     t.assert(/Unifocus Standard/.test(ufHtml), 'the card is titled plainly');
     t.assert(/House Attendant/.test(ufHtml) && /Room Attendant/.test(ufHtml), 'positions are named, not abbreviated to the crew key');
-    t.assert(/std 7/.test(ufHtml), "the standard prints beneath the actual number");
+    t.assert(/>-4</.test(ufHtml), "Room Attendant (3 actual vs 7 standard) shows as a plain signed delta, -4, not two numbers to subtract");
+    t.assert(/vs\. 7 standard/.test(ufHtml), 'the exact standard figure is still there, in the hover title');
     t.assert(/AM Houseman \+ PM Houseman combined/.test(ufHtml),
       'the combined-crew caveat is stated on the page, not left implicit');
+    t.assert(/rms ea/.test(ufHtml), "rooms-per-person shows for a qualifying position (Room Attendant: 158 rooms / 3 actual)");
+    const laundryRow = ufHtml.match(/title="Laundry Attendant"[\s\S]*?(?=title="Turndown Attendant")/);
+    t.assert(!!laundryRow && !/rms ea/.test(laundryRow[0]),
+      "but not for Laundry — it isn't staffed against a per-room count, so a 'rooms each' figure there would be made up");
 
     // ── 12) "PM" is a real body, not a blank ──
     // Excel's own SUM() drops "PM" the same way it drops "OFF" — both are
