@@ -578,5 +578,23 @@ module.exports = {
     const dayWithSandraS = { gra: [['Sandra S', '1'], ['Sandra', '1']] };
     t.eq(win.dlLook(dayWithSandraS, 'gra', 'Sandra Silva'), '1',
       "the alias resolves Sections' \"Sandra Silva\" to the Schedule's \"Sandra S\", not to the OTHER \"Sandra\" who owns a floor");
+
+    // ── Paty doubled up in PM Houseman: Carlos hit a real day where she
+    // was BOTH a manual edit directly into the "PM Houseman" block AND
+    // still carrying "HOUSEMAN" on her old Turndown row from before —
+    // the two sources this code reads never expected to both be true
+    // for the same person on the same day, so she printed twice. ──
+    const schForDup = win.dlLoadSchedule();
+    const dayDup = schForDup.days['2026-08-14'];
+    dayDup.pmhm = [['Paty', '1']];
+    dayDup.td = dayDup.td.map((p) => {
+      if (p[0] === 'Paty') return ['Paty', 'HOUSEMAN'];
+      if (p[0] === 'Yesenia') return ['Yesenia', '1']; // not covering this day, isolates the scenario to Paty alone
+      return p;
+    });
+    win.dlSaveSchedule(schForDup);
+    const dupP = win.dlBuildPlan('2026-08-14');
+    t.eq(dupP.hm_pm.join(','), 'Paty',
+      'Paty shows up once, not twice, even though both the direct PM Houseman row and the Turndown HOUSEMAN cover cell both point at her');
   }
 };

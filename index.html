@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.21.1"/>
+<meta name="app-version" content="7.21.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.21.2', date:'2026-08-17',
+    features:['Fixed Paty printing twice in PM Houseman. She can end up counted from two places at once — directly listed in the "PM Houseman" block itself (a manual edit) AND still carrying "HOUSEMAN" on her old Turndown row from covering earlier — and the lineup was showing both instead of recognizing they\'re the same person. Deduped by name, so either source alone is enough to place her once.']
+  },
   {
     v:'7.21.1', date:'2026-08-17',
     features:['Fixed the real cause of "Floor 2 has no owner" — Carlos re-uploaded the corrected Section assignment file and it still wasn\'t reading Ada. Traced it by loading his actual file through the real Excel reader: the GRA sheet\'s row 1 is completely blank (the title sits on row 2), which shifts where the spreadsheet reader starts counting rows from — every fixed "row 6" read was landing one row late, silently reading row 7 into what should have been row 6, for the ENTIRE sheet. No amount of widening the row range could have fixed this, since the whole window was shifted, not too narrow. Now finds the Floor/Name header by its actual text and reads everything below it, immune to how many blank rows sit above regardless of the file\'s layout. Verified against the real uploaded file: 21 floors, Floor 2 = Ada.']
@@ -18346,9 +18350,18 @@ function dlBuildPlan(ds){
      Real source of truth instead: whoever is actually listed as working
      in the Schedule Draft's own "PM Houseman" block that day (normally
      Yesenia), PLUS whoever from Turndown has "HOUSEMAN" in their own
-     cell that day (Paty, when she's covering). */
+     cell that day (Paty, when she's covering).
+
+     Carlos then hit a real day where BOTH were true at once — Paty
+     directly in the "PM Houseman" block (a manual edit put her there)
+     AND still carrying "HOUSEMAN" on her old Turndown row from before
+     — which doubled her up on the printed lineup. Deduped by name
+     rather than trying to decide which of the two sources is more
+     "correct": either one on its own means she's covering that day. */
+  var hmPmSeen={};
   P.hm_pm=day.pmhm.filter(function(p){return dlIn(p[1]);}).map(function(p){return p[0];})
-    .concat(day.td.filter(function(p){return p[1]==='HOUSEMAN';}).map(function(p){return p[0];}));
+    .concat(day.td.filter(function(p){return p[1]==='HOUSEMAN';}).map(function(p){return p[0];}))
+    .filter(function(nm){ var k=dlNorm(nm); if(hmPmSeen[k])return false; hmPmSeen[k]=1; return true; });
   P.lobby_am=S.lobby.filter(function(p){return /AM/.test(p[0])&&dlIn(dlLook(day,'lobby',p[1]));}).map(function(p){return p[1];});
   P.lobby_pm=S.lobby.filter(function(p){return /PM/.test(p[0])&&dlIn(dlLook(day,'lobby',p[1]));}).map(function(p){return p[1];});
   /* A GRA the schedule explicitly pulls to the lobby that day (the cell
