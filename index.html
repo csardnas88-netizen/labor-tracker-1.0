@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.21.0"/>
+<meta name="app-version" content="7.21.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.21.1', date:'2026-08-17',
+    features:['Fixed the real cause of "Floor 2 has no owner" — Carlos re-uploaded the corrected Section assignment file and it still wasn\'t reading Ada. Traced it by loading his actual file through the real Excel reader: the GRA sheet\'s row 1 is completely blank (the title sits on row 2), which shifts where the spreadsheet reader starts counting rows from — every fixed "row 6" read was landing one row late, silently reading row 7 into what should have been row 6, for the ENTIRE sheet. No amount of widening the row range could have fixed this, since the whole window was shifted, not too narrow. Now finds the Floor/Name header by its actual text and reads everything below it, immune to how many blank rows sit above regardless of the file\'s layout. Verified against the real uploaded file: 21 floors, Floor 2 = Ada.']
+  },
   {
     v:'7.21.0', date:'2026-08-17',
     features:['Daily Lineup fixes from Carlos\'s report: the Section assignment file\'s floater column was only ever read from 3 fixed rows, which silently dropped any PM-shift floater and risked reading section headers ("AM Shift"/"PM Shift") as if they were people — now scans the whole column by value and stops before the Laundry crew\'s names, which are a different list entirely. Also widened the floor-owner read past the old fixed 21-row range, so a newly inserted floor row (like the one Carlos just added) is picked up. Added a name alias so "Sandra Silva" (Sections file) resolves to "Sandra S" (Schedule Draft) — without it she was correctly saved as a floater but invisible on the actual lineup. And compacted the printed page (smaller print margins, tighter spacing throughout, nothing removed or reordered) — a full day with all 21 floors and 3 floaters now fits on one page with room to spare, verified against a full realistic day\'s worth of data.']
@@ -18154,26 +18158,37 @@ function dlParseSections(wb){
   var g=grid('GRA'), h=grid('HM & Supervisor');
   if(!g||!h)throw new Error('Expected sheets "GRA" and "HM & Supervisor".');
   var cell=function(rows,r,c){ var row=rows[r-1]; return row&&row[c-1]!=null?String(row[c-1]).trim():''; };
+  var cellAt=function(rows,idx,c){ var row=rows[idx]; return row&&row[c-1]!=null?String(row[c-1]).trim():''; };
+
+  /* Root cause of "Floor 2 has no owner", found by reading the real
+     file through SheetJS directly rather than guessing again: the GRA
+     sheet's row 1 is completely empty (the title sits on row 2), so
+     SheetJS's used-range starts at row 2 and g[0] is row 2, not row 1
+     — every fixed "row 6" read was actually landing one row LATE (row
+     7), which is exactly why Floor 2 (the real row 6) could never be
+     read no matter how wide the scan range was widened. Locating the
+     "Floor"/"Name" header by its actual text and reading everything
+     below THAT index sidesteps the whole class of bug: it no longer
+     matters where the sheet's used range happens to start. */
+  var graHeaderIdx=-1;
+  for(var hi=0;hi<g.length;hi++){
+    if(String((g[hi]||[])[1]||'').trim().toLowerCase()==='floor'&&String((g[hi]||[])[3]||'').trim().toLowerCase()==='name'){ graHeaderIdx=hi; break; }
+  }
+  if(graHeaderIdx===-1)throw new Error('Could not find the Floor/Name header row on the GRA sheet.');
+
   var gra={},floaters=[];
-  /* Widened from the old 6-26 (exactly 21 rows, no headroom) after
-     Carlos inserted a new floor row for a real edit — the sheet grows
-     when a floor is added, so this stops just short of assuming the
-     layout can never change again. */
-  for(var r=6;r<=40;r++){
-    var fl=cell(g,r,2), nm=cell(g,r,4);
+  for(var idx=graHeaderIdx+1; idx<g.length; idx++){
+    var fl=cellAt(g,idx,2), nm=cellAt(g,idx,4);
     if(fl&&nm)gra[fl]=nm;
   }
   /* Floater column (H) is a mixed list: "AM Shift"/"PM Shift" section
      headers, then real GRA floater names, then a "Laundry" header
      followed by LAUNDRY crew names — a completely different list that
-     doesn't belong here at all. The old code only ever read rows 8-10,
-     which happened to catch just Gabriela/Sandra Silva and silently
-     missed any PM-shift floater (Yanira) sitting further down. Scanning
-     by VALUE instead of a fixed row range survives the sheet's rows
-     shifting, and stopping at "Laundry" keeps its crew out of the GRA
-     floater picker. */
-  for(var r2=7;r2<=40;r2++){
-    var f=cell(g,r2,8);
+     doesn't belong here at all. Scanning by VALUE (not a row number)
+     survives the sheet's rows shifting, and stopping at "Laundry" keeps
+     its crew out of the GRA floater picker. */
+  for(var idx2=graHeaderIdx+1; idx2<g.length; idx2++){
+    var f=cellAt(g,idx2,8);
     if(!f)continue;
     var fNorm=f.toLowerCase();
     if(fNorm==='laundry')break;

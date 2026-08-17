@@ -132,6 +132,7 @@ function sectionsWb() {
     SheetNames: ['GRA', 'HM & Supervisor'],
     Sheets: {
       GRA: sheet({
+        5: [[2, 'Floor'], [4, 'Name']],
         7: [[2, '3rd'], [4, 'Aletis']],
         8: [[2, '4th'], [4, 'Maria'], [8, 'Gabriela']],
         9: [[2, '5th'], [4, 'Karla Varela'], [8, 'Ada']],
@@ -531,32 +532,43 @@ module.exports = {
     t.assert(/name="color-scheme" content="light"/.test(printedHtml), 'the print page pins itself to light mode explicitly');
     t.assert(/background:#fff/.test(printedHtml), 'with a real white background stated outright, not left to the browser to guess');
 
-    // ── The Section assignment file's floater column mixes "AM Shift"/
-    // "PM Shift" headers with real names, then a "Laundry" header
-    // followed by the Laundry crew — a different list entirely. Carlos
-    // hit this directly: his real GRA sheet has Gabriela/Sandra Silva
-    // under "AM Shift" and Yanira further down under "PM Shift", but
-    // the old fixed-row read (8-10) only ever caught the first two and
-    // silently dropped Yanira, while ALSO being one shifted-file-layout
-    // away from reading "AM Shift" itself as if it were a person. ──
-    const realGraSheet = sheet({
-      6: [[2, '2nd'], [4, 'Ada']],
-      7: [[2, '3rd'], [4, 'Aletis'], [8, 'AM Shift']],
-      8: [[2, '4th'], [4, 'Maria'], [8, 'Gabriela']],
-      9: [[2, '5th'], [4, 'Karla Varela'], [8, 'Sandra Silva']],
-      10: [[2, '6th'], [4, 'Sandra']],
-      15: [[2, '11th'], [4, 'Claudia'], [8, 'PM Shift']],
-      19: [[2, '15th'], [4, 'Julia'], [8, 'Yanira']],
-      22: [[2, '18th'], [4, 'Ermelinda'], [8, 'Laundry']],
-      23: [[2, '19th'], [4, 'Sandy'], [8, 'Isabel Diaz']],
-      24: [[2, '20th'], [4, 'Heidy'], [8, 'Victoriano Chuquiej']],
-      26: [[2, '22nd'], [4, 'Maria Aguilar'], [8, 'Petronila']]
-    }, 40);
+    // ── Real root cause of "Floor 2 has no owner", found by loading
+    // Carlos's actual file through real SheetJS (not this harness's
+    // stub): the GRA sheet's row 1 is completely empty (the title
+    // sits on row 2), so SheetJS's used-range starts at row 2 and
+    // index 0 of the parsed array is row 2's content, NOT row 1's.
+    // Every fixed "row 6" read was landing one row late — reading row
+    // 7 ("3rd"/Aletis) into what should have been row 6 ("2nd"/Ada) —
+    // which is exactly why Floor 2 could never be read no matter how
+    // wide the scan range was widened; the window was always shifted.
+    // Built directly here (not through the row-number-keyed sheet()
+    // helper, which always aligns array[0] to row 1 and so can't
+    // reproduce this) to mirror the real file's actual array shape:
+    // index 0 = row 2, index 3 = row 5 (the Floor/Name header), index
+    // 4 = row 6 (Floor 2 / Ada), and so on. The floater column mixes
+    // in "AM Shift"/"PM Shift" section headers among real names too. ──
+    const shiftedGraRows = [
+      ['', 'GRA Floor Assignment', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', '', ''],
+      ['', 'Floor', '', 'Name', 'Floor', 'Vacuum', '', 'Floater'],
+      [1, '2nd', 1, 'Ada', 2, '', '', ''],
+      [2, '3rd', 2, 'Aletis', 3, '', '', 'AM Shift'],
+      [3, '4th', 3, 'Maria', 4, '', '', 'Gabriela'],
+      [4, '5th', 4, 'Karla Varela', 5, '', '', 'Sandra Silva'],
+      [5, '6th', 5, 'Sandra', 6, '', '', ''],
+      [6, '7th', 6, 'Debora', 7, '', '', 'PM Shift'],
+      [7, '8th', 7, 'Evangelina', 8, '', '', 'Yanira'],
+      [8, '9th', 8, 'Mayra', 9, '', '', 'Laundry'],
+      [9, '10th', 9, 'Jazmy', 10, '', '', 'Isabel Diaz'],
+    ];
+    const realGraSheet = { _rows: shiftedGraRows };
     const realSections = win.dlParseSections({ SheetNames: ['GRA', 'HM & Supervisor'], Sheets: { GRA: realGraSheet, 'HM & Supervisor': sectionsWb().Sheets['HM & Supervisor'] } });
-    t.eq(realSections.gra['2nd'], 'Ada', 'a floor row Carlos just inserted (2nd) is read fine — the parse range now has headroom past the old fixed 6-26');
+    t.eq(realSections.gra['2nd'], 'Ada', "Floor 2 is read correctly even though it sits at array index 4, not index 5 — found by its header, not assumed by row number");
+    t.eq(realSections.gra['9th'], 'Mayra', 'and the rest of the floors past it are unaffected');
     t.eq(realSections.gra_floaters.join(','), 'Gabriela,Sandra Silva,Yanira',
-      'AM Shift and PM Shift are recognized as section headers and skipped, not read as floater names, and the PM-shift floater (Yanira) is no longer missed');
-    t.assert(!realSections.gra_floaters.includes('Isabel Diaz') && !realSections.gra_floaters.includes('Victoriano Chuquiej') && !realSections.gra_floaters.includes('Petronila'),
+      'AM Shift and PM Shift are recognized as section headers and skipped, not read as floater names, and the PM-shift floater (Yanira) is not missed');
+    t.assert(!realSections.gra_floaters.includes('Isabel Diaz'),
       'the Laundry crew listed after the "Laundry" header is a different list entirely and never lands in the GRA floater picker');
 
     // ── DL_ALIAS bridges a real name mismatch between the two files:
