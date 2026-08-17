@@ -1054,5 +1054,41 @@ module.exports = {
     const reparsed23 = { days: { [thisDates20[0]]: { sheet: 'reuploaded', occ: '', dep: '', tdOcc: '', sup: [['Amara', '1']] } }, count: 1 };
     const carried23 = win.schedCarryWeekendPref(before23, reparsed23);
     t.eq(carried23.weekendPref[win.dlNorm('Amara')], 'preferWork', 'schedCarryWeekendPref keeps the mark across a fresh workbook parse');
+
+    // ── FLEX and VAC (Request Off write-through) are fixed for Auto-fill,
+    // exactly like R-OFF — Carlos's ask: those three all represent a
+    // granted absence already promised to the employee, so none of the
+    // three should ever get silently overwritten by a regeneration. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const wk24 = new Date(2026, 10, 7); // a fresh Saturday
+    const dates24 = [];
+    { const d = new Date(wk24); for (let i = 0; i < 7; i++) { dates24.push(win.dateStr(d)); d.setDate(d.getDate() + 1); } }
+    const SCH24 = { days: {} };
+    dates24.forEach((ds, i) => {
+      SCH24.days[ds] = {
+        sheet: 't', occ: '150', dep: '70', tdOcc: '',
+        sup: [
+          ['Flexy', i === 2 ? 'FLEX' : '1'],
+          ['Vaca', (i === 3 || i === 4) ? 'VAC' : '1'],
+          ['Normal', '1'],
+        ],
+      };
+    });
+    win.dlSaveSchedule(SCH24);
+    win.schedViewWeekStart = wk24;
+    const confirmed24 = win.confirm; win.confirm = () => true;
+    win.schedAutoFill();
+    win.confirm = confirmed24;
+    const afterAuto24 = win.dlLoadSchedule();
+    t.eq(afterAuto24.days[dates24[2]].sup.filter((p) => p[0] === 'Flexy')[0][1], 'FLEX',
+      "Flexy's FLEX day survives Auto-fill untouched, same protection R-OFF gets");
+    t.eq(afterAuto24.days[dates24[3]].sup.filter((p) => p[0] === 'Vaca')[0][1], 'VAC', "Vaca's Vacation days survive Auto-fill too");
+    t.eq(afterAuto24.days[dates24[4]].sup.filter((p) => p[0] === 'Vaca')[0][1], 'VAC', 'both days of her vacation, not just the first');
+
+    // And neither FLEX nor VAC is ever counted as a working body.
+    const miniSCH24 = { days: { [dates24[0]]: { sup: [['A', 'FLEX'], ['B', '1'], ['C', 'VAC']] } } };
+    t.eq(win.schedDayTotal(miniSCH24, dates24[0], 'sup'), 1, 'FLEX and VAC cells do not count toward the day total, only the "1"');
+    t.eq(win.schedIsOff('FLEX'), true, 'schedIsOff treats FLEX as off, same as OFF/R-OFF/VAC');
+    t.eq(win.schedIsOff('VAC'), true);
   }
 };

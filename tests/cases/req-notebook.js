@@ -77,16 +77,33 @@ module.exports = {
     t.eq(karlaEntry.writtenDates.length, 0, 'nothing written — that date is not in any built week');
     t.eq(karlaEntry.missingDates.length, 1, 'and it is flagged missing rather than silently ignored');
 
-    // ── Flex/Vacation are logged but never touch the Schedule grid — there's no cell value for them ──
+    // ── Vacation writes VAC to the Schedule cell, same as R-OFF writes R-OFF ──
     win.rnPickedDates = [dates[3]];
     win.rnSelectedType = 'vac';
     selectRn(win, 'Jose B', 'sup', 'Supervisors');
     win.rnAddRequest();
     const afterVac = win.dlLoadSchedule();
-    t.eq(afterVac.days[dates[3]].sup.filter((p) => p[0] === 'Jose B')[0][1], '1',
-      "Vacation is logged in the notebook but does not overwrite Jose B's Schedule cell — SCHED_VALUES has no VAC marker yet");
+    t.eq(afterVac.days[dates[3]].sup.filter((p) => p[0] === 'Jose B')[0][1], 'VAC',
+      "Vacation now writes through to Jose B's Schedule cell, just like R-OFF does");
     list = win.loadReqNotebook();
-    t.assert(list.some((r) => r.name === 'Jose B' && r.type === 'vac'), 'the Vacation entry is still saved to the notebook itself');
+    const joseVacEntry = list.find((r) => r.name === 'Jose B' && r.type === 'vac');
+    t.assert(!!joseVacEntry, 'the Vacation entry is saved to the notebook itself');
+    t.eq(joseVacEntry.writtenDates.length, 1, 'and records that it wrote through');
+
+    // Flex writes FLEX the same way.
+    win.rnPickedDates = [dates[4]];
+    win.rnSelectedType = 'flex';
+    selectRn(win, 'Karla Varela', 'gra', 'AM Room Attendant');
+    win.rnAddRequest();
+    const afterFlex = win.dlLoadSchedule();
+    t.eq(afterFlex.days[dates[4]].gra.filter((p) => p[0] === 'Karla Varela')[0][1], 'FLEX', 'Flex writes FLEX to the cell too');
+
+    // Deleting a Vacation entry clears only cells still saying VAC — same undo rule R-OFF already has.
+    const confirmFnVac = win.confirm; win.confirm = () => true;
+    win.rnDeleteRequest(joseVacEntry.id);
+    win.confirm = confirmFnVac;
+    t.eq(win.dlLoadSchedule().days[dates[3]].sup.filter((p) => p[0] === 'Jose B')[0][1], '',
+      'deleting the Vacation entry clears the VAC cell back to blank');
 
     // ── Deleting an R-OFF entry clears only cells still saying R-OFF — a manual edit since is never overwritten back ──
     win.rnSelectedType = 'roff';

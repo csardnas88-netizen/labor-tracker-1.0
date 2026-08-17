@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.18.0"/>
+<meta name="app-version" content="7.19.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.19.0', date:'2026-08-16',
+    features:['Request Off: Flex and Vacation now write through to the Schedule too, not just R-OFF — a new FLEX or VAC cell value, colored blue/purple to match their pills everywhere else. Both are protected from Auto-fill exactly like R-OFF (never overwritten, and don\'t count toward the day\'s headcount), and deleting a Flex/Vacation entry clears the cell the same careful way R-OFF already does (only if it still says FLEX/VAC — a hand-edit since is never reverted).']
+  },
   {
     v:'7.18.0', date:'2026-08-16',
     features:['Request Off: the full Shared Notebook shell, matching Schedule Builder\'s own screens — a "Recording as" manager selector (tags each new entry with whoever captured it), and two new browse tabs alongside New: "HK Week" (a colored pill per person on a day, one column per day of the operational week) and "Calendar" (a full Sunday-start month, every day\'s requests inline, with a color legend). R-OFF/Flex/Vacation now each carry their own color (gold/blue/purple) everywhere, including the type picker itself.']
@@ -18562,7 +18566,7 @@ function schedUfExpectedForShift(SCH,pos,shiftIndex,ds){
    not on this list (a stray "0.75", a lowercase "off") is offered as an
    extra option on that cell, so opening the picker can never silently
    throw away something he typed in Excel. */
-var SCHED_VALUES=['','1','OFF','R-OFF','PM','LOBBY','HOUSEMAN','TAILOR','LAUNDRY'];
+var SCHED_VALUES=['','1','OFF','R-OFF','FLEX','VAC','PM','LOBBY','HOUSEMAN','TAILOR','LAUNDRY'];
 var SCHED_DAYNAMES=['Saturday','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday'];
 var schedViewWeekStart=null;
 
@@ -18804,7 +18808,7 @@ function schedCarryWeekendPref(oldSch,newSch){
   if(oldSch&&oldSch.weekendPref)newSch.weekendPref=Object.assign({},oldSch.weekendPref);
   return newSch;
 }
-function schedIsOff(v){ v=String(v||'').trim(); return v==='OFF'||v==='R-OFF'; }
+function schedIsOff(v){ v=String(v||'').trim(); return v==='OFF'||v==='R-OFF'||v==='FLEX'||v==='VAC'; }
 function schedCellFor(SCH,ds,bk,name){
   var day=SCH.days&&SCH.days[ds]; if(!day)return '';
   var row=(day[bk]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
@@ -18982,7 +18986,10 @@ function schedWeekendDueOrder(SCH,bk,names,weekStartDs){
 function schedAutoFillCrew(SCH,dates,bk,names,offCount,wk){
   var days=[0,1,2,3,4,5,6];
   var cellVal=function(nm,i){ return schedCellFor(SCH,dates[i],bk,nm); };
-  var isFixedOff=function(nm,i){ return cellVal(nm,i)==='R-OFF'; };
+  /* R-OFF, FLEX and VAC are all granted absences already committed to
+     the employee via Request Off — none of them are ever overwritten
+     by Auto-fill, same protection every one of them gets. */
+  var isFixedOff=function(nm,i){ var v=cellVal(nm,i); return v==='R-OFF'||v==='FLEX'||v==='VAC'; };
   /* schedSupHpNeeded's 9999 stands for "everyone" (Schedule Builder's own
      'ALL') — clamped to the crew's actual size here, where names.length
      is known. */
@@ -19048,7 +19055,7 @@ function schedRepairShortfalls(SCH,dates,bk,names){
   var days=[0,1,2,3,4,5,6];
   var cellVal=function(nm,i){ return schedCellFor(SCH,dates[i],bk,nm); };
   var isOffCellFn=function(nm,i){ return schedIsOff(cellVal(nm,i)); };
-  var isFixedOffFn=function(nm,i){ return cellVal(nm,i)==='R-OFF'; };
+  var isFixedOffFn=function(nm,i){ var v=cellVal(nm,i); return v==='R-OFF'||v==='FLEX'||v==='VAC'; };
   var needFn=function(i){ var day=SCH.days[dates[i]]; if(!day)return 0; return Math.min(schedAutoNeed(day,bk),names.length); };
   var working=days.map(function(i){ return names.filter(function(nm){return !isOffCellFn(nm,i);}).length; });
   var guard=0;
@@ -19144,7 +19151,7 @@ function schedApplyOvernight(SCH,dates){
     if(!offDays)return;   // not one of the two fixed-pattern people — left alone
     dates.forEach(function(ds,i){
       var row=schedRawCell(SCH,ds,'night',nm);
-      if(!row||row[1]==='R-OFF')return;
+      if(!row||row[1]==='R-OFF'||row[1]==='FLEX'||row[1]==='VAC')return;
       row[1]=offDays.indexOf(i)!==-1?'OFF':'1';
     });
   });
@@ -19615,6 +19622,8 @@ function _schedCellCss(v){
   if(v==='1')      return base+'border:1px solid var(--green-border);background:var(--green-bg);color:var(--green);';
   if(v==='OFF'||v==='off') return base+'border:1px solid var(--border);background:var(--s3);color:var(--text3);';
   if(v==='R-OFF')  return base+'border:1px solid var(--border2);background:var(--s3);color:var(--text2);';
+  if(v==='FLEX')   return base+'border:1px solid #2E6DA4;background:#EAF2FA;color:#2E6DA4;';
+  if(v==='VAC')    return base+'border:1px solid var(--purple);background:var(--purple-bg);color:var(--purple);';
   if(v==='')       return base+'border:1px dashed var(--border2);background:transparent;color:var(--text3);';
   return base+'border:1px solid var(--gold);background:var(--gt);color:var(--gd);'; /* PM / LOBBY / HOUSEMAN / TAILOR / LAUNDRY */
 }
@@ -19995,14 +20004,19 @@ function reqEmpOptions(){
   });
   return out;
 }
-/* Writes 'R-OFF' onto this person's cell for every date that's actually
-   part of a built/loaded week. A date the Schedule hasn't reached yet
-   (a future week not built, or a past one never uploaded) is reported
-   back as missing rather than silently skipped — the notebook entry
-   still gets saved either way, so nothing typed is lost, but the list
-   below flags exactly which days still need the Schedule caught up to
-   them. */
-function reqWriteToSchedule(name,crewKey,dates){
+/* Request type -> the Schedule cell value it writes. All three now
+   write through (Carlos's ask — Flex/Vacation used to only log to the
+   notebook, with no cell value for either). */
+var RN_TYPE_CELL={roff:'R-OFF',flex:'FLEX',vac:'VAC'};
+/* Writes the request's cell value onto this person's cell for every
+   date that's actually part of a built/loaded week. A date the
+   Schedule hasn't reached yet (a future week not built, or a past one
+   never uploaded) is reported back as missing rather than silently
+   skipped — the notebook entry still gets saved either way, so nothing
+   typed is lost, but the list below flags exactly which days still
+   need the Schedule caught up to them. */
+function reqWriteToSchedule(name,crewKey,dates,type){
+  var val=RN_TYPE_CELL[type]||'R-OFF';
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days)return {written:[],missing:dates.slice()};
   var written=[],missing=[];
@@ -20010,24 +20024,25 @@ function reqWriteToSchedule(name,crewKey,dates){
     var day=SCH.days[ds];
     var row=day&&(day[crewKey]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
     if(!row){ missing.push(ds); return; }
-    row[1]='R-OFF';
+    row[1]=val;
     written.push(ds);
   });
   if(written.length){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
   return {written:written,missing:missing};
 }
 /* Undoes a request's write-through, but only cells that still say
-   R-OFF — if Carlos already changed one by hand since, deleting the
-   notebook entry must not silently erase that edit. Same rule Schedule
-   Builder's own removeRequest already uses. */
-function reqClearFromSchedule(name,crewKey,dates){
+   exactly what this request wrote — if Carlos already changed one by
+   hand since, deleting the notebook entry must not silently erase that
+   edit. Same rule Schedule Builder's own removeRequest already uses. */
+function reqClearFromSchedule(name,crewKey,dates,type){
+  var val=RN_TYPE_CELL[type]||'R-OFF';
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days||!dates||!dates.length)return;
   var touched=false;
   dates.forEach(function(ds){
     var day=SCH.days[ds];
     var row=day&&(day[crewKey]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
-    if(row&&row[1]==='R-OFF'){ row[1]=''; touched=true; }
+    if(row&&row[1]===val){ row[1]=''; touched=true; }
   });
   if(touched){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
 }
@@ -20425,15 +20440,12 @@ function rnAddRequest(){
   }
   var entry={id:Date.now(),name:name,crewKey:crewKey,crewLabel:crewLabel,type:rnSelectedType,dates:dates,capturedBy:rnRecordingAs,capturedAt:new Date().toISOString()};
   var msg='&#10003; Request saved';
-  if(rnSelectedType==='roff'){
-    var res=reqWriteToSchedule(name,crewKey,dates);
-    entry.writtenDates=res.written;
-    entry.missingDates=res.missing;
-    if(res.written.length)msg+=' — R-OFF written to '+res.written.length+' day'+(res.written.length===1?'':'s')+' on the Schedule';
-    if(res.missing.length)msg+=(res.written.length?', ':' — ')+res.missing.length+' day'+(res.missing.length===1?'':'s')+' not in a built week yet';
-  } else {
-    msg+=' — logged as '+rnTypeLabel(rnSelectedType)+' (not written to the Schedule grid; only R-OFF is)';
-  }
+  var res=reqWriteToSchedule(name,crewKey,dates,rnSelectedType);
+  entry.writtenDates=res.written;
+  entry.missingDates=res.missing;
+  var cellVal=RN_TYPE_CELL[rnSelectedType]||'R-OFF';
+  if(res.written.length)msg+=' — '+cellVal+' written to '+res.written.length+' day'+(res.written.length===1?'':'s')+' on the Schedule';
+  if(res.missing.length)msg+=(res.written.length?', ':' — ')+res.missing.length+' day'+(res.missing.length===1?'':'s')+' not in a built week yet';
   var list=loadReqNotebook();
   list.unshift(entry);
   saveReqNotebook(list);
@@ -20448,7 +20460,7 @@ function rnDeleteRequest(id){
   var entry=list.filter(function(r){return r.id===id;})[0];
   if(!entry)return;
   if(!confirm('Delete this request?\n\n'+entry.name+' · '+rnTypeLabel(entry.type)+' · '+(entry.dates||[]).join(', ')+'\n\nThis can\'t be undone.'))return;
-  if(entry.type==='roff'&&(entry.writtenDates||[]).length)reqClearFromSchedule(entry.name,entry.crewKey,entry.writtenDates);
+  if((entry.writtenDates||[]).length)reqClearFromSchedule(entry.name,entry.crewKey,entry.writtenDates,entry.type);
   list=list.filter(function(r){return r.id!==id;});
   saveReqNotebook(list);
   /* Without a tombstone, the NEXT pull from another device would just
@@ -20528,7 +20540,7 @@ function renderReqNotebook(){
       html+='<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">'+escHtml(r.crewLabel||'')+' &middot; '+rnTypeLabel(r.type)+(r.capturedBy?' &middot; by '+escHtml(r.capturedBy):'')+'</div>';
       html+='<div style="display:flex;flex-wrap:wrap;gap:4px;">';
       (r.dates||[]).forEach(function(ds){
-        var missed=r.type==='roff'&&(r.missingDates||[]).indexOf(ds)!==-1;
+        var missed=(r.missingDates||[]).indexOf(ds)!==-1;
         html+='<span style="font-size:10px;padding:2px 7px;border-radius:99px;background:'+(missed?'var(--yellow-bg)':'var(--s3)')+';color:'+(missed?'var(--yellow)':'var(--text2)')+';" title="'+(missed?'Not in a built week yet — not written to the Schedule':'')+'">'+ds+(missed?' &#9888;':'')+'</span>';
       });
       html+='</div></div>';
