@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.17.0"/>
+<meta name="app-version" content="7.18.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.18.0', date:'2026-08-16',
+    features:['Request Off: the full Shared Notebook shell, matching Schedule Builder\'s own screens — a "Recording as" manager selector (tags each new entry with whoever captured it), and two new browse tabs alongside New: "HK Week" (a colored pill per person on a day, one column per day of the operational week) and "Calendar" (a full Sunday-start month, every day\'s requests inline, with a color legend). R-OFF/Flex/Vacation now each carry their own color (gold/blue/purple) everywhere, including the type picker itself.']
+  },
   {
     v:'7.17.0', date:'2026-08-16',
     features:['Request Off notebook: tap calendar (Phase 2, the last piece of the Libreta port). Replaces the plain date-input picker — tap a day to add/remove it for R-OFF/Flex, or tap a first day then a last day to fill in a whole Vacation range, same interaction as Schedule Builder\'s own capture calendar. Found and fixed a real bug while testing this live: a day picked under one Request type stayed highlighted after switching to another, looking like a confirmed range anchor, but the next tap silently wiped it instead of extending a range from it — switching type now always starts day-picking fresh.']
@@ -20034,6 +20038,173 @@ var rnSelectedType='roff';
    toggle (rnSetType) re-renders the whole form, which used to wipe a
    just-picked employee out from under the hidden inputs holding it. */
 var rnSelName='', rnSelCrewKey='', rnSelCrewLabel='';
+
+/* ── Shared Notebook shell — matching Schedule Builder's own Libreta ──
+   Carlos pointed at Schedule Builder's actual screens: a "Recording as"
+   manager attribution, and two BROWSE views (a week board, a full month
+   calendar) alongside the capture form — not just capture-and-flat-list.
+   Kept in labor-tracker's own card/navy visual language rather than
+   cloning Schedule Builder's page chrome (this app's page-header already
+   carries the "Request Off" title everywhere else consistently), but the
+   three tabs and both browse views are the same information Schedule
+   Builder's are. */
+var rnActiveTab='new';
+var rnRecordingAs=(localStorage.getItem('hk_manager_name')||'').trim();
+var rnWeekViewStart=null;
+var rnBrowseCalYear=null, rnBrowseCalMonth=null;
+var RN_TYPE_COLOR={
+  roff:{bg:'var(--gold)',text:'var(--navy)',dot:'var(--gold)'},
+  flex:{bg:'#2E6DA4',text:'#fff',dot:'#2E6DA4'},
+  vac: {bg:'var(--purple)',text:'#fff',dot:'var(--purple)'}
+};
+function rnSetTab(t){ rnActiveTab=t; renderReqNotebook(); }
+function rnTabsHtml(){
+  var tabs=[['new','+ New'],['week','HK Week'],['calendar','Calendar']];
+  var html='<div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;">';
+  tabs.forEach(function(t){
+    var active=(rnActiveTab===t[0]);
+    html+='<div onclick="rnSetTab(\''+t[0]+'\')" style="flex:1;text-align:center;padding:11px 6px;font-size:12.5px;font-weight:700;cursor:pointer;color:'+(active?'var(--navy)':'var(--text3)')+';border-bottom:2px solid '+(active?'var(--gold)':'transparent')+';">'+t[1]+'</div>';
+  });
+  html+='</div>';
+  return html;
+}
+/* Which manager captured a given entry — Schedule Builder's own
+   "Recording as" selector. Defaults to whoever's signed in (same
+   hk_manager_name every other part of this app already uses), but can
+   be switched for this one entry (someone covering the desk for a
+   colleague). The dropdown itself is filled in once loadAllowedUsers'
+   sibling fetch below resolves — offline or slow, it still shows and
+   works with just the current name. */
+function rnRecordingAsHtml(){
+  var names=(window._rnManagers||[]).map(function(u){return u.name||u.email;});
+  if(rnRecordingAs&&names.indexOf(rnRecordingAs)===-1)names.unshift(rnRecordingAs);
+  if(!names.length)names=[rnRecordingAs||'Manager'];
+  var html='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 2px 14px;">';
+  html+='<div style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:6px;">'
+    +'<span style="width:6px;height:6px;border-radius:50%;background:var(--gold);display:inline-block;"></span>Recording as</div>';
+  html+='<select onchange="rnSetRecordingAs(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;color:var(--navy);background:#fff;">';
+  names.forEach(function(n){
+    html+='<option value="'+escHtml(n)+'"'+(n===rnRecordingAs?' selected':'')+'>'+escHtml(n)+'</option>';
+  });
+  html+='</select></div>';
+  return html;
+}
+function rnSetRecordingAs(n){
+  rnRecordingAs=n;
+  safeSetItem('hk_manager_name',n);
+}
+function rnLoadManagers(){
+  if(typeof authedFetch!=='function'||typeof SUPA_URL==='undefined')return;
+  authedFetch(SUPA_URL+'/rest/v1/allowed_users?select=email,name')
+    .then(function(r){ return r.ok?r.json():[]; })
+    .then(function(rows){
+      window._rnManagers=(rows||[]).map(function(u){ return {name:(u.name||u.email),email:u.email}; });
+      var box=document.getElementById('rnRecordingAsWrap');
+      if(box)box.innerHTML=rnRecordingAsHtml();
+    })
+    .catch(function(){});
+}
+/* All entries touching a given date, across every crew — used by both
+   browse views. */
+function rnEntriesForDate(ds){
+  return loadReqNotebook().filter(function(r){ return (r.dates||[]).indexOf(ds)!==-1; });
+}
+/* ── HK Week board — one column per day of the operational week (Sat
+   start, same as the Schedule page), a colored pill per request that
+   touches that day. */
+function rnWeekDates(){
+  if(!rnWeekViewStart)rnWeekViewStart=getHotelWeekStart(new Date());
+  var out=[],d=new Date(rnWeekViewStart);
+  for(var i=0;i<7;i++){ out.push(dateStr(d)); d.setDate(d.getDate()+1); }
+  return out;
+}
+function rnChangeWeek(delta){
+  var d=new Date(rnWeekViewStart||getHotelWeekStart(new Date()));
+  d.setDate(d.getDate()+delta*7);
+  rnWeekViewStart=d;
+  renderReqNotebook();
+}
+function rnWeekBoardHtml(){
+  var dates=rnWeekDates();
+  var start=parseLocalDate(dates[0]), end=parseLocalDate(dates[6]);
+  var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+    +'<button onclick="rnChangeWeek(-1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:4px 10px;">&lsaquo;</button>'
+    +'<div style="font-size:13.5px;font-weight:800;color:var(--text1);">'+start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' &ndash; '+end.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>'
+    +'<button onclick="rnChangeWeek(1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:4px 10px;">&rsaquo;</button>'
+    +'</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;overflow-x:auto;">';
+  dates.forEach(function(ds,i){
+    var d=parseLocalDate(ds);
+    var entries=rnEntriesForDate(ds);
+    var isToday=(ds===dateStr(new Date()));
+    html+='<div style="min-width:76px;">';
+    html+='<div style="text-align:center;font-size:8.5px;font-weight:800;color:'+(isToday?'var(--gd)':'var(--text3)')+';text-transform:uppercase;margin-bottom:4px;">'+SCHED_DAYNAMES[i].slice(0,3)
+      +'<div style="font-size:12.5px;color:'+(isToday?'var(--gd)':'var(--text1)')+';">'+d.getDate()+'</div></div>';
+    if(!entries.length)html+='<div style="min-height:6px;"></div>';
+    entries.forEach(function(en){
+      var col=RN_TYPE_COLOR[en.type]||RN_TYPE_COLOR.roff;
+      html+='<div style="background:'+col.bg+';color:'+col.text+';border-radius:8px;padding:5px 3px;margin-bottom:4px;text-align:center;">'
+        +'<div style="font-size:10px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(en.name)+'</div>'
+        +'<div style="font-size:8px;font-weight:700;opacity:.85;">'+rnTypeLabel(en.type).toUpperCase()+'</div></div>';
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  return html;
+}
+/* ── Calendar — a full month, Sunday-start like an ordinary calendar
+   (deliberately NOT the hotel week HK Week uses — matches Carlos's own
+   reference screens, which use two different week starts for these two
+   views on purpose). */
+function rnBrowseCalInit(){
+  if(rnBrowseCalYear==null){ var d=new Date(); rnBrowseCalYear=d.getFullYear(); rnBrowseCalMonth=d.getMonth(); }
+}
+function rnBrowseCalNav(delta){
+  rnBrowseCalInit();
+  var d=new Date(rnBrowseCalYear,rnBrowseCalMonth+delta,1);
+  rnBrowseCalYear=d.getFullYear(); rnBrowseCalMonth=d.getMonth();
+  renderReqNotebook();
+}
+function rnCalendarViewHtml(){
+  rnBrowseCalInit();
+  var first=new Date(rnBrowseCalYear,rnBrowseCalMonth,1);
+  var startOffset=first.getDay();
+  var daysInMonth=new Date(rnBrowseCalYear,rnBrowseCalMonth+1,0).getDate();
+  var todayDs=dateStr(new Date());
+  var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+    +'<button onclick="rnBrowseCalNav(-1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:4px 10px;">&lsaquo;</button>'
+    +'<div style="font-size:14.5px;font-weight:800;color:var(--text1);">'+MONTH_NAMES[rnBrowseCalMonth]+' '+rnBrowseCalYear+'</div>'
+    +'<button onclick="rnBrowseCalNav(1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:4px 10px;">&rsaquo;</button>'
+    +'</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;">';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(d){
+    html+='<div style="text-align:center;font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;">'+d+'</div>';
+  });
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;">';
+  for(var i=0;i<startOffset;i++)html+='<div></div>';
+  for(var day=1;day<=daysInMonth;day++){
+    var dObj=new Date(rnBrowseCalYear,rnBrowseCalMonth,day);
+    var ds=dateStr(dObj);
+    var entries=rnEntriesForDate(ds);
+    var isToday=(ds===todayDs);
+    html+='<div style="min-height:56px;border:1px solid '+(isToday?'var(--gold)':'var(--border)')+';border-radius:6px;padding:3px;overflow:hidden;">';
+    html+='<div style="font-size:9.5px;font-weight:700;color:'+(isToday?'var(--gd)':'var(--text2)')+';">'+day+'</div>';
+    entries.slice(0,2).forEach(function(en){
+      var col=RN_TYPE_COLOR[en.type]||RN_TYPE_COLOR.roff;
+      html+='<div style="background:'+col.bg+';color:'+col.text+';border-radius:4px;padding:1px 3px;margin-top:2px;font-size:7.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(en.name)+' &middot; '+rnTypeLabel(en.type).slice(0,3).toUpperCase()+'</div>';
+    });
+    if(entries.length>2)html+='<div style="font-size:7px;color:var(--text3);margin-top:1px;">+'+(entries.length-2)+' more</div>';
+    html+='</div>';
+  }
+  html+='</div>';
+  html+='<div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap;font-size:9.5px;color:var(--text3);">';
+  ['roff','flex','vac'].forEach(function(k){
+    html+='<span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+RN_TYPE_COLOR[k].dot+';margin-right:3px;"></span>'+rnTypeLabel(k)+'</span>';
+  });
+  html+='</div>';
+  return html;
+}
 function rnPickedDaysHtml(){
   if(!rnPickedDates.length)return '<span style="font-size:11px;color:var(--text3);">No days added yet</span>';
   return rnPickedDates.slice().sort().map(function(ds){
@@ -20252,7 +20423,7 @@ function rnAddRequest(){
     var c=conflicts[0];
     if(!confirm(escHtml(c.otherName)+' already has '+c.ds+' logged, and '+name+' is their cover for that day.\n\nSave '+name+'\'s request anyway?'))return;
   }
-  var entry={id:Date.now(),name:name,crewKey:crewKey,crewLabel:crewLabel,type:rnSelectedType,dates:dates,capturedAt:new Date().toISOString()};
+  var entry={id:Date.now(),name:name,crewKey:crewKey,crewLabel:crewLabel,type:rnSelectedType,dates:dates,capturedBy:rnRecordingAs,capturedAt:new Date().toISOString()};
   var msg='&#10003; Request saved';
   if(rnSelectedType==='roff'){
     var res=reqWriteToSchedule(name,crewKey,dates);
@@ -20293,7 +20464,22 @@ function renderReqNotebook(){
   if(!el)return;
   var empOptions=reqEmpOptions();
   window._rnEmpAll=empOptions;
+  if(!window._rnManagers)rnLoadManagers();
   var html='';
+
+  html+='<div id="rnRecordingAsWrap">'+rnRecordingAsHtml()+'</div>';
+  html+=rnTabsHtml();
+
+  if(rnActiveTab==='week'){
+    html+='<div class="card" style="padding:14px;">'+rnWeekBoardHtml()+'</div>';
+    el.innerHTML=html; return;
+  }
+  if(rnActiveTab==='calendar'){
+    html+='<div class="card" style="padding:14px;">'+rnCalendarViewHtml()+'</div>';
+    el.innerHTML=html; return;
+  }
+
+  /* ── New (capture) ── */
   if(!empOptions.length){
     html+='<div class="card" style="padding:20px;text-align:center;">'
       +'<div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:5px;">No Schedule loaded yet</div>'
@@ -20302,8 +20488,9 @@ function renderReqNotebook(){
     el.innerHTML=html; return;
   }
 
-  html+='<div class="card" style="padding:14px;margin-bottom:12px;">';
-  html+='<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Record a request</div>';
+  html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
+  html+='<div style="background:var(--navy);color:#fff;padding:9px 14px;font-size:12px;font-weight:800;">Record request</div>';
+  html+='<div style="padding:14px;">';
 
   html+='<label style="font-size:10.5px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px;">Employee</label>';
   html+='<div style="position:relative;margin-bottom:10px;">';
@@ -20315,16 +20502,17 @@ function renderReqNotebook(){
   html+='<div style="display:flex;gap:6px;margin-bottom:10px;">';
   ['roff','flex','vac'].forEach(function(t){
     var active=(rnSelectedType===t);
-    html+='<button type="button" onclick="rnSetType(\''+t+'\')" style="flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid '+(active?'var(--navy)':'var(--border)')+';background:'+(active?'var(--navy)':'#fff')+';color:'+(active?'#fff':'var(--text1)')+';">'+rnTypeLabel(t)+'</button>';
+    var col=RN_TYPE_COLOR[t];
+    html+='<button type="button" onclick="rnSetType(\''+t+'\')" style="flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid '+(active?col.dot:'var(--border)')+';background:'+(active?col.bg:'#fff')+';color:'+(active?col.text:'var(--text1)')+';">'+rnTypeLabel(t)+'</button>';
   });
   html+='</div>';
 
-  html+='<label style="font-size:10.5px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px;">Day(s) &mdash; tap to select</label>';
+  html+='<label style="font-size:10.5px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px;">Requested day(s) &mdash; tap to select</label>';
   html+='<div id="rnCalWrap" style="margin-bottom:8px;">'+rnCalHtml()+'</div>';
   html+='<div id="rnPickedDays" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;">'+rnPickedDaysHtml()+'</div>';
   html+='<div id="rnCaptureAlerts">'+rnAlertsHtml()+'</div>';
   html+='<button class="btn btn-navy" style="width:100%;" onclick="rnAddRequest()">Save request</button>';
-  html+='</div>';
+  html+='</div></div>';
 
   var list=loadReqNotebook();
   html+='<div class="card" style="padding:0;overflow:hidden;">';
@@ -20337,7 +20525,7 @@ function renderReqNotebook(){
       html+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);">';
       html+='<div style="min-width:0;">';
       html+='<div style="font-size:12.5px;font-weight:700;color:var(--text1);">'+escHtml(r.name)+'</div>';
-      html+='<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">'+escHtml(r.crewLabel||'')+' &middot; '+rnTypeLabel(r.type)+'</div>';
+      html+='<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">'+escHtml(r.crewLabel||'')+' &middot; '+rnTypeLabel(r.type)+(r.capturedBy?' &middot; by '+escHtml(r.capturedBy):'')+'</div>';
       html+='<div style="display:flex;flex-wrap:wrap;gap:4px;">';
       (r.dates||[]).forEach(function(ds){
         var missed=r.type==='roff'&&(r.missingDates||[]).indexOf(ds)!==-1;

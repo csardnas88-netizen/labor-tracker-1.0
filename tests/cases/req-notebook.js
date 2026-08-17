@@ -259,5 +259,50 @@ module.exports = {
     win.rnDeleteRequest(1001);
     win.confirm = confirmFn2;
     t.assert(win.getDeletedIds('req_notebook_deleted_ids').includes(1001), 'deleting locally records a tombstone for other devices to pick up');
+
+    // ── Shared Notebook shell: tabs, Recording as, HK Week board, Calendar view ──
+    win.saveReqNotebook([
+      { id: 6001, name: 'Rolando', crewKey: 'sup', crewLabel: 'Supervisors', type: 'vac', dates: [dates[0], dates[1]], capturedBy: 'Ingrid' },
+      { id: 6002, name: 'Karla Varela', crewKey: 'gra', crewLabel: 'AM Room Attendant', type: 'roff', dates: [dates[0]], capturedBy: 'Carlos' },
+    ]);
+    win.rnActiveTab = 'new';
+    win.renderReqNotebook();
+    t.assert(/Recording as/.test(win.document.getElementById('reqNotebookContent').innerHTML), 'the Recording as bar shows on every tab');
+    t.assert(/HK Week/.test(win.document.getElementById('reqNotebookContent').innerHTML) && /Calendar/.test(win.document.getElementById('reqNotebookContent').innerHTML),
+      'both browse tabs are offered alongside New');
+
+    win.rnSetRecordingAs('Ingrid');
+    t.eq(win.localStorage.getItem('hk_manager_name'), 'Ingrid', 'switching Recording as persists it the same way every other part of this app remembers the signed-in manager\'s name');
+    win.rnSetTab('new');
+    t.assert(/by Carlos/.test(win.document.getElementById('reqNotebookContent').innerHTML),
+      "switching Recording as to Ingrid does not retroactively relabel Karla's entry — its original capturedBy (Carlos) is preserved");
+
+    win.rnSetTab('week');
+    t.eq(win.rnActiveTab, 'week');
+    win.rnWeekViewStart = win.getHotelWeekStart(win.parseLocalDate(dates[0]));
+    win.renderReqNotebook();
+    let weekHtml = win.document.getElementById('reqNotebookContent').innerHTML;
+    t.assert(/Rolando/.test(weekHtml) && /VAC/.test(weekHtml), "the HK Week board shows Rolando's Vacation on the right day");
+    t.assert(/Karla Varela/.test(weekHtml) && /R-OFF/.test(weekHtml), "and Karla's R-OFF alongside it");
+
+    const entriesForDay0 = win.rnEntriesForDate(dates[0]);
+    t.eq(entriesForDay0.length, 2, 'rnEntriesForDate finds every entry touching that date, across crews');
+
+    win.rnSetTab('calendar');
+    const d0 = win.parseLocalDate(dates[0]);
+    win.rnBrowseCalYear = d0.getFullYear();
+    win.rnBrowseCalMonth = d0.getMonth();
+    win.renderReqNotebook();
+    const calHtml = win.document.getElementById('reqNotebookContent').innerHTML;
+    t.assert(/Rolando/.test(calHtml) && /Karla Varela/.test(calHtml), 'the Calendar month view shows both entries on their day cell');
+    t.assert(/VAC/.test(calHtml) && /R-OFF/.test(calHtml), 'each pill is labeled with its type');
+
+    // Week nav and month nav move independently of each other and of the capture calendar.
+    const beforeWeek = win.rnWeekViewStart.getTime();
+    win.rnChangeWeek(1);
+    t.assert(win.rnWeekViewStart.getTime() > beforeWeek, 'rnChangeWeek moves the HK Week board forward');
+    const beforeMonth = win.rnBrowseCalMonth;
+    win.rnBrowseCalNav(1);
+    t.assert(win.rnBrowseCalMonth !== beforeMonth || win.rnBrowseCalYear > d0.getFullYear(), 'rnBrowseCalNav moves the Calendar view forward, independently');
   },
 };
