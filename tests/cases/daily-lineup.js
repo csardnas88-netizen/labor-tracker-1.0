@@ -530,5 +530,41 @@ module.exports = {
     try { win.dlPrint(); } finally { win.open = realOpen; }
     t.assert(/name="color-scheme" content="light"/.test(printedHtml), 'the print page pins itself to light mode explicitly');
     t.assert(/background:#fff/.test(printedHtml), 'with a real white background stated outright, not left to the browser to guess');
+
+    // ── The Section assignment file's floater column mixes "AM Shift"/
+    // "PM Shift" headers with real names, then a "Laundry" header
+    // followed by the Laundry crew — a different list entirely. Carlos
+    // hit this directly: his real GRA sheet has Gabriela/Sandra Silva
+    // under "AM Shift" and Yanira further down under "PM Shift", but
+    // the old fixed-row read (8-10) only ever caught the first two and
+    // silently dropped Yanira, while ALSO being one shifted-file-layout
+    // away from reading "AM Shift" itself as if it were a person. ──
+    const realGraSheet = sheet({
+      6: [[2, '2nd'], [4, 'Ada']],
+      7: [[2, '3rd'], [4, 'Aletis'], [8, 'AM Shift']],
+      8: [[2, '4th'], [4, 'Maria'], [8, 'Gabriela']],
+      9: [[2, '5th'], [4, 'Karla Varela'], [8, 'Sandra Silva']],
+      10: [[2, '6th'], [4, 'Sandra']],
+      15: [[2, '11th'], [4, 'Claudia'], [8, 'PM Shift']],
+      19: [[2, '15th'], [4, 'Julia'], [8, 'Yanira']],
+      22: [[2, '18th'], [4, 'Ermelinda'], [8, 'Laundry']],
+      23: [[2, '19th'], [4, 'Sandy'], [8, 'Isabel Diaz']],
+      24: [[2, '20th'], [4, 'Heidy'], [8, 'Victoriano Chuquiej']],
+      26: [[2, '22nd'], [4, 'Maria Aguilar'], [8, 'Petronila']]
+    }, 40);
+    const realSections = win.dlParseSections({ SheetNames: ['GRA', 'HM & Supervisor'], Sheets: { GRA: realGraSheet, 'HM & Supervisor': sectionsWb().Sheets['HM & Supervisor'] } });
+    t.eq(realSections.gra['2nd'], 'Ada', 'a floor row Carlos just inserted (2nd) is read fine — the parse range now has headroom past the old fixed 6-26');
+    t.eq(realSections.gra_floaters.join(','), 'Gabriela,Sandra Silva,Yanira',
+      'AM Shift and PM Shift are recognized as section headers and skipped, not read as floater names, and the PM-shift floater (Yanira) is no longer missed');
+    t.assert(!realSections.gra_floaters.includes('Isabel Diaz') && !realSections.gra_floaters.includes('Victoriano Chuquiej') && !realSections.gra_floaters.includes('Petronila'),
+      'the Laundry crew listed after the "Laundry" header is a different list entirely and never lands in the GRA floater picker');
+
+    // ── DL_ALIAS bridges a real name mismatch between the two files:
+    // the Section assignment sheet says "Sandra Silva", the Schedule
+    // Draft says "Sandra S" — without the alias she was invisible as
+    // an assignable floater even though she was correctly saved. ──
+    const dayWithSandraS = { gra: [['Sandra S', '1'], ['Sandra', '1']] };
+    t.eq(win.dlLook(dayWithSandraS, 'gra', 'Sandra Silva'), '1',
+      "the alias resolves Sections' \"Sandra Silva\" to the Schedule's \"Sandra S\", not to the OTHER \"Sandra\" who owns a floor");
   }
 };

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.20.0"/>
+<meta name="app-version" content="7.21.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.21.0', date:'2026-08-17',
+    features:['Daily Lineup fixes from Carlos\'s report: the Section assignment file\'s floater column was only ever read from 3 fixed rows, which silently dropped any PM-shift floater and risked reading section headers ("AM Shift"/"PM Shift") as if they were people — now scans the whole column by value and stops before the Laundry crew\'s names, which are a different list entirely. Also widened the floor-owner read past the old fixed 21-row range, so a newly inserted floor row (like the one Carlos just added) is picked up. Added a name alias so "Sandra Silva" (Sections file) resolves to "Sandra S" (Schedule Draft) — without it she was correctly saved as a floater but invisible on the actual lineup. And compacted the printed page (smaller print margins, tighter spacing throughout, nothing removed or reordered) — a full day with all 21 floors and 3 floaters now fits on one page with room to spare, verified against a full realistic day\'s worth of data.']
+  },
   {
     v:'7.20.0', date:'2026-08-16',
     features:['Unifocus Standard card redesigned — Carlos\'s ask, the old actual/std pair needed subtracting by hand to see if he was off. Each cell now shows one signed number (e.g. "-4") with a ▼/▲/✓ icon, colored the same as before; the exact scheduled/standard figures are still there on hover. Also added "rooms per person that day" beneath the delta for Room Attendant, House Attendant, Housekeeping Supervisor and Turndown Attendant — Lobby, Public Area and Laundry are left out, since none of those are staffed against a per-room count.']
@@ -18108,7 +18112,7 @@ var DL_FLOORS=['2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12
 var DL_ALIAS={'maria':'Maria Noriega','abby':'Abigail Rosa','vane':'Vanessa',
   'maria m':'Marroquin','sarahy':'Sarahi','rubidia':'Rubidia G','isabel d':'Isabel D',
   'adamaris':'Adamary','victoriano chuquin':'Victoriano Ch','olga alpacaja':'Olga A',
-  'jorge':'Jorge Gonzalez'};
+  'jorge':'Jorge Gonzalez','sandra silva':'Sandra S'};
 
 function dlNorm(s){
   return String(s==null?'':s).normalize('NFKD').replace(/[̀-ͯ]/g,'')
@@ -18151,11 +18155,31 @@ function dlParseSections(wb){
   if(!g||!h)throw new Error('Expected sheets "GRA" and "HM & Supervisor".');
   var cell=function(rows,r,c){ var row=rows[r-1]; return row&&row[c-1]!=null?String(row[c-1]).trim():''; };
   var gra={},floaters=[];
-  for(var r=6;r<=26;r++){
+  /* Widened from the old 6-26 (exactly 21 rows, no headroom) after
+     Carlos inserted a new floor row for a real edit — the sheet grows
+     when a floor is added, so this stops just short of assuming the
+     layout can never change again. */
+  for(var r=6;r<=40;r++){
     var fl=cell(g,r,2), nm=cell(g,r,4);
     if(fl&&nm)gra[fl]=nm;
   }
-  for(var r2=8;r2<=10;r2++){ var f=cell(g,r2,8); if(f)floaters.push(f); }
+  /* Floater column (H) is a mixed list: "AM Shift"/"PM Shift" section
+     headers, then real GRA floater names, then a "Laundry" header
+     followed by LAUNDRY crew names — a completely different list that
+     doesn't belong here at all. The old code only ever read rows 8-10,
+     which happened to catch just Gabriela/Sandra Silva and silently
+     missed any PM-shift floater (Yanira) sitting further down. Scanning
+     by VALUE instead of a fixed row range survives the sheet's rows
+     shifting, and stopping at "Laundry" keeps its crew out of the GRA
+     floater picker. */
+  for(var r2=7;r2<=40;r2++){
+    var f=cell(g,r2,8);
+    if(!f)continue;
+    var fNorm=f.toLowerCase();
+    if(fNorm==='laundry')break;
+    if(fNorm==='am shift'||fNorm==='pm shift')continue;
+    floaters.push(f);
+  }
   function rng(r1,r2c,c1,c2){
     var out=[];
     for(var r3=r1;r3<=r2c;r3++){
@@ -18297,7 +18321,19 @@ function dlBuildPlan(ds){
   P.sup_pm=(function(){var v=dlLook(day,'sup',S.sup_pm);return (v==='1'||v==='PM')?[S.sup_pm]:[];})();
   P.hm=S.hm.filter(function(p){return dlIn(dlLook(day,'hp',p[1]));}).map(function(p){return p[1];});
   if(dlIn(dlLook(day,'hp',S.hm_float)))P.hm.push(S.hm_float);
-  P.hm_pm=(dlLook(day,'td',S.hm_pm)==='HOUSEMAN'||dlIn(dlLook(day,'hp',S.hm_pm)))?[S.hm_pm]:[];
+  /* PM Houseman — Carlos found this one missing (Paty covering wasn't
+     showing). The old check only ever looked up the Sections file's
+     FIXED name (Yesenia) inside the wrong blocks ('td' and 'hp'), so it
+     could never find Paty at all: her cover shows up as her OWN
+     Turndown cell reading "HOUSEMAN" for that day (schedApplyYesenia's
+     convention, same one the Schedule page's Auto-fill already
+     produces), not as a new row anywhere the old code was looking.
+     Real source of truth instead: whoever is actually listed as working
+     in the Schedule Draft's own "PM Houseman" block that day (normally
+     Yesenia), PLUS whoever from Turndown has "HOUSEMAN" in their own
+     cell that day (Paty, when she's covering). */
+  P.hm_pm=day.pmhm.filter(function(p){return dlIn(p[1]);}).map(function(p){return p[0];})
+    .concat(day.td.filter(function(p){return p[1]==='HOUSEMAN';}).map(function(p){return p[0];}));
   P.lobby_am=S.lobby.filter(function(p){return /AM/.test(p[0])&&dlIn(dlLook(day,'lobby',p[1]));}).map(function(p){return p[1];});
   P.lobby_pm=S.lobby.filter(function(p){return /PM/.test(p[0])&&dlIn(dlLook(day,'lobby',p[1]));}).map(function(p){return p[1];});
   /* A GRA the schedule explicitly pulls to the lobby that day (the cell
@@ -21100,44 +21136,52 @@ function dlPrint(){
      below back to plain black-on-white the moment it actually reaches
      paper. Without it this looks right on screen and wrong once printed
      — the one place that can't be caught by looking at the preview. */
+  /* Carlos's ask: same format, one page instead of two. The @page rule
+     is the biggest single lever — a browser's default print margin
+     (~19mm) was eating almost an inch off every side before a single
+     line of content even started. Every other number below is the
+     same layout just packed tighter (smaller gaps/padding/font-sizes,
+     nothing removed or reordered), since "same format" ruled out
+     dropping sections or columns to make it fit. */
   var h='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Daily Lineup '+ds+'</title><style>'
+    +'@page{size:auto;margin:8mm;}'
     +'*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
     +'html{color-scheme:light;}'
     +'body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1A1714;background:#fff;}'
-    +'.hdr{background:#1E2D4A;color:#fff;padding:14px 22px 12px;border-bottom:4px solid #C9A84C;}'
-    +'.hdr h1{font-size:19px;font-weight:800;letter-spacing:.2px;}'
-    +'.hdr .sub{font-size:10.5px;color:#D9C68A;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-top:3px;}'
-    +'.wrap{padding:14px 20px 16px;}'
-    +'.occ{display:flex;gap:12px;margin-bottom:14px;}'
-    +'.occ .card{flex:1;border:1px solid #E4DDD1;border-left:4px solid #C9A84C;background:#F7F4EF;border-radius:0 5px 5px 0;padding:7px 12px;}'
-    +'.occ .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;color:#8C8680;font-weight:700;}'
-    +'.occ b{font-size:18px;color:#1E2D4A;display:block;margin-top:1px;}'
-    +'.adjnote{font-size:9px;color:#8C8680;margin-top:1px;}'
-    +'.cols{display:flex;gap:18px;align-items:flex-start;}'
+    +'.hdr{background:#1E2D4A;color:#fff;padding:9px 18px 7px;border-bottom:3px solid #C9A84C;}'
+    +'.hdr h1{font-size:16px;font-weight:800;letter-spacing:.2px;}'
+    +'.hdr .sub{font-size:9.5px;color:#D9C68A;text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-top:2px;}'
+    +'.wrap{padding:9px 14px 10px;}'
+    +'.occ{display:flex;gap:9px;margin-bottom:8px;}'
+    +'.occ .card{flex:1;border:1px solid #E4DDD1;border-left:4px solid #C9A84C;background:#F7F4EF;border-radius:0 5px 5px 0;padding:4px 9px;}'
+    +'.occ .k{font-size:8px;text-transform:uppercase;letter-spacing:.4px;color:#8C8680;font-weight:700;}'
+    +'.occ b{font-size:15px;color:#1E2D4A;display:block;margin-top:0;}'
+    +'.adjnote{font-size:8px;color:#8C8680;margin-top:1px;}'
+    +'.cols{display:flex;gap:12px;align-items:flex-start;}'
     +'.side{flex:1;min-width:0;}'
-    +'.side h2{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#1E2D4A;background:#F5ECD4;border-left:3px solid #C9A84C;padding:5px 9px;margin-bottom:8px;}'
-    +'.grp{border-left:3px solid #C9A84C;background:#F7F4EF;border-radius:0 4px 4px 0;padding:6px 10px;margin-bottom:7px;}'
+    +'.side h2{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#1E2D4A;background:#F5ECD4;border-left:3px solid #C9A84C;padding:3px 7px;margin-bottom:5px;}'
+    +'.grp{border-left:3px solid #C9A84C;background:#F7F4EF;border-radius:0 4px 4px 0;padding:4px 8px;margin-bottom:4px;}'
     +'.grp.em0{border-left-color:#D6CCBC;background:transparent;}'
-    +'.lbl{font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;color:#8C8680;font-weight:700;}'
+    +'.lbl{font-size:8px;text-transform:uppercase;letter-spacing:.4px;color:#8C8680;font-weight:700;}'
     +'.ea{float:right;text-transform:none;letter-spacing:0;font-weight:800;color:#8A6F20;}'
     +'.sn{font-weight:600;color:#8C8680;}'
-    +'.perlady{font-size:10px;font-weight:800;color:#8A6F20;margin-bottom:5px;}'
-    +'.nm{font-size:12px;color:#1A1714;font-weight:600;margin-top:2px;}'
+    +'.perlady{font-size:9.5px;font-weight:800;color:#8A6F20;margin-bottom:3px;}'
+    +'.nm{font-size:11px;color:#1A1714;font-weight:600;margin-top:1px;}'
     +'.em{color:#8C8680;font-weight:500;}'
-    +'.fllbl{font-size:8px;text-transform:uppercase;letter-spacing:.3px;color:#8C8680;font-weight:700;margin-left:7px;}'
-    +'.flline{display:inline-block;min-width:70px;border-bottom:1px solid #8C8680;margin-left:3px;color:#1E2D4A;font-weight:700;}'
-    +'table{border-collapse:collapse;width:100%;margin-top:2px;}'
-    +'td{border:1px solid #D6CCBC;padding:3px 6px;font-size:11px;}'
-    +'td.fl{width:38px;color:#5C5652;font-weight:700;}td.tk{width:22px;color:#5C5652;}'
-    +'th{border:1px solid #1E2D4A;padding:3px 6px;font-size:8px;text-transform:uppercase;letter-spacing:.3px;color:#fff;background:#1E2D4A;}'
-    +'td.wr{width:34px;text-align:center;}td.ck{width:22px;text-align:center;color:#2D9E45;font-weight:800;}'
+    +'.fllbl{font-size:7.5px;text-transform:uppercase;letter-spacing:.3px;color:#8C8680;font-weight:700;margin-left:6px;}'
+    +'.flline{display:inline-block;min-width:60px;border-bottom:1px solid #8C8680;margin-left:3px;color:#1E2D4A;font-weight:700;}'
+    +'table{border-collapse:collapse;width:100%;margin-top:1px;}'
+    +'td{border:1px solid #D6CCBC;padding:1.5px 5px;font-size:10px;}'
+    +'td.fl{width:34px;color:#5C5652;font-weight:700;}td.tk{width:20px;color:#5C5652;}'
+    +'th{border:1px solid #1E2D4A;padding:2px 5px;font-size:7.5px;text-transform:uppercase;letter-spacing:.3px;color:#fff;background:#1E2D4A;}'
+    +'td.wr{width:30px;text-align:center;}td.ck{width:20px;text-align:center;color:#2D9E45;font-weight:800;}'
     +'tr.open td{background:#F5ECD4;}'
     +'tr.done td{background:#EFF7F2;}'
-    +'.xt{margin-top:8px;}.xt td{font-size:10px;}.xt td.xl{width:96px;color:#5C5652;text-transform:uppercase;font-size:8px;letter-spacing:.3px;font-weight:700;background:#F7F4EF;}'
-    +'.warn{margin-top:10px;border:1px solid #E7B65C;background:#FBF0DC;border-radius:4px;padding:7px 10px;font-size:11px;color:#8A6F20;}'
+    +'.xt{margin-top:5px;}.xt td{font-size:9.5px;padding:1.5px 5px;}.xt td.xl{width:90px;color:#5C5652;text-transform:uppercase;font-size:7.5px;letter-spacing:.3px;font-weight:700;background:#F7F4EF;}'
+    +'.warn{margin-top:6px;border:1px solid #E7B65C;background:#FBF0DC;border-radius:4px;padding:5px 8px;font-size:10px;color:#8A6F20;}'
     +'.warn b{color:#1E2D4A;}'
-    +'.ftr{margin-top:14px;padding-top:7px;border-top:1px solid #E4DDD1;font-size:9px;color:#8C8680;text-align:right;}'
-    +'@media print{.wrap{padding:12px 16px;}}'
+    +'.ftr{margin-top:7px;padding-top:4px;border-top:1px solid #E4DDD1;font-size:8px;color:#8C8680;text-align:right;}'
+    +'@media print{.wrap{padding:8px 12px;}}'
     +'</style></head><body>'
     +'<div class="hdr"><h1>Daily Lineup</h1><div class="sub">Housekeeping &middot; '+d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})+'</div></div>'
     +'<div class="wrap">'
