@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.21.3"/>
+<meta name="app-version" content="7.21.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.21.4', date:'2026-08-17',
+    features:['Reworked the Daily Line Up Excel template per Carlos\'s request: it now prints portrait instead of landscape, and every associate name cell (coordinators, supervisors, house attendants, lobby, night, turndown, GRAs, floaters) starts with no highlight — a manager checking people in can now highlight exactly the ones confirmed rather than seeing some names pre-highlighted and others not, and cross that against the sheet. Also centered every cell\'s text so the whole sheet reads cleanly. Nothing else about the layout, formulas, borders or data changed — this only touched the template\'s formatting, not the app code that fills it in.']
+  },
   {
     v:'7.21.3', date:'2026-08-17',
     features:['Fixed the downloaded Daily Line Up Excel printing on two pages. The one-page fix from earlier today only touched the on-screen print/PDF view — the actual .xlsx you download ("Export Excel") comes from a separate template file with its own page-fit setting, which was still fixed at a 75% zoom that spilled onto a second page. Switched it to "fit to 1 page" so it always prints as a single sheet regardless of zoom, same layout, nothing moved or removed.']
