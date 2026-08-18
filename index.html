@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.21.4"/>
+<meta name="app-version" content="7.21.5"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.21.5', date:'2026-08-18',
+    features:['Increased the text size across the downloaded Daily Line Up Excel — small print was hard to read. Every font used on that sheet is about 2pt larger now (e.g. 12→14, 16→18). Layout, borders, formulas, highlight and centering all stay exactly as they were; the sheet still prints on one page since it auto-fits regardless of font size.']
+  },
   {
     v:'7.21.4', date:'2026-08-17',
     features:['Reworked the Daily Line Up Excel template per Carlos\'s request: it now prints portrait instead of landscape, and every associate name cell (coordinators, supervisors, house attendants, lobby, night, turndown, GRAs, floaters) starts with no highlight — a manager checking people in can now highlight exactly the ones confirmed rather than seeing some names pre-highlighted and others not, and cross that against the sheet. Also centered every cell\'s text so the whole sheet reads cleanly. Nothing else about the layout, formulas, borders or data changed — this only touched the template\'s formatting, not the app code that fills it in.']
