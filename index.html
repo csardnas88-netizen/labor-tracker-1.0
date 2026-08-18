@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.21.5"/>
+<meta name="app-version" content="7.21.6"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4333,6 +4333,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.21.6', date:'2026-08-18',
+    features:['Widened the GRA name box on the Daily Line Up Excel (columns E and I, rows 35-45/floaters) so there\'s more blank room on either side of the name for the room total and check-out numbers Carlos writes in by hand. Also shortened GRA and floater names on that same grid to "First L." (e.g. "Maria Aguilar" -> "Maria A") to free up even more space — every other name list (coordinators, supervisors, house attendants, lobby, night) still prints the full name.']
+  },
   {
     v:'7.21.5', date:'2026-08-18',
     features:['Increased the text size across the downloaded Daily Line Up Excel — small print was hard to read. Every font used on that sheet is about 2pt larger now (e.g. 12→14, 16→18). Layout, borders, formulas, highlight and centering all stay exactly as they were; the sheet still prints on one page since it auto-fits regardless of font size.']
@@ -18461,6 +18465,17 @@ function dlFinalFloors(P){
   });
   return out;
 }
+/* First name + last-initial ("Maria Aguilar" -> "Maria A"), only for the
+   printed GRA name grid. Carlos writes room total/checkout by hand on
+   either side of the name inside that same cell, so the shorter the
+   name the more room he has — leave every other name list (coordinators,
+   supervisors, house attendants, lobby, night) at its full name. */
+function dlShortName(name){
+  if(!name)return name;
+  var parts=String(name).trim().split(/\s+/);
+  if(parts.length<2)return name;
+  return parts[0]+' '+parts[1].charAt(0).toUpperCase();
+}
 function dlUnplacedFloaters(P){
   var a=P.assign||{};
   return (P.floaters||[]).filter(function(f){ return !a[f]; });
@@ -21369,8 +21384,8 @@ function dlExportExcel(){
         fill(['I24','I25','I26'],P.night);
         fill(['E49','E50','E51','E52','E53','E54','E55'],P.td);
         var floors=dlFinalFloors(P);
-        Object.keys(DL_GRA_CELL).forEach(function(fl){ S(DL_GRA_CELL[fl],floors[fl]||''); });
-        fill(DL_FLOATER_CELL,dlUnplacedFloaters(P));
+        Object.keys(DL_GRA_CELL).forEach(function(fl){ S(DL_GRA_CELL[fl],dlShortName(floors[fl])); });
+        fill(DL_FLOATER_CELL,dlUnplacedFloaters(P).map(dlShortName));
         DL_EXTRA_FIELDS.forEach(function(f){ S(f.cell,P.extras[f.key]||''); });
 
         /* Cached formula results are stale now; make Excel recalculate. */
