@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.21.6"/>
+<meta name="app-version" content="7.22.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4334,6 +4334,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.22.0', date:'2026-08-18',
+    features:['The Occupancy page\'s Forecast vs Scheduled vs Opera card now tracks departures too, not just rooms — Carlos\'s ask: departures drive as much of the Room Attendant standard as rooms do (30 min each vs. ~17 min per stayover), but only rooms had a Forecast/Scheduled/Opera comparison to check the numbers against. One card, one week picker: every day now shows a Rooms row and a Dep row together instead of two separate cards stacked on top of each other, with both weekly charts side by side at the bottom. Departures live in the same weekly forecast record as rooms, so they sync the same way with nothing new to configure.']
+  },
+  {
     v:'7.21.6', date:'2026-08-18',
     features:['Widened the GRA name box on the Daily Line Up Excel (columns E and I, rows 35-45/floaters) so there\'s more blank room on either side of the name for the room total and check-out numbers Carlos writes in by hand. Also shortened GRA and floater names on that same grid to "First L." (e.g. "Maria Aguilar" -> "Maria A") to free up even more space — every other name list (coordinators, supervisors, house attendants, lobby, night) still prints the full name.']
   },
@@ -6955,14 +6959,23 @@ function saveOccForecast(weekKey,days){
   return rec;
 }
 /* Normalizes one day's stored value, old bare-number shape or new
-   {sched,uf} shape, into {sched:number|null, uf:number|null}. */
+   {sched,uf} shape, into {sched:number|null, uf:number|null,
+   depSched:number|null, depUf:number|null}. depSched/depUf (Carlos's
+   ask: departures hit the Room Attendant standard just as much as rooms
+   do, so they get the same Forecast/Scheduled tracking) ride in the
+   same day record as sched/uf rather than a separate store — one
+   record per day, same sync path, no new remote key. Old records never
+   had these two keys, so they normalize to null exactly like a day
+   that was never touched. */
 function _occfcNormDay(raw){
-  if(typeof raw==='number')return {sched:raw,uf:null};
+  if(typeof raw==='number')return {sched:raw,uf:null,depSched:null,depUf:null};
   if(raw&&typeof raw==='object')return {
     sched:(typeof raw.sched==='number'?raw.sched:null),
-    uf:(typeof raw.uf==='number'?raw.uf:null)
+    uf:(typeof raw.uf==='number'?raw.uf:null),
+    depSched:(typeof raw.depSched==='number'?raw.depSched:null),
+    depUf:(typeof raw.depUf==='number'?raw.depUf:null)
   };
-  return {sched:null,uf:null};
+  return {sched:null,uf:null,depSched:null,depUf:null};
 }
 /* One day's Scheduled figure, resolved through its own hotel week.
    Returns null (not 0) when nothing was entered — a week Carlos never
@@ -6976,13 +6989,20 @@ function getOccForecastForDay(ds,field){
   if(!rec||!rec.days)return null;
   return _occfcNormDay(rec.days[ds])[field||'sched'];
 }
-/* Called from the inputs: writes one FIELD ('sched' or 'uf') of one day
-   into its week's record without disturbing the other field or the other
-   six days. An empty box clears that field back to "not entered" rather
-   than storing a 0; the day itself is only dropped once BOTH fields are
-   empty, so clearing Unifocus for a day that still has a Scheduled
-   number doesn't silently lose the Scheduled one. */
-function saveOccForecastDay(weekKey,ds,field,raw){
+/* True once ANY of the four fields is filled in — used to decide
+   whether a day record is worth keeping at all. Replaces the old
+   two-field-only check so clearing a rooms field never silently wipes
+   an already-entered departures figure for that same day, or the
+   reverse. */
+function _occfcDayHasData(cur){
+  return cur.sched!==null||cur.uf!==null||cur.depSched!==null||cur.depUf!==null;
+}
+/* Shared write path for both the rooms card (field 'sched'/'uf') and the
+   departures card (field 'depSched'/'depUf') — same day record, same
+   week storage, just a different key written. Returns the day's updated
+   {sched,uf,depSched,depUf}, or null if the input was junk and nothing
+   was written (callers use that to skip their refresh). */
+function _occfcSetField(weekKey,ds,field,raw){
   var rec=loadOccForecast(weekKey)||{days:{}};
   var days=rec.days||{};
   var cur=_occfcNormDay(days[ds]);
@@ -6990,13 +7010,28 @@ function saveOccForecastDay(weekKey,ds,field,raw){
   if(t===''){ cur[field]=null; }
   else{
     var n=parseInt(t,10);
-    if(isNaN(n)||n<0)return; /* ignore junk rather than storing NaN */
+    if(isNaN(n)||n<0)return null; /* ignore junk rather than storing NaN */
     cur[field]=n;
   }
-  if(cur.sched===null&&cur.uf===null){ delete days[ds]; }
+  if(!_occfcDayHasData(cur)){ delete days[ds]; }
   else{ days[ds]=cur; }
   saveOccForecast(weekKey,days);
+  return cur;
+}
+/* Called from the Rooms card's inputs: writes one FIELD ('sched' or
+   'uf') of one day without disturbing the other field, the departures
+   fields, or the other six days. An empty box clears that field back to
+   "not entered" rather than storing a 0. */
+function saveOccForecastDay(weekKey,ds,field,raw){
+  if(_occfcSetField(weekKey,ds,field,raw)===null)return;
   try{ _occfcRefreshWeek(weekKey); }catch(e){}
+}
+/* Same as saveOccForecastDay, for the Departures card's inputs
+   ('depSched'/'depUf'). Separate function only so each card refreshes
+   just itself, not the other one, after an edit. */
+function saveDepForecastDay(weekKey,ds,field,raw){
+  if(_occfcSetField(weekKey,ds,field,raw)===null)return;
+  try{ _depfcRefreshWeek(weekKey); }catch(e){}
 }
 
 /* Merge every project_<id> row (plus the legacy projects_data blob as a
@@ -14185,8 +14220,19 @@ function _occfcDiffHTML(c){
 }
 
 /* One week only, the one occfcViewWeekStart points at. */
+/* One combined card for both rooms and departures — Carlos's ask
+   (2026-08-18): two full cards stacked, each with its own header/week-
+   picker/chart, took too much scrolling to read together even though
+   they're the same week's numbers. Now one header, one week picker, one
+   table with a Rooms row and a Dep row under each day, and the two
+   charts side by side at the bottom instead of one each. Still backed
+   by the same _occfcWeekData/_depfcWeekData and the same input ids
+   (occfcUf_/occfcSched_/occfcDiff_, depfcUf_/depfcSched_/depfcDiff_), so
+   _occfcRefreshWeek and _depfcRefreshWeek keep working untouched after
+   an edit — only the surrounding markup changed. */
 function buildOccForecastHTML(){
   var wd=_occfcWeekData(_occfcWeekStart());
+  var dwd=_depfcWeekData(_occfcWeekStart());
   var thisWeekKey=dateStr(getHotelWeekStart(new Date()));
   var isThisWeek=(wd.weekKey===thisWeekKey);
   var yr=wd.start.getFullYear();
@@ -14194,13 +14240,14 @@ function buildOccForecastHTML(){
   var html='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
   html+='<div style="background:var(--navy);padding:12px 18px;">';
   html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Forecast vs Scheduled vs Opera</div>';
-  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">Unifocus\'s Friday forecast, the number the schedule was actually built on, and what Opera shows the hotel ran</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">Unifocus\'s Friday forecast, the number the schedule was actually built on, and what Opera shows the hotel ran &mdash; rooms and departures together</div>';
   html+='</div>';
 
   /* Week picker. Its own arrows, independent of the month controls at the
      top of the page — see the note on occfcViewWeekStart. The year is
      spelled out because these arrows can walk into a different one, and
-     "Aug 15 – Aug 21" alone would give no hint of that. */
+     "Aug 15 – Aug 21" alone would give no hint of that. Drives both the
+     rooms and departures data below — one picker, one week for both. */
   html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--surface);border-bottom:1px solid var(--border);">';
   html+='<button onclick="changeOccfcWeek(-1)" aria-label="Previous week" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;background:#fff;font-size:12px;font-weight:700;color:var(--text1);cursor:pointer;flex-shrink:0;">&larr;</button>';
   html+='<div style="text-align:center;min-width:0;">';
@@ -14215,7 +14262,8 @@ function buildOccForecastHTML(){
   html+='</div>';
 
   html+='<div style="padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);">';
-  html+='<div id="occfcSum_'+wd.weekKey+'" style="font-size:10px;color:var(--text3);">'+_occfcSummaryHTML(wd)+'</div>';
+  html+='<div id="occfcSum_'+wd.weekKey+'" style="font-size:10px;color:var(--text3);">&#127968; Rooms &mdash; '+_occfcSummaryHTML(wd)+'</div>';
+  html+='<div id="depfcSum_'+wd.weekKey+'" style="font-size:10px;color:var(--text3);margin-top:3px;">&#129531; Departures &mdash; '+_occfcSummaryHTML(dwd)+'</div>';
   html+='</div>';
 
   /* Full words ("Forecast", "Sched", "Opera"), Carlos's explicit ask —
@@ -14230,10 +14278,14 @@ function buildOccForecastHTML(){
   html+='<div></div><div style="text-align:center;">Forecast</div><div style="text-align:center;">Sched</div><div style="text-align:center;">Opera</div><div style="text-align:center;">Diff</div>';
   html+='</div>';
 
-  wd.cells.forEach(function(c){
-    html+='<div style="display:grid;grid-template-columns:'+occfcCols+';gap:4px;padding:7px 16px;align-items:center;font-size:11px;border-top:1px solid var(--border);">';
-    html+='<div><div style="font-weight:700;color:var(--text1);">'+_occfcShortD(c.d)+'</div>'
+  wd.cells.forEach(function(c,i){
+    var dc=dwd.cells[i];
+    html+='<div style="padding:6px 16px 0;border-top:1px solid var(--border);">'
+      +'<div style="font-weight:700;color:var(--text1);font-size:11px;">'+_occfcShortD(c.d)+'</div>'
       +'<div style="font-size:9px;color:var(--text3);margin-top:1px;">night '+_occfcShortD(c.night)+'</div></div>';
+
+    html+='<div style="display:grid;grid-template-columns:'+occfcCols+';gap:4px;padding:3px 16px;align-items:center;font-size:11px;">';
+    html+='<div style="font-size:9.5px;color:var(--text3);font-weight:700;">&#127968; Rooms</div>';
     html+='<input type="number" min="0" inputmode="numeric" id="occfcUf_'+c.ds+'" value="'+(c.uf!==null?c.uf:'')+'" placeholder="&mdash;"'
       +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'uf\',this.value)"'
       +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
@@ -14243,13 +14295,40 @@ function buildOccForecastHTML(){
     html+='<div style="text-align:center;color:var(--text2);">'+(c.ac>0?c.ac:'&mdash;')+'</div>';
     html+='<div id="occfcDiff_'+c.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(c)+'</div>';
     html+='</div>';
+
+    html+='<div style="display:grid;grid-template-columns:'+occfcCols+';gap:4px;padding:3px 16px 7px;align-items:center;font-size:11px;">';
+    html+='<div style="font-size:9.5px;color:var(--text3);font-weight:700;">&#129531; Dep</div>';
+    html+='<input type="number" min="0" inputmode="numeric" id="depfcUf_'+dc.ds+'" value="'+(dc.uf!==null?dc.uf:'')+'" placeholder="&mdash;"'
+      +' onchange="saveDepForecastDay(\''+dwd.weekKey+'\',\''+dc.ds+'\',\'depUf\',this.value)"'
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(dc.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(dc.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
+    html+='<input type="number" min="0" inputmode="numeric" id="depfcSched_'+dc.ds+'" value="'+(dc.sched!==null?dc.sched:'')+'" placeholder="&mdash;"'
+      +' onchange="saveDepForecastDay(\''+dwd.weekKey+'\',\''+dc.ds+'\',\'depSched\',this.value)"'
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(dc.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(dc.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+    html+='<div style="text-align:center;color:var(--text2);">'+(dc.ac>0?dc.ac:'&mdash;')+'</div>';
+    html+='<div id="depfcDiff_'+dc.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(dc)+'</div>';
+    html+='</div>';
   });
 
   /* Only when there's actually something to plot — a genuinely untouched
      week ("Nothing entered yet" above) would just draw three flat lines
-     at zero, which reads as real data rather than absence of it. */
-  if(wd.anyFc){
-    html+='<div style="padding:10px 16px 6px;height:170px;"><canvas id="occfcChart_'+wd.weekKey+'"></canvas></div>';
+     at zero, which reads as real data rather than absence of it. Side by
+     side rather than stacked (Carlos's ask) since the two are now on the
+     same card; each still keyed and destroyed/recreated independently
+     (see _occfcRenderOneChart/_depfcRenderOneChart), so a week with only
+     one of the two filled in still only draws that one. */
+  if(wd.anyFc||dwd.anyFc){
+    html+='<div style="display:flex;flex-wrap:wrap;gap:10px;padding:10px 16px 6px;">';
+    if(wd.anyFc){
+      html+='<div style="flex:1 1 220px;min-width:0;">'
+        +'<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;">&#127968; Rooms</div>'
+        +'<div style="height:150px;"><canvas id="occfcChart_'+wd.weekKey+'"></canvas></div></div>';
+    }
+    if(dwd.anyFc){
+      html+='<div style="flex:1 1 220px;min-width:0;">'
+        +'<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;">&#129531; Departures</div>'
+        +'<div style="height:150px;"><canvas id="depfcChart_'+dwd.weekKey+'"></canvas></div></div>';
+    }
+    html+='</div>';
     html+='<div style="display:flex;gap:14px;padding:0 16px 10px;font-size:9px;color:var(--text3);">'
       +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.uf+';margin-right:4px;"></span>Forecast</span>'
       +'<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+OCCFC_COLORS.sched+';margin-right:4px;"></span>Sched</span>'
@@ -14260,7 +14339,7 @@ function buildOccForecastHTML(){
   html+='<div style="padding:8px 16px 10px;border-top:1px solid var(--border);font-size:9.5px;color:var(--text3);">'
     +'<b style="color:var(--text1);">Sched</b> (gold) is the number that actually built the schedule &middot; '
     +'<b style="color:var(--text1);">Forecast</b> is Unifocus\'s own Friday number, shown alongside it for comparison &middot; '
-    +'<b style="color:var(--text1);">Opera</b> is the actual rooms sold &middot; Diff compares Scheduled against Opera. '
+    +'<b style="color:var(--text1);">Opera</b> is the actual rooms/departures &middot; Diff compares Scheduled against Opera. '
     +'A positive gap means the hotel ran heavier than the schedule was built for.</div>';
   html+='</div>';
   return html;
@@ -14350,6 +14429,107 @@ function _occfcRefreshWeek(weekKey){
      (changing month and back, or reopening the page). Everything else
      above (the numbers themselves) is unaffected by that. */
   _occfcRenderOneChart(wd);
+}
+
+/* ══ Departures forecast ══ (Carlos's ask, 2026-08-18: departures drive
+   as much of the Room Attendant standard as rooms do — 30 min each vs.
+   ~17 min per stayover — so they deserve the same Forecast/Scheduled/
+   Opera tracking as rooms already get above, not just a bare number
+   typed into the Schedule with nothing to check it against. Same
+   hk_occfc_<week> record, same days[ds] object, just the depSched/depUf
+   keys instead of sched/uf — see _occfcNormDay/_occfcSetField. Shares
+   the rooms card's week pointer (occfcViewWeekStart) and its Prev/Next/
+   This-week controls; this card only displays that week, no controls
+   of its own, since the two sit back to back and would otherwise walk
+   out of sync with each other. */
+var _depfcChartObjs={};
+function _depfcWeekData(weekStart){
+  var weekKey=dateStr(weekStart);
+  var rec=loadOccForecast(weekKey);
+  var ufTotal=0,schedTotal=0,acTotal=0,bothDays=0,anyFc=false,cells=[];
+  for(var i=0;i<7;i++){
+    var d=new Date(weekStart);d.setDate(weekStart.getDate()+i);
+    var ds=dateStr(d);
+    var v=_occfcNormDay((rec&&rec.days)?rec.days[ds]:undefined);
+    if(v.depSched!==null||v.depUf!==null)anyFc=true;
+    /* getDeparturesForDay returns null for "no R106 yet" — treated as 0
+       here, same simplification the rooms card already makes for
+       getRoomsForDay, so both cards read the same way at a glance. */
+    var ac=getDeparturesForDay(ds); if(ac===null)ac=0;
+    if(v.depUf!==null)ufTotal+=v.depUf;
+    if(v.depSched!==null)schedTotal+=v.depSched;
+    if(v.depSched!==null&&ac>0){acTotal+=ac;bothDays++;}
+    cells.push({ds:ds,d:d,uf:v.depUf,sched:v.depSched,ac:ac,
+                diff:(v.depSched!==null&&ac>0)?(ac-v.depSched):null});
+  }
+  return {weekKey:weekKey,start:new Date(weekStart),
+          end:(function(){var e=new Date(weekStart);e.setDate(weekStart.getDate()+6);return e;})(),
+          cells:cells,ufTotal:ufTotal,schedTotal:schedTotal,acTotal:acTotal,
+          bothDays:bothDays,anyFc:anyFc,
+          netVar:bothDays>0?acTotal-schedTotal:null};
+}
+function _depfcRenderOneChart(wd){
+  if(_depfcChartObjs[wd.weekKey]){
+    try{_depfcChartObjs[wd.weekKey].destroy();}catch(e){}
+    delete _depfcChartObjs[wd.weekKey];
+  }
+  if(typeof Chart==='undefined'||!wd.anyFc)return;
+  var canvas=document.getElementById('depfcChart_'+wd.weekKey);
+  if(!canvas)return;
+  _depfcChartObjs[wd.weekKey]=new Chart(canvas,{
+    type:'line',
+    data:{
+      labels:wd.cells.map(function(c){return _occfcShortD(c.d);}),
+      datasets:[
+        {label:'Forecast',data:wd.cells.map(function(c){return c.uf;}),
+         borderColor:OCCFC_COLORS.uf,backgroundColor:OCCFC_COLORS.uf,
+         tension:.25,pointRadius:3,borderWidth:2,spanGaps:true},
+        {label:'Sched',data:wd.cells.map(function(c){return c.sched;}),
+         borderColor:OCCFC_COLORS.sched,backgroundColor:OCCFC_COLORS.sched,
+         tension:.25,pointRadius:3,borderWidth:2,spanGaps:true},
+        {label:'Opera',data:wd.cells.map(function(c){return c.ac>0?c.ac:null;}),
+         borderColor:OCCFC_COLORS.opera,backgroundColor:OCCFC_COLORS.opera,
+         tension:.25,pointRadius:3,borderWidth:2,spanGaps:true}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#8C8680',font:{size:9}}},
+        y:{beginAtZero:true,grid:{color:'#E4DDD1'},ticks:{color:'#8C8680',font:{size:10}}}
+      }
+    }
+  });
+}
+function _depfcRenderCharts(){
+  var wd=_depfcWeekData(_occfcWeekStart());
+  Object.keys(_depfcChartObjs).forEach(function(k){
+    if(k===wd.weekKey)return;
+    try{_depfcChartObjs[k].destroy();}catch(e){}
+    delete _depfcChartObjs[k];
+  });
+  _depfcRenderOneChart(wd);
+}
+function _depfcRefreshWeek(weekKey){
+  var wd=_depfcWeekData(parseLocalDate(weekKey));
+  var sum=document.getElementById('depfcSum_'+weekKey);
+  if(sum)sum.innerHTML=_occfcSummaryHTML(wd);
+  wd.cells.forEach(function(c){
+    var dEl=document.getElementById('depfcDiff_'+c.ds);
+    if(dEl)dEl.innerHTML=_occfcDiffHTML(c);
+    var ufEl=document.getElementById('depfcUf_'+c.ds);
+    if(ufEl){
+      ufEl.style.borderColor=(c.uf!==null?'#8FA3C7':'var(--border)');
+      ufEl.style.background=(c.uf!==null?'rgba(30,45,74,.07)':'#fff');
+    }
+    var schedEl=document.getElementById('depfcSched_'+c.ds);
+    if(schedEl){
+      schedEl.style.borderColor=(c.sched!==null?'#C9A84C':'var(--border)');
+      schedEl.style.background=(c.sched!==null?'var(--gt)':'#fff');
+    }
+  });
+  _depfcRenderOneChart(wd);
 }
 
 /* ══ Occupancy pickup ══
@@ -14498,7 +14678,8 @@ function renderOccupancy(){
     +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-top:2px;">Low Night</div></div>';
   html+='</div>';
 
-  /* Forecast the schedule was built on, vs what actually ran */
+  /* Forecast the schedule was built on, vs what actually ran — rooms
+     and departures together, one card (see buildOccForecastHTML). */
   html+=buildOccForecastHTML();
 
   /* Pickup — how much each night moved between OCC uploads */
@@ -14586,6 +14767,7 @@ function renderOccupancy(){
   html+='</div>';
   el.innerHTML=html;
   try{_occfcRenderCharts();}catch(e){}
+  try{_depfcRenderCharts();}catch(e){}
 }
 
 /* ── Occupancy Fix Modal ── */

@@ -170,7 +170,14 @@ module.exports = {
     t.assert(/occfcUf_2026-08-17/.test(html), 'and its own addressable Unifocus input, independent of the Scheduled one');
     t.assert(/occfcSum_2026-08-15/.test(html), 'the week has an addressable summary');
     t.assert(!/occfcSum_2026-08-22/.test(html), 'and the NEXT week is not rendered at all — one week at a time, not the whole month');
-    t.assert(!/Nothing entered yet/.test(html), 'the week on screen has entries, so it does not claim to be empty');
+    // The Rooms and Departures sections now share one card (Carlos's ask,
+    // v7.22.1) but report their own emptiness independently — this week
+    // has Rooms entries but no Departures ones, so Rooms must not claim
+    // to be empty while Departures correctly does.
+    const roomsSumHtml = /occfcSum_2026-08-15"[^>]*>([^<]*)</.exec(html)[1];
+    const depSumHtml = /depfcSum_2026-08-15"[^>]*>([^<]*)</.exec(html)[1];
+    t.assert(!/Nothing entered yet/.test(roomsSumHtml), 'Rooms has entries this week, so it does not claim to be empty');
+    t.assert(/Nothing entered yet/.test(depSumHtml), 'Departures genuinely has nothing entered for this week, and says so');
 
     // Default with nothing chosen is the week we're actually in — the
     // whole point of the default, and the one thing a stale value would
