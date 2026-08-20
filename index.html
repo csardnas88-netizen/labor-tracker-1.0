@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.22.0"/>
+<meta name="app-version" content="7.23.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -872,6 +872,24 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .hub-assign-sub{font-size:12px;color:rgba(255,255,255,.55);}
 .hub-assign-arrow{color:var(--gold);font-size:22px;transition:.18s;flex-shrink:0;}
 .hub-assign-banner:hover .hub-assign-arrow{transform:translateX(4px);}
+
+/* ── Birthdays hub banner ──
+   Same card language as hub-assign-banner (gold-on-navy) but not a nav
+   link — it's a straight list, so no hover-lift/arrow. Today's entries
+   get a slow pulse so they read as "act on this now" without being
+   obnoxious; the confetti burst (fireConfetti, once per day) is the
+   actual celebratory moment — this pill just marks who it was for. */
+.hub-bday-banner{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);border-radius:16px;padding:16px 20px;margin-top:14px;box-shadow:var(--sh2);border:1px solid rgba(201,168,76,.25);}
+.hub-bday-title{font-family:var(--serif);font-size:16px;font-weight:700;color:#fff;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.hub-bday-empty{font-size:12.5px;color:rgba(255,255,255,.5);}
+.hub-bday-list{display:flex;flex-direction:column;gap:7px;}
+.hub-bday-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:9px;background:rgba(255,255,255,.05);}
+.hub-bday-name{font-size:13px;font-weight:600;color:#fff;}
+.hub-bday-pos{font-size:10.5px;color:rgba(255,255,255,.5);margin-left:6px;}
+.hub-bday-date{font-size:11.5px;color:rgba(255,255,255,.55);font-weight:700;white-space:nowrap;}
+.hub-bday-row.today{background:rgba(201,168,76,.22);border:1px solid var(--gold);animation:hubBdayPulse 2.2s ease-in-out infinite;}
+.hub-bday-today-pill{font-size:10.5px;font-weight:800;color:var(--gold);white-space:nowrap;}
+@keyframes hubBdayPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,.35);}50%{box-shadow:0 0 0 6px rgba(201,168,76,0);}}
 
 /* ===== LABOR MODEL ===== */
 .lm-table{width:100%;border-collapse:collapse;background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--sh1);}
@@ -2377,7 +2395,16 @@ var ROSTER_BY_ID={
   "26100324":{"name":"Candy Say Toc","pos":"Room Attendant","code":"2560"},
   "26100327":{"name":"Adamary Tzic","pos":"Laundry Attendant","code":"2655"},
   "26100333":{"name":"Sandra Silva Henriquez","pos":"Room Attendant","code":"2560"},
-  "26100335":{"name":"Abby Puac","pos":"Room Attendant","code":"2560"}
+  "26100335":{"name":"Abby Puac","pos":"Room Attendant","code":"2560"},
+  "26100343":{"name":"Maria Aguilar","pos":"Room Attendant","code":"2560"},
+  "26100347":{"name":"Sarahi Gonzalez","pos":"Public Area Attendant","code":"2575"},
+  "26100351":{"name":"Ada Guevara","pos":"Room Attendant","code":"2560"},
+  "26100353":{"name":"Diana Martinez","pos":"House Attendant","code":"2565"},
+  "26100355":{"name":"Alicia Martinez","pos":"Turndown Attendant","code":"2580"},
+  "26100356":{"name":"Veronica Ramirez","pos":"Turndown Attendant","code":"2580"},
+  "26100357":{"name":"Sindi Ocheita","pos":"Room Attendant","code":"2560"},
+  "26100358":{"name":"Yolanda Cano","pos":"Turndown Attendant","code":"2580"},
+  "26100359":{"name":"Mayra Martinez","pos":"Room Attendant","code":"2560"}
 };
 var HK_POS={"2550":"Housekeeping Supervisor","2560":"Room Attendant","2565":"House Attendant","2575":"Public Area Attendant","2580":"Turndown Attendant","2655":"Laundry Attendant"};
 var HK_CODES=Object.keys(HK_POS);
@@ -2438,6 +2465,59 @@ function newHireBadgeHTML(empId){
   return '<span class="newhire-badge">&#9733; New</span>'
     +'<span class="days-pill">'+st.days+' '+(st.days===1?'d\u00eda':'d\u00edas')+'</span>';
 }
+
+/* \u2500\u2500 Birthdays \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+   Stored as "MM-DD" in hk_emp_dates[id].birthday (see showEditModal /
+   saveEditEmp) \u2014 no birth year kept, since only the monthly reminder
+   and the day-of celebration ever need month/day. */
+function birthdayMonthDayFor(empId){
+  var rec=loadEmpDates()[empId];
+  return (rec&&rec.birthday)?rec.birthday:null;
+}
+var BDAY_MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+/* Active roster members with a birthday this month, sorted by day. Each
+   entry also carries isToday so the dashboard can single out who to
+   actually go congratulate right now versus who's just coming up. */
+function birthdaysThisMonth(){
+  var today=new Date();
+  var mm=String(today.getMonth()+1).padStart(2,'0');
+  var todayDD=String(today.getDate()).padStart(2,'0');
+  var roster=getActiveRoster();
+  var out=[];
+  roster.forEach(function(e){
+    var bd=birthdayMonthDayFor(e.id);
+    if(!bd||bd.slice(0,2)!==mm)return;
+    var dd=bd.slice(3,5);
+    out.push({id:e.id,name:e.name,pos:e.pos,day:parseInt(dd,10),isToday:dd===todayDD});
+  });
+  out.sort(function(a,b){return a.day-b.day;});
+  return out;
+}
+
+/* One-time seed from the HR date-of-birth export Carlos provided
+   (dob.xlsx, 2026-08-19) — matched to the current roster by Employee ID,
+   month/day only (no birth year kept). Merged in on load, once, by
+   BDAY_SEED_KEY below; never overwrites a birthday someone already
+   entered by hand. 9 people in that file (IDs 26100343-359, all newer
+   than anyone in ROSTER_BY_ID) aren't on the roster yet, so they're
+   left out until they're added as employees. */
+var BIRTHDAY_SEED={
+  "26100005":"01-30","26100006":"06-24","26100015":"10-04","26100018":"10-11",
+  "26100020":"06-26","26100232":"05-20","26100024":"10-08","26100034":"01-16",
+  "26100036":"06-20","26100038":"03-26","26100039":"12-03","26100040":"12-17",
+  "26100213":"02-06","26100046":"12-10","26100055":"12-09","26100056":"07-10",
+  "26100322":"02-21","26100064":"04-10","26100223":"12-24","26100241":"11-26",
+  "26100090":"04-12","26100097":"11-10","26100109":"12-24","26100111":"06-16",
+  "26100302":"01-29","26100119":"12-10","26100335":"05-03","26100222":"02-16",
+  "26100127":"09-17","26100132":"01-17","26100146":"09-27","26100333":"07-06",
+  "26100156":"05-26","26100159":"10-26","26100327":"03-31","26100161":"07-17",
+  "26100160":"03-05","26100163":"01-24","26100239":"01-12","26100164":"05-18",
+  "26100171":"10-11","26100172":"01-28",
+  "26100343":"06-20","26100347":"10-18","26100351":"10-21","26100353":"02-14",
+  "26100355":"12-01","26100356":"08-26","26100357":"06-27","26100358":"12-15",
+  "26100359":"03-11"
+};
+var BDAY_SEED_KEY='hk_bday_seed_v1';
 
 /* \u2500\u2500 SENIORITY \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
    Hire dates come from the Paychex seniority report (imported on the Roster
@@ -4334,6 +4414,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.23.0', date:'2026-08-19',
+    features:['Birthdays — Carlos\'s ask: add each employee\'s birthday to the roster (Edit Employee, year doesn\'t matter, only month/day) and get a reminder so he or any manager remembers to congratulate people. The dashboard now has a "Birthdays this month" card listing everyone with a birthday that month; whoever\'s birthday is today gets called out with a pulsing "Today!" pill, and the same confetti burst + sound already used elsewhere in the app fires once when the dashboard first loads that day. Birthdays live in the same store as hire dates (hk_emp_dates), so they sync the same way with nothing new to configure. Also seeded all 51 birthdays from the HR date-of-birth report Carlos provided, matched by Employee ID — 9 of those (Maria Aguilar, Sarahi Gonzalez, Ada Guevara, Diana Martinez, Alicia Martinez, Veronica Ramirez, Sindi Ocheita, Yolanda Cano, Mayra Martinez) weren\'t in the app\'s roster yet, so they were added as employees at the same time.']
+  },
+  {
     v:'7.22.0', date:'2026-08-18',
     features:['The Occupancy page\'s Forecast vs Scheduled vs Opera card now tracks departures too, not just rooms — Carlos\'s ask: departures drive as much of the Room Attendant standard as rooms do (30 min each vs. ~17 min per stayover), but only rooms had a Forecast/Scheduled/Opera comparison to check the numbers against. One card, one week picker: every day now shows a Rooms row and a Dep row together instead of two separate cards stacked on top of each other, with both weekly charts side by side at the bottom. Departures live in the same weekly forecast record as rooms, so they sync the same way with nothing new to configure.']
   },
@@ -5203,6 +5287,12 @@ function showEditModal(btn){
   /* Current hire date (if any) for this employee */
   var dates=loadEmpDates();
   var hireVal=(dates[eid]&&dates[eid].hire)?dates[eid].hire.slice(0,10):"";
+  /* Birthday is stored as "MM-DD" only (see birthdayMonthDayFor) — no
+     birth year is kept, since nothing here needs it and it's personal
+     data beyond what the reminder actually requires. The date input still
+     needs a full YYYY-MM-DD to populate, so a fixed placeholder year is
+     prepended for display only and stripped back off on save. */
+  var bdayVal=(dates[eid]&&dates[eid].birthday)?("2000-"+dates[eid].birthday):"";
   var nh=newHireStatus(eid);
   var hireHint=hireVal
     ? (nh.isNew?('<span style="color:var(--gd);font-weight:700;">'+nh.days+' d\u00edas en el equipo \u00b7 New Hire</span>'):('<span style="color:var(--text3);">'+(nh.days!==null?nh.days+' d\u00edas en el equipo':'')+'</span>'))
@@ -5231,6 +5321,9 @@ function showEditModal(btn){
     +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Hire Date / Fecha de contrataci\u00f3n</label>'
     +'<input id="editEmpHire" type="date" value="'+hireVal+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/>'
     +'<div style="font-size:10px;margin-top:4px;">'+hireHint+'</div></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Birthday</label>'
+    +'<input id="editEmpBday" type="date" value="'+bdayVal+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/>'
+    +'<div style="font-size:10px;margin-top:4px;color:var(--text3);">Year doesn\'t matter &mdash; only used for the monthly reminder on the dashboard</div></div>'
     +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Status</label>'
     +'<select id="editEmpStatus" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:#fff;">'+statusOpts+'</select></div>'
     +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'
@@ -5255,6 +5348,8 @@ function saveEditEmp(){
   var newStatus=document.getElementById("editEmpStatus").value;
   var newNote=document.getElementById("editEmpNote").value.trim();
   var newHire=document.getElementById("editEmpHire").value;
+  var newBdayEl=document.getElementById("editEmpBday");
+  var newBday=newBdayEl?newBdayEl.value:"";
   if(!newName){showToast("Enter a name");return;}
   if(!newPos){showToast("Select a position");return;}
   if(newStatus==="terminated"){
@@ -5262,14 +5357,26 @@ function saveEditEmp(){
   }
   /* Save hire date to the separate dates store */
   var dates=loadEmpDates();
+  var datesChanged=false;
   if(newHire){
     dates[eid]=dates[eid]||{};
     dates[eid].hire=newHire;
-    saveEmpDates(dates);
+    datesChanged=true;
   } else if(dates[eid]&&dates[eid].hire){
     delete dates[eid].hire;
-    saveEmpDates(dates);
+    datesChanged=true;
   }
+  /* Birthday strips the placeholder year the date input needed — only
+     MM-DD is ever kept (see showEditModal's bdayVal). */
+  if(newBday){
+    dates[eid]=dates[eid]||{};
+    dates[eid].birthday=newBday.slice(5,10);
+    datesChanged=true;
+  } else if(dates[eid]&&dates[eid].birthday){
+    delete dates[eid].birthday;
+    datesChanged=true;
+  }
+  if(datesChanged)saveEmpDates(dates);
   var ov=loadOverrides();
   ov[eid]={name:newName,pos:newPos,status:newStatus,note:newNote,updated:new Date().toISOString()};
   saveOverrides(ov);
@@ -10215,6 +10322,41 @@ function renderDashHub(){
   }
 
   html+='</div>';
+
+  /* Birthdays this month — Carlos's ask: a monthly reminder so he or any
+     manager remembers to congratulate whoever's birthday it is, with
+     today's entry called out so it can't be missed at a glance. */
+  var bdays=birthdaysThisMonth();
+  html+='<div class="hub-bday-banner">';
+  html+='<div class="hub-bday-title">&#127874; Birthdays this month</div>';
+  if(!bdays.length){
+    html+='<div class="hub-bday-empty">No birthdays logged for '+BDAY_MONTH_NAMES[today.getMonth()]+'.</div>';
+  }else{
+    html+='<div class="hub-bday-list">';
+    bdays.forEach(function(b){
+      html+='<div class="hub-bday-row'+(b.isToday?' today':'')+'">'
+        +'<div><span class="hub-bday-name">'+escHtml(b.name)+'</span><span class="hub-bday-pos">'+escHtml(b.pos)+'</span></div>'
+        +(b.isToday?'<span class="hub-bday-today-pill">&#127881; Today!</span>':'<span class="hub-bday-date">'+BDAY_MONTH_NAMES[today.getMonth()].slice(0,3)+' '+b.day+'</span>')
+        +'</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+
+  /* Fires the same confetti burst used elsewhere in the app, once per
+     calendar day regardless of how many times the dashboard is opened or
+     re-rendered — a localStorage flag (not sessionStorage) so it doesn't
+     re-fire on every visit today, but does fire again for tomorrow's
+     birthday person. Runs after c.innerHTML is set below so the banner
+     is already on screen when it bursts. */
+  var todayBdays=bdays.filter(function(b){return b.isToday;});
+  if(todayBdays.length){
+    var fireKey='hk_bday_confetti_'+dateStr(today);
+    if(!localStorage.getItem(fireKey)){
+      try{localStorage.setItem(fireKey,'1');}catch(e){}
+      setTimeout(function(){ try{fireConfetti();}catch(e){} },400);
+    }
+  }
 
   /* Assignments quick-launch banner */
   html+='<div class="hub-assign-banner" onclick="showPage(\'assignments\')">'
@@ -17954,6 +18096,23 @@ window.addEventListener('load',function(){
       });
       saveEmpDates(_ed);
       localStorage.setItem('hk_emp_dates_init','1');
+    }
+  }catch(e){}
+
+  /* One-time HR birthday seed (BIRTHDAY_SEED above). Runs once per device,
+     but is safe to run again if it ever does: only fills a birthday that
+     isn't already set, so it never overwrites a manual edit made from any
+     device in between. */
+  try{
+    if(!localStorage.getItem(BDAY_SEED_KEY)){
+      var _bd=loadEmpDates();
+      var _bdChanged=false;
+      Object.keys(BIRTHDAY_SEED).forEach(function(id){
+        if(!_bd[id])_bd[id]={};
+        if(!_bd[id].birthday){ _bd[id].birthday=BIRTHDAY_SEED[id]; _bdChanged=true; }
+      });
+      if(_bdChanged)saveEmpDates(_bd);
+      localStorage.setItem(BDAY_SEED_KEY,'1');
     }
   }catch(e){}
   try{migrateRoomsData();}catch(ex){console.warn('migrate:',ex);}

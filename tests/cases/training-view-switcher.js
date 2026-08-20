@@ -34,7 +34,7 @@ module.exports = {
     t.eq(win.getTrainingView(), 'details', 'getTrainingView should reflect the new choice');
     t.assert(/tr-list/.test(content.innerHTML), 'details view should render the compact list');
     t.assert(/tr-row-title">Safety/.test(content.innerHTML), 'details view should show the training title');
-    t.assert(/68 pending/.test(content.innerHTML), 'details view should show the pending count');
+    t.assert(/77 pending/.test(content.innerHTML), 'details view should show the pending count');
     t.assert(/overdue by \d+d/.test(content.innerHTML), 'details view should show the more urgent (overdue) deadline');
     t.assert(!/tr-grid|tr-card"/.test(content.innerHTML), 'details view should not also render the other two layouts');
 
