@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.23.1"/>
+<meta name="app-version" content="7.23.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -2517,7 +2517,13 @@ var BIRTHDAY_SEED={
   "26100355":"12-01","26100356":"08-26","26100357":"06-27","26100358":"12-15",
   "26100359":"03-11"
 };
-var BDAY_SEED_KEY='hk_bday_seed_v1';
+/* v2: 7.23.0's first run seeded birthdays then the (now-fixed) sync merge
+   immediately stripped them back out on every device that had already
+   loaded that version. Bumping the key forces the seed to run again
+   everywhere once, restoring what was wiped — still guarded per-id so it
+   only fills a birthday that's missing, never overwrites one entered by
+   hand in between. */
+var BDAY_SEED_KEY='hk_bday_seed_v2';
 
 /* \u2500\u2500 SENIORITY \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
    Hire dates come from the Paychex seniority report (imported on the Roster
@@ -4413,6 +4419,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.23.2', date:'2026-08-20',
+    fixes:['7.23.1 fixed the sync bug that was wiping birthdays, but didn\'t undo the damage it had already done: the seed only runs once per device, and on any device that had already opened 7.23.0, that first run got its birthday stripped right back out by the (now-fixed) merge, with nothing left to re-seed since the flag marking it "done" was already set. Bumped the seed key so it runs one more time everywhere, restoring whatever got wiped, still without touching a birthday entered by hand in between.']
+  },
   {
     v:'7.23.1', date:'2026-08-20',
     fixes:['Fixed birthdays disappearing right after they were set. The cloud sync that runs a second after every page load was rebuilding each employee\'s date record from only hire date + last-seen — silently dropping the birthday field every single time, on every device. Carlos caught it within hours of 7.23.0 shipping (Veronica Ramirez\'s birthday vanished from the dashboard card). Also made the "Birthdays this month" card bigger per his note that it read too small.']
