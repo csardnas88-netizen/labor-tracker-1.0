@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.23.0"/>
+<meta name="app-version" content="7.23.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -879,16 +879,16 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
    get a slow pulse so they read as "act on this now" without being
    obnoxious; the confetti burst (fireConfetti, once per day) is the
    actual celebratory moment — this pill just marks who it was for. */
-.hub-bday-banner{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);border-radius:16px;padding:16px 20px;margin-top:14px;box-shadow:var(--sh2);border:1px solid rgba(201,168,76,.25);}
-.hub-bday-title{font-family:var(--serif);font-size:16px;font-weight:700;color:#fff;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
-.hub-bday-empty{font-size:12.5px;color:rgba(255,255,255,.5);}
-.hub-bday-list{display:flex;flex-direction:column;gap:7px;}
-.hub-bday-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:9px;background:rgba(255,255,255,.05);}
-.hub-bday-name{font-size:13px;font-weight:600;color:#fff;}
-.hub-bday-pos{font-size:10.5px;color:rgba(255,255,255,.5);margin-left:6px;}
-.hub-bday-date{font-size:11.5px;color:rgba(255,255,255,.55);font-weight:700;white-space:nowrap;}
+.hub-bday-banner{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);border-radius:16px;padding:22px 26px;margin-top:14px;box-shadow:var(--sh2);border:1px solid rgba(201,168,76,.25);}
+.hub-bday-title{font-family:var(--serif);font-size:20px;font-weight:700;color:#fff;margin-bottom:14px;display:flex;align-items:center;gap:10px;}
+.hub-bday-empty{font-size:14px;color:rgba(255,255,255,.5);}
+.hub-bday-list{display:flex;flex-direction:column;gap:9px;}
+.hub-bday-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:10px;background:rgba(255,255,255,.05);}
+.hub-bday-name{font-size:15.5px;font-weight:600;color:#fff;}
+.hub-bday-pos{font-size:12px;color:rgba(255,255,255,.5);margin-left:8px;}
+.hub-bday-date{font-size:13.5px;color:rgba(255,255,255,.55);font-weight:700;white-space:nowrap;}
 .hub-bday-row.today{background:rgba(201,168,76,.22);border:1px solid var(--gold);animation:hubBdayPulse 2.2s ease-in-out infinite;}
-.hub-bday-today-pill{font-size:10.5px;font-weight:800;color:var(--gold);white-space:nowrap;}
+.hub-bday-today-pill{font-size:12.5px;font-weight:800;color:var(--gold);white-space:nowrap;}
 @keyframes hubBdayPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,.35);}50%{box-shadow:0 0 0 6px rgba(201,168,76,0);}}
 
 /* ===== LABOR MODEL ===== */
@@ -4414,6 +4414,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.23.1', date:'2026-08-20',
+    fixes:['Fixed birthdays disappearing right after they were set. The cloud sync that runs a second after every page load was rebuilding each employee\'s date record from only hire date + last-seen — silently dropping the birthday field every single time, on every device. Carlos caught it within hours of 7.23.0 shipping (Veronica Ramirez\'s birthday vanished from the dashboard card). Also made the "Birthdays this month" card bigger per his note that it read too small.']
+  },
+  {
     v:'7.23.0', date:'2026-08-19',
     features:['Birthdays — Carlos\'s ask: add each employee\'s birthday to the roster (Edit Employee, year doesn\'t matter, only month/day) and get a reminder so he or any manager remembers to congratulate people. The dashboard now has a "Birthdays this month" card listing everyone with a birthday that month; whoever\'s birthday is today gets called out with a pulsing "Today!" pill, and the same confetti burst + sound already used elsewhere in the app fires once when the dashboard first loads that day. Birthdays live in the same store as hire dates (hk_emp_dates), so they sync the same way with nothing new to configure. Also seeded all 51 birthdays from the HR date-of-birth report Carlos provided, matched by Employee ID — 9 of those (Maria Aguilar, Sarahi Gonzalez, Ada Guevara, Diana Martinez, Alicia Martinez, Veronica Ramirez, Sindi Ocheita, Yolanda Cano, Mayra Martinez) weren\'t in the app\'s roster yet, so they were added as employees at the same time.']
   },
@@ -7496,7 +7500,7 @@ function _syncFromSheetsPull(){
             Object.keys(localED).forEach(function(id){
               var l=localED[id]||{},r=mergedED[id]||{};
               var ls=(l.lastSeen&&r.lastSeen)?(l.lastSeen>r.lastSeen?l.lastSeen:r.lastSeen):(l.lastSeen||r.lastSeen);
-              mergedED[id]={hire:l.hire||r.hire,lastSeen:ls};
+              mergedED[id]={hire:l.hire||r.hire,lastSeen:ls,birthday:l.birthday||r.birthday};
             });
             safeSetItem('hk_emp_dates',JSON.stringify(mergedED));
             updated=true;
