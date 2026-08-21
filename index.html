@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.24.2"/>
+<meta name="app-version" content="7.24.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4481,6 +4481,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.24.3', date:'2026-08-21',
+    fixes:['Fixed Laundry\'s cover chain (Victoriano Ch → Jorge Gonzalez) only reacting to Victoriano being OFF or R-OFF, never to TAILOR — Carlos\'s rule: Victoriano is Taylor 2 days a week by hand, and Laundry must never sit with zero people OR both Victoriano and Jorge in it at once, so a Taylor day needs Jorge\'s cover exactly as much as an OFF day does. Also: this now reacts live the moment Carlos sets TAILOR (or back to \'1\') on the Schedule page itself, not only on the next full "Auto-fill this week" run, since that\'s the cell he actually edits every week — and going back to \'1\' correctly releases Jorge back to Houseman instead of leaving him stuck showing LAUNDRY. Also protected TAILOR from being silently overwritten by Auto-fill\'s own day-off placement and shortfall repair, the same protection R-OFF/FLEX/VAC already had.']
+  },
   {
     v:'7.24.2', date:'2026-08-20',
     fixes:['Fixed the Schedule page\'s Supervisors "departures each" dividing by one person too many on a day Yanira works PM — Carlos\'s report. Yanira is a real body for the Unifocus headcount (that total correctly still counts her PM shift), but she runs her own separate PM shift rather than sharing the AM crew\'s departures, so the per-person split now excludes her specifically, while the headcount and Unifocus comparison right above it are unchanged.']
@@ -19243,8 +19247,22 @@ function schedSetCell(bk,idx,name,ds,val,el){
   var row=_schedRow(SCH,ds,bk,idx,name);
   if(!row)return;
   row[1]=String(val==null?'':val).trim();
+  /* Marking Victoriano TAILOR (or back to '1') is itself the trigger for
+     Jorge's Laundry cover, same relationship Auto-fill already knows —
+     Carlos sets this by hand every week, not through Auto-fill, so it
+     has to react live right here rather than only on the next full
+     Auto-fill run. */
+  var chainMember=schedIsChainMember(bk,name);
+  if(chainMember)schedApplyCoverChainsForDate(SCH,ds);
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
+  if(chainMember){
+    /* The chain reaction can change a DIFFERENT cell on this same day
+       (Jorge's own row) — that needs the full grid repainted so it
+       actually shows, unlike the single-cell case below. */
+    renderSchedule();
+    return;
+  }
   /* Repaint only what changed. A full re-render would throw away the
      scroll position of a grid that is deliberately wider than the
      screen — losing your place on every single cell you touch. */
@@ -19570,8 +19588,14 @@ function schedAutoFillCrew(SCH,dates,bk,names,offCount,wk){
   var cellVal=function(nm,i){ return schedCellFor(SCH,dates[i],bk,nm); };
   /* R-OFF, FLEX and VAC are all granted absences already committed to
      the employee via Request Off — none of them are ever overwritten
-     by Auto-fill, same protection every one of them gets. */
-  var isFixedOff=function(nm,i){ var v=cellVal(nm,i); return v==='R-OFF'||v==='FLEX'||v==='VAC'; };
+     by Auto-fill, same protection every one of them gets. TAILOR gets
+     the same protection for a different reason: Victoriano works Laundry
+     except 2 days a week Carlos marks him as Taylor by hand, and Laundry's
+     own day-off algorithm needs to see those days as unavailable (so it
+     doesn't also hand him an OFF day that week expecting him to be idle)
+     without ever silently overwriting Carlos's mark back to '1' or 'OFF'
+     the next time Auto-fill runs. */
+  var isFixedOff=function(nm,i){ var v=cellVal(nm,i); return v==='R-OFF'||v==='FLEX'||v==='VAC'||v==='TAILOR'; };
   /* schedSupHpNeeded's 9999 stands for "everyone" (Schedule Builder's own
      'ALL') — clamped to the crew's actual size here, where names.length
      is known. */
@@ -19637,7 +19661,10 @@ function schedRepairShortfalls(SCH,dates,bk,names){
   var days=[0,1,2,3,4,5,6];
   var cellVal=function(nm,i){ return schedCellFor(SCH,dates[i],bk,nm); };
   var isOffCellFn=function(nm,i){ return schedIsOff(cellVal(nm,i)); };
-  var isFixedOffFn=function(nm,i){ var v=cellVal(nm,i); return v==='R-OFF'||v==='FLEX'||v==='VAC'; };
+  /* TAILOR is protected the same as R-OFF/FLEX/VAC here too — a shortfall
+     swap must never treat Victoriano's Taylor day as a spare working day
+     to pull from, nor overwrite it with a plain OFF. */
+  var isFixedOffFn=function(nm,i){ var v=cellVal(nm,i); return v==='R-OFF'||v==='FLEX'||v==='VAC'||v==='TAILOR'; };
   var needFn=function(i){ var day=SCH.days[dates[i]]; if(!day)return 0; return Math.min(schedAutoNeed(day,bk),names.length); };
   var working=days.map(function(i){ return names.filter(function(nm){return !isOffCellFn(nm,i);}).length; });
   var guard=0;
@@ -19769,21 +19796,57 @@ function schedApplyYesenia(SCH,dates,wk){
     if(row)row[1]='HOUSEMAN';
   });
 }
-function schedApplyCoverChains(SCH,dates){
+/* A titular not working their home crew that day means OFF/R-OFF — or,
+   for Victoriano specifically, TAILOR: Carlos's rule is never two people
+   in Laundry at once, and Victoriano-as-Taylor is exactly as unavailable
+   for Laundry that day as Victoriano-off is, so the same cover has to
+   fire (Jorge Gonzalez, into Laundry) rather than leaving Laundry
+   uncovered because the cell technically isn't OFF.
+
+   Scoped to one date (schedApplyCoverChainsForDate) so a single manual
+   cell edit (schedSetCell, below) can re-run this live, right when
+   Carlos marks Victoriano TAILOR by hand, without touching any other
+   day. If the titular's cell reads a plain '1' (back to working their
+   own crew) and the backup's cell still shows this same chain's label,
+   the backup is released back to '1' too — otherwise Jorge would stay
+   parked in LAUNDRY forever after Carlos changes Victoriano back. A
+   titular cell that's blank or anything else (VAC/FLEX/PM/borrowed
+   elsewhere) is left alone in both directions — not a clear enough
+   signal to assign OR release a cover. */
+function schedApplyCoverChainsForDate(SCH,ds){
   SCHED_COVER_CHAINS.forEach(function(cc){
     var titular=cc.chain[0];
-    dates.forEach(function(ds){
-      var titularCell=schedCellFor(SCH,ds,titular.homeCrew,titular.name);
-      if(titularCell===''||(titularCell!=='OFF'&&titularCell!=='R-OFF'))return;
+    var titularCell=schedCellFor(SCH,ds,titular.homeCrew,titular.name);
+    if(titularCell==='1'){
       for(var i=1;i<cc.chain.length;i++){
         var c=cc.chain[i];
-        var cell=schedCellFor(SCH,ds,c.homeCrew,c.name);
-        if(cell!=='1')continue;   // not on this week's roster, or off/already covering elsewhere
+        if(schedCellFor(SCH,ds,c.homeCrew,c.name)!==cc.label)continue;
         var row=schedRawCell(SCH,ds,c.homeCrew,c.name);
-        if(row)row[1]=cc.label;
-        return;
+        if(row)row[1]='1';
       }
-    });
+      return;
+    }
+    if(titularCell===''||(titularCell!=='OFF'&&titularCell!=='R-OFF'&&titularCell!=='TAILOR'))return;
+    for(var i=1;i<cc.chain.length;i++){
+      var c=cc.chain[i];
+      var cell=schedCellFor(SCH,ds,c.homeCrew,c.name);
+      if(cell!=='1')continue;   // not on this week's roster, or off/already covering elsewhere
+      var row=schedRawCell(SCH,ds,c.homeCrew,c.name);
+      if(row)row[1]=cc.label;
+      return;
+    }
+  });
+}
+function schedApplyCoverChains(SCH,dates){
+  dates.forEach(function(ds){ schedApplyCoverChainsForDate(SCH,ds); });
+}
+/* Whether (bk,name) is anywhere in a cover chain — titular or backup.
+   schedSetCell uses this to decide whether an edit needs the heavier
+   full-grid repaint (a chain reaction can change a DIFFERENT cell on the
+   same day) instead of its normal single-cell repaint. */
+function schedIsChainMember(bk,name){
+  return SCHED_COVER_CHAINS.some(function(cc){
+    return cc.chain.some(function(c){ return c.homeCrew===bk&&dlNorm(c.name)===dlNorm(name); });
   });
 }
 function schedApplyHpOverflow(SCH,dates){

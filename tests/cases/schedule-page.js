@@ -953,6 +953,31 @@ module.exports = {
     win.schedApplyCoverChains(SCH21d, ds21);
     t.eq(SCH21d.days[ds21[0]].gra[0][1], '1', "no Marroquin row this week at all — Gabriela Cuevas is left alone rather than assumed covering");
 
+    // Carlos's report: there must always be exactly one launderer between
+    // Victoriano and Jorge, never both, never neither. Victoriano is
+    // Taylor 2 days a week by hand — TAILOR has to trigger Jorge's cover
+    // exactly like OFF/R-OFF does, and going back to '1' has to release
+    // Jorge back to his own Houseman crew, not leave him stuck in LAUNDRY.
+    const SCH21j = {
+      days: {
+        [ds21[0]]: { laundry: [['Victoriano Ch', 'TAILOR']], hp: [['Jorge Gonzalez', '1']] },
+      },
+    };
+    win.schedApplyCoverChains(SCH21j, ds21);
+    t.eq(SCH21j.days[ds21[0]].hp[0][1], 'LAUNDRY', 'Jorge Gonzalez covers Laundry on a day Victoriano Ch works as Taylor instead');
+
+    SCH21j.days[ds21[0]].laundry[0][1] = '1'; // Victoriano back to Laundry
+    win.schedApplyCoverChains(SCH21j, ds21);
+    t.eq(SCH21j.days[ds21[0]].hp[0][1], '1', "Jorge Gonzalez is released back to Houseman once Victoriano Ch resumes Laundry himself");
+
+    // schedIsChainMember + schedSetCell: a manual edit to Victoriano Ch's
+    // own cell (the real path Carlos uses every week, not the bulk
+    // Auto-fill button) has to react live — this is what actually fires
+    // the chain day-to-day, per his answer that he sets TAILOR by hand.
+    t.eq(win.schedIsChainMember('laundry', 'Victoriano Ch'), true, 'Victoriano Ch (titular) is recognized as a chain member');
+    t.eq(win.schedIsChainMember('hp', 'Jorge Gonzalez'), true, 'Jorge Gonzalez (backup) is recognized as a chain member');
+    t.eq(win.schedIsChainMember('laundry', 'Karla Varela'), false, 'an unrelated Laundry attendant is not a chain member');
+
     // Yesenia (PM Houseman): exactly 1 day off, forced deterministic via
     // a pre-set R-OFF so the cover check lands on a known day. Paty
     // covers on that day if she's actually working her own Turndown
