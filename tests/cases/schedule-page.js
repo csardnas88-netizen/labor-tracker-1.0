@@ -894,6 +894,15 @@ module.exports = {
     t.eq(SCH21b.days[ds21[0]].sup[1][1], '1', 'everyone else on Supervisors is untouched');
     t.eq(SCH21b.days[ds21[1]].sup[0][1], 'OFF', "Yanira's own OFF day is left alone, not relabeled");
 
+    // schedRatioCount vs schedDayTotal: Yanira's PM shift is a real body
+    // for the Unifocus headcount (schedDayTotal counts her, by design —
+    // see its own comment) but she is not splitting the AM crew's
+    // departures with everyone else, since she works her own separate PM
+    // shift. Carlos's report: Supervisors' "departures each" was dividing
+    // by one person too many on a day Yanira worked PM.
+    t.eq(win.schedDayTotal(SCH21b, ds21[0], 'sup'), 2, "Yanira's PM still counts toward the Unifocus headcount total");
+    t.eq(win.schedRatioCount(SCH21b, ds21[0], 'sup'), 1, 'but she is excluded from the departures-each ratio, leaving just the one AM supervisor');
+
     // Cover chains: single-tier (Sarahi -> Andrea, Victoriano Ch ->
     // Jorge Gonzalez), two-tier escalation (Marroquin -> Gabriela Cuevas
     // -> Sandra S), no-cover-needed, and no-one-available-to-cover.

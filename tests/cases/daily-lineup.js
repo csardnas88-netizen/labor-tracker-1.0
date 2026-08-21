@@ -234,6 +234,22 @@ module.exports = {
     t.assert(P.pulled.some((p) => p[0] === 'Sandra S' && p[1] === 'LOBBY'),
       'and the override is surfaced so it is visible why she left her section');
 
+    // A GRA the schedule pulls to cover a Houseman shortage (her own cell
+    // reads HOUSEMAN, same convention as LOBBY above and the exact one
+    // schedApplyHpOverflow writes for its Rubia/Julia backups) must show
+    // up in Houseman on the printed lineup — Carlos's report: Julia Say
+    // got "Houseman" on her schedule row but never appeared there.
+    const schForHm = win.dlLoadSchedule();
+    const dayHm = schForHm.days['2026-08-14'];
+    dayHm.gra = dayHm.gra.map((p) => (p[0] === 'Ada' ? ['Ada', 'HOUSEMAN'] : p));
+    win.dlSaveSchedule(schForHm);
+    const hmP = win.dlBuildPlan('2026-08-14');
+    t.assert(hmP.hm.indexOf('Ada') !== -1,
+      'a GRA whose schedule cell reads HOUSEMAN is placed in Houseman, not left among the room attendants');
+    const schRestoreHm = win.dlLoadSchedule();
+    schRestoreHm.days['2026-08-14'].gra = schRestoreHm.days['2026-08-14'].gra.map((p) => (p[0] === 'Ada' ? ['Ada', '1'] : p));
+    win.dlSaveSchedule(schRestoreHm);
+
     // ── Sections: owners placed, the rest flagged, nothing invented ──
     t.eq(P.gra['7th'], 'Debora', 'an owner who is in gets her own section');
     t.eq(P.gra['5th'], 'Karla Varela');
