@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.23.2"/>
+<meta name="app-version" content="7.24.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -879,17 +879,59 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
    get a slow pulse so they read as "act on this now" without being
    obnoxious; the confetti burst (fireConfetti, once per day) is the
    actual celebratory moment — this pill just marks who it was for. */
-.hub-bday-banner{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);border-radius:16px;padding:22px 26px;margin-top:14px;box-shadow:var(--sh2);border:1px solid rgba(201,168,76,.25);}
-.hub-bday-title{font-family:var(--serif);font-size:20px;font-weight:700;color:#fff;margin-bottom:14px;display:flex;align-items:center;gap:10px;}
-.hub-bday-empty{font-size:14px;color:rgba(255,255,255,.5);}
-.hub-bday-list{display:flex;flex-direction:column;gap:9px;}
-.hub-bday-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:10px;background:rgba(255,255,255,.05);}
+.hub-bday-banner{position:relative;background:linear-gradient(135deg,#E0855B 0%,#D4537E 60%,#993556 100%);border-radius:16px;padding:22px 26px;margin-top:14px;box-shadow:var(--sh2);border:1px solid rgba(255,255,255,.25);overflow:hidden;}
+.hub-bday-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
+.hub-bday-title{font-family:var(--serif);font-size:20px;font-weight:700;color:#fff;display:flex;align-items:center;gap:10px;}
+.hub-bday-nav{display:flex;align-items:center;gap:8px;}
+.hub-bday-nav-btn{width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.12);color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.hub-bday-nav-btn:hover{background:rgba(255,255,255,.22);}
+.hub-bday-month{font-size:12.5px;font-weight:700;color:#fff;min-width:74px;text-align:center;}
+.hub-bday-back{font-size:9.5px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.3px;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;margin-left:4px;}
+.hub-bday-empty{font-size:14px;color:rgba(255,255,255,.75);position:relative;z-index:2;}
+.hub-bday-list{display:flex;flex-direction:column;gap:9px;position:relative;z-index:2;}
+.hub-bday-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:10px;background:rgba(255,255,255,.14);}
 .hub-bday-name{font-size:15.5px;font-weight:600;color:#fff;}
-.hub-bday-pos{font-size:12px;color:rgba(255,255,255,.5);margin-left:8px;}
-.hub-bday-date{font-size:13.5px;color:rgba(255,255,255,.55);font-weight:700;white-space:nowrap;}
-.hub-bday-row.today{background:rgba(201,168,76,.22);border:1px solid var(--gold);animation:hubBdayPulse 2.2s ease-in-out infinite;}
-.hub-bday-today-pill{font-size:12.5px;font-weight:800;color:var(--gold);white-space:nowrap;}
-@keyframes hubBdayPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,.35);}50%{box-shadow:0 0 0 6px rgba(201,168,76,0);}}
+.hub-bday-pos{font-size:12px;color:rgba(255,255,255,.65);margin-left:8px;}
+.hub-bday-date{font-size:13.5px;color:rgba(255,255,255,.7);font-weight:700;white-space:nowrap;}
+.hub-bday-row.today{background:rgba(255,255,255,.3);border:1px solid #fff;animation:hubBdayPulse 2.2s ease-in-out infinite;}
+.hub-bday-today-pill{font-size:12.5px;font-weight:800;color:#fff;white-space:nowrap;}
+@keyframes hubBdayPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.4);}50%{box-shadow:0 0 0 6px rgba(255,255,255,0);}}
+
+/* Mini mascot — same construction as the #appLoader housekeeper (hkl-*),
+   scaled down and re-dressed for a birthday: party hat instead of a plain
+   bun, one arm raised, a cake in place of the vacuum. Carlos's ask: reuse
+   "the same person" from the loading animation rather than a new drawing. */
+.bm-wrap{position:absolute;right:14px;bottom:8px;width:74px;height:118px;z-index:1;opacity:.95;}
+.bm-char{position:absolute;left:8px;top:0;width:60px;height:96px;animation:bm-bob 2.6s ease-in-out infinite;}
+.bm-head{position:absolute;width:26px;height:29px;left:17px;top:14px;background:#d99a6c;border-radius:48% 48% 46% 46%;z-index:5;}
+.bm-hair{position:absolute;width:27px;height:15px;left:16px;top:11px;background:#2c211c;border-radius:60% 60% 35% 35%;z-index:6;}
+.bm-eye{position:absolute;width:2px;height:2px;background:#1d1d1d;border-radius:50%;top:27px;z-index:7;}
+.bm-eye.bm-left{left:22px}
+.bm-eye.bm-right{left:32px}
+.bm-smile{position:absolute;width:8px;height:4px;border-bottom:1.5px solid #7f4a35;border-radius:50%;left:22px;top:32px;z-index:7;}
+.bm-hat{position:absolute;left:20px;top:-9px;width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-bottom:20px solid var(--gold);transform:rotate(8deg);z-index:8;}
+.bm-hat:after{content:"";position:absolute;top:-6px;left:-3px;width:6px;height:6px;border-radius:50%;background:#fff;}
+.bm-torso{position:absolute;width:32px;height:39px;left:14px;top:41px;background:#1E2D4A;border-radius:9px 9px 7px 7px;z-index:3;}
+.bm-apron{position:absolute;width:33px;height:20px;left:13.5px;top:63px;background:#c9a56b;border-radius:2px 2px 7px 7px;z-index:4;}
+.bm-arm{position:absolute;width:8px;height:34px;background:#d99a6c;border-radius:6px;z-index:2;}
+.bm-arm.bm-back{left:9px;top:44px;transform:rotate(20deg);}
+.bm-arm.bm-front{left:39px;top:34px;transform-origin:4px 4px;transform:rotate(-150deg);animation:bm-wave 1.8s ease-in-out infinite;}
+.bm-leg{position:absolute;width:11px;height:29px;top:78px;background:#1E2D4A;border-radius:5px;z-index:2;}
+.bm-leg.bm-left{left:17px;transform:rotate(5deg)}
+.bm-leg.bm-right{left:31px;transform:rotate(-4deg)}
+.bm-shoe{position:absolute;width:14px;height:6px;background:#1d1d1d;border-radius:5px 5px 2px 2px;top:104px;z-index:3;}
+.bm-shoe.bm-left{left:14px}
+.bm-shoe.bm-right{left:30px}
+.bm-cake{position:absolute;left:34px;top:2px;font-size:16px;z-index:9;animation:bm-cake-bob 1.8s ease-in-out infinite;}
+.bm-confetti{position:absolute;font-size:9px;z-index:1;animation:bm-confetti-fall 3.2s linear infinite;}
+.bm-c1{left:2px;top:6px;color:#fff;animation-delay:0s}
+.bm-c2{left:60px;top:2px;color:var(--gold);animation-delay:.9s}
+.bm-c3{left:44px;top:78px;color:#fff;animation-delay:1.6s}
+@keyframes bm-bob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(2px) rotate(-1deg)}}
+@keyframes bm-wave{0%,100%{transform:rotate(-150deg)}50%{transform:rotate(-170deg)}}
+@keyframes bm-cake-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes bm-confetti-fall{0%{opacity:0;transform:translateY(0) rotate(0)}15%{opacity:1}100%{opacity:0;transform:translateY(90px) rotate(200deg)}}
+@media (prefers-reduced-motion: reduce){.bm-char,.bm-arm.bm-front,.bm-cake,.bm-confetti{animation:none!important;}}
 
 /* ===== LABOR MODEL ===== */
 .lm-table{width:100%;border-collapse:collapse;background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--sh1);}
@@ -2475,20 +2517,40 @@ function birthdayMonthDayFor(empId){
   return (rec&&rec.birthday)?rec.birthday:null;
 }
 var BDAY_MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
-/* Active roster members with a birthday this month, sorted by day. Each
-   entry also carries isToday so the dashboard can single out who to
-   actually go congratulate right now versus who's just coming up. */
-function birthdaysThisMonth(){
-  var today=new Date();
-  var mm=String(today.getMonth()+1).padStart(2,'0');
-  var todayDD=String(today.getDate()).padStart(2,'0');
+/* Which month the dashboard card is showing — Carlos's ask: browse past
+   and upcoming months, not just whatever month it happens to be. Lazy
+   like occfcViewWeekStart so a device left open overnight still opens on
+   the real current month, and resets to it on a fresh page load rather
+   than persisting a stale "viewing" state. */
+var bdayViewMonth=null;
+function _bdayViewMonth(){ if(!bdayViewMonth)bdayViewMonth=new Date(); return bdayViewMonth; }
+function changeBdayMonth(delta){
+  var d=new Date(_bdayViewMonth());
+  d.setMonth(d.getMonth()+delta);
+  bdayViewMonth=d;
+  try{renderDashHub();}catch(e){}
+}
+function bdayGoToThisMonth(){
+  bdayViewMonth=new Date();
+  try{renderDashHub();}catch(e){}
+}
+/* Active roster members with a birthday in the given month (defaults to
+   today's), sorted by day. isToday is only ever true for the REAL current
+   month — browsing to a past or future month must never claim one of its
+   entries is "today", which would also wrongly re-fire the confetti. */
+function birthdaysThisMonth(viewDate){
+  var real=new Date();
+  var vd=viewDate||real;
+  var mm=String(vd.getMonth()+1).padStart(2,'0');
+  var isRealMonth=(vd.getFullYear()===real.getFullYear()&&vd.getMonth()===real.getMonth());
+  var todayDD=String(real.getDate()).padStart(2,'0');
   var roster=getActiveRoster();
   var out=[];
   roster.forEach(function(e){
     var bd=birthdayMonthDayFor(e.id);
     if(!bd||bd.slice(0,2)!==mm)return;
     var dd=bd.slice(3,5);
-    out.push({id:e.id,name:e.name,pos:e.pos,day:parseInt(dd,10),isToday:dd===todayDD});
+    out.push({id:e.id,name:e.name,pos:e.pos,day:parseInt(dd,10),isToday:isRealMonth&&dd===todayDD});
   });
   out.sort(function(a,b){return a.day-b.day;});
   return out;
@@ -4419,6 +4481,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.24.0', date:'2026-08-20',
+    features:['Birthdays card redesign, Carlos\'s ask: you can now navigate month to month (arrows either side of the month label) to see upcoming or past birthdays instead of only the current month — "Back to this month" jumps straight back, and the confetti/"Today!" pill only ever fire for the real current month, never while browsing. Replaced the plain navy background with a warmer coral-to-pink gradient so the card actually stands out from the rest of the navy dashboard. Also added a small illustrated housekeeper in the corner — the same character from the loading screen, re-dressed with a party hat and a cake instead of her vacuum.']
+  },
   {
     v:'7.23.2', date:'2026-08-20',
     fixes:['7.23.1 fixed the sync bug that was wiping birthdays, but didn\'t undo the damage it had already done: the seed only runs once per device, and on any device that had already opened 7.23.0, that first run got its birthday stripped right back out by the (now-fixed) merge, with nothing left to re-seed since the flag marking it "done" was already set. Bumped the seed key so it runs one more time everywhere, restoring whatever got wiped, still without touching a birthday entered by hand in between.']
@@ -10340,21 +10406,55 @@ function renderDashHub(){
   /* Birthdays this month — Carlos's ask: a monthly reminder so he or any
      manager remembers to congratulate whoever's birthday it is, with
      today's entry called out so it can't be missed at a glance. */
-  var bdays=birthdaysThisMonth();
+  var bdayVD=_bdayViewMonth();
+  var bdays=birthdaysThisMonth(bdayVD);
+  var bdayIsRealMonth=(bdayVD.getFullYear()===today.getFullYear()&&bdayVD.getMonth()===today.getMonth());
   html+='<div class="hub-bday-banner">';
-  html+='<div class="hub-bday-title">&#127874; Birthdays this month</div>';
+  html+='<div class="hub-bday-head">';
+  html+='<div class="hub-bday-title">&#127874; Birthdays'+(bdayIsRealMonth?' this month':'')+'</div>';
+  html+='<div class="hub-bday-nav">';
+  html+='<button class="hub-bday-nav-btn" onclick="changeBdayMonth(-1)" aria-label="Previous month">&larr;</button>';
+  html+='<span class="hub-bday-month">'+BDAY_MONTH_NAMES[bdayVD.getMonth()].slice(0,3)+' '+bdayVD.getFullYear()+'</span>';
+  html+='<button class="hub-bday-nav-btn" onclick="changeBdayMonth(1)" aria-label="Next month">&rarr;</button>';
+  html+='</div>';
+  html+='</div>';
+  if(!bdayIsRealMonth){
+    html+='<button class="hub-bday-back" onclick="bdayGoToThisMonth()" style="margin-bottom:10px;display:inline-block;">Back to this month</button>';
+  }
   if(!bdays.length){
-    html+='<div class="hub-bday-empty">No birthdays logged for '+BDAY_MONTH_NAMES[today.getMonth()]+'.</div>';
+    html+='<div class="hub-bday-empty">No birthdays logged for '+BDAY_MONTH_NAMES[bdayVD.getMonth()]+'.</div>';
   }else{
     html+='<div class="hub-bday-list">';
     bdays.forEach(function(b){
       html+='<div class="hub-bday-row'+(b.isToday?' today':'')+'">'
         +'<div><span class="hub-bday-name">'+escHtml(b.name)+'</span><span class="hub-bday-pos">'+escHtml(b.pos)+'</span></div>'
-        +(b.isToday?'<span class="hub-bday-today-pill">&#127881; Today!</span>':'<span class="hub-bday-date">'+BDAY_MONTH_NAMES[today.getMonth()].slice(0,3)+' '+b.day+'</span>')
+        +(b.isToday?'<span class="hub-bday-today-pill">&#127881; Today!</span>':'<span class="hub-bday-date">'+BDAY_MONTH_NAMES[bdayVD.getMonth()].slice(0,3)+' '+b.day+'</span>')
         +'</div>';
     });
     html+='</div>';
   }
+  /* The housekeeper from the loading screen (#appLoader .hkl-*), scaled
+     down and re-dressed with a party hat + cake instead of the vacuum —
+     Carlos's ask to reuse "the same person" from that animation. */
+  html+='<div class="bm-wrap" aria-hidden="true">'
+    +'<div class="bm-char">'
+    +'<div class="bm-hat"></div>'
+    +'<div class="bm-head"><div class="bm-eye bm-left"></div><div class="bm-eye bm-right"></div><div class="bm-smile"></div></div>'
+    +'<div class="bm-hair"></div>'
+    +'<div class="bm-torso"></div>'
+    +'<div class="bm-apron"></div>'
+    +'<div class="bm-arm bm-back"></div>'
+    +'<div class="bm-arm bm-front"></div>'
+    +'<div class="bm-leg bm-left"></div>'
+    +'<div class="bm-leg bm-right"></div>'
+    +'<div class="bm-shoe bm-left"></div>'
+    +'<div class="bm-shoe bm-right"></div>'
+    +'<div class="bm-cake">&#127874;</div>'
+    +'</div>'
+    +'<span class="bm-confetti bm-c1">&#10022;</span>'
+    +'<span class="bm-confetti bm-c2">&#10022;</span>'
+    +'<span class="bm-confetti bm-c3">&#10022;</span>'
+    +'</div>';
   html+='</div>';
 
   /* Fires the same confetti burst used elsewhere in the app, once per
