@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.24.8"/>
+<meta name="app-version" content="7.24.9"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4555,6 +4555,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.24.9', date:'2026-08-22',
+    fixes:['The "Over"/"Under"/"On Standard" word from 7.24.8 had landed on the wrong Unifocus card — the standalone summary card near the top of the Schedule page, not the "UNIFOCUS STD" row Carlos actually looks at inside each crew card (Supervisors, Houseman, Room Attendant, Laundry, etc). Now on the row he showed a screenshot of: the small word sits right under the colored number in every crew card.','Departures above the date row (added in 7.24.8) is now read-only, not a second editable box — Carlos\'s correction. It just mirrors whatever\'s already typed in the OCC/Departures card above; edit it there.']
+  },
   {
     v:'7.24.8', date:'2026-08-22',
     features:['Departures now shows right above the date row inside the Supervisors, Houseman, and AM Room Attendant cards on the Schedule Draft — Carlos\'s ask, since those three crews\' "each" figures are the ones driven by departures and he was scrolling back up to the OCC/Departures card every time to check or fix the number. It\'s the same field either way, so editing it in a crew card edits the top card too.','The Unifocus Standard card now spells out "Over", "Under", or "On Standard" under every colored number, not just the icon and color — Carlos\'s ask, so the card reads plainly without having to remember what each color means.']
@@ -20425,9 +20429,15 @@ function _schedUfCellHTML(SCH,ufPos,bk,ds){
   var actual=schedDayTotal(SCH,ds,bk);
   var std=ufPos.shiftIndex==null?schedUfExpected(SCH,ufPos.label,ds):schedUfExpectedForShift(SCH,ufPos.label,ufPos.shiftIndex,ds);
   if(std==null)return '<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>';
-  var c=_ufDiffColor(actual-std);
+  var diff=actual-std;
+  var c=_ufDiffColor(diff);
+  /* The word itself, not just the color — Carlos's ask, this is the row
+     he actually looks at day to day (the top "Unifocus Standard" summary
+     card further up the page is a separate, secondary view). */
+  var stateLabel=diff>0?'Over':(diff<0?'Under':'On Standard');
   return '<div style="text-align:center;border-radius:5px;padding:1px 0;background:'+c.bg+';" title="'+ufPos.label+': '+actual+' scheduled vs. '+std+' standard">'
-    +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+std+'</div></div>';
+    +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+std+'</div>'
+    +'<div style="font-size:6.5px;font-weight:700;color:'+c.fg+';text-transform:uppercase;letter-spacing:.2px;">'+stateLabel+'</div></div>';
 }
 function _schedCellCss(v){
   var base='width:100%;min-width:0;padding:3px 2px;font-size:10.5px;font-weight:700;text-align:center;'
@@ -20655,18 +20665,17 @@ function renderSchedule(){
     html+='<div style="padding:10px 14px 12px;overflow-x:auto;"><div style="min-width:520px;">';
     /* Departures, right above the date header — Carlos's ask, for the
        three crews whose "each" figure is driven by it (Supervisors,
-       Houseman, Room Attendant) so he can check or correct the day's
-       departures without scrolling up to the OCC/Departures card. Same
-       field as that card (day.dep), so editing here edits it there too. */
+       Houseman, Room Attendant) so he can check the day's departures
+       without scrolling up to the OCC/Departures card. Read-only on
+       purpose (Carlos's correction) — just a mirror of what's already
+       typed in that card, not a second place to edit the same number. */
     if((b.ratios||[]).some(function(r){return r.num==='dep';})){
       html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:6px;">';
       html+='<div style="font-size:9.5px;font-weight:800;color:var(--navy);">Departures</div>';
       dates.forEach(function(ds){
         var day=SCH.days[ds];
         if(!day){ html+='<div></div>'; return; }
-        html+='<input type="number" min="0" value="'+escHtml(day.dep||'')+'" onchange="schedSetNum(\''+ds+'\',\'dep\',this.value)"'
-          +' style="width:100%;min-width:0;padding:3px 2px;font-size:10px;font-weight:800;text-align:center;color:var(--navy);'
-          +'border:1px solid var(--border);border-radius:5px;background:#fff;box-sizing:border-box;font-family:inherit;">';
+        html+='<div style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+(day.dep!=null&&day.dep!==''?escHtml(day.dep):'&middot;')+'</div>';
       });
       html+='</div>';
     }
