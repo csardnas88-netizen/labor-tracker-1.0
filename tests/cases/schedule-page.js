@@ -453,6 +453,46 @@ module.exports = {
     t.assert(scuAfter !== scuBefore, 'taking a room attendant off Saturday moves the inline standard cell, not just the Total row');
     win.schedSetCell('gra', kIdx2, 'Karla Varela', sat, '1', null);
 
+    // ── 13b) Under/Over/On Standard spelled out next to the inline
+    // colored number, and a read-only Departures mirror + a "Days"
+    // work-day count on Supervisors/Houseman/Room Attendant — Carlos's
+    // own screenshot of the row he actually reads day to day. ──
+    {
+      const html2 = html();
+      const supCard2 = html2.match(/>Supervisors<\/div>[\s\S]*?(?=<div style="background:var\(--navy\))/)[0];
+      t.assert(/Over|Under|On Standard/.test(supCard2),
+        'the inline Unifocus std row (not just the standalone summary card) spells out what the color means');
+
+      // Departures mirrors the OCC/Departures card — read-only, no <input>.
+      t.assert(/Departures/.test(supCard2), 'a Departures row sits above the date header on Supervisors');
+      t.assert(!/Departures[\s\S]{0,40}<input/.test(supCard2), 'and it is not an editable box — just a mirror');
+      t.assert(/68/.test(supCard2) && /88/.test(supCard2),
+        "it shows the same figures typed into the OCC/Departures card (68 Sat, 88 Sun)");
+
+      const laundryCard2 = html2.match(/>LAUNDRY<\/div>[\s\S]*?(?=<div style="background:var\(--navy\))/i);
+      t.assert(!laundryCard2 || !/^Departures$/m.test((laundryCard2[0].match(/Departures/g) || []).join('')),
+        "Laundry's own 'each' figure is not departures-driven, so it gets no Departures mirror row");
+
+      // Work days: Rolando is OFF both fixture days (0), Rubidia G works
+      // both (2) — Mon-Fri carry no data in this fixture, so both totals
+      // are exactly the Sat/Sun count.
+      const supDays = win.dlLoadSchedule().days[sat].sup;
+      const rolandoIdx2 = supDays.findIndex((p) => p[0] === 'Rolando');
+      const rubidiaIdx = supDays.findIndex((p) => p[0] === 'Rubidia G');
+      t.eq(win.document.getElementById('scd_sup_' + rolandoIdx2).textContent, '0',
+        "Rolando's Work Days reads 0 — OFF both days the fixture actually carries data for");
+      t.eq(win.document.getElementById('scd_sup_' + rubidiaIdx).textContent, '2',
+        "Rubidia G's Work Days reads 2 — a real shift Sat and Sun");
+
+      // Editing a cell repaints the count in place, same as Total/std do.
+      win.schedSetCell('sup', rolandoIdx2, 'Rolando', sat, '1', null);
+      t.eq(win.document.getElementById('scd_sup_' + rolandoIdx2).textContent, '1',
+        'putting Rolando back to work Saturday moves his Work Days count to 1');
+      win.schedSetCell('sup', rolandoIdx2, 'Rolando', sat, 'OFF', null);
+      t.eq(win.document.getElementById('scd_sup_' + rolandoIdx2).textContent, '0',
+        'and back off again drops it back to 0');
+    }
+
     // ── 14) "Fill week" — Carlos's own workflow from Unifocus ──
     // Type one day, then replicate it across the rest of that person's
     // week in one click instead of opening seven dropdowns for the same

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.24.9"/>
+<meta name="app-version" content="7.25.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4555,6 +4555,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.25.0', date:'2026-08-22',
+    features:['Every person\'s row on the Schedule Draft now ends with a "Days" column right after Friday — Carlos\'s ask, a plain count of how many actual shifts she has this week (a relabeled "covering" cell like LOBBY or TAILOR still counts; OFF/R-OFF/FLEX/VAC/CALL-OFF and a blank day don\'t), so a 1-day week is obvious at a glance instead of having to count cells by hand. Updates live as cells are edited.']
+  },
   {
     v:'7.24.9', date:'2026-08-22',
     fixes:['The "Over"/"Under"/"On Standard" word from 7.24.8 had landed on the wrong Unifocus card — the standalone summary card near the top of the Schedule page, not the "UNIFOCUS STD" row Carlos actually looks at inside each crew card (Supervisors, Houseman, Room Attendant, Laundry, etc). Now on the row he showed a screenshot of: the small word sits right under the colored number in every crew card.','Departures above the date row (added in 7.24.8) is now read-only, not a second editable box — Carlos\'s correction. It just mirrors whatever\'s already typed in the OCC/Departures card above; edit it there.']
@@ -19516,6 +19520,41 @@ function schedCarryWeekendPref(oldSch,newSch){
   return newSch;
 }
 function schedIsOff(v){ v=String(v||'').trim(); return v==='OFF'||v==='R-OFF'||v==='FLEX'||v==='VAC'; }
+/* A day this person is actually a body on the schedule — a real shift,
+   including a relabeled cell that means she's covering another crew
+   (LOBBY/HOUSEMAN/TAILOR/LAUNDRY/PM). Blank, any flavor of off, and
+   CALL-OFF are all "not a work day". Used for the per-person weekly
+   work-day count Carlos asked for. */
+function schedIsWorkDay(v){ v=String(v||'').trim(); return v!==''&&v!=='CALL-OFF'&&!schedIsOff(v); }
+/* The crew's current people list, same "first loaded date with a
+   non-empty array" rule the main Schedule render uses to find who's on
+   a crew — kept in sync here so the per-person work-day count can be
+   repainted in place without a full re-render. */
+function _schedCrewRef(SCH,bk){
+  var dates=schedWeekDates(), ref=null;
+  for(var i=0;i<dates.length;i++){
+    var day=SCH.days[dates[i]];
+    if(!day||!day[bk])continue;
+    if(day[bk].length){ ref=day[bk]; break; }
+    if(!ref)ref=day[bk];
+  }
+  return ref||[];
+}
+/* How many days this person (by idx within the crew's own list, falling
+   back to a name match for a cell that moved slots) actually worked
+   this week — same rule as schedIsWorkDay. */
+function _schedWorkDaysFor(SCH,dates,bk,idx,nm){
+  var n=0;
+  dates.forEach(function(ds){
+    var day=SCH.days[ds];
+    if(!day||!day[bk])return;
+    var cell=(day[bk][idx]&&dlNorm(day[bk][idx][0])===dlNorm(nm))
+      ? day[bk][idx]
+      : day[bk].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0];
+    if(cell&&schedIsWorkDay(cell[1]))n++;
+  });
+  return n;
+}
 function schedCellFor(SCH,ds,bk,name){
   var day=SCH.days&&SCH.days[ds]; if(!day)return '';
   var row=(day[bk]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
@@ -20406,6 +20445,10 @@ function _schedRefreshTotals(SCH,onlyBk){
         if(uEl)uEl.innerHTML=_schedUfCellHTML(SCH,ufPos,b.key,ds);
       }
     });
+    _schedCrewRef(SCH,b.key).forEach(function(p,idx){
+      var dEl=document.getElementById('scd_'+b.key+'_'+idx);
+      if(dEl)dEl.textContent=_schedWorkDaysFor(SCH,dates,b.key,idx,p[0]);
+    });
   });
 }
 /* One place deciding green/amber/red, used by both the crew-card row
@@ -20528,6 +20571,27 @@ function renderSchedule(){
         +SCHED_DAYNAMES[i].slice(0,3)
         +'<div style="font-size:10px;font-weight:800;color:'+(isToday?'var(--gd)':'var(--text2)')+';">'+d.getDate()+'</div></div>';
     });
+    return h+'</div>';
+  }
+  /* One extra column, Saturday-through-Friday's people rows only —
+     Carlos's ask: a "Work Days" count right after Friday so he can see
+     at a glance how many days someone actually has this week without
+     counting shifts by hand. Every row inside a crew card uses this
+     same wider template (even the ones that don't fill the extra
+     column) so the seven date columns still line up pixel-for-pixel
+     between the header, the people, and the total/ratio/Unifocus rows
+     underneath them. */
+  var COLS_C=COLS+' 40px';
+  function headRowCrew(){
+    var h='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:end;margin-bottom:5px;">';
+    h+='<div></div>';
+    dates.forEach(function(ds,i){
+      var d=parseLocalDate(ds), isToday=(ds===todayDs);
+      h+='<div style="text-align:center;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:'+(isToday?'var(--gd)':'var(--text3)')+';">'
+        +SCHED_DAYNAMES[i].slice(0,3)
+        +'<div style="font-size:10px;font-weight:800;color:'+(isToday?'var(--gd)':'var(--text2)')+';">'+d.getDate()+'</div></div>';
+    });
+    h+='<div style="text-align:center;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;color:var(--text3);">Days</div>';
     return h+'</div>';
   }
 
@@ -20670,7 +20734,7 @@ function renderSchedule(){
        purpose (Carlos's correction) — just a mirror of what's already
        typed in that card, not a second place to edit the same number. */
     if((b.ratios||[]).some(function(r){return r.num==='dep';})){
-      html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:6px;">';
+      html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-bottom:6px;">';
       html+='<div style="font-size:9.5px;font-weight:800;color:var(--navy);">Departures</div>';
       dates.forEach(function(ds){
         var day=SCH.days[ds];
@@ -20679,7 +20743,7 @@ function renderSchedule(){
       });
       html+='</div>';
     }
-    html+=headRow();
+    html+=headRowCrew();
 
     ref.forEach(function(p,idx){
       var nm=p[0], nmJs=escHtml(schedJs(nm)), borrowed=(p[2]==='added');
@@ -20714,7 +20778,7 @@ function renderSchedule(){
         var lcell=lday&&lday[b.key]&&lday[b.key].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0];
         if(lcell&&String(lcell[1]||'').trim()!=='')hasLastWeek=true;
       }
-      html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:3px;'
+      html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-bottom:3px;'
         +(fullWeekend?'background:rgba(21,101,192,.18);border-radius:6px;':'')+'">';
       html+='<div style="display:flex;align-items:center;gap:3px;min-width:0;">'
         +'<span style="font-size:11px;font-weight:600;color:'+(borrowed?'var(--gd)':'var(--text1)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"'
@@ -20749,11 +20813,17 @@ function renderSchedule(){
           }).join('')
           +'</select>';
       });
+      /* Work days for the week — Carlos's ask, a new column right after
+         Friday counting how many actual shifts (including a relabeled
+         "covering" cell) this person has, so he can tell a 1-day week
+         from a 4-day week without counting by hand. Repainted in place
+         by _schedRefreshTotals whenever a cell on this row changes. */
+      html+='<div id="scd_'+b.key+'_'+idx+'" style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+_schedWorkDaysFor(SCH,dates,b.key,idx,nm)+'</div>';
       html+='</div>';
     });
 
     /* total + the per-person load it drives */
-    html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">';
+    html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">';
     html+='<div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);">Total</div>';
     dates.forEach(function(ds,di){
       var tot=SCH.days[ds]?schedDayTotal(SCH,ds,b.key):0;
@@ -20761,7 +20831,7 @@ function renderSchedule(){
     });
     html+='</div>';
     (b.ratios||[]).forEach(function(rt,ri){
-      html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-top:2px;">';
+      html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-top:2px;">';
       html+='<div style="font-size:9px;color:var(--text3);">'+escHtml(rt.label)+'</div>';
       dates.forEach(function(ds,di){
         var day=SCH.days[ds];
@@ -20787,7 +20857,7 @@ function renderSchedule(){
          making Carlos work that out from the crew name alone. */
       var shiftNote=b.key==='hp'?' <span style="font-weight:400;text-transform:none;">(AM shift)</span>'
         :b.key==='pmhm'?' <span style="font-weight:400;text-transform:none;">(PM shift)</span>':'';
-      html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border);">';
+      html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border);">';
       html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">Unifocus std'+shiftNote+'</div>';
       dates.forEach(function(ds,di){
         html+='<div id="scu_'+b.key+'_'+di+'">'+_schedUfCellHTML(SCH,ufPos,b.key,ds)+'</div>';
