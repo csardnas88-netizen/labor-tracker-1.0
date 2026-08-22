@@ -987,6 +987,21 @@ module.exports = {
     t.eq(SCH21c.days[ds21[4]].hp[0][1], 'LAUNDRY', "Jorge Gonzalez covers Laundry on Victoriano Ch's day off — a different chain, same day, doesn't interfere");
     t.eq(SCH21c.days[ds21[4]].td[1][1], '1', "Paty is unrelated to either chain that day and stays untouched");
 
+    // Carlos's ask: Jorge marked LAUNDRY on his own Houseman row is a real
+    // body doing Laundry that day ("sería el lavador") — the Laundry
+    // crew's own headcount has to count him, not just show it in his cell.
+    t.eq(win.schedDayTotal(SCH21c, ds21[4], 'laundry'), 1,
+      "Laundry's headcount counts Jorge Gonzalez (LAUNDRY) even though Victoriano Ch (OFF) is the only literal row in the laundry array");
+    // Symmetrically, Andrea covering Lobby PM (a different chain, same
+    // convention) counts toward 'lobby' the same way.
+    t.eq(win.schedDayTotal(SCH21c, ds21[4], 'lobby'), 1,
+      "Lobby's headcount counts Andrea (LOBBY) covering Sarahi's PM shift the same way");
+    // The titular's own crew is untouched by this — Victoriano Ch (OFF)
+    // still contributes 0 from the array loop, and _schedCoverInflow adds
+    // nothing extra for him since his home crew IS the crew being judged.
+    t.eq(win.schedDayTotal(SCH21c, ds21[3], 'lobby'), 1,
+      "an ordinary day with no cover in play (Marroquin working) counts exactly the literal row, nothing added twice");
+
     // A titular missing from this week's roster entirely is skipped, not
     // guessed at — schedCellFor returns '' and the chain never fires.
     const SCH21d = { days: { [ds21[0]]: { lobby: [], gra: [['Gabriela Cuevas', '1']] } } };

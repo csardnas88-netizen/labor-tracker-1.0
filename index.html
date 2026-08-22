@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.25.0"/>
+<meta name="app-version" content="7.25.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4555,6 +4555,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.25.1', date:'2026-08-22',
+    fixes:['A cover chain backup marked on their own crew (Jorge Gonzalez reading "LAUNDRY" on his Houseman row while covering Victoriano Ch, Andrea reading "LOBBY" while covering Sarahi\'s PM shift) now counts toward the crew they\'re actually covering that day — Carlos\'s ask, "sería el lavador". Their own home crew already correctly excluded them (that part never changed); the covered crew\'s Total, its Unifocus comparison, and the week-overview card were the ones missing the body. The titular side of every chain is untouched — they\'re already a literal row in that crew and were always counted normally.']
+  },
   {
     v:'7.25.0', date:'2026-08-22',
     features:['Every person\'s row on the Schedule Draft now ends with a "Days" column right after Friday — Carlos\'s ask, a plain count of how many actual shifts she has this week (a relabeled "covering" cell like LOBBY or TAILOR still counts; OFF/R-OFF/FLEX/VAC/CALL-OFF and a blank day don\'t), so a 1-day week is obvious at a glance instead of having to count cells by hand. Updates live as cells are edited.']
@@ -19314,7 +19318,28 @@ function schedDayTotal(SCH,ds,bk){
     if(v==='PM'){ t+=1; return; }
     var n=parseFloat(v); if(!isNaN(n))t+=n;
   });
-  return t;
+  return t+_schedCoverInflow(SCH,ds,bk);
+}
+/* Carlos's ask: a cover chain backup (Jorge Gonzalez marked "LAUNDRY" on
+   his own Houseman row while covering Victoriano) is a real body doing
+   that crew's work that day — "sería el lavador" — so the TARGET crew's
+   headcount should count him, not just show a name missing from it. The
+   titular half of each chain needs nothing here: their own cell already
+   lives in the target crew's own array and schedDayTotal above counts
+   them normally (or doesn't, exactly when a cover is due). Only a
+   backup whose HOME crew differs from the crew they're covering needs
+   adding in — a same-crew titular is already covered by the loop above,
+   and double-counting them would be wrong. */
+function _schedCoverInflow(SCH,ds,bk){
+  var n=0;
+  SCHED_COVER_CHAINS.forEach(function(cc){
+    if(cc.crew!==bk)return;
+    cc.chain.forEach(function(m){
+      if(m.homeCrew===bk)return;
+      if(schedCellFor(SCH,ds,m.homeCrew,m.name)===cc.label)n++;
+    });
+  });
+  return n;
 }
 function schedFmtTotal(n){ return (Math.round(n*100)/100).toString(); }
 /* The "each" ratios (departures each, rooms each) must divide only among
@@ -19870,8 +19895,10 @@ var SCHED_PM_SUPERVISOR='Yanira';
    crew-label value on the day they cover — the exact convention
    already sitting in Carlos's real file (Paty's Turndown row already
    reads "HOUSEMAN" the day she covers Yesenia, not a new row added to
-   PM Houseman) — so nothing about totals or rendering needed to change,
-   only who gets marked and when. Each chain is titular first, then
+   PM Houseman) — so no new row is ever added to the crew being covered.
+   The covered crew's headcount DOES count them, though (_schedCoverInflow,
+   next to schedDayTotal) — Carlos's ask: a marked cover is a real body
+   doing that crew's work that day. Each chain is titular first, then
    backups in escalating order; the first name actually on this week's
    roster AND not off that day covers, and if the titular themselves is
    working, no cover is needed at all. */
