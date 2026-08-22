@@ -1029,6 +1029,52 @@ module.exports = {
     t.eq(SCH21i.days[ds21[0]].gra[0][1], 'OFF', "Rubia being off her own shift means she isn't pulled — only someone already working can be relabeled");
     t.eq(SCH21i.days[ds21[0]].gra[1][1], 'HOUSEMAN', 'so Julia covers instead');
 
+    // ── 21b) Call-Offs connecting to the Schedule Draft — Carlos's ask:
+    // logging a call-off should mark it on the schedule too, not just in
+    // the Call-Offs journal, and deleting the call-off should put the
+    // cell back to whatever it held before (unless he's since changed it
+    // by hand, in which case his edit wins). Call-Offs carries full
+    // Paychex names while the Schedule Draft uses Carlos's own shorthand,
+    // so matching has to bridge that — and must refuse to guess when a
+    // position/spelling doesn't resolve to exactly one person. ──
+    t.eq(win.schedNameLooselyMatches('Victoriano Ch', 'Victoriano Chuquiej'), true, 'first name + partial last name matches the full Paychex name');
+    t.eq(win.schedNameLooselyMatches('Marroquin', 'Maria Marroquin'), true, 'a last-name-only shorthand matches too');
+    t.eq(win.schedNameLooselyMatches('Sandra T', 'Sandra Tzunun De Leon'), true, 'the right Sandra matches');
+    t.eq(win.schedNameLooselyMatches('Sandra T', 'Sandra Silva Henriquez'), false, 'but not the wrong Sandra with a different last initial');
+
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH21k = { days: {} };
+    ds21.forEach((ds) => { SCH21k.days[ds] = { laundry: [['Victoriano Ch', '1']], hp: [['Jorge Gonzalez', '1']] }; });
+    win.dlSaveSchedule(SCH21k);
+
+    const applied = win.schedApplyCallOff(ds21[0], 'Victoriano Chuquiej', 'Laundry Attendant');
+    t.assert(applied && applied.crew === 'laundry' && applied.name === 'Victoriano Ch' && applied.prevVal === '1',
+      'schedApplyCallOff finds the one matching row and reports what it overwrote');
+    let afterCO = win.dlLoadSchedule();
+    t.eq(afterCO.days[ds21[0]].laundry[0][1], 'CALL-OFF', "Victoriano's own cell is marked CALL-OFF");
+    t.eq(afterCO.days[ds21[0]].hp[0][1], 'LAUNDRY', 'and the same cover chain as TAILOR/OFF fires — Jorge Gonzalez covers Laundry');
+
+    win.schedRevertCallOff(ds21[0], applied.crew, applied.name, applied.prevVal);
+    afterCO = win.dlLoadSchedule();
+    t.eq(afterCO.days[ds21[0]].laundry[0][1], '1', 'deleting the call-off puts Victoriano back exactly as he was');
+    t.eq(afterCO.days[ds21[0]].hp[0][1], '1', 'and releases Jorge back to Houseman, same release path as TAILOR');
+
+    // A position/name that cannot be pinned to exactly one row is left
+    // alone entirely — never guess and risk marking the wrong person.
+    const noMatch = win.schedApplyCallOff(ds21[0], 'Someone Nobody Knows', 'Laundry Attendant');
+    t.eq(noMatch, null, 'no match on the schedule means nothing is touched');
+    t.eq(win.dlLoadSchedule().days[ds21[0]].laundry[0][1], '1', 'the untouched cell proves it');
+
+    // Reverting is a no-op once Carlos has since edited that cell by hand
+    // — his manual edit is authoritative, not the stale call-off record.
+    const applied2 = win.schedApplyCallOff(ds21[0], 'Victoriano Chuquiej', 'Laundry Attendant');
+    t.eq(win.dlLoadSchedule().days[ds21[0]].laundry[0][1], 'CALL-OFF', 'marked again for this next check');
+    const manual = win.dlLoadSchedule();
+    manual.days[ds21[0]].laundry[0][1] = 'VAC'; // Carlos changed it by hand since
+    win.dlSaveSchedule(manual);
+    win.schedRevertCallOff(ds21[0], applied2.crew, applied2.name, applied2.prevVal);
+    t.eq(win.dlLoadSchedule().days[ds21[0]].laundry[0][1], 'VAC', "Carlos's manual edit survives — revert refuses to clobber it");
+
     // ── 22) Full-weekend-off rows shade pale blue — Carlos's ask, using
     // the exact same schedHasFullWeekend check Schedule Checks and the
     // weekend-rotation history already use, so the highlight can never
