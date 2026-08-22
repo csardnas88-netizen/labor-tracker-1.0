@@ -1022,6 +1022,19 @@ module.exports = {
     t.eq(win.schedDayTotal(SCH21n, ds21[0], 'hp'), 0,
       'a Houseman marked LAUNDRY (covering Laundry from Houseman) still does not count toward Houseman\'s own total');
 
+    // Real clock-in/out times for the Excel export, confirmed with
+    // Carlos — separate from Unifocus's own shift-window labels, which
+    // don't match reality (Carlos: real Laundry hours are 9:00 AM-5:30
+    // PM weekends / 8:15 AM-4:45 PM weekdays, not the "0815-1645"
+    // Unifocus band name every day). ds21[0] is Saturday, ds21[3] Tuesday.
+    t.eq(win.schedShiftTimeText('laundry', ds21[0]), '8:30 AM – 5:00 PM', 'Laundry Saturday');
+    t.eq(win.schedShiftTimeText('laundry', ds21[3]), '8:15 AM – 4:45 PM', 'Laundry weekday');
+    t.eq(win.schedShiftTimeText('gra', ds21[0]), '9:00 AM – 5:30 PM', 'Room Attendant weekend');
+    t.eq(win.schedShiftTimeText('gra', ds21[3]), '8:15 AM – 4:45 PM', 'Room Attendant weekday');
+    t.eq(win.schedShiftTimeText('td', ds21[0]), '5:00 PM – 11:00 PM', 'Turndown/GRA is the same every day of the week');
+    t.eq(win.schedShiftTimeText('mgr', ds21[0]), null,
+      'Managers has no shift-time lookup — Carlos marks that crew Open/Close by hand instead');
+
     // A titular missing from this week's roster entirely is skipped, not
     // guessed at — schedCellFor returns '' and the chain never fires.
     const SCH21d = { days: { [ds21[0]]: { lobby: [], gra: [['Gabriela Cuevas', '1']] } } };
