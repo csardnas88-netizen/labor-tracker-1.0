@@ -71,6 +71,21 @@ module.exports = {
     let listAndrea = win.loadReqNotebook();
     listAndrea.forEach((r) => { if (r.name === 'Andrea') win.rnDeleteRequest(r.id); });
 
+    // ── The picker has to offer someone from a week that ISN'T the
+    // chronologically latest one loaded — Carlos's report: Sandra T was
+    // right there on the Schedule page for the week he was viewing, but
+    // missing entirely from Request Off, because he'd already built a
+    // later week too and the picker only ever looked at the newest-dated
+    // week in storage, not the one actually on screen. ──
+    const stWeek = buildWeek(win, weekStart, { gra: ['Karla Varela', 'Sandra T'] });
+    const futureWeekStart = new Date(weekStart); futureWeekStart.setDate(futureWeekStart.getDate() + 7);
+    buildWeek(win, futureWeekStart, { gra: ['Someone Else Entirely'] });
+    const optsAfterFuture = win.reqEmpOptions();
+    t.assert(optsAfterFuture.some((e) => e.name === 'Sandra T' && e.crewKey === 'gra'),
+      "Sandra T is still offered even though a later week is now the newest one loaded");
+    t.assert(optsAfterFuture.some((e) => e.name === 'Someone Else Entirely'),
+      'and the later week\'s own roster is offered too — every loaded week counts, not just one');
+
     // ── R-OFF writes straight to the Schedule cell for each picked day ──
     win.rnPickedDates = [dates[0], dates[2]];
     const doc = win.document;

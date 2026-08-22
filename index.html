@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.24.6"/>
+<meta name="app-version" content="7.24.7"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4555,6 +4555,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.24.7', date:'2026-08-22',
+    fixes:['Request Off\'s employee picker was pulling its roster from whichever week has the newest date anywhere in the Schedule Draft, not the week actually on screen — so once a future week gets built ahead of time, everyone on the week Carlos is actually looking at quietly disappears from the picker. Carlos\'s report: Sandra T was right there on the Schedule page, but missing from Request Off entirely. Now offers everyone from EVERY currently loaded week, not just the newest one.']
+  },
   {
     v:'7.24.6', date:'2026-08-22',
     fixes:['Request Off\'s employee picker was silently dropping one of someone\'s crews when they have a real row on two the same week — Carlos\'s report: Andrea kept showing only as "AM Lobby" even though she works mostly PM Turndown, because the picker deduped by name alone and "AM Lobby" happens to be scanned before "PM Turndown / GRA". Now dedupes by name+crew instead, so a person on two crews the same week is offered as both ("Andrea (AM Lobby)" and "Andrea (PM Turndown / GRA)"), and picking one writes the request through to exactly that crew\'s cell, leaving her other crew\'s cell untouched.']
@@ -20827,13 +20831,24 @@ function rnTypeLabel(t){ return t==='vac'?'Vacation':(t==='flex'?'Flex':'R-OFF')
    dates she isn't even on that crew. Carlos's report: Andrea kept
    showing as "AM Lobby" only, when she works mostly PM. Both now list
    separately ("Andrea (AM Lobby)" / "Andrea (PM Turndown / GRA)") so he
-   picks the one he actually means. */
+   picks the one he actually means.
+
+   Roster is pulled from EVERY currently loaded week, not just the
+   chronologically latest one — schedLatestLoadedWeekStart picks whatever
+   week has the newest date anywhere in SCH.days, which is NOT
+   necessarily the week Carlos is looking at (he often builds a future
+   week ahead of time). Carlos's report: Sandra T was visible on the
+   Schedule page for the week he was on, but missing entirely from
+   Request Off's picker, because a later week had already been built and
+   silently became "the" roster. Since reqWriteToSchedule looks up each
+   picked date's own row independently anyway, offering everyone from
+   every loaded week costs nothing and can't write to the wrong place. */
 function reqEmpOptions(){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days)return [];
-  var refStart=schedLatestLoadedWeekStart(SCH);
-  if(!refStart)return [];
-  var roster=schedRosterForDates(SCH,_schedDatesForWeekStart(refStart));
+  var allDates=Object.keys(SCH.days);
+  if(!allDates.length)return [];
+  var roster=schedRosterForDates(SCH,allDates);
   var out=[],seen={};
   SCHED_BLOCKS.forEach(function(b){
     (roster[b.key]||[]).forEach(function(n){
