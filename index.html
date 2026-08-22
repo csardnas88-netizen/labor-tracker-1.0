@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.25.1"/>
+<meta name="app-version" content="7.25.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4555,6 +4555,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.25.2', date:'2026-08-22',
+    fixes:['7.25.1 fixed the wrong shape of this: Carlos\'s real file doesn\'t route Jorge Gonzalez through Houseman at all this week — he\'s a literal row right inside the Laundry crew\'s own list, marked "LAUNDRY" instead of "1" on the days he\'s standing in for Victoriano Ch, same idiom "PM" already uses for a Supervisor covering the PM half of a shift. That still wasn\'t counting. Fixed at the source: a crew\'s OWN label, on a row that\'s already a literal member of that same crew, now counts as a body — Total, Unifocus, the works. Nothing else changes: the same label on any OTHER crew\'s row still means "gone, covering elsewhere" and stays excluded from that crew\'s own count, same as before.']
+  },
   {
     v:'7.25.1', date:'2026-08-22',
     fixes:['A cover chain backup marked on their own crew (Jorge Gonzalez reading "LAUNDRY" on his Houseman row while covering Victoriano Ch, Andrea reading "LOBBY" while covering Sarahi\'s PM shift) now counts toward the crew they\'re actually covering that day — Carlos\'s ask, "sería el lavador". Their own home crew already correctly excluded them (that part never changed); the covered crew\'s Total, its Unifocus comparison, and the week-overview card were the ones missing the body. The titular side of every chain is untouched — they\'re already a literal row in that crew and were always counted normally.']
@@ -19307,18 +19311,33 @@ function schedNormalizePmHm(SCH){
    BOTH the AM and PM shift, and comparing it against a total that
    silently excludes every PM supervisor would read as short every day
    someone is legitimately covering the PM shift.
-   "LOBBY" / "HOUSEMAN" / "TAILOR" / "LAUNDRY" stay excluded on purpose —
-   those mean this person is covering a DIFFERENT crew that day, not
-   this one. */
+   "LOBBY" / "HOUSEMAN" / "TAILOR" / "LAUNDRY" stay excluded EXCEPT one
+   case: a row that's already a literal member of the crew that label
+   names (Jorge Gonzalez sitting right in Carlos's own Laundry list,
+   marked "LAUNDRY" instead of "1" the days he's the one actually doing
+   it, in for Victoriano) — Carlos's own idiom for "here, doing this
+   crew's work", exactly like PM. Any OTHER crew's cell reading that
+   same label still means "gone, covering elsewhere" and stays excluded. */
 function schedDayTotal(SCH,ds,bk){
   var day=SCH.days&&SCH.days[ds]; if(!day)return 0;
   var arr=day[bk]||[],t=0;
+  var ownLabel=_schedCrewLabel(bk);
   arr.forEach(function(p){
     var v=String(p[1]||'').trim();
     if(v==='PM'){ t+=1; return; }
+    if(ownLabel&&v===ownLabel){ t+=1; return; }
     var n=parseFloat(v); if(!isNaN(n))t+=n;
   });
   return t+_schedCoverInflow(SCH,ds,bk);
+}
+/* The label a cover chain uses for THIS crew, if any (laundry ->
+   "LAUNDRY", lobby -> "LOBBY") — same source SCHED_COVER_CHAINS already
+   defines, so this can never disagree with what the chain itself marks
+   a cover with. */
+function _schedCrewLabel(bk){
+  var lbl=null;
+  SCHED_COVER_CHAINS.forEach(function(cc){ if(cc.crew===bk)lbl=cc.label; });
+  return lbl;
 }
 /* Carlos's ask: a cover chain backup (Jorge Gonzalez marked "LAUNDRY" on
    his own Houseman row while covering Victoriano) is a real body doing

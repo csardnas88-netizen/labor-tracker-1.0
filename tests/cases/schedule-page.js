@@ -1002,6 +1002,26 @@ module.exports = {
     t.eq(win.schedDayTotal(SCH21c, ds21[3], 'lobby'), 1,
       "an ordinary day with no cover in play (Marroquin working) counts exactly the literal row, nothing added twice");
 
+    // Carlos's real file, screenshot in hand: Jorge Gonzalez isn't
+    // arriving via the hp->laundry cross-crew chain at all this week —
+    // he's a LITERAL row inside Laundry's own list, and Carlos marks his
+    // cell "LAUNDRY" (instead of "1") the days he's the one actually
+    // doing it, standing in for Victoriano Ch who's OFF. That has to
+    // count too, same idiom as "PM" already does for Supervisors/Managers.
+    const SCH21m = {
+      days: {
+        [ds21[0]]: { laundry: [['Victoriano Ch', 'OFF'], ['Jorge Gonzalez', 'LAUNDRY'], ['Olga A', '1']] },
+      },
+    };
+    t.eq(win.schedDayTotal(SCH21m, ds21[0], 'laundry'), 2,
+      'Jorge Gonzalez marked LAUNDRY on his own literal Laundry row counts as a body, same as Olga A on "1" — Victoriano Ch (OFF) still does not');
+    // A DIFFERENT crew's cell reading "LAUNDRY" still means "gone,
+    // covering elsewhere" and must stay excluded from ITS OWN crew — the
+    // one case this does NOT flip is a crew judging its own members.
+    const SCH21n = { days: { [ds21[0]]: { hp: [['Someone Else', 'LAUNDRY']] } } };
+    t.eq(win.schedDayTotal(SCH21n, ds21[0], 'hp'), 0,
+      'a Houseman marked LAUNDRY (covering Laundry from Houseman) still does not count toward Houseman\'s own total');
+
     // A titular missing from this week's roster entirely is skipped, not
     // guessed at — schedCellFor returns '' and the chain never fires.
     const SCH21d = { days: { [ds21[0]]: { lobby: [], gra: [['Gabriela Cuevas', '1']] } } };
