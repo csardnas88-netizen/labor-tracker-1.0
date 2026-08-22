@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.24.5"/>
+<meta name="app-version" content="7.24.6"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4555,6 +4555,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.24.6', date:'2026-08-22',
+    fixes:['Request Off\'s employee picker was silently dropping one of someone\'s crews when they have a real row on two the same week — Carlos\'s report: Andrea kept showing only as "AM Lobby" even though she works mostly PM Turndown, because the picker deduped by name alone and "AM Lobby" happens to be scanned before "PM Turndown / GRA". Now dedupes by name+crew instead, so a person on two crews the same week is offered as both ("Andrea (AM Lobby)" and "Andrea (PM Turndown / GRA)"), and picking one writes the request through to exactly that crew\'s cell, leaving her other crew\'s cell untouched.']
+  },
   {
     v:'7.24.5', date:'2026-08-22',
     features:['Logging a Call-Off now marks it on the Schedule Draft too, not just in the Call-Offs journal — Carlos\'s ask, since he was doing that as two separate manual steps before. A new "CALL-OFF" value (red, distinct from a normal OFF) gets written onto that person\'s own Schedule cell for that date the moment the call-off is saved, so the Daily Lineup drops them immediately with no second edit, and it plugs into the same cover-chain logic as TAILOR (a called-off Victoriano still pulls Jorge into Laundry). Deleting the call-off record puts the cell back to exactly what it held before — but only if Carlos hasn\'t since changed that cell by hand, in which case his edit is left alone rather than overwritten. Call-Offs logs full Paychex names while the Schedule Draft uses whatever shorthand is typed in Excel, so matching them requires the schedule name to unambiguously fit inside the full name (any position/spelling that doesn\'t resolve to exactly one person is left for Carlos to mark manually, rather than risk marking the wrong employee absent).']
@@ -20815,6 +20819,15 @@ function saveReqNotebook(list){
   (list||[]).forEach(function(r){ if(r&&r.id){ try{supaPut('reqnb_'+r.id,r);}catch(e){} } });
 }
 function rnTypeLabel(t){ return t==='vac'?'Vacation':(t==='flex'?'Flex':'R-OFF'); }
+/* Dedup key is (name, crew) — NOT name alone. Someone who actually sits
+   on two crews the same week (Andrea: PM Turndown/GRA most days, AM
+   Lobby covering Sarahi some days) has a real row in both, and picking
+   just one — whichever SCHED_BLOCKS happens to scan first — silently
+   hid the other and could write R-OFF to the wrong crew's cell for
+   dates she isn't even on that crew. Carlos's report: Andrea kept
+   showing as "AM Lobby" only, when she works mostly PM. Both now list
+   separately ("Andrea (AM Lobby)" / "Andrea (PM Turndown / GRA)") so he
+   picks the one he actually means. */
 function reqEmpOptions(){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days)return [];
@@ -20824,7 +20837,7 @@ function reqEmpOptions(){
   var out=[],seen={};
   SCHED_BLOCKS.forEach(function(b){
     (roster[b.key]||[]).forEach(function(n){
-      var k=dlNorm(n); if(seen[k])return; seen[k]=1;
+      var k=dlNorm(n)+'|'+b.key; if(seen[k])return; seen[k]=1;
       out.push({name:n,crewKey:b.key,crewLabel:b.label});
     });
   });

@@ -50,6 +50,27 @@ module.exports = {
     t.assert(opts.some((e) => e.name === 'Rolando' && e.crewKey === 'sup'), 'Rolando is offered, tagged to his real crew (sup)');
     t.assert(opts.some((e) => e.name === 'Karla Varela' && e.crewKey === 'gra'), 'so is Karla, tagged to hers (gra)');
 
+    // ── Someone with a real row on two crews the same week (Andrea:
+    // mostly PM Turndown, sometimes covering AM Lobby) has to be offered
+    // as BOTH — Carlos's report: she kept showing as "AM Lobby" only,
+    // dropped silently because 'lobby' scans before 'td' in SCHED_BLOCKS,
+    // even though she works mostly PM. ──
+    const datesAndrea = buildWeek(win, weekStart, { lobby: ['Andrea'], td: ['Andrea'] });
+    const optsAndrea = win.reqEmpOptions();
+    t.assert(optsAndrea.some((e) => e.name === 'Andrea' && e.crewKey === 'lobby'), 'Andrea is offered tagged to AM Lobby');
+    t.assert(optsAndrea.some((e) => e.name === 'Andrea' && e.crewKey === 'td'), 'AND tagged to PM Turndown/GRA — neither crew is silently dropped');
+    t.eq(optsAndrea.filter((e) => e.name === 'Andrea').length, 2, 'exactly one option per crew she actually has a row on, no more');
+
+    win.rnPickedDates = [datesAndrea[0]];
+    win.renderReqNotebook();
+    selectRn(win, 'Andrea', 'td', 'PM Turndown / GRA');
+    win.rnAddRequest();
+    const afterAndrea = win.dlLoadSchedule();
+    t.eq(afterAndrea.days[datesAndrea[0]].td.filter((p) => p[0] === 'Andrea')[0][1], 'R-OFF', 'picking the PM Turndown option writes to HER PM cell');
+    t.eq(afterAndrea.days[datesAndrea[0]].lobby.filter((p) => p[0] === 'Andrea')[0][1], '1', "and leaves her separate AM Lobby cell alone — the two crews are independent picks");
+    let listAndrea = win.loadReqNotebook();
+    listAndrea.forEach((r) => { if (r.name === 'Andrea') win.rnDeleteRequest(r.id); });
+
     // ── R-OFF writes straight to the Schedule cell for each picked day ──
     win.rnPickedDates = [dates[0], dates[2]];
     const doc = win.document;
