@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.24.3"/>
+<meta name="app-version" content="7.24.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3897,12 +3897,13 @@ function renderPositionCheckPage(){
   });
 }
 
-function renderRoster(){
-  /* Load overrides: position changes and inactive flags */
+/* Merged roster: ROSTER_BY_ID (the base Paychex-imported staff) plus anyone
+   added by hand via "+ Add Employee" / quick-add (ROSTER/EMP_META), with
+   position/name/status overrides applied. This is the single source of
+   truth for both the on-screen Roster page and the Excel export, so a
+   newly hired employee shows up in both the moment they're added. */
+function buildRosterByPos(){
   var overrides=loadOverrides();
-  var search=(document.getElementById("rosterSearch")||{value:""}).value.toLowerCase().trim();
-
-  /* Build merged list from ROSTER_BY_ID + manually added */
   var byPos={};
   Object.keys(ROSTER_BY_ID).forEach(function(id){
     var r=ROSTER_BY_ID[id];
@@ -3914,7 +3915,7 @@ function renderRoster(){
     byPos[pos].push({
       id:id,name:ov.name||r.name,origPos:r.pos,
       pos:pos,posChanged:ov.pos&&ov.pos!==r.pos,
-      status:status,note:ov.note||"",isManual:false
+      status:status,note:ov.note||"",isManual:false,added:""
     });
   });
   POS_LIST.forEach(function(pos){
@@ -3930,11 +3931,16 @@ function renderRoster(){
         });
         if(!already){
           if(!byPos[fpos])byPos[fpos]=[];
-          byPos[fpos].push({id:key,name:ov.name||name,origPos:pos,pos:fpos,posChanged:ov.pos&&ov.pos!==pos,status:status,note:ov.note||"",isManual:true});
+          byPos[fpos].push({id:key,name:ov.name||name,origPos:pos,pos:fpos,posChanged:ov.pos&&ov.pos!==pos,status:status,note:ov.note||"",isManual:true,added:(EMP_META[pos+"|"+name].added||"")});
         }
       }
     });
   });
+  return byPos;
+}
+function renderRoster(){
+  var search=(document.getElementById("rosterSearch")||{value:""}).value.toLowerCase().trim();
+  var byPos=buildRosterByPos();
 
   /* Stats bar */
   var total=0,inactive=0,changed=0;
@@ -4073,13 +4079,81 @@ function saveNewEmp(){
   EMP_META[pos+"|"+name]={added:new Date().toISOString(),id:id,note:""};
   saveRoster();saveEmpMeta();closeModal();renderRoster();showToast("&#10003; "+name+" added to "+pos);
 }
-function exportRoster(){
-  var wb=XLSX.utils.book_new();
-  var rows=[["Position","Name","Employee ID","Date Added","Notes"]];
-  POS_LIST.forEach(function(pos){(ROSTER[pos]||[]).forEach(function(name){var meta=EMP_META[pos+"|"+name]||{};rows.push([pos,name,meta.id||"",meta.added?meta.added.slice(0,10):"Original",meta.note||""])})});
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Roster");
-  XLSX.writeFile(wb,"HK_Roster_"+new Date().toISOString().slice(0,10)+".xlsx");
-  showToast("Roster exported");
+async function exportRoster(){
+  if(typeof ExcelJS==='undefined'){showToast('&#9888; Export library still loading — try again in a second.');return;}
+  var byPos=buildRosterByPos();
+  var posOrder=["Housekeeping Supervisor","Room Attendant","House Attendant","Public Area Attendant","Turndown Attendant","Laundry Attendant"];
+
+  var wb=new ExcelJS.Workbook();
+  var ws=wb.addWorksheet('Roster');
+  ws.columns=[{width:26},{width:14},{width:11},{width:13},{width:30}];
+
+  ws.mergeCells('A1:E1');
+  ws.getCell('A1').value='Housekeeping Roster';
+  ws.getCell('A1').font={bold:true,size:16};
+  ws.mergeCells('A2:E2');
+  ws.getCell('A2').value='Exported '+new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  ws.getCell('A2').font={size:11,color:{argb:'FF666666'}};
+  ws.addRow([]);
+
+  var thin={style:'thin',color:{argb:'FFD9D9D9'}};
+  var cellBorder={top:thin,left:thin,bottom:thin,right:thin};
+  var headerRow=ws.addRow(['Name','Employee ID','Status','Date Added','Notes']);
+  headerRow.height=24;
+  for(var c=1;c<=5;c++){
+    var hc=headerRow.getCell(c);
+    hc.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF243660'}};
+    hc.font={color:{argb:'FFFFFFFF'},bold:true,size:12};
+    hc.alignment={horizontal:'center',vertical:'middle'};
+    hc.border=cellBorder;
+  }
+
+  var total=0;
+  posOrder.forEach(function(pos){
+    var list=rankBySeniority(byPos[pos]||[]).filter(function(e){return e.status!=='terminated';});
+    if(!list.length)return;
+    var deptRow=ws.addRow([pos.toUpperCase()+' ('+list.length+')','','','','']);
+    ws.mergeCells('A'+deptRow.number+':E'+deptRow.number);
+    deptRow.height=22;
+    var dc=deptRow.getCell(1);
+    dc.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2C4270'}};
+    dc.font={color:{argb:'FFE8C96B'},bold:true,size:12};
+    dc.alignment={vertical:'middle'};
+
+    list.forEach(function(e){
+      total++;
+      var isInactive=e.status==='inactive';
+      var notes=[];
+      if(e.posChanged)notes.push('Position changed from '+e.origPos);
+      if(e.note)notes.push(e.note);
+      if(isInactive)notes.push('Inactive');
+      var row=ws.addRow([
+        e.name,
+        e.isManual?'':e.id,
+        isInactive?'Inactive':'Active',
+        e.added?e.added.slice(0,10):(e.isManual?'':'Original'),
+        notes.join(' — ')
+      ]);
+      row.height=20;
+      for(var c2=1;c2<=5;c2++){
+        var cell=row.getCell(c2);
+        cell.border=cellBorder;
+        cell.alignment={vertical:'middle',horizontal:(c2===1||c2===5)?'left':'center'};
+        cell.font={size:11,italic:isInactive,color:{argb:isInactive?'FF999999':'FF1B2B4B'}};
+      }
+    });
+    ws.addRow([]);
+  });
+
+  var buffer=await wb.xlsx.writeBuffer();
+  var blob=new Blob([buffer],{type:'application/octet-stream'});
+  var fname='HK_Roster_'+new Date().toISOString().slice(0,10)+'.xlsx';
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download=fname;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(total+" employees exported");
 }
 function resetRoster(){
   if(!confirm("Reset roster to default? All manually added employees will be removed."))return;
@@ -4481,6 +4555,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.24.4', date:'2026-08-22',
+    fixes:['Fixed "Export Roster" on the Roster page silently dropping most of the staff — it only ever read the small manual-add list, never the actual base roster (everyone imported from Paychex with a real Employee ID), so the file came out missing whoever wasn\'t hand-typed in after the fact. It now pulls from the exact same merged list the Roster page itself displays, so every active employee (base roster + anyone added by hand, including brand-new hires) is in the file, and anyone marked Inactive/Terminated is correctly left out. Also rebuilt the file itself with ExcelJS instead of the old plain-text export: a proper title, grouped by position with a header band and count, centered columns, an Employee ID/Status/Date Added/Notes column for each person, and colors matching the Schedule export\'s look — instead of one flat uncolored, uncentered table.']
+  },
   {
     v:'7.24.3', date:'2026-08-21',
     fixes:['Fixed Laundry\'s cover chain (Victoriano Ch → Jorge Gonzalez) only reacting to Victoriano being OFF or R-OFF, never to TAILOR — Carlos\'s rule: Victoriano is Taylor 2 days a week by hand, and Laundry must never sit with zero people OR both Victoriano and Jorge in it at once, so a Taylor day needs Jorge\'s cover exactly as much as an OFF day does. Also: this now reacts live the moment Carlos sets TAILOR (or back to \'1\') on the Schedule page itself, not only on the next full "Auto-fill this week" run, since that\'s the cell he actually edits every week — and going back to \'1\' correctly releases Jorge back to Houseman instead of leaving him stuck showing LAUNDRY. Also protected TAILOR from being silently overwritten by Auto-fill\'s own day-off placement and shortfall repair, the same protection R-OFF/FLEX/VAC already had.']
