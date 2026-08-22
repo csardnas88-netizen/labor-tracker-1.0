@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.25.3"/>
+<meta name="app-version" content="7.25.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4555,6 +4555,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.25.4', date:'2026-08-22',
+    fixes:['The shift times added to the Excel export in 7.25.3 looked "incomplete" on Carlos\'s work computer (fine on his laptop) — two likely causes fixed: the day columns (width 13) were too narrow for an 18-character time string like "8:15 AM - 4:45 PM", forcing it to wrap onto two lines and center awkwardly, and the en dash character in the time separator doesn\'t render the same across every Excel build. Columns widened to fit the longest time on one line, and every shift time now uses a plain hyphen instead of an en dash.']
+  },
   {
     v:'7.25.3', date:'2026-08-22',
     features:['The Schedule Draft\'s Excel export now prints the real shift time (e.g. "8:15 AM – 4:45 PM") in place of a plain "1", for every crew whose actual hours Carlos confirmed — Laundry, AM Room Attendant, Supervisors, AM Lobby, PM Turndown/GRA, Houseman (AM), PM Houseman, and Overnight, each with its own weekday-vs-weekend split where Carlos gave one. Deliberately separate from Unifocus\'s own shift-window labels used for labor-hour math elsewhere in the app (Laundry\'s "0815-1645" band name does NOT match its real 8:15 AM–4:45 PM clock times) — mixing the two would have printed the wrong hours on a real business document. Managers is left untouched (Carlos marks that crew Open/Close by hand), and OFF/R-OFF/PM/covering cells (LOBBY/HOUSEMAN/TAILOR/LAUNDRY) print exactly as before — only a plain "1" on a crew with confirmed hours changes. The on-screen grid is unaffected; it stays compact codes for editing.']
@@ -20198,15 +20202,19 @@ var SCHED_XLS_COLORS={
    Managers is deliberately absent: Carlos marks that crew "Open"/"Close"
    by hand rather than a shift-time lookup, and Ingrid/Rebeca's "PM" cells
    stay as plain "PM" text, same as they render on screen. */
+/* Plain hyphen, not an en dash — the en dash character didn't render
+   the same on Carlos's work computer as it did on his laptop, part of
+   why the export "looked incomplete" there; a plain "-" is safe on
+   every Excel build. */
 var SCHED_SHIFT_TIMES={
-  laundry:{weekday:'8:15 AM – 4:45 PM', weekend:'8:30 AM – 5:00 PM'},
-  gra:    {weekday:'8:15 AM – 4:45 PM', weekend:'9:00 AM – 5:30 PM'},
-  hp:     {weekday:'8:15 AM – 4:45 PM', weekend:'9:00 AM – 5:30 PM'}, // Houseman AM shares Room Attendant's hours
-  sup:    {weekday:'8:30 AM – 5:00 PM', weekend:'9:30 AM – 6:00 PM'},
-  lobby:  {weekday:'7:00 AM – 3:30 PM', weekend:'7:00 AM – 3:30 PM'},
-  td:     {weekday:'5:00 PM – 11:00 PM', weekend:'5:00 PM – 11:00 PM'},
-  pmhm:   {weekday:'2:30 PM – 11:00 PM', weekend:'2:30 PM – 11:00 PM'},
-  night:  {weekday:'10:00 PM – 6:30 AM', weekend:'10:00 PM – 6:30 AM'}
+  laundry:{weekday:'8:15 AM - 4:45 PM', weekend:'8:30 AM - 5:00 PM'},
+  gra:    {weekday:'8:15 AM - 4:45 PM', weekend:'9:00 AM - 5:30 PM'},
+  hp:     {weekday:'8:15 AM - 4:45 PM', weekend:'9:00 AM - 5:30 PM'}, // Houseman AM shares Room Attendant's hours
+  sup:    {weekday:'8:30 AM - 5:00 PM', weekend:'9:30 AM - 6:00 PM'},
+  lobby:  {weekday:'7:00 AM - 3:30 PM', weekend:'7:00 AM - 3:30 PM'},
+  td:     {weekday:'5:00 PM - 11:00 PM', weekend:'5:00 PM - 11:00 PM'},
+  pmhm:   {weekday:'2:30 PM - 11:00 PM', weekend:'2:30 PM - 11:00 PM'},
+  night:  {weekday:'10:00 PM - 6:30 AM', weekend:'10:00 PM - 6:30 AM'}
 };
 function schedShiftTimeText(bk,ds){
   var t=SCHED_SHIFT_TIMES[bk]; if(!t)return null;
@@ -20223,7 +20231,13 @@ async function schedExportExcel(){
 
   var wb=new ExcelJS.Workbook();
   var ws=wb.addWorksheet('Schedule');
-  ws.columns=[{width:3},{width:22},{width:13},{width:13},{width:13},{width:13},{width:13},{width:13},{width:13}];
+  /* Day columns widened from 13 to 19 — a shift-time string like
+     "8:15 AM - 4:45 PM" (18 chars) was wrapping onto two lines at the
+     old width, which on some Excel builds (Carlos's work computer,
+     confirmed a different result than his laptop) rendered as clipped
+     or "incomplete" instead of wrapping cleanly. Wide enough now to
+     sit on one line at size 12. */
+  ws.columns=[{width:3},{width:22},{width:19},{width:19},{width:19},{width:19},{width:19},{width:19},{width:19}];
 
   ws.addRow(['','','','','Weekly Schedule']).getCell(5).font={bold:true,size:16};
   ws.addRow(['','','','','Housekeeping']).getCell(5).font={bold:true,size:12};
