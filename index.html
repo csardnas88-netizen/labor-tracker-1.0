@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.26.0"/>
+<meta name="app-version" content="7.27.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1291,6 +1291,9 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   <div class="nav-item" id="nav-dnds" onclick="showPage('dnds')">
     <span class="nav-icon">&#128683;</span> DNDs
   </div>
+  <div class="nav-item" id="nav-latedep" onclick="showPage('latedep')">
+    <span class="nav-icon">&#128715;</span> Late Departures
+  </div>
 
   <div class="nav-section-label">Finance</div>
   <div class="nav-item" id="nav-labormodel" onclick="showPage('labormodel')">
@@ -1638,6 +1641,18 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div class="page-sub">Which days run heaviest on Do Not Disturb</div>
       </div>
       <div id="dndsContent"></div>
+    </div>
+
+    <!-- ══ LATE DEPARTURES ══ -->
+    <div id="page-latedep" style="display:none;">
+      <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
+      <div class="page-header">
+        <div class="page-title">&#128715; Late Departures</div>
+        <div class="page-sub">How many rooms check out after 11 AM, and which days run heaviest</div>
+      </div>
+      <input type="file" id="lateDepFile" accept=".pdf" style="display:none;" onchange="handleLateDepUpload(this)">
+      <button onclick="document.getElementById('lateDepFile').click()" style="margin-bottom:14px;padding:10px 16px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#128228; Upload Housekeeping Task Sheet (OperaPrint PDF)</button>
+      <div id="lateDepContent"></div>
     </div>
 
     <!-- ══ PROJECTS ══ -->
@@ -4556,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.27.0', date:'2026-08-23',
+    features:['New "Late Departures" section (in the sidebar under Reports): upload the hotel\'s Housekeeping Task Sheet (OperaPrint) and the app reads which rooms actually checked out at or after 11 AM — the hotel\'s standard checkout time — and which day of the week runs heaviest on them. Carlos\'s ask: Sundays run heavy on late checkouts (fewer guests under a lease Departure clause, plus rooms already running late), which compresses Room Attendant cleaning into the back half of their shift and drags that day\'s labor standard down — this turns that into real evidence for the labor meeting instead of an assertion. Deliberately reads only room number, checkout time, and the attendant heading each page\'s block — never the guest-name column that same report has, matching a privacy concern Carlos raised before sending a sample. Read-only: never feeds into any Unifocus budget math, same treatment as DNDs.']
+  },
+  {
     v:'7.26.0', date:'2026-08-23',
     features:['The Daily Lineup no longer reads the Schedule Draft page\'s live edits — Carlos\'s explicit ask: he\'s still actively building and testing that page (Auto-fill, cover chains, manual cell edits, Call-Offs marking CALL-OFF), and none of that should change the Lineup he actually prints and runs the hotel from until he uploads a fresh Excel. The Lineup now reads a frozen copy, captured only at the moment of an upload; the Schedule Draft page keeps editing its own separate live copy exactly as before, with nothing lost — Auto-fill, borrowing people between crews, weekend checks, all of it. Re-uploading the same or a corrected workbook still refreshes the Lineup normally; it\'s frozen between uploads, not frozen forever.']
   },
@@ -7043,10 +7062,12 @@ function _roomTs(data,ds){ return (data.roomsUpdatedAt&&data.roomsUpdatedAt[ds])
 function _depTs(data,ds){ return (data.departuresUpdatedAt&&data.departuresUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _vnoteTs(data,ds){ return (data.varianceNotesUpdatedAt&&data.varianceNotesUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _dndTs(data,ds){ return (data.dndRoomsUpdatedAt&&data.dndRoomsUpdatedAt[ds])||_dsFallbackTs(ds); }
+function _lateDepTs(data,ds){ return (data.lateDepUpdatedAt&&data.lateDepUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _pushMonthRows(data,mk){
   data=data||{}; var days=data.days||{}, rooms=data.rooms||{}, src=data.roomsSource||{};
   var deps=data.departures||{}, depSrc=data.departuresSource||{}, vnotes=data.varianceNotes||{};
   var dndRooms=data.dndRooms||{};
+  var lateDep=data.lateDep||{};
   var who=(typeof getSignedInEmail==='function'&&getSignedInEmail())||'';
   var shadow=_monthPushShadow(mk); var newShadow=Object.assign({},shadow); var rows=[];
   Object.keys(days).forEach(function(ds){
@@ -7087,6 +7108,15 @@ function _pushMonthRows(data,mk){
     var ts=_dndTs(data,ds), sk='dnd:'+ds;
     if(shadow[sk]===ts)return;
     rows.push({key:'mdnd_'+mk+'_'+ds, value:JSON.stringify({v:dndRooms[ds],ts:ts,by:who})});
+    newShadow[sk]=ts;
+  });
+  /* Late Departures — parsed from the Housekeeping Task Sheet PDF, same
+     per-day-row treatment as DNDs above (never affects any Unifocus
+     budget math, purely evidence for the labor meeting). */
+  Object.keys(lateDep).forEach(function(ds){
+    var ts=_lateDepTs(data,ds), sk='ld:'+ds;
+    if(shadow[sk]===ts)return;
+    rows.push({key:'mlatedep_'+mk+'_'+ds, value:JSON.stringify({v:lateDep[ds],ts:ts,by:who})});
     newShadow[sk]=ts;
   });
   if(!rows.length)return;
@@ -7484,7 +7514,7 @@ function _syncFromSheetsPull(){
        keeping the newest timestamp per day; merged into local AFTER the loop. */
     var _remoteMonths={};
     function _tsRank(ts){ var n=Date.parse(ts); return isNaN(n)?0:n; }
-    function _rm(mk){ return _remoteMonths[mk]||(_remoteMonths[mk]={days:{},daysUpdatedAt:{},rooms:{},roomsUpdatedAt:{},roomsSource:{},departures:{},departuresUpdatedAt:{},departuresSource:{},varianceNotes:{},varianceNotesUpdatedAt:{},dndRooms:{},dndRoomsUpdatedAt:{}}); }
+    function _rm(mk){ return _remoteMonths[mk]||(_remoteMonths[mk]={days:{},daysUpdatedAt:{},rooms:{},roomsUpdatedAt:{},roomsSource:{},departures:{},departuresUpdatedAt:{},departuresSource:{},varianceNotes:{},varianceNotesUpdatedAt:{},dndRooms:{},dndRoomsUpdatedAt:{},lateDep:{},lateDepUpdatedAt:{}}); }
     function _foldDay(mk,ds,snap,ts){ var m=_rm(mk); if(m.daysUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.daysUpdatedAt[ds])){ m.days[ds]=snap; m.daysUpdatedAt[ds]=ts; } }
     function _foldRoom(mk,ds,n,ts,srcv){ var m=_rm(mk); if(m.roomsUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.roomsUpdatedAt[ds])){ m.rooms[ds]=n; m.roomsUpdatedAt[ds]=ts; if(srcv)m.roomsSource[ds]=srcv; } }
     /* Departures and variance notes — same fold-by-newest-timestamp
@@ -7495,6 +7525,7 @@ function _syncFromSheetsPull(){
     function _foldDep(mk,ds,n,ts,srcv){ var m=_rm(mk); if(m.departuresUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.departuresUpdatedAt[ds])){ m.departures[ds]=n; m.departuresUpdatedAt[ds]=ts; if(srcv)m.departuresSource[ds]=srcv; } }
     function _foldVNote(mk,ds,notesObj,ts){ var m=_rm(mk); if(m.varianceNotesUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.varianceNotesUpdatedAt[ds])){ m.varianceNotes[ds]=notesObj; m.varianceNotesUpdatedAt[ds]=ts; } }
     function _foldDND(mk,ds,n,ts){ var m=_rm(mk); if(m.dndRoomsUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.dndRoomsUpdatedAt[ds])){ m.dndRooms[ds]=n; m.dndRoomsUpdatedAt[ds]=ts; } }
+    function _foldLateDep(mk,ds,n,ts){ var m=_rm(mk); if(m.lateDepUpdatedAt[ds]===undefined||_tsRank(ts)>=_tsRank(m.lateDepUpdatedAt[ds])){ m.lateDep[ds]=n; m.lateDepUpdatedAt[ds]=ts; } }
     Object.keys(all).forEach(function(key){
       try{
         if(key.indexOf("mday_")===0){
@@ -7512,6 +7543,9 @@ function _syncFromSheetsPull(){
         } else if(key.indexOf("mdnd_")===0){
           var _rN=all[key], _restN=key.slice(5), _uN=_restN.indexOf('_');
           if(_uN>0&&_rN&&_rN.v!==undefined)_foldDND(_restN.slice(0,_uN),_restN.slice(_uN+1),_rN.v,_rN.ts);
+        } else if(key.indexOf("mlatedep_")===0){
+          var _rL=all[key], _restL=key.slice(9), _uL=_restL.indexOf('_');
+          if(_uL>0&&_rL&&_rL.v!==undefined)_foldLateDep(_restL.slice(0,_uL),_restL.slice(_uL+1),_rL.v,_rL.ts);
         } else if(key.indexOf("month_")===0){
           var mk=key.replace("month_",""); var remote=all[key]||{};
           var _rd=remote.days||{}, _rdt=remote.daysUpdatedAt||{};
@@ -7790,6 +7824,7 @@ function _syncFromSheetsPull(){
       var depsMerge=_mergeTimedDayMap(local.departures,local.departuresUpdatedAt,remote.departures,remote.departuresUpdatedAt,local.departuresSource,remote.departuresSource);
       var vnoteMerge=_mergeTimedDayMap(local.varianceNotes,local.varianceNotesUpdatedAt,remote.varianceNotes,remote.varianceNotesUpdatedAt);
       var dndMerge=_mergeTimedDayMap(local.dndRooms,local.dndRoomsUpdatedAt,remote.dndRooms,remote.dndRoomsUpdatedAt);
+      var lateDepMerge=_mergeTimedDayMap(local.lateDep,local.lateDepUpdatedAt,remote.lateDep,remote.lateDepUpdatedAt);
       /* Start from a full copy of local (not a fresh object naming only the
          fields this function knows how to merge) so any OTHER field on the
          month blob survives untouched. This is the actual v6.88.0 fix: the
@@ -7802,7 +7837,8 @@ function _syncFromSheetsPull(){
         rooms:roomsMerge.map,roomsUpdatedAt:roomsMerge.times,roomsSource:roomsMerge.extra,
         departures:depsMerge.map,departuresUpdatedAt:depsMerge.times,departuresSource:depsMerge.extra,
         varianceNotes:vnoteMerge.map,varianceNotesUpdatedAt:vnoteMerge.times,
-        dndRooms:dndMerge.map,dndRoomsUpdatedAt:dndMerge.times
+        dndRooms:dndMerge.map,dndRoomsUpdatedAt:dndMerge.times,
+        lateDep:lateDepMerge.map,lateDepUpdatedAt:lateDepMerge.times
       });
       _origSaveMonthData(merged,mk);
       updated=true;
@@ -8703,6 +8739,335 @@ function renderDnds(){
 function _dndShortDate(ds){
   var d=parseLocalDate(ds);
   return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+}
+
+/* ══ Late Departures section ══
+   Carlos's ask (2026-08-23): Sundays run heavy on late checkouts (guests
+   without a lease Departure clause, plus rooms already running late), which
+   compresses GRA's cleaning window into the back half of their shift and
+   drags that day's Room Attendant labor standard down — he wanted a way to
+   PROVE that pattern to the labor meeting instead of just asserting it.
+
+   Source is the hotel's own "Housekeeping Task Sheet" (OperaPrint export,
+   filename hint hsk_tasksheet_4) — a PDF, parsed client-side same as
+   R106/WTC. Deliberately reads ONLY Room No / Reservation Status / actual
+   Dep. Time / the attendant heading each page's block; the guest-name
+   column that report also has is never touched, matching Carlos's explicit
+   privacy concern about that data ("no quisiera darte eso").
+
+   "Late" = checked out at/after 11:00 AM, the hotel's standard checkout
+   time — the actual cutoff before a room even becomes cleanable. */
+var LATEDEP_CUTOFF_HOUR=11;
+
+function getLateDepForDay(ds){
+  var mk=ds.substring(0,7);
+  var mData=loadMonthData(mk);
+  return (mData.lateDep&&mData.lateDep[ds])||null;
+}
+/* Same per-day-row placement/sync treatment as dndRooms above — a sibling
+   of days[] on the month blob, never nested inside days[ds].byPosition
+   (wholesale-replaced by every Labor Distribution Report upload), and wired
+   into _pushMonthRows/_syncFromSheetsPull from day one so it doesn't repeat
+   the missing-field bug fixed in v6.88.0 (see the comment above
+   getVarianceNote). */
+function saveLateDepForDate(ds,rec){
+  var mk=ds.substring(0,7);
+  var mData=loadMonthData(mk);
+  if(!mData.lateDep)mData.lateDep={};
+  if(!mData.lateDepUpdatedAt)mData.lateDepUpdatedAt={};
+  mData.lateDep[ds]=rec;
+  mData.lateDepUpdatedAt[ds]=new Date().toISOString();
+  saveMonthData(mData,mk);
+}
+function getAllLateDepDays(){
+  var out=[];
+  Object.keys(localStorage).forEach(function(k){
+    if(k.indexOf('hk_month_')!==0)return;
+    try{
+      var mData=JSON.parse(localStorage.getItem(k));
+      var ld=(mData&&mData.lateDep)||{};
+      Object.keys(ld).forEach(function(ds){
+        var rec=ld[ds];
+        if(!rec||!rec.total)return;
+        var d=parseLocalDate(ds);
+        out.push({
+          ds:ds,date:d,dow:d.getDay(),
+          total:rec.total,after11:rec.after11,before11:rec.before11,
+          pct:rec.total>0?(rec.after11/rec.total)*100:null,
+          byAttendant:rec.byAttendant||{},rooms:rec.rooms||[]
+        });
+      });
+    }catch(e){}
+  });
+  out.sort(function(a,b){return a.ds.localeCompare(b.ds);});
+  return out;
+}
+/* Averages per weekday, same shape/purpose as getDNDByWeekday above — this
+   IS the chart that answers Carlos's actual question ("¿por qué las
+   mujeres se van del labor standard los domingos?"). */
+function getLateDepByWeekday(days){
+  var DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var buckets=[];
+  for(var i=0;i<7;i++)buckets.push({dow:i,name:DOW[i],totalRooms:0,totalLate:0,n:0,avgPct:0});
+  (days||[]).forEach(function(d){
+    var b=buckets[d.dow];
+    b.totalRooms+=d.total;b.totalLate+=d.after11;b.n++;
+  });
+  buckets.forEach(function(b){b.avgPct=b.totalRooms>0?(b.totalLate/b.totalRooms)*100:0;});
+  return buckets;
+}
+
+/* ── PDF parsing ──
+   The report prints one fixed-width table per attendant block, repeated
+   page after page — Room No / Room Status / Section AM / Section PM /
+   Reservation Status / Turndown / FO Status / Arrival / Arr. Time /
+   Departure / Dep. Time / Adl. / Chl / Tasks, in that left-to-right column
+   order. pdf.js hands back individual text fragments with x/y positions,
+   not rows, so this rebuilds rows by clustering fragments with the same y
+   (same approach already used for R106/WTC — see handleR106Upload), then
+   assigns each fragment to a column purely by its x position (verified
+   against Carlos's real report). Only 4 of those columns are ever read. */
+function _ldRowsFromPage(items){
+  var sorted=items.slice().sort(function(a,b){
+    var dy=Math.round(b.transform[5])-Math.round(a.transform[5]);
+    return dy!==0?dy:a.transform[4]-b.transform[4];
+  });
+  var rows=[],lastY=null,cur=[];
+  sorted.forEach(function(it){
+    var y=Math.round(it.transform[5]);
+    if(lastY===null)lastY=y;
+    if(Math.abs(y-lastY)>3){rows.push(cur);cur=[];lastY=y;}
+    cur.push(it);
+  });
+  if(cur.length)rows.push(cur);
+  return rows;
+}
+function _ldCol(x){
+  if(x<60)return 'room';
+  if(x<195)return 'skip';
+  if(x<260)return 'resv';
+  if(x<500)return 'skip';
+  if(x<530)return 'depdate';
+  if(x<590)return 'deptime';
+  return 'skip';
+}
+/* Every "Departed" room across every page, keyed by its OWN departure date
+   (not the report's header date) — the report's "Task Date From/To" can
+   span more than one day, and trusting each room's own column is correct
+   either way. Attendant name is read from the same fixed spot every page
+   repeats it in (right under the "Instructions" label) by finding that
+   literal label word and reading whatever sits beside it on the same row —
+   position-independent of page count or attendant order. */
+async function _ldParsePdf(pdf){
+  var byDate={};
+  for(var p=1;p<=pdf.numPages;p++){
+    var page=await pdf.getPage(p);
+    var tc=await page.getTextContent();
+    var attendant='';
+    var instrItem=null;
+    tc.items.forEach(function(it){if(it.str==='Instructions')instrItem=it;});
+    if(instrItem){
+      var iy=Math.round(instrItem.transform[5]);
+      var parts=[];
+      tc.items.forEach(function(it){
+        var x=it.transform[4],y=Math.round(it.transform[5]);
+        if(Math.abs(y-iy)<=2&&x>85&&x<150&&it.str.trim())parts.push(it.str.trim());
+      });
+      attendant=parts.join(' ').trim();
+    }
+    var rows=_ldRowsFromPage(tc.items);
+    rows.forEach(function(row){
+      var bins={};
+      row.forEach(function(it){
+        var c=_ldCol(it.transform[4]);
+        if(c==='skip')return;
+        bins[c]=(bins[c]?bins[c]+' ':'')+it.str.trim();
+      });
+      var room=(bins.room||'').trim();
+      if(!/^\d{3,4}$/.test(room))return;
+      var resv=(bins.resv||'').trim();
+      if(resv.indexOf('Departed')!==0)return;
+      var dt=(bins.deptime||'').trim().replace(/^\*/,'');
+      if(!/^\d{1,2}:\d{2}$/.test(dt))return;
+      var dd=(bins.depdate||'').trim();
+      var m=dd.match(/^(\d{2})-(\d{2})-(\d{2})$/);
+      if(!m)return;
+      var ds='20'+m[3]+'-'+m[1]+'-'+m[2];
+      if(!byDate[ds])byDate[ds]=[];
+      byDate[ds].push({room:room,depTime:dt,attendant:attendant});
+    });
+  }
+  return byDate;
+}
+function _ldAggregate(rooms){
+  var total=0,after11=0,byAtt={};
+  rooms.forEach(function(r){
+    total++;
+    var h=parseInt(r.depTime.split(':')[0],10);
+    var late=h>=LATEDEP_CUTOFF_HOUR;
+    if(late)after11++;
+    var key=r.attendant||'(unlabeled)';
+    if(!byAtt[key])byAtt[key]={total:0,after11:0};
+    byAtt[key].total++;
+    if(late)byAtt[key].after11++;
+  });
+  return {total:total,after11:after11,before11:total-after11,byAttendant:byAtt,rooms:rooms};
+}
+function handleLateDepUpload(input){
+  var file=input.files[0];
+  if(!file)return;
+  showToast('⏳ Reading Late Departures report...');
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var typedarray=new Uint8Array(e.target.result);
+    pdfjsLib.getDocument({data:typedarray}).promise.then(function(pdf){
+      _ldParsePdf(pdf).then(function(byDate){
+        var days=Object.keys(byDate);
+        if(!days.length){showToast('❌ No departures found in this report');return;}
+        days.forEach(function(ds){
+          saveLateDepForDate(ds,_ldAggregate(byDate[ds]));
+        });
+        showToast('✓ Late Departures loaded — '+days.length+' day'+(days.length===1?'':'s'));
+        if(currentPage==='latedep')renderLateDep();
+      }).catch(function(err){
+        showToast('❌ Error reading report: '+err.message);
+      });
+    }).catch(function(err){
+      showToast('❌ Error reading report: '+err.message);
+    });
+  };
+  reader.readAsArrayBuffer(file);
+  input.value='';
+}
+
+var lateDepDowChartObj=null;
+function _destroyLateDepCharts(){
+  if(lateDepDowChartObj){try{lateDepDowChartObj.destroy();}catch(e){}lateDepDowChartObj=null;}
+}
+var lateDepDayExpanded={};
+function toggleLateDepDay(ds){
+  lateDepDayExpanded[ds]=!lateDepDayExpanded[ds];
+  renderLateDep();
+}
+function renderLateDep(){
+  var el=document.getElementById('lateDepContent');
+  if(!el)return;
+  _destroyLateDepCharts();
+
+  var days=getAllLateDepDays();
+  if(!days.length){
+    el.innerHTML='<div class="empty-state"><div class="es-icon">&#128715;</div><div class="es-title">No reports uploaded yet</div>'
+      +'<div class="es-desc">Upload the Housekeeping Task Sheet (OperaPrint) above for a few days — Sundays included — '
+      +'and the checkout-time pattern by day of the week will build itself here.</div></div>';
+    return;
+  }
+
+  var byDow=getLateDepByWeekday(days);
+  var totalRooms=0,totalLate=0,peakDay=days[0];
+  days.forEach(function(d){
+    totalRooms+=d.total;totalLate+=d.after11;
+    if((d.pct||0)>(peakDay.pct||0))peakDay=d;
+  });
+  var avgPct=totalRooms>0?(totalLate/totalRooms)*100:0;
+
+  var ranked=byDow.filter(function(b){return b.n>0;}).sort(function(a,b){return b.avgPct-a.avgPct;});
+  var worst=ranked[0],best=ranked[ranked.length-1];
+
+  var html='';
+
+  html+='<div style="background:var(--navy);border-radius:var(--radius);padding:16px 18px;margin-bottom:14px;">';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.5px;font-weight:700;">Heaviest day for late checkouts (11 AM+)</div>';
+  if(worst&&worst.totalRooms>0){
+    html+='<div style="font-size:24px;font-weight:800;color:#fff;margin-top:4px;">'+worst.name+'</div>';
+    html+='<div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:3px;">'
+      +worst.avgPct.toFixed(0)+'% of departures at/after 11 AM on average, across '+worst.n+' logged '+(worst.n===1?'day':'days')
+      +(best&&best!==worst?' &middot; lightest is '+best.name+' at '+best.avgPct.toFixed(0)+'%':'')+'</div>';
+  }else{
+    html+='<div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px;">Not enough logged days yet</div>';
+  }
+  html+='</div>';
+
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;">';
+  function tile(val,label,color){
+    return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;text-align:center;">'
+      +'<div style="font-size:22px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+      +'<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">'+label+'</div></div>';
+  }
+  html+=tile(days.length,'Days logged');
+  html+=tile(totalRooms,'Total departures');
+  html+=tile(totalLate,'At/after 11 AM','var(--red)');
+  html+=tile(avgPct.toFixed(0)+'%','Avg. late share','var(--gd)');
+  html+=tile((peakDay.pct||0).toFixed(0)+'%','Peak day','var(--red)');
+  html+='</div>';
+
+  html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+  html+='<div style="background:var(--navy);padding:12px 18px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Average % of departures at/after 11 AM, by day of the week</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">Across every logged day, all months</div>';
+  html+='</div>';
+  html+='<div style="padding:14px;height:220px;"><canvas id="lateDepDowCanvas"></canvas></div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:0 14px 12px;">';
+  byDow.forEach(function(b){
+    html+='<div style="text-align:center;font-size:8.5px;color:var(--text3);">'+(b.n>0?b.n+(b.n===1?' day':' days'):'&#8212;')+'</div>';
+  });
+  html+='</div></div>';
+
+  html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">';
+  html+='<div style="background:var(--navy);padding:12px 18px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128197; Every logged day</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+days.length+' day'+(days.length===1?'':'s')+', newest first — tap a day for the room-by-room breakdown</div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:1.3fr 70px 90px;gap:6px;padding:7px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">';
+  html+='<div>Date</div><div style="text-align:right;">Depart.</div><div style="text-align:right;">11 AM+</div></div>';
+  days.slice().reverse().forEach(function(d){
+    var open=!!lateDepDayExpanded[d.ds];
+    html+='<div style="border-top:1px solid var(--border);">';
+    html+='<div onclick="toggleLateDepDay(\''+d.ds+'\')" style="display:grid;grid-template-columns:1.3fr 70px 90px;gap:6px;padding:8px 16px;align-items:center;font-size:11px;cursor:pointer;">';
+    html+='<div style="font-weight:700;color:var(--text1);"><span style="display:inline-block;transition:transform .15s;transform:rotate('+(open?'90':'0')+'deg);margin-right:5px;color:var(--text3);">&#9656;</span>'+_dndShortDate(d.ds)+'</div>';
+    html+='<div style="text-align:right;font-weight:700;color:var(--navy);">'+d.total+'</div>';
+    html+='<div style="text-align:right;color:'+(d.pct>=40?'var(--red)':'var(--gd)')+';font-weight:700;">'+(d.pct!==null?d.pct.toFixed(0)+'%':'&#8212;')+'</div>';
+    html+='</div>';
+    if(open){
+      html+='<div style="padding:0 16px 12px 38px;">';
+      d.rooms.slice().sort(function(a,b){return a.depTime.localeCompare(b.depTime);}).forEach(function(r){
+        var h=parseInt(r.depTime.split(':')[0],10);
+        var late=h>=LATEDEP_CUTOFF_HOUR;
+        html+='<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:10.5px;color:'+(late?'var(--red)':'var(--text2)')+';">'
+          +'<span>Room '+escHtml(r.room)+(r.attendant?' &middot; '+escHtml(r.attendant):'')+'</span><span style="font-weight:700;">'+escHtml(r.depTime)+'</span></div>';
+      });
+      html+='</div>';
+    }
+    html+='</div>';
+  });
+  html+='</div>';
+
+  el.innerHTML=html;
+
+  var dowCanvas=document.getElementById('lateDepDowCanvas');
+  if(dowCanvas&&typeof Chart!=='undefined'){
+    lateDepDowChartObj=new Chart(dowCanvas,{
+      type:'bar',
+      data:{
+        labels:byDow.map(function(b){return b.name.slice(0,3);}),
+        datasets:[{
+          data:byDow.map(function(b){return +b.avgPct.toFixed(1);}),
+          backgroundColor:byDow.map(function(b){return (worst&&b.dow===worst.dow&&b.n>0)?'#C9A84C':'#1E2D4A';}),
+          borderRadius:4,borderWidth:0
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
+          var b=byDow[ctx.dataIndex];
+          return b.n>0?(ctx.parsed.y.toFixed(0)+'% avg &middot; '+b.totalLate+'/'+b.totalRooms+' over '+b.n+(b.n===1?' day':' days')):'no logged days';
+        }}}},
+        scales:{
+          x:{grid:{display:false},ticks:{color:'#8C8680',font:{size:10}}},
+          y:{beginAtZero:true,max:100,grid:{color:'#E4DDD1'},ticks:{color:'#8C8680',font:{size:10}}}
+        }
+      }
+    });
+  }
 }
 /* Turndown's Hotel-Rooms-driven components use SAME-DAY occupancy, unlike
    every other Rooms-driven component in this app (which uses the night
@@ -10247,7 +10612,7 @@ function toggleSidebarSmart(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','reqnotebook','dailylineup','assignments','tutorial','settings'];
+var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','latedep','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','reqnotebook','dailylineup','assignments','tutorial','settings'];
 var _pinGateBypass=false;
 var pendingGatePage=null;
 var PIN_GATED_PAGES=['labormodel','pnl','settings'];
@@ -10277,6 +10642,7 @@ function showPage(page){
   if(page==='recap')renderRecap();
   if(page==='occupancy')renderOccupancy();
   if(page==='dnds')renderDnds();
+  if(page==='latedep')renderLateDep();
   if(page==='schedule')renderSchedule();
   if(page==='reqnotebook')renderReqNotebook();
   if(page==='dailylineup')renderDailyLineup();

@@ -69,6 +69,7 @@ const cases = [
   require('./cases/toast-entities'),
   require('./cases/dl-sections-sync'),
   require('./cases/dl-schedule-snapshot-decouple'),
+  require('./cases/late-departures'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
