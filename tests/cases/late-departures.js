@@ -31,13 +31,14 @@ function buildPageItems(attendantName, y0) {
   // Instructions label + attendant name, same row (y = y0 + 40)
   items.push(fragItem(9.1, y0 + 40, 'Instructions'));
   items.push(fragItem(94.5, y0 + 40, attendantName));
-  // Header/table rows below. Room 1503 is a real Suite (LATEDEP_SUITE_ROOMS);
-  // 1501/1502/1504 are not. All four are floor 15.
+  // Header/table rows below. Rooms 1503/1505 are real Suites
+  // (LATEDEP_SUITE_ROOMS); 1501/1502/1504 are not. All five are floor 15.
   const rows = [
     { room: '1501', resv: 'Departed', depdate: '08-23-26', deptime: '07:04' },              // before 11
     { room: '1502', resv: 'Departed', depdate: '08-23-26', deptime: '12:01' },              // at/after 11
     { room: '1503', resv: 'Due', resv2: 'Out', depdate: '', deptime: '' },                  // still occupied, no time — excluded from LATE detail, still assigned (Suite)
     { room: '1504', resv: 'Due', resv2: 'Out', depdate: '08-23-26', deptime: '16:00' },     // still occupied, SCHEDULED late checkout printed — now included
+    { room: '1505', resv: 'Stayover', depdate: '', deptime: '' },                           // guest staying another night — "occupied" (Suite too)
   ];
   rows.forEach((r, i) => {
     const y = y0 - i * 20;
@@ -89,15 +90,19 @@ module.exports = {
     // ── roomsByAttendant — Carlos's ask: "el total de cuartos asignados a
     // limpiarse en ese día" counts EVERY room (every status), unlike
     // the late-checkout detail above ──
-    t.eq(result.roomsByAttendant['Gabriela'].length, 4, "Gabriela's room list includes all 4 rows, including both Due Out rooms");
-    t.eq(result.roomsByAttendant['Evangelina'].length, 4, 'same for Evangelina');
+    t.eq(result.roomsByAttendant['Gabriela'].length, 5, "Gabriela's room list includes all 5 rows, including the Stayover");
+    t.eq(result.roomsByAttendant['Evangelina'].length, 5, 'same for Evangelina');
+    t.eq(result.roomsByAttendant['Gabriela'][0].resv, 'Departed', 'roomsByAttendant keeps each room\'s reservation status alongside its number');
 
     // ── _ldSummarizeAssigned / _ldIsSuite / _ldFloorOf — Carlos's ask:
-    // floors + Suites + late count together explain a slow day ──
+    // floors + Suites + late count together explain a slow day, and split
+    // "occupied" (Stayover) from "checked out" (everything else) ──
     const summary = win._ldSummarizeAssigned(result.roomsByAttendant['Gabriela']);
-    t.eq(summary.total, 4, 'total rooms assigned, every status');
-    t.eq(summary.floors, 1, 'rooms 1501-1504 are all floor 15 — one floor');
-    t.eq(summary.suites, 1, 'only room 1503 is a real Suite (LATEDEP_SUITE_ROOMS); 1501/1502/1504 are not');
+    t.eq(summary.total, 5, 'total rooms assigned, every status');
+    t.eq(summary.floors, 1, 'rooms 1501-1505 are all floor 15 — one floor');
+    t.eq(summary.suites, 2, 'rooms 1503 and 1505 are real Suites (LATEDEP_SUITE_ROOMS); 1501/1502/1504 are not');
+    t.eq(summary.occupied, 1, 'only room 1505 (Stayover) counts as occupied');
+    t.eq(summary.checkedOut, 4, 'the other 4 rooms (Departed or Due Out) count as checked out');
     t.eq(win._ldFloorOf('2003'), 20, 'floor from a 4-digit room number');
     t.eq(win._ldFloorOf('0605'), 6, "floor from a room number with the hotel's own leading zero");
     t.assert(win._ldIsSuite('1503'), '1503 is on the real Suite list Carlos provided');
@@ -158,7 +163,7 @@ module.exports = {
 
     const stored = win.getLateDepForDay('2026-08-23');
     t.eq(stored.total, 6, 'getLateDepForDay reads back exactly what was saved');
-    t.eq(stored.assigned['Gabriela'].suites, 1, "the assigned summary's suites count survives the save round trip too");
+    t.eq(stored.assigned['Gabriela'].suites, 2, "the assigned summary's suites count survives the save round trip too");
 
     const all = win.getAllLateDepDays();
     t.eq(all.length, 4, 'all four logged days are found across the month(s), including the zero-late/assigned-only day');

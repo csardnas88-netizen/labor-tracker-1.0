@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.31.0"/>
+<meta name="app-version" content="7.32.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.32.0', date:'2026-08-23',
+    features:['Late Departures attendant cards now split her rooms into "checked out" (green) and "occupied" (gold) — Carlos\'s ask, to see how many Stayovers she was carrying that day alongside the floors/suites/late-checkout numbers already there. "Occupied" is a Stayover room (the guest isn\'t leaving); everything else — Departed or Due Out — counts as checked out. Colors follow the app\'s existing scheme rather than introducing a new one.']
+  },
+  {
     v:'7.31.0', date:'2026-08-23',
     fixes:['Late Departures was showing "Total Departures" as its own count of rows off the Housekeeping Task Sheet (73 for 08-23-26) instead of the hotel\'s real day total — Carlos\'s catch, working through an example where 41 late rooms out of a real 99 departures is 41%, not the 56% the PDF-only count was showing. Every total/percentage in Late Departures (the summary tiles, the heaviest-day headline, the weekday chart, and each day\'s row) now uses the real Departures figure already uploaded in Labor (R106/OCC) for that date, falling back to the PDF\'s own count only on a day Labor has no figure for yet. The late-checkout count itself (41) is unaffected — only what it\'s measured against changed.']
   },
@@ -8817,14 +8821,21 @@ function _ldFloorOf(room){
    every status (Departed/Due Out/Stayover), same source as "rooms
    assigned". Carlos's ask: floors + suites + late count together tell the
    real story behind a slow day, not late checkouts alone. */
+/* rooms: [{room,resv}] — every row on her page, any status. "Occupied"
+   (Carlos's word) = Stayover, the guest staying another night; everything
+   else (Departed, Due Out) has actually checked out or is on its way out.
+   Carlos's ask: differentiate the two so a card doesn't just say "13
+   rooms" when really 4 of those never even needed a checkout clean. */
 function _ldSummarizeAssigned(rooms){
   var floors={};
-  var suites=0;
-  (rooms||[]).forEach(function(room){
-    floors[_ldFloorOf(room)]=true;
-    if(_ldIsSuite(room))suites++;
+  var suites=0,occupied=0;
+  (rooms||[]).forEach(function(r){
+    floors[_ldFloorOf(r.room)]=true;
+    if(_ldIsSuite(r.room))suites++;
+    if((r.resv||'').indexOf('Stayover')===0)occupied++;
   });
-  return {total:(rooms||[]).length,suites:suites,floors:Object.keys(floors).length};
+  var total=(rooms||[]).length;
+  return {total:total,suites:suites,floors:Object.keys(floors).length,occupied:occupied,checkedOut:total-occupied};
 }
 
 function getLateDepForDay(ds){
@@ -8980,13 +8991,16 @@ function _ldCol(x){
      but 16:00 already on file) — a still-occupied Due Out with nothing
      printed there stays excluded, since there's no way to know when it'll
      actually leave. Keyed by each room's OWN departure date.
-   - roomsByAttendant: {attendant: [room,...]} — EVERY room row on the report
-     (Departed, Due Out, Stayover, whatever status), regardless of when its
-     own reservation happens to depart. Carlos's ask: "el total de cuartos
-     asignados a limpiarse en ese día" — a Stayover still gets cleaned that
-     day, it just isn't a checkout, so it counts here even though it's
-     excluded from the late-departure math itself (his earlier ask). Feeds
-     _ldSummarizeAssigned (total/suites/floors), keyed to the report's OWN
+   - roomsByAttendant: {attendant: [{room,resv},...]} — EVERY room row on
+     the report (Departed, Due Out, Stayover, whatever status), regardless
+     of when its own reservation happens to depart. Carlos's ask: "el
+     total de cuartos asignados a limpiarse en ese día" — a Stayover
+     still gets cleaned that day, it just isn't a checkout, so it counts
+     here even though it's excluded from the late-departure math itself
+     (his earlier ask). resv is kept alongside room so _ldSummarizeAssigned
+     can also split out how many were Stayover ("occupied") vs actually
+     checked out. Feeds _ldSummarizeAssigned (total/suites/floors/occupied/
+     checkedOut), keyed to the report's OWN
      date (from its "Task Date From" header) since that's the day being
      staffed — not each room's individual reservation dates, which for a
      Stayover point at some future checkout. */
@@ -9028,7 +9042,7 @@ async function _ldParsePdf(pdf){
       if(!resv)return;
       var key=attendant||'(unlabeled)';
       if(!roomsByAttendant[key])roomsByAttendant[key]=[];
-      roomsByAttendant[key].push(room);
+      roomsByAttendant[key].push({room:room,resv:resv});
       /* Departed = actual checkout scan time. A "Due Out" room can ALSO
          carry a real time here — Carlos found it: room 1503 was still
          "Due Out" (guest hadn't left yet) but the report already printed
@@ -9211,7 +9225,13 @@ function renderLateDep(){
         var nameJs=a.attendant.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
         html+='<div onclick="toggleLateDepAttendant(\''+d.ds+'\',\''+nameJs+'\')" style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;'+(attOpen?'grid-column:1/-1;':'')+'">';
         html+='<div style="font-size:10.5px;font-weight:700;color:var(--text1);">'+escHtml(a.attendant)+'</div>';
-        html+='<div style="font-size:11px;color:var(--text2);font-weight:600;margin-top:2px;">'+(a.assigned?a.assigned.total+' room'+(a.assigned.total===1?'':'s')+' &middot; '+a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
+        html+='<div style="font-size:11px;color:var(--text2);font-weight:600;margin-top:2px;">'+(a.assigned?a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
+        if(a.assigned){
+          html+='<div style="font-size:11px;font-weight:600;margin-top:1px;">'
+            +'<span style="color:var(--green);">'+a.assigned.checkedOut+' checked out</span>'
+            +'<span style="color:var(--text3);"> &middot; </span>'
+            +'<span style="color:var(--gd);">'+a.assigned.occupied+' occupied</span></div>';
+        }
         html+='<div style="font-size:10px;font-weight:700;margin-top:3px;color:'+(a.after11>0?'var(--red)':'var(--text3)')+';">'+a.after11+' of '+a.total+' at/after 11 AM</div>';
         if(attOpen){
           html+='<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">';
