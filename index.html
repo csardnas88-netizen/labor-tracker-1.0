@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.30.0"/>
+<meta name="app-version" content="7.31.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.31.0', date:'2026-08-23',
+    fixes:['Late Departures was showing "Total Departures" as its own count of rows off the Housekeeping Task Sheet (73 for 08-23-26) instead of the hotel\'s real day total — Carlos\'s catch, working through an example where 41 late rooms out of a real 99 departures is 41%, not the 56% the PDF-only count was showing. Every total/percentage in Late Departures (the summary tiles, the heaviest-day headline, the weekday chart, and each day\'s row) now uses the real Departures figure already uploaded in Labor (R106/OCC) for that date, falling back to the PDF\'s own count only on a day Labor has no figure for yet. The late-checkout count itself (41) is unaffected — only what it\'s measured against changed.']
+  },
+  {
     v:'7.30.0', date:'2026-08-23',
     fixes:['Late Departures was missing rooms that hadn\'t been marked "Departed" yet at the moment the report was pulled, even when they were clearly going to be late — Carlos caught it: room 1503 was still "Due Out" but the report already had 16:00 printed as its scheduled checkout, and it wasn\'t showing up anywhere. Turns out a "Due Out" row CAN carry a real time in that same column — the approved/scheduled late checkout on file for that reservation — separate from the actual checkout scan time a "Departed" row has. Both now count. A "Due Out" with no time printed there still stays excluded, since there\'s genuinely no way to know when (or if) it\'ll actually leave.']
   },
@@ -8854,10 +8858,20 @@ function getAllLateDepDays(){
         var rec=ld[ds];
         if(!rec||(!rec.total&&!rec.assigned))return;
         var d=parseLocalDate(ds);
+        /* Carlos's ask, 2026-08-23: the "total departures" the day should
+           be measured against is the REAL hotel-wide figure he already
+           uploads in Labor (R106/OCC) — not our own count of rows off the
+           Housekeeping Task Sheet, which only reflects whatever attendant
+           pages happened to be in that PDF and can undercount the true
+           day total. Falls back to our own parsed count only when Labor
+           has no departures figure for that day at all (nothing uploaded
+           yet), so the tile is never blank. */
+        var laborTotal=getDeparturesForDay(ds);
+        var effTotal=(typeof laborTotal==='number')?laborTotal:rec.total;
         out.push({
           ds:ds,date:d,dow:d.getDay(),
-          total:rec.total,after11:rec.after11,before11:rec.before11,
-          pct:rec.total>0?(rec.after11/rec.total)*100:null,
+          total:effTotal,parsedTotal:rec.total,after11:rec.after11,before11:Math.max(0,effTotal-rec.after11),
+          pct:effTotal>0?(rec.after11/effTotal)*100:null,
           byAttendant:rec.byAttendant||{},rooms:rec.rooms||[],
           assigned:rec.assigned||null
         });

@@ -175,5 +175,21 @@ module.exports = {
     t.eq(Math.round(sunday.avgPct), 80, 'Sunday late share is 8/10 = 80%, materially worse than Monday');
     const monday = byDow[1];
     t.eq(Math.round(monday.avgPct), 10, 'Monday late share is 1/10 = 10%, the contrast Carlos was looking for');
+
+    // ── Carlos's ask: "Total Departures" (and every % built from it) should
+    // measure against the REAL day total already uploaded in Labor (R106/
+    // OCC), not our own count of rows off the Housekeeping Task Sheet —
+    // worked through his own example: 41 late out of a real 99 departures
+    // is 41%, not whatever the PDF-only count would have shown. ──
+    win.saveDeparturesForDate('2026-08-23', 99);
+    const allWithLabor = win.getAllLateDepDays();
+    const sundayWithLabor = allWithLabor.find((d) => d.ds === '2026-08-23');
+    t.eq(sundayWithLabor.total, 99, "Total Departures now reads Labor's real day total (99), not our own PDF row count (6)");
+    t.eq(sundayWithLabor.parsedTotal, 6, "the raw PDF-parsed count is preserved separately as parsedTotal, not lost");
+    t.eq(Math.round(sundayWithLabor.pct * 10) / 10, Math.round((4 / 99) * 1000) / 10, '% at/after 11 AM is now late-count over the REAL Labor total, not our own PDF count');
+    // A day with no Labor departures figure uploaded at all still falls
+    // back to our own PDF count, so the tile is never blank.
+    const mondayNoLabor = allWithLabor.find((d) => d.ds === '2026-08-24');
+    t.eq(mondayNoLabor.total, 10, 'a day with nothing uploaded in Labor falls back to the PDF-parsed total');
   }
 };
