@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.29.2"/>
+<meta name="app-version" content="7.30.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.30.0', date:'2026-08-23',
+    fixes:['Late Departures was missing rooms that hadn\'t been marked "Departed" yet at the moment the report was pulled, even when they were clearly going to be late — Carlos caught it: room 1503 was still "Due Out" but the report already had 16:00 printed as its scheduled checkout, and it wasn\'t showing up anywhere. Turns out a "Due Out" row CAN carry a real time in that same column — the approved/scheduled late checkout on file for that reservation — separate from the actual checkout scan time a "Departed" row has. Both now count. A "Due Out" with no time printed there still stays excluded, since there\'s genuinely no way to know when (or if) it\'ll actually leave.']
+  },
+  {
     v:'7.29.2', date:'2026-08-23',
     changes:['Late Departures room detail: only the checkout TIME turns red for a late room now, not the whole line — Carlos\'s ask, less red on screen. The room number stays in the normal text color either way.']
   },
@@ -8956,9 +8960,12 @@ function _ldCol(x){
    literal label word and reading whatever sits beside it on the same row —
    position-independent of page count or attendant order. */
 /* Returns {reportDate, lateByDs, roomsByAttendant}:
-   - lateByDs: {ds:[{room,depTime,attendant}]} — Departed rooms only, keyed by
-     each room's OWN departure date, same as before (drives the late-checkout
-     detail/detection).
+   - lateByDs: {ds:[{room,depTime,attendant}]} — Departed rooms (actual
+     checkout time) PLUS Due Out rooms that already have a scheduled/
+     approved late-checkout time printed (e.g. room 1503, still occupied
+     but 16:00 already on file) — a still-occupied Due Out with nothing
+     printed there stays excluded, since there's no way to know when it'll
+     actually leave. Keyed by each room's OWN departure date.
    - roomsByAttendant: {attendant: [room,...]} — EVERY room row on the report
      (Departed, Due Out, Stayover, whatever status), regardless of when its
      own reservation happens to depart. Carlos's ask: "el total de cuartos
@@ -9008,7 +9015,15 @@ async function _ldParsePdf(pdf){
       var key=attendant||'(unlabeled)';
       if(!roomsByAttendant[key])roomsByAttendant[key]=[];
       roomsByAttendant[key].push(room);
-      if(resv.indexOf('Departed')!==0)return;
+      /* Departed = actual checkout scan time. A "Due Out" room can ALSO
+         carry a real time here — Carlos found it: room 1503 was still
+         "Due Out" (guest hadn't left yet) but the report already printed
+         16:00 in this same column, the approved/scheduled late checkout
+         on file for that reservation. A "Due Out" with nothing printed
+         here just hasn't been processed yet at report-pull time and is
+         still excluded — there's no way to know when (or if) it'll
+         actually depart, so it stays out rather than guessing. */
+      if(resv.indexOf('Departed')!==0&&resv.indexOf('Due')!==0)return;
       var dt=(bins.deptime||'').trim().replace(/^\*/,'');
       if(!/^\d{1,2}:\d{2}$/.test(dt))return;
       var dd=(bins.depdate||'').trim();

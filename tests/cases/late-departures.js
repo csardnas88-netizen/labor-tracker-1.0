@@ -13,9 +13,12 @@ function fragItem(x, y, str) {
 }
 
 // One page's worth of fragments: an "Instructions"/attendant header row,
-// plus three data rows (one Departed before 11am, one Departed at/after
-// 11am — a real Suite room, 1503 — and one Due Out that's excluded from
-// the LATE-checkout detail but still counts toward rooms assigned).
+// plus four data rows — Departed before 11am, Departed at/after 11am, a
+// still-occupied Due Out with NO printed time (must stay excluded — real
+// example from Carlos's report: no way to know when it'll actually leave),
+// and a still-occupied Due Out WITH a printed time (Carlos's exact catch:
+// room 1503 was "Due Out" but the report already had 16:00 on file as its
+// approved/scheduled late checkout — that belongs in the late list too).
 function buildPageItems(attendantName, y0) {
   const items = [];
   // Header fragments, same on every page of the real report — used to read
@@ -28,12 +31,13 @@ function buildPageItems(attendantName, y0) {
   // Instructions label + attendant name, same row (y = y0 + 40)
   items.push(fragItem(9.1, y0 + 40, 'Instructions'));
   items.push(fragItem(94.5, y0 + 40, attendantName));
-  // Header/table rows below — three data rows. Room 1503 is a real Suite
-  // (LATEDEP_SUITE_ROOMS), on a different floor (15) than 1501/1502.
+  // Header/table rows below. Room 1503 is a real Suite (LATEDEP_SUITE_ROOMS);
+  // 1501/1502/1504 are not. All four are floor 15.
   const rows = [
-    { room: '1501', resv: 'Departed', depdate: '08-23-26', deptime: '07:04' }, // before 11
-    { room: '1502', resv: 'Departed', depdate: '08-23-26', deptime: '12:01' }, // at/after 11
-    { room: '1503', resv: 'Due', resv2: 'Out', depdate: '', deptime: '' },      // excluded from LATE detail, still assigned (Suite)
+    { room: '1501', resv: 'Departed', depdate: '08-23-26', deptime: '07:04' },              // before 11
+    { room: '1502', resv: 'Departed', depdate: '08-23-26', deptime: '12:01' },              // at/after 11
+    { room: '1503', resv: 'Due', resv2: 'Out', depdate: '', deptime: '' },                  // still occupied, no time — excluded from LATE detail, still assigned (Suite)
+    { room: '1504', resv: 'Due', resv2: 'Out', depdate: '08-23-26', deptime: '16:00' },     // still occupied, SCHEDULED late checkout printed — now included
   ];
   rows.forEach((r, i) => {
     const y = y0 - i * 20;
@@ -73,23 +77,27 @@ module.exports = {
     const byDate = result.lateByDs;
     t.assert(Object.keys(byDate).length === 1, 'both synthetic pages report the same departure date');
     const rooms = byDate['2026-08-23'];
-    t.eq(rooms.length, 4, 'Due Out rows are excluded from the LATE detail; only the two Departed rows per page (x2 pages) survive');
+    t.eq(rooms.length, 6, 'Due Out WITH a printed time now counts too: 3 late-detail rows per page (1501/1502/1504) x 2 pages — only 1503 (Due Out, no time) stays excluded');
     const gabRoom = rooms.find((r) => r.attendant === 'Gabriela' && r.room === '1502');
     t.assert(!!gabRoom, 'attendant name is correctly attached to the room from the same page\'s Instructions row');
     t.eq(gabRoom.depTime, '12:01', 'actual departure time is read from the Dep. Time column, not the date column');
+    const scheduledLate = rooms.find((r) => r.attendant === 'Gabriela' && r.room === '1504');
+    t.assert(!!scheduledLate, "Carlos's exact catch: room 1504 (Due Out, still occupied) is now included because it has a scheduled/approved late checkout time printed");
+    t.eq(scheduledLate.depTime, '16:00', "the still-occupied room's scheduled checkout time reads correctly, same column as an actual Departed time");
+    t.assert(!rooms.some((r) => r.room === '1503'), 'room 1503 (Due Out, NO time printed) stays excluded — no way to know when it will actually leave');
 
     // ── roomsByAttendant — Carlos's ask: "el total de cuartos asignados a
-    // limpiarse en ese día" counts EVERY room (Departed AND Due Out), unlike
-    // the late-checkout detail above which is Departed-only ──
-    t.eq(result.roomsByAttendant['Gabriela'].length, 3, "Gabriela's room list includes her Due Out room too, not just her 2 Departed ones");
-    t.eq(result.roomsByAttendant['Evangelina'].length, 3, 'same for Evangelina — 2 Departed + 1 Due Out');
+    // limpiarse en ese día" counts EVERY room (every status), unlike
+    // the late-checkout detail above ──
+    t.eq(result.roomsByAttendant['Gabriela'].length, 4, "Gabriela's room list includes all 4 rows, including both Due Out rooms");
+    t.eq(result.roomsByAttendant['Evangelina'].length, 4, 'same for Evangelina');
 
     // ── _ldSummarizeAssigned / _ldIsSuite / _ldFloorOf — Carlos's ask:
     // floors + Suites + late count together explain a slow day ──
     const summary = win._ldSummarizeAssigned(result.roomsByAttendant['Gabriela']);
-    t.eq(summary.total, 3, 'total rooms assigned, every status');
-    t.eq(summary.floors, 1, 'rooms 1501/1502/1503 are all floor 15 — one floor');
-    t.eq(summary.suites, 1, 'only room 1503 is a real Suite (LATEDEP_SUITE_ROOMS); 1501/1502 are not');
+    t.eq(summary.total, 4, 'total rooms assigned, every status');
+    t.eq(summary.floors, 1, 'rooms 1501-1504 are all floor 15 — one floor');
+    t.eq(summary.suites, 1, 'only room 1503 is a real Suite (LATEDEP_SUITE_ROOMS); 1501/1502/1504 are not');
     t.eq(win._ldFloorOf('2003'), 20, 'floor from a 4-digit room number');
     t.eq(win._ldFloorOf('0605'), 6, "floor from a room number with the hotel's own leading zero");
     t.assert(win._ldIsSuite('1503'), '1503 is on the real Suite list Carlos provided');
@@ -97,20 +105,21 @@ module.exports = {
 
     // ── _ldAggregate ──
     const agg = win._ldAggregate(rooms);
-    t.eq(agg.total, 4, 'total departures counted');
-    t.eq(agg.after11, 2, 'exactly the two 12:01 checkouts count as at/after 11 AM');
+    t.eq(agg.total, 6, 'total departures counted, including the scheduled-late Due Out rooms');
+    t.eq(agg.after11, 4, 'the two 12:01 AND the two 16:00 scheduled checkouts all count as at/after 11 AM');
     t.eq(agg.before11, 2, 'the two 07:04 checkouts count as before 11 AM');
-    t.eq(agg.byAttendant['Gabriela'].total, 2, 'per-attendant breakdown splits by page');
-    t.eq(agg.byAttendant['Gabriela'].after11, 1, 'per-attendant late count is correct');
+    t.eq(agg.byAttendant['Gabriela'].total, 3, 'per-attendant breakdown splits by page (1501/1502/1504)');
+    t.eq(agg.byAttendant['Gabriela'].after11, 2, 'per-attendant late count includes the scheduled Due Out');
 
     // ── _ldGroupByAttendant — Carlos's ask: group the day's detail by
     // attendant (worst-affected first), not a flat chronological list ──
     const grouped = win._ldGroupByAttendant({ rooms: rooms });
     t.eq(grouped.length, 2, 'both attendants who worked the day appear');
-    t.eq(grouped[0].after11, 1, "every attendant here is tied at 1 late room, so order falls back to name");
+    t.eq(grouped[0].after11, 2, "every attendant here is tied at 2 late rooms, so order falls back to name");
     t.eq(grouped[0].attendant, 'Evangelina', 'alphabetical tie-break when after11/total are equal');
-    t.eq(grouped[0].rooms.length, 2, "each attendant's own room list stays intact, sorted by time");
+    t.eq(grouped[0].rooms.length, 3, "each attendant's own room list stays intact, sorted by time");
     t.eq(grouped[0].rooms[0].depTime, '07:04', "an attendant's rooms are sorted earliest-first within her own group");
+    t.eq(grouped[0].rooms[2].depTime, '16:00', "the scheduled-late Due Out room sorts in with everything else by time");
     const lopsided = win._ldGroupByAttendant({ rooms: [
       { room: '1', depTime: '07:00', attendant: 'Ana' },
       { room: '2', depTime: '12:00', attendant: 'Bea' },
@@ -148,7 +157,7 @@ module.exports = {
     win.saveLateDepForDate('2026-08-25', { total: 0, after11: 0, before11: 0, byAttendant: {}, rooms: [], assigned: { Cleo: { total: 6, suites: 2, floors: 3 } } });
 
     const stored = win.getLateDepForDay('2026-08-23');
-    t.eq(stored.total, 4, 'getLateDepForDay reads back exactly what was saved');
+    t.eq(stored.total, 6, 'getLateDepForDay reads back exactly what was saved');
     t.eq(stored.assigned['Gabriela'].suites, 1, "the assigned summary's suites count survives the save round trip too");
 
     const all = win.getAllLateDepDays();
@@ -161,9 +170,9 @@ module.exports = {
     const byDow = win.getLateDepByWeekday(all);
     const sunday = byDow[0]; // Date.getDay() === 0
     t.eq(sunday.n, 2, 'two Sunday reports were logged');
-    t.eq(sunday.totalRooms, 8, 'Sunday totals combine both logged Sundays (4 + 4)');
-    t.eq(sunday.totalLate, 6, 'Sunday late count combines both (2 + 4)');
-    t.eq(Math.round(sunday.avgPct), 75, 'Sunday late share is 6/8 = 75%, materially worse than Monday');
+    t.eq(sunday.totalRooms, 10, 'Sunday totals combine both logged Sundays (6 + 4)');
+    t.eq(sunday.totalLate, 8, 'Sunday late count combines both (4 + 4)');
+    t.eq(Math.round(sunday.avgPct), 80, 'Sunday late share is 8/10 = 80%, materially worse than Monday');
     const monday = byDow[1];
     t.eq(Math.round(monday.avgPct), 10, 'Monday late share is 1/10 = 10%, the contrast Carlos was looking for');
   }
