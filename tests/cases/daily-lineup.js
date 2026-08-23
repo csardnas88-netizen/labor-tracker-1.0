@@ -207,7 +207,7 @@ module.exports = {
     // nobody will open.
     const far = win.dlParseSchedule(scheduleWb(), new Date(2027, 0, 1));
     t.eq(far.count, 0, 'a week far outside the window is not stored at all');
-    win.dlSaveSchedule(SCH);
+    win.dlSaveSchedule(SCH); win.dlSaveScheduleSnapshot(SCH);
 
     // ── Name resolution stays inside its block ──
     t.eq(win.dlLook(day, 'sup', 'Susan'), '1',
@@ -242,13 +242,13 @@ module.exports = {
     const schForHm = win.dlLoadSchedule();
     const dayHm = schForHm.days['2026-08-14'];
     dayHm.gra = dayHm.gra.map((p) => (p[0] === 'Ada' ? ['Ada', 'HOUSEMAN'] : p));
-    win.dlSaveSchedule(schForHm);
+    win.dlSaveSchedule(schForHm); win.dlSaveScheduleSnapshot(schForHm);
     const hmP = win.dlBuildPlan('2026-08-14');
     t.assert(hmP.hm.indexOf('Ada') !== -1,
       'a GRA whose schedule cell reads HOUSEMAN is placed in Houseman, not left among the room attendants');
     const schRestoreHm = win.dlLoadSchedule();
     schRestoreHm.days['2026-08-14'].gra = schRestoreHm.days['2026-08-14'].gra.map((p) => (p[0] === 'Ada' ? ['Ada', '1'] : p));
-    win.dlSaveSchedule(schRestoreHm);
+    win.dlSaveSchedule(schRestoreHm); win.dlSaveScheduleSnapshot(schRestoreHm);
 
     // ── Sections: owners placed, the rest flagged, nothing invented ──
     t.eq(P.gra['7th'], 'Debora', 'an owner who is in gets her own section');
@@ -608,7 +608,7 @@ module.exports = {
       if (p[0] === 'Yesenia') return ['Yesenia', '1']; // not covering this day, isolates the scenario to Paty alone
       return p;
     });
-    win.dlSaveSchedule(schForDup);
+    win.dlSaveSchedule(schForDup); win.dlSaveScheduleSnapshot(schForDup);
     const dupP = win.dlBuildPlan('2026-08-14');
     t.eq(dupP.hm_pm.join(','), 'Paty',
       'Paty shows up once, not twice, even though both the direct PM Houseman row and the Turndown HOUSEMAN cover cell both point at her');
