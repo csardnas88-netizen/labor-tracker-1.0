@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.25.4"/>
+<meta name="app-version" content="7.25.5"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4556,6 +4556,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.25.5', date:'2026-08-23',
+    fixes:['Fixed a real data-loss bug behind Carlos\'s report: Houseman showing empty on the Daily Lineup for today AND tomorrow, even right after re-uploading a corrected "Section assignment" file with a confirmed success toast. Traced by replicating the app\'s own parser against Carlos\'s real files node-side — the parsing was correct the whole time. The actual cause: with two devices/tabs open, the Section assignment sync pull had NO protection against a stale device clobbering a fresh upload — it overwrote the local copy with whatever Supabase had, unconditionally, unlike the Schedule Draft\'s own sync (which already compares "is this actually newer" before overwriting). A stale device\'s old Houseman list was winning the race every time. Section assignment now carries its own savedAt and gets the identical last-write-wins protection.']
+  },
+  {
     v:'7.25.4', date:'2026-08-22',
     fixes:['The shift times added to the Excel export in 7.25.3 looked "incomplete" on Carlos\'s work computer (fine on his laptop) — two likely causes fixed: the day columns (width 13) were too narrow for an 18-character time string like "8:15 AM - 4:45 PM", forcing it to wrap onto two lines and center awkwardly, and the en dash character in the time separator doesn\'t render the same across every Excel build. Columns widened to fit the longest time on one line, and every shift time now uses a plain hyphen instead of an en dash.']
   },
@@ -7521,7 +7525,17 @@ function _syncFromSheetsPull(){
            these are single uploaded documents, not records built up
            field by field, so there is nothing to merge. */
         if(key==='dl_sections'&&all[key]&&typeof all[key]==='object'){
-          safeSetItem('hk_dl_sections',JSON.stringify(all[key])); updated=true;
+          /* Carlos's real bug: two devices open, this pull used to
+             overwrite unconditionally — a stale device's own sync
+             could silently clobber a fresh re-upload moments after it
+             landed. Same last-write-wins-by-savedAt guard dl_schedule
+             already had; a record saved before this fix has no
+             savedAt and simply loses to anything newer, same as
+             before for that one transition. */
+          var localSec=dlLoadSections();
+          if(!localSec||String(all[key].savedAt||'')>String(localSec.savedAt||'')){
+            safeSetItem('hk_dl_sections',JSON.stringify(all[key])); updated=true;
+          }
         }
         if(key==='dl_schedule'&&all[key]&&all[key].days){
           var localSch=dlLoadSchedule();
@@ -18740,7 +18754,16 @@ function dlIn(v){ return String(v||'').trim()==='1'; }
 
 /* ── storage ── */
 function dlLoadSections(){ try{var s=localStorage.getItem('hk_dl_sections');return s?JSON.parse(s):null;}catch(e){return null;} }
-function dlSaveSections(o){ safeSetItem('hk_dl_sections',JSON.stringify(o)); try{supaPut('dl_sections',o);}catch(e){} }
+/* savedAt stamped here (not just on dl_schedule) — Carlos's real bug:
+   with two devices open, a re-upload here could be silently clobbered
+   moments later by a stale device's own sync pull, since the pull
+   handler used to overwrite dl_sections unconditionally with whatever
+   Supabase had, no "is this actually newer" check at all (unlike
+   dl_schedule, which already compared savedAt). Traced by replicating
+   the app's own parser against Carlos's real files node-side: the
+   correct Houseman list computed cleanly every time, proving the bug
+   was in which copy won the sync race, not in the parsing. */
+function dlSaveSections(o){ o.savedAt=new Date().toISOString(); safeSetItem('hk_dl_sections',JSON.stringify(o)); try{supaPut('dl_sections',o);}catch(e){} }
 function dlLoadSchedule(){ try{var s=localStorage.getItem('hk_dl_schedule');return s?JSON.parse(s):null;}catch(e){return null;} }
 function dlSaveSchedule(o){ safeSetItem('hk_dl_schedule',JSON.stringify(o)); try{supaPut('dl_schedule',o);}catch(e){} }
 /* The blank lineup form ships WITH the app (./lineup-template.xlsx) and
