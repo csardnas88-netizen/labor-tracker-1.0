@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.29.0"/>
+<meta name="app-version" content="7.29.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.29.1', date:'2026-08-23',
+    changes:['Late Departures attendant cards restyled per Carlos\'s feedback: the dark cream card background and red border he didn\'t like are gone (cards are now plain white with the app\'s standard border, same as every other stat tile in the app), and the rooms/floors/suites line is bigger and darker (was a barely-visible light gray) so it actually reads at a glance. Severity is still shown, just via the late-count text color alone (red when she has any) instead of a heavy red border too.']
+  },
   {
     v:'7.29.0', date:'2026-08-23',
     features:['Late Departures cards now also show how many floors and Suites each attendant had that day, next to her rooms-assigned and late-checkout counts — Carlos\'s ask: a Suite takes longer to clean than a standard room, and more floors means more time lost walking/pushing the cart between them, so floors + Suites + late count together explain a slow day better than late checkouts alone. Suite rooms are matched against the hotel\'s own Housekeeping Detail Report (Room Type KSTE/KSTA/DSTE/OZZY/OZZA/EXEC/LUXS/PENT/PENA/PRES/LUXR/SUIT/VPRE/OZZZ) Carlos provided — a fixed list of the building\'s Suite inventory, not something that changes report to report.']
@@ -9172,9 +9176,9 @@ function renderLateDep(){
         var attKey=d.ds+'|'+a.attendant;
         var attOpen=!!lateDepAttExpanded[attKey];
         var nameJs=a.attendant.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        html+='<div onclick="toggleLateDepAttendant(\''+d.ds+'\',\''+nameJs+'\')" style="background:var(--surface);border:1px solid '+(a.after11>0?'var(--red)':'var(--border)')+';border-radius:8px;padding:8px 10px;cursor:pointer;'+(attOpen?'grid-column:1/-1;':'')+'">';
+        html+='<div onclick="toggleLateDepAttendant(\''+d.ds+'\',\''+nameJs+'\')" style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;'+(attOpen?'grid-column:1/-1;':'')+'">';
         html+='<div style="font-size:10.5px;font-weight:700;color:var(--text1);">'+escHtml(a.attendant)+'</div>';
-        html+='<div style="font-size:9px;color:var(--text3);margin-top:2px;">'+(a.assigned?a.assigned.total+' room'+(a.assigned.total===1?'':'s')+' &middot; '+a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
+        html+='<div style="font-size:11px;color:var(--text2);font-weight:600;margin-top:2px;">'+(a.assigned?a.assigned.total+' room'+(a.assigned.total===1?'':'s')+' &middot; '+a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
         html+='<div style="font-size:10px;font-weight:700;margin-top:3px;color:'+(a.after11>0?'var(--red)':'var(--text3)')+';">'+a.after11+' of '+a.total+' at/after 11 AM</div>';
         if(attOpen){
           html+='<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">';
