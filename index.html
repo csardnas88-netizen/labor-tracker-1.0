@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.28.0"/>
+<meta name="app-version" content="7.29.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,14 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.29.0', date:'2026-08-23',
+    features:['Late Departures cards now also show how many floors and Suites each attendant had that day, next to her rooms-assigned and late-checkout counts — Carlos\'s ask: a Suite takes longer to clean than a standard room, and more floors means more time lost walking/pushing the cart between them, so floors + Suites + late count together explain a slow day better than late checkouts alone. Suite rooms are matched against the hotel\'s own Housekeeping Detail Report (Room Type KSTE/KSTA/DSTE/OZZY/OZZA/EXEC/LUXS/PENT/PENA/PRES/LUXR/SUIT/VPRE/OZZZ) Carlos provided — a fixed list of the building\'s Suite inventory, not something that changes report to report.']
+  },
+  {
+    v:'7.28.1', date:'2026-08-23',
+    changes:['Late Departures: a logged day\'s attendant breakdown is now a compact card grid instead of one tall stacked list — Carlos\'s ask, since the old layout left a lot of dead white space in the middle of the screen for how few attendants fit on it. Each card shows just her name, rooms assigned, and late count by default; tap a card to expand it in place for her room-by-room detail, same as before.']
+  },
+  {
     v:'7.28.0', date:'2026-08-23',
     features:['Late Departures now shows each attendant\'s total rooms assigned that day next to her name, not just her late-checkout count — Carlos\'s ask ("el total de cuartos asignados a limpiarse en ese día"). This reads EVERY room on her page of the report regardless of status (Departed, Due Out, Stayover included), unlike the late-checkout detection itself, which stays Departed-only per his earlier ask to exclude Stayover. A day with zero late checkouts is no longer dropped from the log if it still has a real assigned-rooms count.']
   },
@@ -8766,6 +8774,42 @@ function _dndShortDate(ds){
    "Late" = checked out at/after 11:00 AM, the hotel's standard checkout
    time — the actual cutoff before a room even becomes cleanable. */
 var LATEDEP_CUTOFF_HOUR=11;
+/* Every Suite-category room in the hotel (Housekeeping Detail Report,
+   filtered to Room Type KSTE/KSTA/DSTE/OZZY/OZZA/EXEC/LUXS/PENT/PENA/
+   PRES/LUXR/SUIT/VPRE/OZZZ, pulled 2026-08-23) — Carlos's ask: a Suite
+   takes a Room Attendant longer to clean than a standard room, so it's
+   part of what explains a slow day, alongside late checkouts. This is
+   the hotel's physical room inventory, not something that changes report
+   to report, so it's hardcoded here rather than re-uploaded every time —
+   same room-number strings (zero-padded) the Task Sheet itself prints. */
+var LATEDEP_SUITE_ROOMS=['0205','0215','0303','0305','0315','0321','0322','0323','0324','0403','0405','0415','0416','0421','0422','0423','0424','0503','0505','0515','0516','0521','0522','0523','0524','0603','0605','0615','0616','0621','0622','0623','0624','0703','0705','0715','0716','0721','0722','0723','0724','0803','0805','0815','0816','0821','0822','0823','0824','0903','0905','0915','0916','0921','0922','0923','0924','1003','1005','1015','1016','1021','1022','1023','1024','1103','1105','1203','1205','1303','1305','1403','1405','1503','1505','1603','1605','1703','1705','1803','1805','1903','1905','2003','2005','2103','2105','2203','2205'];
+var LATEDEP_SUITE_SET=null;
+function _ldIsSuite(room){
+  if(!LATEDEP_SUITE_SET){
+    LATEDEP_SUITE_SET={};
+    LATEDEP_SUITE_ROOMS.forEach(function(r){LATEDEP_SUITE_SET[r]=true;});
+  }
+  return !!LATEDEP_SUITE_SET[room];
+}
+/* Floor from a 3-4 digit room number: "2003"->20, "0605"->6, "805"->8 —
+   the report always prints room numbers with the hotel's own leading
+   zeros, so this holds regardless of digit count. */
+function _ldFloorOf(room){
+  return Math.floor(parseInt(room,10)/100);
+}
+/* {total, suites, floors} for one attendant's full room list that day —
+   every status (Departed/Due Out/Stayover), same source as "rooms
+   assigned". Carlos's ask: floors + suites + late count together tell the
+   real story behind a slow day, not late checkouts alone. */
+function _ldSummarizeAssigned(rooms){
+  var floors={};
+  var suites=0;
+  (rooms||[]).forEach(function(room){
+    floors[_ldFloorOf(room)]=true;
+    if(_ldIsSuite(room))suites++;
+  });
+  return {total:(rooms||[]).length,suites:suites,floors:Object.keys(floors).length};
+}
 
 function getLateDepForDay(ds){
   var mk=ds.substring(0,7);
@@ -8796,14 +8840,14 @@ function getAllLateDepDays(){
       var ld=(mData&&mData.lateDep)||{};
       Object.keys(ld).forEach(function(ds){
         var rec=ld[ds];
-        if(!rec||(!rec.total&&!rec.totalAssigned))return;
+        if(!rec||(!rec.total&&!rec.assigned))return;
         var d=parseLocalDate(ds);
         out.push({
           ds:ds,date:d,dow:d.getDay(),
           total:rec.total,after11:rec.after11,before11:rec.before11,
           pct:rec.total>0?(rec.after11/rec.total)*100:null,
           byAttendant:rec.byAttendant||{},rooms:rec.rooms||[],
-          totalAssigned:rec.totalAssigned||null
+          assigned:rec.assigned||null
         });
       });
     }catch(e){}
@@ -8835,7 +8879,7 @@ function getLateDepByWeekday(days){
 function _ldGroupByAttendant(d){
   var byName={};
   function ensure(key){
-    if(!byName[key])byName[key]={attendant:key,total:0,after11:0,rooms:[],totalAssigned:null};
+    if(!byName[key])byName[key]={attendant:key,total:0,after11:0,rooms:[],assigned:null};
     return byName[key];
   }
   (d.rooms||[]).forEach(function(r){
@@ -8846,12 +8890,13 @@ function _ldGroupByAttendant(d){
     if(h>=LATEDEP_CUTOFF_HOUR)a.after11++;
     a.rooms.push(r);
   });
-  /* Total cuartos asignados a limpiarse ese día (every status, not just
-     Departed/late checkouts — Carlos's ask). An attendant whose rooms were
-     ALL Stayover that day still worked and still gets listed, even though
-     she has nothing in the late-departure detail above. */
-  Object.keys(d.totalAssigned||{}).forEach(function(key){
-    ensure(key).totalAssigned=d.totalAssigned[key];
+  /* Rooms assigned/suites/floors that day (every status, not just
+     Departed/late checkouts — Carlos's ask: floors + suites + late count
+     together tell the real story). An attendant whose rooms were ALL
+     Stayover that day still worked and still gets listed, even though she
+     has nothing in the late-departure detail above. */
+  Object.keys(d.assigned||{}).forEach(function(key){
+    ensure(key).assigned=d.assigned[key];
   });
   var out=Object.keys(byName).map(function(k){return byName[k];});
   out.forEach(function(a){a.rooms.sort(function(x,y){return x.depTime.localeCompare(y.depTime);});});
@@ -8902,22 +8947,23 @@ function _ldCol(x){
    repeats it in (right under the "Instructions" label) by finding that
    literal label word and reading whatever sits beside it on the same row —
    position-independent of page count or attendant order. */
-/* Returns {reportDate, lateByDs, totalByAttendant}:
+/* Returns {reportDate, lateByDs, roomsByAttendant}:
    - lateByDs: {ds:[{room,depTime,attendant}]} — Departed rooms only, keyed by
      each room's OWN departure date, same as before (drives the late-checkout
      detail/detection).
-   - totalByAttendant: {attendant: count} — EVERY room row on the report
+   - roomsByAttendant: {attendant: [room,...]} — EVERY room row on the report
      (Departed, Due Out, Stayover, whatever status), regardless of when its
      own reservation happens to depart. Carlos's ask: "el total de cuartos
      asignados a limpiarse en ese día" — a Stayover still gets cleaned that
      day, it just isn't a checkout, so it counts here even though it's
-     excluded from the late-departure math itself (his earlier ask). Keyed
-     to the report's OWN date (from its "Task Date From" header), since
-     that's the day being staffed — not each room's individual reservation
-     dates, which for a Stayover point at some future checkout. */
+     excluded from the late-departure math itself (his earlier ask). Feeds
+     _ldSummarizeAssigned (total/suites/floors), keyed to the report's OWN
+     date (from its "Task Date From" header) since that's the day being
+     staffed — not each room's individual reservation dates, which for a
+     Stayover point at some future checkout. */
 async function _ldParsePdf(pdf){
   var byDate={};
-  var totalByAttendant={};
+  var roomsByAttendant={};
   var reportDate=null;
   for(var p=1;p<=pdf.numPages;p++){
     var page=await pdf.getPage(p);
@@ -8952,7 +8998,8 @@ async function _ldParsePdf(pdf){
       var resv=(bins.resv||'').trim();
       if(!resv)return;
       var key=attendant||'(unlabeled)';
-      totalByAttendant[key]=(totalByAttendant[key]||0)+1;
+      if(!roomsByAttendant[key])roomsByAttendant[key]=[];
+      roomsByAttendant[key].push(room);
       if(resv.indexOf('Departed')!==0)return;
       var dt=(bins.deptime||'').trim().replace(/^\*/,'');
       if(!/^\d{1,2}:\d{2}$/.test(dt))return;
@@ -8964,7 +9011,7 @@ async function _ldParsePdf(pdf){
       byDate[ds].push({room:room,depTime:dt,attendant:attendant});
     });
   }
-  return {reportDate:reportDate,lateByDs:byDate,totalByAttendant:totalByAttendant};
+  return {reportDate:reportDate,lateByDs:byDate,roomsByAttendant:roomsByAttendant};
 }
 function _ldAggregate(rooms){
   var total=0,after11=0,byAtt={};
@@ -8998,7 +9045,13 @@ function handleLateDepUpload(input){
         if(!days.length){showToast('❌ No departures found in this report');return;}
         days.forEach(function(ds){
           var agg=_ldAggregate(byDate[ds]||[]);
-          if(ds===result.reportDate)agg.totalAssigned=result.totalByAttendant;
+          if(ds===result.reportDate){
+            var assigned={};
+            Object.keys(result.roomsByAttendant).forEach(function(name){
+              assigned[name]=_ldSummarizeAssigned(result.roomsByAttendant[name]);
+            });
+            agg.assigned=assigned;
+          }
           saveLateDepForDate(ds,agg);
         });
         showToast('✓ Late Departures loaded — '+days.length+' day'+(days.length===1?'':'s'));
@@ -9021,6 +9074,17 @@ function _destroyLateDepCharts(){
 var lateDepDayExpanded={};
 function toggleLateDepDay(ds){
   lateDepDayExpanded[ds]=!lateDepDayExpanded[ds];
+  renderLateDep();
+}
+/* Per-attendant card expand state, keyed ds+'|'+name — a day can have a
+   dozen+ attendants, so each card stays compact (name + counts) until
+   tapped, instead of every room-by-room detail printing at once. Carlos's
+   ask: the old always-expanded stacked list left a lot of dead white space
+   for how few attendants fit on screen. */
+var lateDepAttExpanded={};
+function toggleLateDepAttendant(ds,name){
+  var key=ds+'|'+name;
+  lateDepAttExpanded[key]=!lateDepAttExpanded[key];
   renderLateDep();
 }
 function renderLateDep(){
@@ -9102,21 +9166,29 @@ function renderLateDep(){
     html+='<div style="text-align:right;color:'+(d.pct>=40?'var(--red)':'var(--gd)')+';font-weight:700;">'+(d.pct!==null?d.pct.toFixed(0)+'%':'&#8212;')+'</div>';
     html+='</div>';
     if(open){
-      html+='<div style="padding:0 16px 12px 38px;">';
+      html+='<div style="padding:0 16px 12px 16px;">';
+      html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;">';
       _ldGroupByAttendant(d).forEach(function(a){
-        html+='<div style="margin-top:8px;">';
-        html+='<div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;color:var(--text1);">'
-          +'<span>'+escHtml(a.attendant)+(a.totalAssigned!==null?' &middot; '+a.totalAssigned+' room'+(a.totalAssigned===1?'':'s')+' assigned':'')+'</span>'
-          +'<span style="color:'+(a.after11>0?'var(--red)':'var(--text3)')+';">'+a.after11+' of '+a.total+' at/after 11 AM</span></div>';
-        a.rooms.forEach(function(r){
-          var h=parseInt(r.depTime.split(':')[0],10);
-          var late=h>=LATEDEP_CUTOFF_HOUR;
-          html+='<div style="display:flex;justify-content:space-between;padding:2px 0 2px 10px;font-size:10px;color:'+(late?'var(--red)':'var(--text2)')+';">'
-            +'<span>Room '+escHtml(r.room)+'</span><span style="font-weight:700;">'+escHtml(r.depTime)+'</span></div>';
-        });
+        var attKey=d.ds+'|'+a.attendant;
+        var attOpen=!!lateDepAttExpanded[attKey];
+        var nameJs=a.attendant.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        html+='<div onclick="toggleLateDepAttendant(\''+d.ds+'\',\''+nameJs+'\')" style="background:var(--surface);border:1px solid '+(a.after11>0?'var(--red)':'var(--border)')+';border-radius:8px;padding:8px 10px;cursor:pointer;'+(attOpen?'grid-column:1/-1;':'')+'">';
+        html+='<div style="font-size:10.5px;font-weight:700;color:var(--text1);">'+escHtml(a.attendant)+'</div>';
+        html+='<div style="font-size:9px;color:var(--text3);margin-top:2px;">'+(a.assigned?a.assigned.total+' room'+(a.assigned.total===1?'':'s')+' &middot; '+a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
+        html+='<div style="font-size:10px;font-weight:700;margin-top:3px;color:'+(a.after11>0?'var(--red)':'var(--text3)')+';">'+a.after11+' of '+a.total+' at/after 11 AM</div>';
+        if(attOpen){
+          html+='<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">';
+          a.rooms.forEach(function(r){
+            var h=parseInt(r.depTime.split(':')[0],10);
+            var late=h>=LATEDEP_CUTOFF_HOUR;
+            html+='<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;color:'+(late?'var(--red)':'var(--text2)')+';">'
+              +'<span>Room '+escHtml(r.room)+'</span><span style="font-weight:700;">'+escHtml(r.depTime)+'</span></div>';
+          });
+          html+='</div>';
+        }
         html+='</div>';
       });
-      html+='</div>';
+      html+='</div></div>';
     }
     html+='</div>';
   });
