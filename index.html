@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.32.0"/>
+<meta name="app-version" content="7.33.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,14 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.33.0', date:'2026-08-23',
+    changes:['Late Departures: "checked out" switched from green to gold (Carlos\'s ask, matching "occupied"), and the expanded room list under each attendant now also lists her Stayover rooms — gold room number, no checkout time since there isn\'t one — right alongside her checked-out rooms, so the two are easy to tell apart in the same list instead of only in the summary counts.']
+  },
+  {
+    v:'7.32.1', date:'2026-08-23',
+    fixes:['Fixed Late Departures silently dropping a whole room row whenever the report flagged it with one of its own legend markers (@ Sleep, # Skip, ! Arrival), printed just left of the room number — Carlos caught it: Sandy\'s page had 13 rooms in the real report but the app only counted 12. The marker was getting concatenated onto the room number ("! 2107" instead of "2107"), which failed the room-number check and threw the entire row out. That marker column is now ignored on its own instead of being merged into the room number.']
+  },
+  {
     v:'7.32.0', date:'2026-08-23',
     features:['Late Departures attendant cards now split her rooms into "checked out" (green) and "occupied" (gold) — Carlos\'s ask, to see how many Stayovers she was carrying that day alongside the floors/suites/late-checkout numbers already there. "Occupied" is a Stayover room (the guest isn\'t leaving); everything else — Departed or Due Out — counts as checked out. Colors follow the app\'s existing scheme rather than introducing a new one.']
   },
@@ -8829,13 +8837,18 @@ function _ldFloorOf(room){
 function _ldSummarizeAssigned(rooms){
   var floors={};
   var suites=0,occupied=0;
+  var stayoverRooms=[];
   (rooms||[]).forEach(function(r){
     floors[_ldFloorOf(r.room)]=true;
     if(_ldIsSuite(r.room))suites++;
-    if((r.resv||'').indexOf('Stayover')===0)occupied++;
+    if((r.resv||'').indexOf('Stayover')===0){occupied++;stayoverRooms.push(r.room);}
   });
   var total=(rooms||[]).length;
-  return {total:total,suites:suites,floors:Object.keys(floors).length,occupied:occupied,checkedOut:total-occupied};
+  /* stayoverRooms — the actual room numbers, not just the count — so the
+     expanded card detail can list them alongside the checked-out rooms,
+     colored separately (Carlos's ask: tell the two apart at a glance
+     inside the same room list, not just in the summary counts). */
+  return {total:total,suites:suites,floors:Object.keys(floors).length,occupied:occupied,checkedOut:total-occupied,stayoverRooms:stayoverRooms};
 }
 
 function getLateDepForDay(ds){
@@ -8969,6 +8982,14 @@ function _ldRowsFromPage(items){
   return rows;
 }
 function _ldCol(x){
+  /* x<15 is the report's own legend-marker column (@ Sleep, # Skip,
+     ! Arrival — printed just left of the room number on a flagged row,
+     e.g. room 2107 marked "!" for a same-day arrival). Concatenating that
+     marker into the room-number bin broke the room regex match below and
+     silently dropped the ENTIRE row — Carlos caught it: Sandy's page had
+     13 rooms but the app only counted 12. Room numbers themselves always
+     start at x0=23, well clear of this. */
+  if(x<15)return 'skip';
   if(x<60)return 'room';
   if(x<195)return 'skip';
   if(x<260)return 'resv';
@@ -9228,7 +9249,7 @@ function renderLateDep(){
         html+='<div style="font-size:11px;color:var(--text2);font-weight:600;margin-top:2px;">'+(a.assigned?a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
         if(a.assigned){
           html+='<div style="font-size:11px;font-weight:600;margin-top:1px;">'
-            +'<span style="color:var(--green);">'+a.assigned.checkedOut+' checked out</span>'
+            +'<span style="color:var(--gd);">'+a.assigned.checkedOut+' checked out</span>'
             +'<span style="color:var(--text3);"> &middot; </span>'
             +'<span style="color:var(--gd);">'+a.assigned.occupied+' occupied</span></div>';
         }
@@ -9241,6 +9262,16 @@ function renderLateDep(){
             html+='<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;color:var(--text2);">'
               +'<span>Room '+escHtml(r.room)+'</span><span style="font-weight:700;color:'+(late?'var(--red)':'var(--text2)')+';">'+escHtml(r.depTime)+'</span></div>';
           });
+          /* Stayover rooms — gold room number, no checkout time (there
+             isn't one; the guest isn't leaving) — Carlos's ask: tell
+             checked-out and occupied rooms apart at a glance in the same
+             list, not just in the summary counts above. */
+          if(a.assigned&&a.assigned.stayoverRooms){
+            a.assigned.stayoverRooms.forEach(function(room){
+              html+='<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;">'
+                +'<span style="color:var(--gd);font-weight:700;">Room '+escHtml(room)+'</span><span style="color:var(--gd);">Stayover</span></div>';
+            });
+          }
           html+='</div>';
         }
         html+='</div>';

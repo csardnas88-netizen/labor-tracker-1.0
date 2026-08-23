@@ -32,16 +32,23 @@ function buildPageItems(attendantName, y0) {
   items.push(fragItem(9.1, y0 + 40, 'Instructions'));
   items.push(fragItem(94.5, y0 + 40, attendantName));
   // Header/table rows below. Rooms 1503/1505 are real Suites
-  // (LATEDEP_SUITE_ROOMS); 1501/1502/1504 are not. All five are floor 15.
+  // (LATEDEP_SUITE_ROOMS); 1501/1502/1504/1506 are not. All six are floor 15.
+  // Room 1506 carries the report's own "!" (Arrival) legend marker right
+  // next to its room number — Carlos's real bug: Sandy's page had 13 rooms
+  // but the app only counted 12, because a marker like this used to get
+  // concatenated onto the room number and fail the room-number match,
+  // silently dropping the whole row.
   const rows = [
     { room: '1501', resv: 'Departed', depdate: '08-23-26', deptime: '07:04' },              // before 11
     { room: '1502', resv: 'Departed', depdate: '08-23-26', deptime: '12:01' },              // at/after 11
     { room: '1503', resv: 'Due', resv2: 'Out', depdate: '', deptime: '' },                  // still occupied, no time — excluded from LATE detail, still assigned (Suite)
     { room: '1504', resv: 'Due', resv2: 'Out', depdate: '08-23-26', deptime: '16:00' },     // still occupied, SCHEDULED late checkout printed — now included
     { room: '1505', resv: 'Stayover', depdate: '', deptime: '' },                           // guest staying another night — "occupied" (Suite too)
+    { room: '1506', resv: 'Arrived', depdate: '', deptime: '', marker: '!' },               // flagged row — must still be counted
   ];
   rows.forEach((r, i) => {
     const y = y0 - i * 20;
+    if (r.marker) items.push(fragItem(9.0, y, r.marker)); // legend-marker column, left of the room number
     items.push(fragItem(23, y, r.room));           // room bin (<60)
     items.push(fragItem(208, y, r.resv));           // resv bin (195-260)
     if (r.resv2) items.push(fragItem(225, y, r.resv2));
@@ -90,19 +97,22 @@ module.exports = {
     // ── roomsByAttendant — Carlos's ask: "el total de cuartos asignados a
     // limpiarse en ese día" counts EVERY room (every status), unlike
     // the late-checkout detail above ──
-    t.eq(result.roomsByAttendant['Gabriela'].length, 5, "Gabriela's room list includes all 5 rows, including the Stayover");
-    t.eq(result.roomsByAttendant['Evangelina'].length, 5, 'same for Evangelina');
+    t.eq(result.roomsByAttendant['Gabriela'].length, 6, "Gabriela's room list includes all 6 rows, including the flagged one (1506)");
+    t.eq(result.roomsByAttendant['Evangelina'].length, 6, 'same for Evangelina');
     t.eq(result.roomsByAttendant['Gabriela'][0].resv, 'Departed', 'roomsByAttendant keeps each room\'s reservation status alongside its number');
+    t.assert(result.roomsByAttendant['Gabriela'].some((r) => r.room === '1506'), "Carlos's real bug: a room flagged with the report's own legend marker (!/@/#) next to its number is no longer silently dropped");
 
     // ── _ldSummarizeAssigned / _ldIsSuite / _ldFloorOf — Carlos's ask:
     // floors + Suites + late count together explain a slow day, and split
     // "occupied" (Stayover) from "checked out" (everything else) ──
     const summary = win._ldSummarizeAssigned(result.roomsByAttendant['Gabriela']);
-    t.eq(summary.total, 5, 'total rooms assigned, every status');
-    t.eq(summary.floors, 1, 'rooms 1501-1505 are all floor 15 — one floor');
-    t.eq(summary.suites, 2, 'rooms 1503 and 1505 are real Suites (LATEDEP_SUITE_ROOMS); 1501/1502/1504 are not');
+    t.eq(summary.total, 6, 'total rooms assigned, every status, including the flagged room');
+    t.eq(summary.floors, 1, 'rooms 1501-1506 are all floor 15 — one floor');
+    t.eq(summary.suites, 2, 'rooms 1503 and 1505 are real Suites (LATEDEP_SUITE_ROOMS); the rest are not');
     t.eq(summary.occupied, 1, 'only room 1505 (Stayover) counts as occupied');
-    t.eq(summary.checkedOut, 4, 'the other 4 rooms (Departed or Due Out) count as checked out');
+    t.eq(summary.checkedOut, 5, 'the other 5 rooms (Departed, Due Out, or Arrived) count as checked out');
+    t.eq(summary.stayoverRooms.length, 1, 'stayoverRooms lists the actual room numbers, not just a count');
+    t.eq(summary.stayoverRooms[0], '1505', 'the room 1505 (Stayover) is the one listed — Carlos\'s ask: show which rooms specifically, colored apart from checked-out rooms');
     t.eq(win._ldFloorOf('2003'), 20, 'floor from a 4-digit room number');
     t.eq(win._ldFloorOf('0605'), 6, "floor from a room number with the hotel's own leading zero");
     t.assert(win._ldIsSuite('1503'), '1503 is on the real Suite list Carlos provided');
