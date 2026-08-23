@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.27.0"/>
+<meta name="app-version" content="7.27.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.27.1', date:'2026-08-23',
+    changes:['Late Departures: a logged day\'s detail is now grouped by attendant (worst-affected first, every attendant who worked that day, even with zero late rooms) instead of one flat chronological room list — Carlos\'s ask, since what he actually wants to read is how many rooms got away from EACH woman\'s assignment late, not a room-by-room timeline. Each attendant still shows the same room/time detail as before, just grouped under her name.']
+  },
+  {
     v:'7.27.0', date:'2026-08-23',
     features:['New "Late Departures" section (in the sidebar under Reports): upload the hotel\'s Housekeeping Task Sheet (OperaPrint) and the app reads which rooms actually checked out at or after 11 AM — the hotel\'s standard checkout time — and which day of the week runs heaviest on them. Carlos\'s ask: Sundays run heavy on late checkouts (fewer guests under a lease Departure clause, plus rooms already running late), which compresses Room Attendant cleaning into the back half of their shift and drags that day\'s labor standard down — this turns that into real evidence for the labor meeting instead of an assertion. Deliberately reads only room number, checkout time, and the attendant heading each page\'s block — never the guest-name column that same report has, matching a privacy concern Carlos raised before sending a sample. Read-only: never feeds into any Unifocus budget math, same treatment as DNDs.']
   },
@@ -8817,6 +8821,30 @@ function getLateDepByWeekday(days){
   return buckets;
 }
 
+/* Per-day drill-down, grouped by attendant instead of one flat chronological
+   list — Carlos's ask: he wants to read "how many rooms got away from HER
+   assignment late" per woman, not a room-by-room timeline. Every attendant
+   who worked that day appears (even with zero late rooms), worst-affected
+   first; each attendant's own rooms stay in the same room/time-of-day
+   detail the flat list already had, just grouped under her name. */
+function _ldGroupByAttendant(d){
+  var byName={};
+  (d.rooms||[]).forEach(function(r){
+    var key=r.attendant||'(unlabeled)';
+    if(!byName[key])byName[key]={attendant:key,total:0,after11:0,rooms:[]};
+    byName[key].total++;
+    var h=parseInt(r.depTime.split(':')[0],10);
+    if(h>=LATEDEP_CUTOFF_HOUR)byName[key].after11++;
+    byName[key].rooms.push(r);
+  });
+  var out=Object.keys(byName).map(function(k){return byName[k];});
+  out.forEach(function(a){a.rooms.sort(function(x,y){return x.depTime.localeCompare(y.depTime);});});
+  out.sort(function(a,b){
+    return b.after11-a.after11||b.total-a.total||a.attendant.localeCompare(b.attendant);
+  });
+  return out;
+}
+
 /* ── PDF parsing ──
    The report prints one fixed-width table per attendant block, repeated
    page after page — Room No / Room Status / Section AM / Section PM /
@@ -9015,7 +9043,7 @@ function renderLateDep(){
   html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">';
   html+='<div style="background:var(--navy);padding:12px 18px;">';
   html+='<div style="font-size:13px;font-weight:700;color:#fff;">&#128197; Every logged day</div>';
-  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+days.length+' day'+(days.length===1?'':'s')+', newest first — tap a day for the room-by-room breakdown</div>';
+  html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+days.length+' day'+(days.length===1?'':'s')+', newest first — tap a day for the breakdown by attendant</div>';
   html+='</div>';
   html+='<div style="display:grid;grid-template-columns:1.3fr 70px 90px;gap:6px;padding:7px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">';
   html+='<div>Date</div><div style="text-align:right;">Depart.</div><div style="text-align:right;">11 AM+</div></div>';
@@ -9029,11 +9057,18 @@ function renderLateDep(){
     html+='</div>';
     if(open){
       html+='<div style="padding:0 16px 12px 38px;">';
-      d.rooms.slice().sort(function(a,b){return a.depTime.localeCompare(b.depTime);}).forEach(function(r){
-        var h=parseInt(r.depTime.split(':')[0],10);
-        var late=h>=LATEDEP_CUTOFF_HOUR;
-        html+='<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:10.5px;color:'+(late?'var(--red)':'var(--text2)')+';">'
-          +'<span>Room '+escHtml(r.room)+(r.attendant?' &middot; '+escHtml(r.attendant):'')+'</span><span style="font-weight:700;">'+escHtml(r.depTime)+'</span></div>';
+      _ldGroupByAttendant(d).forEach(function(a){
+        html+='<div style="margin-top:8px;">';
+        html+='<div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;color:var(--text1);">'
+          +'<span>'+escHtml(a.attendant)+'</span>'
+          +'<span style="color:'+(a.after11>0?'var(--red)':'var(--text3)')+';">'+a.after11+' of '+a.total+' at/after 11 AM</span></div>';
+        a.rooms.forEach(function(r){
+          var h=parseInt(r.depTime.split(':')[0],10);
+          var late=h>=LATEDEP_CUTOFF_HOUR;
+          html+='<div style="display:flex;justify-content:space-between;padding:2px 0 2px 10px;font-size:10px;color:'+(late?'var(--red)':'var(--text2)')+';">'
+            +'<span>Room '+escHtml(r.room)+'</span><span style="font-weight:700;">'+escHtml(r.depTime)+'</span></div>';
+        });
+        html+='</div>';
       });
       html+='</div>';
     }

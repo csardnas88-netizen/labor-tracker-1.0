@@ -75,6 +75,24 @@ module.exports = {
     t.eq(agg.byAttendant['Gabriela'].total, 2, 'per-attendant breakdown splits by page');
     t.eq(agg.byAttendant['Gabriela'].after11, 1, 'per-attendant late count is correct');
 
+    // ── _ldGroupByAttendant — Carlos's ask: group the day's detail by
+    // attendant (worst-affected first), not a flat chronological list ──
+    const grouped = win._ldGroupByAttendant({ rooms: rooms });
+    t.eq(grouped.length, 2, 'both attendants who worked the day appear');
+    t.eq(grouped[0].after11, 1, "every attendant here is tied at 1 late room, so order falls back to name");
+    t.eq(grouped[0].attendant, 'Evangelina', 'alphabetical tie-break when after11/total are equal');
+    t.eq(grouped[0].rooms.length, 2, "each attendant's own room list stays intact, sorted by time");
+    t.eq(grouped[0].rooms[0].depTime, '07:04', "an attendant's rooms are sorted earliest-first within her own group");
+    const lopsided = win._ldGroupByAttendant({ rooms: [
+      { room: '1', depTime: '07:00', attendant: 'Ana' },
+      { room: '2', depTime: '12:00', attendant: 'Bea' },
+      { room: '3', depTime: '13:00', attendant: 'Bea' },
+    ] });
+    t.eq(lopsided[0].attendant, 'Bea', 'the attendant with more late rooms sorts first, worst-affected-first as Carlos asked');
+    t.eq(lopsided[0].after11, 2, "Bea's late count");
+    t.eq(lopsided[1].attendant, 'Ana', 'Ana (zero late) still appears — every attendant who worked the day, not just the ones with late rooms');
+    t.eq(lopsided[1].after11, 0, "Ana had zero late rooms but is not omitted");
+
     // ── save/get round trip ──
     win.saveLateDepForDate('2026-08-23', agg); // a Sunday
     win.saveLateDepForDate('2026-08-24', { total: 10, after11: 1, before11: 9, byAttendant: {}, rooms: [] }); // Monday, light
