@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.27.1"/>
+<meta name="app-version" content="7.28.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.28.0', date:'2026-08-23',
+    features:['Late Departures now shows each attendant\'s total rooms assigned that day next to her name, not just her late-checkout count — Carlos\'s ask ("el total de cuartos asignados a limpiarse en ese día"). This reads EVERY room on her page of the report regardless of status (Departed, Due Out, Stayover included), unlike the late-checkout detection itself, which stays Departed-only per his earlier ask to exclude Stayover. A day with zero late checkouts is no longer dropped from the log if it still has a real assigned-rooms count.']
+  },
+  {
     v:'7.27.1', date:'2026-08-23',
     changes:['Late Departures: a logged day\'s detail is now grouped by attendant (worst-affected first, every attendant who worked that day, even with zero late rooms) instead of one flat chronological room list — Carlos\'s ask, since what he actually wants to read is how many rooms got away from EACH woman\'s assignment late, not a room-by-room timeline. Each attendant still shows the same room/time detail as before, just grouped under her name.']
   },
@@ -8792,13 +8796,14 @@ function getAllLateDepDays(){
       var ld=(mData&&mData.lateDep)||{};
       Object.keys(ld).forEach(function(ds){
         var rec=ld[ds];
-        if(!rec||!rec.total)return;
+        if(!rec||(!rec.total&&!rec.totalAssigned))return;
         var d=parseLocalDate(ds);
         out.push({
           ds:ds,date:d,dow:d.getDay(),
           total:rec.total,after11:rec.after11,before11:rec.before11,
           pct:rec.total>0?(rec.after11/rec.total)*100:null,
-          byAttendant:rec.byAttendant||{},rooms:rec.rooms||[]
+          byAttendant:rec.byAttendant||{},rooms:rec.rooms||[],
+          totalAssigned:rec.totalAssigned||null
         });
       });
     }catch(e){}
@@ -8829,13 +8834,24 @@ function getLateDepByWeekday(days){
    detail the flat list already had, just grouped under her name. */
 function _ldGroupByAttendant(d){
   var byName={};
+  function ensure(key){
+    if(!byName[key])byName[key]={attendant:key,total:0,after11:0,rooms:[],totalAssigned:null};
+    return byName[key];
+  }
   (d.rooms||[]).forEach(function(r){
     var key=r.attendant||'(unlabeled)';
-    if(!byName[key])byName[key]={attendant:key,total:0,after11:0,rooms:[]};
-    byName[key].total++;
+    var a=ensure(key);
+    a.total++;
     var h=parseInt(r.depTime.split(':')[0],10);
-    if(h>=LATEDEP_CUTOFF_HOUR)byName[key].after11++;
-    byName[key].rooms.push(r);
+    if(h>=LATEDEP_CUTOFF_HOUR)a.after11++;
+    a.rooms.push(r);
+  });
+  /* Total cuartos asignados a limpiarse ese día (every status, not just
+     Departed/late checkouts — Carlos's ask). An attendant whose rooms were
+     ALL Stayover that day still worked and still gets listed, even though
+     she has nothing in the late-departure detail above. */
+  Object.keys(d.totalAssigned||{}).forEach(function(key){
+    ensure(key).totalAssigned=d.totalAssigned[key];
   });
   var out=Object.keys(byName).map(function(k){return byName[k];});
   out.forEach(function(a){a.rooms.sort(function(x,y){return x.depTime.localeCompare(y.depTime);});});
@@ -8886,11 +8902,31 @@ function _ldCol(x){
    repeats it in (right under the "Instructions" label) by finding that
    literal label word and reading whatever sits beside it on the same row —
    position-independent of page count or attendant order. */
+/* Returns {reportDate, lateByDs, totalByAttendant}:
+   - lateByDs: {ds:[{room,depTime,attendant}]} — Departed rooms only, keyed by
+     each room's OWN departure date, same as before (drives the late-checkout
+     detail/detection).
+   - totalByAttendant: {attendant: count} — EVERY room row on the report
+     (Departed, Due Out, Stayover, whatever status), regardless of when its
+     own reservation happens to depart. Carlos's ask: "el total de cuartos
+     asignados a limpiarse en ese día" — a Stayover still gets cleaned that
+     day, it just isn't a checkout, so it counts here even though it's
+     excluded from the late-departure math itself (his earlier ask). Keyed
+     to the report's OWN date (from its "Task Date From" header), since
+     that's the day being staffed — not each room's individual reservation
+     dates, which for a Stayover point at some future checkout. */
 async function _ldParsePdf(pdf){
   var byDate={};
+  var totalByAttendant={};
+  var reportDate=null;
   for(var p=1;p<=pdf.numPages;p++){
     var page=await pdf.getPage(p);
     var tc=await page.getTextContent();
+    if(!reportDate){
+      var headerText=tc.items.map(function(it){return it.str;}).join(' ');
+      var hm=headerText.match(/Task Date From\s+(\d{2})-(\d{2})-(\d{2})/);
+      if(hm)reportDate='20'+hm[3]+'-'+hm[1]+'-'+hm[2];
+    }
     var attendant='';
     var instrItem=null;
     tc.items.forEach(function(it){if(it.str==='Instructions')instrItem=it;});
@@ -8914,6 +8950,9 @@ async function _ldParsePdf(pdf){
       var room=(bins.room||'').trim();
       if(!/^\d{3,4}$/.test(room))return;
       var resv=(bins.resv||'').trim();
+      if(!resv)return;
+      var key=attendant||'(unlabeled)';
+      totalByAttendant[key]=(totalByAttendant[key]||0)+1;
       if(resv.indexOf('Departed')!==0)return;
       var dt=(bins.deptime||'').trim().replace(/^\*/,'');
       if(!/^\d{1,2}:\d{2}$/.test(dt))return;
@@ -8925,7 +8964,7 @@ async function _ldParsePdf(pdf){
       byDate[ds].push({room:room,depTime:dt,attendant:attendant});
     });
   }
-  return byDate;
+  return {reportDate:reportDate,lateByDs:byDate,totalByAttendant:totalByAttendant};
 }
 function _ldAggregate(rooms){
   var total=0,after11=0,byAtt={};
@@ -8949,11 +8988,18 @@ function handleLateDepUpload(input){
   reader.onload=function(e){
     var typedarray=new Uint8Array(e.target.result);
     pdfjsLib.getDocument({data:typedarray}).promise.then(function(pdf){
-      _ldParsePdf(pdf).then(function(byDate){
+      _ldParsePdf(pdf).then(function(result){
+        var byDate=result.lateByDs;
         var days=Object.keys(byDate);
+        /* A report with zero late checkouts still has a real total-assigned
+           count worth saving, so its own date isn't dropped just because
+           nobody happened to be late that day. */
+        if(result.reportDate&&days.indexOf(result.reportDate)===-1)days.push(result.reportDate);
         if(!days.length){showToast('❌ No departures found in this report');return;}
         days.forEach(function(ds){
-          saveLateDepForDate(ds,_ldAggregate(byDate[ds]));
+          var agg=_ldAggregate(byDate[ds]||[]);
+          if(ds===result.reportDate)agg.totalAssigned=result.totalByAttendant;
+          saveLateDepForDate(ds,agg);
         });
         showToast('✓ Late Departures loaded — '+days.length+' day'+(days.length===1?'':'s'));
         if(currentPage==='latedep')renderLateDep();
@@ -9060,7 +9106,7 @@ function renderLateDep(){
       _ldGroupByAttendant(d).forEach(function(a){
         html+='<div style="margin-top:8px;">';
         html+='<div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;color:var(--text1);">'
-          +'<span>'+escHtml(a.attendant)+'</span>'
+          +'<span>'+escHtml(a.attendant)+(a.totalAssigned!==null?' &middot; '+a.totalAssigned+' room'+(a.totalAssigned===1?'':'s')+' assigned':'')+'</span>'
           +'<span style="color:'+(a.after11>0?'var(--red)':'var(--text3)')+';">'+a.after11+' of '+a.total+' at/after 11 AM</span></div>';
         a.rooms.forEach(function(r){
           var h=parseInt(r.depTime.split(':')[0],10);
