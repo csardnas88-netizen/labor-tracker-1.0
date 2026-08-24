@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.35.0"/>
+<meta name="app-version" content="7.36.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.36.0', date:'2026-08-23',
+    features:['Late Departures attendant cards now have a full "Shift Timeline" — Carlos\'s ask, so the whole story reads at a glance: her start time, Daily Stand Up (20 min), how long she waited for her first vacant room, her scheduled shift length (8h30m), her estimated workload, and finally whether that adds up to finishing on time or late, with the actual clock time and by how much. Replaces the two standalone Stand Up/wait lines and the top-right hours badge from the last two versions — everything now lives in one clean, ordered block instead of scattered across the card.']
+  },
+  {
     v:'7.35.0', date:'2026-08-23',
     features:['Late Departures: the estimated workload moved to the top-right of each attendant\'s card, bigger and in navy instead of small gray text — Carlos\'s ask, it was barely visible. Right under her counts, the card now also shows Daily Stand Up (a fixed 20 min at the start of every shift) and how long she then waited with nothing to clean before her first room was actually ready — the real evidence behind the whole point of this section. Shift start follows Carlos\'s own hours: 9:00 AM Saturday/Sunday, 8:15 AM Monday-Friday.']
   },
@@ -8853,9 +8857,28 @@ var LATEDEP_STANDUP_MIN=20;
 function _ldShiftStartMin(dow){
   return (dow===0||dow===6)?(9*60):(8*60+15);
 }
+/* Scheduled shift end — Carlos's own hours: 5:30 PM Sat/Sun, 4:45 PM
+   Mon-Fri. Both come out to the same 8h30m shift length, just shifted. */
+function _ldShiftEndMin(dow){
+  return (dow===0||dow===6)?(17*60+30):(16*60+45);
+}
 function _ldTimeToMin(hhmm){
   var p=hhmm.split(':');
   return parseInt(p[0],10)*60+parseInt(p[1],10);
+}
+/* Minutes-since-midnight -> "9:00 AM" / "5:38 PM". */
+function _ldFmtClock(min){
+  min=((min%1440)+1440)%1440;
+  var h=Math.floor(min/60),m=min%60;
+  var ap=h>=12?'PM':'AM';
+  var h12=h%12;if(h12===0)h12=12;
+  return h12+':'+(m<10?'0':'')+m+' '+ap;
+}
+/* Minutes -> "6h 45m" / "0h 50m" — same short form already used for the
+   workload figure, reused here for shift length and overage too. */
+function _ldFmtDur(min){
+  var h=Math.floor(min/60),m=min%60;
+  return h+'h'+(m?' '+m+'m':'');
 }
 /* {total, suites, floors} for one attendant's full room list that day —
    every status (Departed/Due Out/Stayover), same source as "rooms
@@ -9288,13 +9311,7 @@ function renderLateDep(){
         var attOpen=!!lateDepAttExpanded[attKey];
         var nameJs=a.attendant.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
         html+='<div onclick="toggleLateDepAttendant(\''+d.ds+'\',\''+nameJs+'\')" style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;'+(attOpen?'grid-column:1/-1;':'')+'">';
-        html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">';
         html+='<div style="font-size:10.5px;font-weight:700;color:var(--text1);">'+escHtml(a.attendant)+'</div>';
-        if(a.assigned&&a.assigned.totalMinutes){
-          var estH=Math.floor(a.assigned.totalMinutes/60),estM=a.assigned.totalMinutes%60;
-          html+='<div style="font-size:13px;font-weight:800;color:var(--navy);white-space:nowrap;">'+estH+'h'+(estM?' '+estM+'m':'')+'</div>';
-        }
-        html+='</div>';
         html+='<div style="font-size:11px;color:var(--text2);font-weight:600;margin-top:2px;">'+(a.assigned?a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
         if(a.assigned){
           html+='<div style="font-size:11px;font-weight:600;margin-top:1px;">'
@@ -9303,17 +9320,37 @@ function renderLateDep(){
             +'<span style="color:var(--gd);">'+a.assigned.occupied+' occupied</span></div>';
         }
         html+='<div style="font-size:10px;font-weight:700;margin-top:3px;color:'+(a.after11>0?'var(--red)':'var(--text3)')+';">'+a.after11+' of '+a.total+' at/after 11 AM</div>';
-        /* Daily Stand Up (fixed 20 min, every shift) + how long she then
-           waited with nothing to clean before her first room was actually
-           ready — Carlos's real point since the first ask: on a heavy-
-           late-departure day there's often nowhere to work yet. Shift
-           start is Carlos's own numbers: 9:00 AM Sat/Sun, 8:15 AM Mon-Fri. */
-        html+='<div style="font-size:10px;color:var(--text3);margin-top:4px;">Daily Stand Up: '+LATEDEP_STANDUP_MIN+' min</div>';
-        if(a.rooms.length){
-          var standupEnd=_ldShiftStartMin(d.dow)+LATEDEP_STANDUP_MIN;
-          var firstMin=_ldTimeToMin(a.rooms[0].depTime);
-          var waitMin=Math.max(0,firstMin-standupEnd);
-          html+='<div style="font-size:10px;color:var(--text2);font-weight:600;">'+(waitMin>0?waitMin+' min wait after stand-up':'No wait after stand-up')+'</div>';
+        /* Shift Timeline — Carlos's ask: a clean, glanceable walk from her
+           start time through Daily Stand Up, the wait for her first vacant
+           room, her scheduled shift length, her actual estimated workload,
+           and finally whether all of that gets her out on time — the real
+           evidence for WHY a heavy-late-departure day pushes someone past
+           her scheduled shift end. Shift hours are Carlos's own numbers:
+           9:00 AM-5:30 PM Sat/Sun, 8:15 AM-4:45 PM Mon-Fri (8h30m either way). */
+        if(a.assigned&&a.assigned.totalMinutes){
+          var shiftStart=_ldShiftStartMin(d.dow);
+          var shiftEnd=_ldShiftEndMin(d.dow);
+          var shiftLen=shiftEnd-shiftStart;
+          var standupEnd=shiftStart+LATEDEP_STANDUP_MIN;
+          var waitMin=0;
+          if(a.rooms.length)waitMin=Math.max(0,_ldTimeToMin(a.rooms[0].depTime)-standupEnd);
+          var finishMin=shiftStart+LATEDEP_STANDUP_MIN+waitMin+a.assigned.totalMinutes;
+          var overMin=finishMin-shiftEnd;
+          function tlRow(label,val,color){
+            return '<div style="display:flex;justify-content:space-between;font-size:10px;padding:1.5px 0;">'
+              +'<span style="color:var(--text3);">'+label+'</span>'
+              +'<span style="font-weight:700;color:'+(color||'var(--text1)')+';">'+val+'</span></div>';
+          }
+          html+='<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);">';
+          html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">Shift Timeline</div>';
+          html+=tlRow('Start',_ldFmtClock(shiftStart));
+          html+=tlRow('Daily Stand Up',LATEDEP_STANDUP_MIN+' min');
+          html+=tlRow('Wait for 1st vacant',a.rooms.length?(waitMin>0?waitMin+' min':'None'):'&#8212;');
+          html+=tlRow('Scheduled shift',_ldFmtDur(shiftLen));
+          html+=tlRow('Est. workload',_ldFmtDur(a.assigned.totalMinutes),'var(--navy)');
+          var finishVal=_ldFmtClock(finishMin)+(overMin>0?' &middot; +'+_ldFmtDur(overMin):(overMin<0?' &middot; '+_ldFmtDur(-overMin)+' to spare':''));
+          html+=tlRow(overMin>0?'Finishes late':'Finishes on time',finishVal,overMin>0?'var(--red)':'var(--green)');
+          html+='</div>';
         }
         if(attOpen){
           html+='<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">';

@@ -233,5 +233,23 @@ module.exports = {
     const firstRoomMin = win._ldTimeToMin(grouped.find((a) => a.attendant === 'Gabriela').rooms[0].depTime);
     t.eq(firstRoomMin, 7 * 60 + 4, "Gabriela's earliest checked-out room is 07:04, well before stand-up ends");
     t.assert(firstRoomMin < standupEndSun, 'confirms this case has zero real wait — her first room was ready before stand-up even ended');
+
+    // ── Shift Timeline: shift end/length + finish-time math — Carlos's
+    // ask: start, stand-up, wait, scheduled shift, workload, and finally
+    // whether all of that gets her out on time ──
+    t.eq(win._ldShiftEndMin(0), 17 * 60 + 30, 'Sunday shift ends 5:30 PM');
+    t.eq(win._ldShiftEndMin(1), 16 * 60 + 45, 'Monday shift ends 4:45 PM');
+    t.eq(win._ldShiftEndMin(0) - win._ldShiftStartMin(0), 510, 'Sunday shift is 8h30m, same length as a weekday');
+    t.eq(win._ldShiftEndMin(1) - win._ldShiftStartMin(1), 510, 'Monday shift is also 8h30m, just shifted earlier');
+    t.eq(win._ldFmtClock(9 * 60), '9:00 AM', 'minutes-since-midnight formats to a 12h clock string');
+    t.eq(win._ldFmtClock(17 * 60 + 30), '5:30 PM', 'PM formatting crosses noon correctly');
+    t.eq(win._ldFmtClock(0), '12:00 AM', 'midnight formats as 12:00 AM, not 0:00 AM');
+    t.eq(win._ldFmtDur(510), '8h 30m', 'duration formats as Xh Ym');
+    t.eq(win._ldFmtDur(480), '8h', 'a whole-hour duration omits the minutes');
+    // A light Sunday: standup ends 9:20, first vacant at 07:04 (no wait),
+    // Gabriela's workload is 195 min (3h15m) — she finishes well inside
+    // her 8h30m shift.
+    const gabFinish = win._ldShiftStartMin(0) + win.LATEDEP_STANDUP_MIN + 0 + summary.totalMinutes;
+    t.assert(gabFinish < win._ldShiftEndMin(0), "Gabriela's light day finishes on time, well before shift end");
   }
 };
