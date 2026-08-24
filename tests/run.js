@@ -70,6 +70,7 @@ const cases = [
   require('./cases/dl-sections-sync'),
   require('./cases/dl-schedule-snapshot-decouple'),
   require('./cases/late-departures'),
+  require('./cases/realtime-retry-cap'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

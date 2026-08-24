@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.38.0"/>
+<meta name="app-version" content="7.38.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.38.1', date:'2026-08-24',
+    fixes:['Fixed the "Maximum call stack size exceeded" crash seen twice this session on two different long-lived tabs (once on Carlos\'s own computer, once on the work computer), always alongside a session that\'s dead server-side but doesn\'t look "expired" locally — a repeating 401. The realtime reconnect watchdog was retrying that dead connection every 30 seconds forever, for as long as the tab stayed open, and something in that many hours of uncontrolled retries was compounding into the crash. It now gives up after 8 failed attempts in a row until an actual page reload or a genuinely new sign-in/token refresh, instead of retrying indefinitely.']
+  },
+  {
     v:'7.38.0', date:'2026-08-24',
     features:['Late Departures leads with a "Latest logged day" panel now — its own departures/late/late-share numbers, front and center — instead of only an all-time aggregate. Carlos\'s ask: showing a manager one specific day was getting lost in a total across every day ever logged. The aggregate tiles are still there below for the long-run pattern, relabeled "all days" so the two can\'t be confused.']
   },
@@ -5898,6 +5902,11 @@ function _authStore(d){
   localStorage.setItem(_SA_REF,d.refresh_token);
   localStorage.setItem(_SA_EXP,String(Date.now()+d.expires_in*1000));
   SUPA_HEADERS['Authorization']='Bearer '+d.access_token;
+  /* A genuinely new token is a real reason to give realtime another
+     chance — clears the give-up state from _rtMaxFails dead-end retries
+     (see its declaration) so a fresh sign-in or a successful refresh
+     isn't stuck waiting for a full page reload to reconnect. */
+  _rtFailCount=0;_rtGaveUp=false;
 }
 /* Single-flight: every caller that arrives while a renewal is already in
    the air waits on that same request instead of starting another.
@@ -5948,6 +5957,19 @@ async function _authRefreshOnce(){
    receive events, scoped by the signed-in user's token. ── */
 var _rtClient=null,_rtChannel=null,_rtLoading=false,_rtDebounce=null;
 var _lastLocalWriteAt=0;
+/* Caps how many times the 30s watchdog will re-attempt a dead realtime
+   channel before giving up until the page is actually reloaded. Without
+   this, a session that's invalid server-side but still looks locally
+   "not expired" (a genuinely bad/revoked token, not just a stale
+   timestamp — the exact case behind a repeating 401 on labor_data) never
+   stops retrying: every 30s forever, for as long as the tab stays open.
+   That's the likely real cause of the "Maximum call stack size exceeded"
+   crash inside supabase.min.js seen on two different long-lived tabs —
+   hours of uncontrolled reconnect attempts compounding inside the
+   Realtime client's own internals. A normal, temporary drop still
+   recovers fine well within this cap; this only stops a session that's
+   never going to succeed from retrying forever. */
+var _rtFailCount=0, _rtMaxFails=8, _rtGaveUp=false;
 function _loadSupabaseLib(){
   return new Promise(function(resolve,reject){
     if(window.supabase&&window.supabase.createClient)return resolve();
@@ -5978,6 +6000,7 @@ function _rtSetLiveStatus(on){
 function startRealtime(){
   var tok=_authToken();
   if(!tok||_authExpired())return;               /* need a valid session */
+  if(_rtGaveUp)return;                            /* too many dead-end retries — needs a reload */
   try{startPresence();}catch(e){}                /* heartbeat rides the same lifecycle */
   if(!navigator.onLine)return;                   /* nothing to connect to */
   if(_rtChannel)return;                           /* already subscribed */
@@ -6000,17 +6023,27 @@ function startRealtime(){
         _rtDebounce=setTimeout(function(){ try{syncFromSheets();}catch(e){} },1200);
       })
       .subscribe(function(status){
-        if(status==='SUBSCRIBED'){_rtSetLiveStatus(true);return;}
+        if(status==='SUBSCRIBED'){_rtFailCount=0;_rtSetLiveStatus(true);return;}
         /* CHANNEL_ERROR / TIMED_OUT / CLOSED: the socket died. Without this,
            _rtChannel stayed set to the dead channel forever, so both
            startRealtime()'s "already subscribed" guard and the 30s watchdog's
            "!_rtChannel" check kept thinking it was still live — no more
            updates would arrive until the whole app was reloaded. Clearing it
            here lets the existing watchdog (and the next 'online' event)
-           reconnect on their own. */
+           reconnect on their own.
+
+           _rtFailCount/_rtMaxFails — see the comment above their
+           declaration: a session that's dead server-side (not just
+           locally "expired") would otherwise retry every 30s forever. */
         if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
           try{ if(_rtClient&&_rtChannel)_rtClient.removeChannel(_rtChannel); }catch(e){}
           _rtChannel=null;
+          _rtFailCount++;
+          if(_rtFailCount>=_rtMaxFails){
+            _rtGaveUp=true;
+            try{ if(_rtClient){_rtClient.removeAllChannels();} }catch(e){}
+            _rtClient=null;
+          }
         }
       });
   }).catch(function(){ /* stay on open/reconnect pull sync */ });
