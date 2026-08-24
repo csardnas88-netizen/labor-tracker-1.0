@@ -256,5 +256,65 @@ module.exports = {
     // the 30-min break is elapsed clock time, not cleaning time ──
     t.eq(win.LATEDEP_BREAK_MIN, 30, '30-minute break, every shift');
     t.eq(win._ldShiftEndMin(0) - win._ldShiftStartMin(0) - win.LATEDEP_BREAK_MIN, 480, 'Scheduled (working) shift is 8h once the break is subtracted from the 8h30m clock span');
+
+    // ── _ldFooterTotal — Carlos's ask: audit our parsed room count
+    // against the report's own printed "Total for Attendant / Total Rooms"
+    // figure, shaped exactly like his real screenshot (Ada, 14 rooms) ──
+    const footerItems = [
+      fragItem(14.6, 100, 'Total'), fragItem(36.0, 100, 'for'), fragItem(48.9, 100, 'Attendant'), fragItem(124.9, 100, '06-02'),
+      fragItem(13.5, 118, 'Total'), fragItem(33.5, 118, 'Rooms'), fragItem(172.2, 118, '14'),
+      fragItem(13.1, 132, 'Total'), fragItem(33.1, 132, 'Adults'), fragItem(171.9, 132, '16'),
+      fragItem(13.1, 148, 'Departure'), fragItem(50.9, 148, 'Rooms'), fragItem(176.3, 148, '3'),
+    ];
+    t.eq(win._ldFooterTotal(footerItems), 14, '"Total Rooms" is read correctly, not confused with "Total for Attendant", "Total Adults", or "Departure Rooms" on the same page');
+
+    // ── Carlos's real bug this caught: room-count mismatch is flagged on
+    // the card so a future parsing gap shows up immediately ──
+    const pdfWithFooter = fakePdf([[
+      ...buildPageItems('Cleo', 194.6),
+      fragItem(13.5, 194.6 - 300, 'Total'), fragItem(33.5, 194.6 - 300, 'Rooms'), fragItem(172.2, 194.6 - 300, '6'),
+    ]]);
+    const resultOk = await win._ldParsePdf(pdfWithFooter);
+    t.eq(resultOk.footerTotalByAttendant['Cleo'], 6, "the page's printed total is captured per attendant");
+    t.eq(resultOk.roomsByAttendant['Cleo'].length, 6, 'our own parsed count matches it — no mismatch on a healthy page');
+
+    const pdfMismatch = fakePdf([[
+      ...buildPageItems('Nadia', 194.6),
+      fragItem(13.5, 194.6 - 300, 'Total'), fragItem(33.5, 194.6 - 300, 'Rooms'), fragItem(172.2, 194.6 - 300, '7'),
+    ]]);
+    const resultBad = await win._ldParsePdf(pdfMismatch);
+    t.eq(resultBad.footerTotalByAttendant['Nadia'], 7, "a page claiming 7 rooms prints 7 in footerTotalByAttendant");
+    t.eq(resultBad.roomsByAttendant['Nadia'].length, 6, 'but we only actually parsed 6 — this is the mismatch the audit exists to catch');
+
+    // ── Carlos's correction: wait time should account for Stayover work
+    // filling the gap before her first checked-out room, not assume she's
+    // idle the whole time ──
+    const busySummary = win._ldSummarizeAssigned([
+      { room: '2111', resv: 'Stayover' }, // 20 min, standard
+      { room: '2112', resv: 'Stayover' }, // 20 min, standard
+    ]);
+    t.eq(busySummary.occupiedMinutes, 40, 'two standard Stayovers = 40 min of fillable Stayover work');
+    // A 60-min gap before her first checkout, with 40 min of Stayover work
+    // available, leaves only 20 real minutes of wait — not the full 60.
+    const gapMin = 60;
+    const realWait = Math.max(0, gapMin - busySummary.occupiedMinutes);
+    t.eq(realWait, 20, "Cindy's real wait is only what's left after her Stayover workload fills part of the gap");
+    // Enough Stayover work to fully absorb the gap means zero real wait.
+    const fullyBusy = win._ldSummarizeAssigned([{ room: '2111', resv: 'Stayover' }, { room: '2114', resv: 'Stayover' }, { room: '2112', resv: 'Stayover' }, { room: '1505', resv: 'Stayover' }]);
+    t.eq(Math.max(0, gapMin - fullyBusy.occupiedMinutes), 0, 'enough Stayover rooms to fill the whole gap means no real wait at all');
+
+    // ── Carlos's real bug, found by the audit itself: a room with a
+    // completely BLANK Reservation Status (room 1706 on Elena's real
+    // page — Vacant, no active reservation at all, but still hers to
+    // check) was being silently dropped from "assigned" entirely. ──
+    const blankResvPdf = fakePdf([[
+      ...buildPageItems('Elena', 194.6),
+      fragItem(23, 194.6 - 120, '1706'), fragItem(76.1, 194.6 - 120, 'IP'), fragItem(310.0, 194.6 - 120, 'Vacant'), // no resv text at all on this row
+      fragItem(13.5, 194.6 - 300, 'Total'), fragItem(33.5, 194.6 - 300, 'Rooms'), fragItem(172.2, 194.6 - 300, '7'),
+    ]]);
+    const blankResult = await win._ldParsePdf(blankResvPdf);
+    t.eq(blankResult.roomsByAttendant['Elena'].length, 7, 'a room with a blank Reservation Status still counts toward assigned (6 normal rows + room 1706)');
+    t.assert(blankResult.roomsByAttendant['Elena'].some((r) => r.room === '1706' && r.resv === ''), 'room 1706 is present with an empty resv, not dropped');
+    t.eq(blankResult.footerTotalByAttendant['Elena'], 7, "matches the page's own printed Total Rooms — the audit passes once this fix is in");
   }
 };

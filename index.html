@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.36.1"/>
+<meta name="app-version" content="7.38.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,15 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.38.0', date:'2026-08-24',
+    features:['Late Departures leads with a "Latest logged day" panel now — its own departures/late/late-share numbers, front and center — instead of only an all-time aggregate. Carlos\'s ask: showing a manager one specific day was getting lost in a total across every day ever logged. The aggregate tiles are still there below for the long-run pattern, relabeled "all days" so the two can\'t be confused.']
+  },
+  {
+    v:'7.37.0', date:'2026-08-24',
+    features:['Late Departures now audits itself on every upload: it cross-checks the room count it parsed for each attendant against the report\'s own printed "Total Rooms" figure, and flags a red warning right on her card if they don\'t match — Carlos\'s ask, so a parsing gap (like the legend-marker bug that silently dropped a room from Sandy\'s page) shows up immediately instead of needing him to count by hand. The upload toast also calls out how many attendants were flagged, if any.'],
+    fixes:['The "wait for first vacant" and "Finishes" timeline figures were assuming an attendant sits idle until her first checked-out room is ready — Carlos\'s catch (Cindy\'s Monday sheet): she can work her Stayover rooms right after Daily Stand Up instead of waiting. Real wait time is now only whatever\'s left after her Stayover workload would have filled that gap.','The new room-count audit above caught a real gap immediately: a room with a completely blank Reservation Status (no active reservation at all — e.g. room 1706 on Elena\'s page, still hers to check) was being silently dropped because the parser required that field to be non-empty. It no longer does; only the late-checkout detail still requires it, same as before.']
+  },
+  {
     v:'7.36.1', date:'2026-08-23',
     fixes:['Fixed the Shift Timeline\'s "Scheduled shift" showing 8h30m — Carlos\'s correction: 30 of those minutes are an unpaid break, not cleaning time, so it now reads 8h. Added a Break line to the timeline for that same 30 minutes, and it now counts toward the "Finishes" clock-time estimate too (elapsed time she\'s off the floor, same as Stand Up and the wait for her first vacant), so the math stays consistent with the corrected shift length.']
   },
@@ -8904,7 +8913,7 @@ function _ldSummarizeAssigned(rooms){
   var suites=0,occupied=0;
   var stayoverRooms=[];
   var roomMinutes={};
-  var totalMinutes=0;
+  var totalMinutes=0,occupiedMinutes=0;
   (rooms||[]).forEach(function(r){
     floors[_ldFloorOf(r.room)]=true;
     var isSuite=_ldIsSuite(r.room);
@@ -8914,6 +8923,7 @@ function _ldSummarizeAssigned(rooms){
     var mins=_ldCleanMinutes(isSuite,isOcc);
     roomMinutes[r.room]=mins;
     totalMinutes+=mins;
+    if(isOcc)occupiedMinutes+=mins;
   });
   var total=(rooms||[]).length;
   /* stayoverRooms — the actual room numbers, not just the count — so the
@@ -8923,8 +8933,12 @@ function _ldSummarizeAssigned(rooms){
      roomMinutes/totalMinutes — Carlos's ask: turn the room counts into an
      actual estimated workload, using his own per-room-type minute
      figures, over EVERY room she had that day (not just the ones shown
-     in either detail list). */
-  return {total:total,suites:suites,floors:Object.keys(floors).length,occupied:occupied,checkedOut:total-occupied,stayoverRooms:stayoverRooms,roomMinutes:roomMinutes,totalMinutes:totalMinutes};
+     in either detail list). occupiedMinutes — how much of that workload is
+     Stayover rooms specifically, which she CAN work on before her first
+     checkout is ready (Carlos's correction: the wait-time estimate was
+     assuming she's idle until her first checkout, when she can actually
+     fill that gap with Stayover cleaning). */
+  return {total:total,suites:suites,floors:Object.keys(floors).length,occupied:occupied,checkedOut:total-occupied,stayoverRooms:stayoverRooms,roomMinutes:roomMinutes,totalMinutes:totalMinutes,occupiedMinutes:occupiedMinutes};
 }
 
 function getLateDepForDay(ds){
@@ -9101,9 +9115,26 @@ function _ldCol(x){
      date (from its "Task Date From" header) since that's the day being
      staffed — not each room's individual reservation dates, which for a
      Stayover point at some future checkout. */
+/* The report prints its own ground-truth room count per attendant, under
+   "Total for Attendant" — e.g. "Total Rooms   14". Cross-checking our own
+   parsed count against this on every upload is Carlos's ask: an ongoing
+   audit that catches a parsing gap (like the legend-marker bug that ate
+   Sandy's room 2107) immediately instead of needing him to notice and
+   count by hand. Built from the same row-clustering as the room table —
+   just joins each row's text left-to-right and looks for the label. */
+function _ldFooterTotal(items){
+  var rows=_ldRowsFromPage(items);
+  for(var i=0;i<rows.length;i++){
+    var text=rows[i].map(function(it){return it.str.trim();}).filter(Boolean).join(' ');
+    var m=text.match(/^Total Rooms\s+(\d+)/);
+    if(m)return parseInt(m[1],10);
+  }
+  return null;
+}
 async function _ldParsePdf(pdf){
   var byDate={};
   var roomsByAttendant={};
+  var footerTotalByAttendant={};
   var reportDate=null;
   for(var p=1;p<=pdf.numPages;p++){
     var page=await pdf.getPage(p);
@@ -9125,6 +9156,10 @@ async function _ldParsePdf(pdf){
       });
       attendant=parts.join(' ').trim();
     }
+    if(attendant){
+      var ft=_ldFooterTotal(tc.items);
+      if(ft!==null)footerTotalByAttendant[attendant]=ft;
+    }
     var rows=_ldRowsFromPage(tc.items);
     rows.forEach(function(row){
       var bins={};
@@ -9136,7 +9171,14 @@ async function _ldParsePdf(pdf){
       var room=(bins.room||'').trim();
       if(!/^\d{3,4}$/.test(room))return;
       var resv=(bins.resv||'').trim();
-      if(!resv)return;
+      /* Every real room row counts toward "assigned", even one with a
+         blank Reservation Status — Carlos's real bug: room 1706 on
+         Elena's page had no status at all (just Vacant/no active
+         reservation) but is still hers to check, and the report's own
+         "Total Rooms: 14" counted it. Requiring a non-empty resv here
+         used to drop it silently. The LATE-checkout detail below is
+         unaffected — it already requires resv to start with "Departed"
+         or "Due", which a blank string never matches anyway. */
       var key=attendant||'(unlabeled)';
       if(!roomsByAttendant[key])roomsByAttendant[key]=[];
       roomsByAttendant[key].push({room:room,resv:resv});
@@ -9159,7 +9201,7 @@ async function _ldParsePdf(pdf){
       byDate[ds].push({room:room,depTime:dt,attendant:attendant});
     });
   }
-  return {reportDate:reportDate,lateByDs:byDate,roomsByAttendant:roomsByAttendant};
+  return {reportDate:reportDate,lateByDs:byDate,roomsByAttendant:roomsByAttendant,footerTotalByAttendant:footerTotalByAttendant};
 }
 function _ldAggregate(rooms){
   var total=0,after11=0,byAtt={};
@@ -9191,18 +9233,30 @@ function handleLateDepUpload(input){
            nobody happened to be late that day. */
         if(result.reportDate&&days.indexOf(result.reportDate)===-1)days.push(result.reportDate);
         if(!days.length){showToast('❌ No departures found in this report');return;}
+        var mismatches=0;
         days.forEach(function(ds){
           var agg=_ldAggregate(byDate[ds]||[]);
           if(ds===result.reportDate){
             var assigned={};
             Object.keys(result.roomsByAttendant).forEach(function(name){
-              assigned[name]=_ldSummarizeAssigned(result.roomsByAttendant[name]);
+              var s=_ldSummarizeAssigned(result.roomsByAttendant[name]);
+              var reported=result.footerTotalByAttendant[name];
+              /* Audit against the report's own printed "Total Rooms" for
+                 that attendant — Carlos's ask, so a parsing gap (like the
+                 legend-marker bug that silently dropped a room) shows up
+                 immediately instead of needing him to count by hand. */
+              if(reported!==undefined){
+                s.reportedTotal=reported;
+                s.auditOk=(reported===s.total);
+                if(!s.auditOk)mismatches++;
+              }
+              assigned[name]=s;
             });
             agg.assigned=assigned;
           }
           saveLateDepForDate(ds,agg);
         });
-        showToast('✓ Late Departures loaded — '+days.length+' day'+(days.length===1?'':'s'));
+        showToast((mismatches?'⚠️ ':'✓ ')+'Late Departures loaded — '+days.length+' day'+(days.length===1?'':'s')+(mismatches?' · '+mismatches+' room-count mismatch'+(mismatches===1?'':'es')+', check flagged cards':''));
         if(currentPage==='latedep')renderLateDep();
       }).catch(function(err){
         showToast('❌ Error reading report: '+err.message);
@@ -9261,6 +9315,22 @@ function renderLateDep(){
 
   var html='';
 
+  /* Latest logged day, front and center — Carlos's ask: the tiles below
+     this used to be an all-time aggregate, which reads fine once there's
+     years of history but tells him nothing useful about "what happened
+     the day I just uploaded" when he's showing a manager one specific
+     day. This surfaces that day's own numbers first; the aggregate stays
+     below for the long-run pattern, now labeled "all logged days" so the
+     two can't be confused for each other. */
+  var latest=days[days.length-1];
+  html+='<div style="background:var(--white);border:2px solid var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;">';
+  html+='<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700;">Latest logged day &middot; '+_dndShortDate(latest.ds)+'</div>';
+  html+='<div style="display:flex;gap:28px;margin-top:6px;flex-wrap:wrap;">';
+  html+='<div><div style="font-size:26px;font-weight:800;color:var(--navy);">'+latest.total+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Departures</div></div>';
+  html+='<div><div style="font-size:26px;font-weight:800;color:var(--red);">'+latest.after11+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">At/after 11 AM</div></div>';
+  html+='<div><div style="font-size:26px;font-weight:800;color:var(--gd);">'+(latest.pct!==null?latest.pct.toFixed(0)+'%':'&#8212;')+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Late share</div></div>';
+  html+='</div></div>';
+
   html+='<div style="background:var(--navy);border-radius:var(--radius);padding:16px 18px;margin-bottom:14px;">';
   html+='<div style="font-size:10px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.5px;font-weight:700;">Heaviest day for late checkouts (11 AM+)</div>';
   if(worst&&worst.totalRooms>0){
@@ -9280,8 +9350,8 @@ function renderLateDep(){
       +'<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">'+label+'</div></div>';
   }
   html+=tile(days.length,'Days logged');
-  html+=tile(totalRooms,'Total departures');
-  html+=tile(totalLate,'At/after 11 AM','var(--red)');
+  html+=tile(totalRooms,'Departures, all days');
+  html+=tile(totalLate,'At/after 11 AM, all days','var(--red)');
   html+=tile(avgPct.toFixed(0)+'%','Avg. late share','var(--gd)');
   html+=tile((peakDay.pct||0).toFixed(0)+'%','Peak day','var(--red)');
   html+='</div>';
@@ -9322,6 +9392,9 @@ function renderLateDep(){
         var nameJs=a.attendant.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
         html+='<div onclick="toggleLateDepAttendant(\''+d.ds+'\',\''+nameJs+'\')" style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;'+(attOpen?'grid-column:1/-1;':'')+'">';
         html+='<div style="font-size:10.5px;font-weight:700;color:var(--text1);">'+escHtml(a.attendant)+'</div>';
+        if(a.assigned&&a.assigned.auditOk===false){
+          html+='<div style="font-size:9.5px;font-weight:700;color:var(--red);margin-top:2px;">&#9888; Counted '+a.assigned.total+' rooms, sheet says '+a.assigned.reportedTotal+' &mdash; check for a parsing gap</div>';
+        }
         html+='<div style="font-size:11px;color:var(--text2);font-weight:600;margin-top:2px;">'+(a.assigned?a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
         if(a.assigned){
           html+='<div style="font-size:11px;font-weight:600;margin-top:1px;">'
@@ -9342,8 +9415,16 @@ function renderLateDep(){
           var shiftEnd=_ldShiftEndMin(d.dow);
           var shiftLen=shiftEnd-shiftStart-LATEDEP_BREAK_MIN; /* working hours only — the 30-min break isn't cleaning time */
           var standupEnd=shiftStart+LATEDEP_STANDUP_MIN;
+          /* Carlos's correction: she isn't idle until her first checked-out
+             room — she can work her Stayover rooms right after stand-up.
+             Real wait is only whatever's left AFTER that Stayover work
+             would have filled the gap; if she has enough Stayovers to stay
+             busy past the first checkout time, there's no real wait at all. */
           var waitMin=0;
-          if(a.rooms.length)waitMin=Math.max(0,_ldTimeToMin(a.rooms[0].depTime)-standupEnd);
+          if(a.rooms.length){
+            var gapBeforeFirstRoom=_ldTimeToMin(a.rooms[0].depTime)-standupEnd;
+            waitMin=Math.max(0,gapBeforeFirstRoom-(a.assigned.occupiedMinutes||0));
+          }
           var finishMin=shiftStart+LATEDEP_STANDUP_MIN+waitMin+a.assigned.totalMinutes+LATEDEP_BREAK_MIN;
           var overMin=finishMin-shiftEnd;
           function tlRow(label,val,color){
