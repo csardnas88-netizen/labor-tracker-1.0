@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.33.0"/>
+<meta name="app-version" content="7.34.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.34.0', date:'2026-08-23',
+    features:['Late Departures now shows an estimated clean-time in minutes next to each of an attendant\'s rooms, and a total "Est. workload" for her day — Carlos\'s own average figures: 45 min for a checked-out Suite, 30 min for any other checked-out room, 30 min for an occupied (Stayover) Suite, 20 min for any other occupied room. Turns the room/floor/suite counts already on the card into an actual estimated hours figure, not just a tally.']
+  },
+  {
     v:'7.33.0', date:'2026-08-23',
     changes:['Late Departures: "checked out" switched from green to gold (Carlos\'s ask, matching "occupied"), and the expanded room list under each attendant now also lists her Stayover rooms — gold room number, no checkout time since there isn\'t one — right alongside her checked-out rooms, so the two are easy to tell apart in the same list instead of only in the summary counts.']
   },
@@ -8825,6 +8829,16 @@ function _ldIsSuite(room){
 function _ldFloorOf(room){
   return Math.floor(parseInt(room,10)/100);
 }
+/* Carlos's own average clean-time figures per room type, in minutes —
+   used to turn "how many rooms/suites/occupied" into an actual estimated
+   workload for the day, not just counts. A Suite takes longer either way,
+   but an occupied (Stayover) room is faster than a checkout clean because
+   there's no full turn — just service. */
+var LATEDEP_CLEAN_MIN={suiteCheckedOut:45,standardCheckedOut:30,standardOccupied:20,suiteOccupied:30};
+function _ldCleanMinutes(isSuite,isOccupied){
+  if(isOccupied)return isSuite?LATEDEP_CLEAN_MIN.suiteOccupied:LATEDEP_CLEAN_MIN.standardOccupied;
+  return isSuite?LATEDEP_CLEAN_MIN.suiteCheckedOut:LATEDEP_CLEAN_MIN.standardCheckedOut;
+}
 /* {total, suites, floors} for one attendant's full room list that day —
    every status (Departed/Due Out/Stayover), same source as "rooms
    assigned". Carlos's ask: floors + suites + late count together tell the
@@ -8838,17 +8852,28 @@ function _ldSummarizeAssigned(rooms){
   var floors={};
   var suites=0,occupied=0;
   var stayoverRooms=[];
+  var roomMinutes={};
+  var totalMinutes=0;
   (rooms||[]).forEach(function(r){
     floors[_ldFloorOf(r.room)]=true;
-    if(_ldIsSuite(r.room))suites++;
-    if((r.resv||'').indexOf('Stayover')===0){occupied++;stayoverRooms.push(r.room);}
+    var isSuite=_ldIsSuite(r.room);
+    if(isSuite)suites++;
+    var isOcc=(r.resv||'').indexOf('Stayover')===0;
+    if(isOcc){occupied++;stayoverRooms.push(r.room);}
+    var mins=_ldCleanMinutes(isSuite,isOcc);
+    roomMinutes[r.room]=mins;
+    totalMinutes+=mins;
   });
   var total=(rooms||[]).length;
   /* stayoverRooms — the actual room numbers, not just the count — so the
      expanded card detail can list them alongside the checked-out rooms,
      colored separately (Carlos's ask: tell the two apart at a glance
-     inside the same room list, not just in the summary counts). */
-  return {total:total,suites:suites,floors:Object.keys(floors).length,occupied:occupied,checkedOut:total-occupied,stayoverRooms:stayoverRooms};
+     inside the same room list, not just in the summary counts).
+     roomMinutes/totalMinutes — Carlos's ask: turn the room counts into an
+     actual estimated workload, using his own per-room-type minute
+     figures, over EVERY room she had that day (not just the ones shown
+     in either detail list). */
+  return {total:total,suites:suites,floors:Object.keys(floors).length,occupied:occupied,checkedOut:total-occupied,stayoverRooms:stayoverRooms,roomMinutes:roomMinutes,totalMinutes:totalMinutes};
 }
 
 function getLateDepForDay(ds){
@@ -9254,13 +9279,18 @@ function renderLateDep(){
             +'<span style="color:var(--gd);">'+a.assigned.occupied+' occupied</span></div>';
         }
         html+='<div style="font-size:10px;font-weight:700;margin-top:3px;color:'+(a.after11>0?'var(--red)':'var(--text3)')+';">'+a.after11+' of '+a.total+' at/after 11 AM</div>';
+        if(a.assigned&&a.assigned.totalMinutes){
+          var estH=Math.floor(a.assigned.totalMinutes/60),estM=a.assigned.totalMinutes%60;
+          html+='<div style="font-size:10px;color:var(--text3);margin-top:2px;">Est. '+estH+'h'+(estM?' '+estM+'m':'')+' workload</div>';
+        }
         if(attOpen){
           html+='<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">';
+          var rm=(a.assigned&&a.assigned.roomMinutes)||{};
           a.rooms.forEach(function(r){
             var h=parseInt(r.depTime.split(':')[0],10);
             var late=h>=LATEDEP_CUTOFF_HOUR;
             html+='<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;color:var(--text2);">'
-              +'<span>Room '+escHtml(r.room)+'</span><span style="font-weight:700;color:'+(late?'var(--red)':'var(--text2)')+';">'+escHtml(r.depTime)+'</span></div>';
+              +'<span>Room '+escHtml(r.room)+(rm[r.room]?' &middot; '+rm[r.room]+' min':'')+'</span><span style="font-weight:700;color:'+(late?'var(--red)':'var(--text2)')+';">'+escHtml(r.depTime)+'</span></div>';
           });
           /* Stayover rooms — gold room number, no checkout time (there
              isn't one; the guest isn't leaving) — Carlos's ask: tell
@@ -9269,7 +9299,7 @@ function renderLateDep(){
           if(a.assigned&&a.assigned.stayoverRooms){
             a.assigned.stayoverRooms.forEach(function(room){
               html+='<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;">'
-                +'<span style="color:var(--gd);font-weight:700;">Room '+escHtml(room)+'</span><span style="color:var(--gd);">Stayover</span></div>';
+                +'<span style="color:var(--gd);font-weight:700;">Room '+escHtml(room)+(rm[room]?' &middot; '+rm[room]+' min':'')+'</span><span style="color:var(--gd);">Stayover</span></div>';
             });
           }
           html+='</div>';

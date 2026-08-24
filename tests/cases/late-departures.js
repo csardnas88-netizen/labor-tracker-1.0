@@ -111,6 +111,18 @@ module.exports = {
     t.eq(summary.suites, 2, 'rooms 1503 and 1505 are real Suites (LATEDEP_SUITE_ROOMS); the rest are not');
     t.eq(summary.occupied, 1, 'only room 1505 (Stayover) counts as occupied');
     t.eq(summary.checkedOut, 5, 'the other 5 rooms (Departed, Due Out, or Arrived) count as checked out');
+
+    // ── _ldCleanMinutes / roomMinutes / totalMinutes — Carlos's own average
+    // figures: 45 min checked-out Suite, 30 min other checked-out, 30 min
+    // occupied Suite, 20 min other occupied ──
+    t.eq(win._ldCleanMinutes(true, false), 45, 'checked-out Suite');
+    t.eq(win._ldCleanMinutes(false, false), 30, 'checked-out standard room');
+    t.eq(win._ldCleanMinutes(true, true), 30, 'occupied (Stayover) Suite');
+    t.eq(win._ldCleanMinutes(false, true), 20, 'occupied (Stayover) standard room');
+    t.eq(summary.roomMinutes['1503'], 45, 'room 1503 (checked out, Suite) gets the 45-min figure');
+    t.eq(summary.roomMinutes['1505'], 30, 'room 1505 (occupied, Suite) gets the 30-min figure, not the standard-occupied 20');
+    t.eq(summary.roomMinutes['1501'], 30, 'room 1501 (checked out, standard) gets 30 min');
+    t.eq(summary.totalMinutes, 195, 'total workload: 30+30+45+30(occupied suite)+30 = 195 min across all 6 of her rooms, not just the ones shown in either detail list');
     t.eq(summary.stayoverRooms.length, 1, 'stayoverRooms lists the actual room numbers, not just a count');
     t.eq(summary.stayoverRooms[0], '1505', 'the room 1505 (Stayover) is the one listed — Carlos\'s ask: show which rooms specifically, colored apart from checked-out rooms');
     t.eq(win._ldFloorOf('2003'), 20, 'floor from a 4-digit room number');
