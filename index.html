@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.38.1"/>
+<meta name="app-version" content="7.39.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.39.0', date:'2026-08-24',
+    fixes:['Daily Lineup\'s Schedule Draft reader now matches a block label (Houseman, Managers, AM Lobby, etc.) regardless of case or extra spaces, instead of requiring an exact-case match. A hand-typed label that drifts even slightly — "HOUSEMAN" instead of "Houseman", a doubled space — used to make that ENTIRE block come up empty on every date on that sheet, with nothing to show anything had gone wrong. This is the most likely real cause of the Houseman-empty bug chased across two computers this session: the schedule file itself checked out correct every other way (right sheet, right raw cell values, right code), which points at exactly this kind of silent label mismatch.'],
+    features:['When House Attendants comes up empty on the Daily Lineup, the page now says why, right there — no Houseman section found on the sheet, no Houseman names on file in Section assignment, or everyone who is on file is off today. Carlos\'s ask after a long console-based investigation: next time this happens, a screenshot of the page itself is enough, no DevTools needed.']
+  },
   {
     v:'7.38.1', date:'2026-08-24',
     fixes:['Fixed the "Maximum call stack size exceeded" crash seen twice this session on two different long-lived tabs (once on Carlos\'s own computer, once on the work computer), always alongside a session that\'s dead server-side but doesn\'t look "expired" locally — a repeating 401. The realtime reconnect watchdog was retrying that dead connection every 30 seconds forever, for as long as the tab stayed open, and something in that many hours of uncontrolled retries was compounding into the crash. It now gives up after 8 failed attempts in a row until an actual page reload or a genuinely new sign-in/token refresh, instead of retrying indefinitely.']
@@ -19736,10 +19741,22 @@ function dlParseSchedule(wb,todayRef){
     var isHidden=function(r){ var p=hiddenRows[r-1]; return !!(p&&p.hidden); };
     var A=function(r){ var row=rows[r-1]; return row&&row[0]!=null?String(row[0]).trim():''; };
     var V=function(r,c){ var row=rows[r-1]; return row&&row[c-1]!=null?String(row[c-1]).trim():''; };
-    /* label -> every row carrying it */
+    /* label -> every row carrying it. Keyed by a normalized (lowercased,
+       single-spaced) form of the label text, not the raw string — a block
+       label is hand-typed in Excel and can drift (a manager retyping
+       "Houseman" as "HOUSEMAN", or leaving two spaces) without it being
+       visibly different to the eye. An exact-case match silently returns
+       an empty block for that entire label — every date on that sheet —
+       with nothing to show anything went wrong; Carlos's real bug,
+       Houseman coming up completely empty on a real schedule sheet where
+       every other block parsed fine. Normalizing the lookup on both sides
+       (here and in rowAfter) makes the match tolerant of exactly that
+       kind of drift while every existing label, already consistent case,
+       behaves identically to before. */
+    var _dlNormLabel=function(s){ return String(s||'').trim().toLowerCase().replace(/\s+/g,' '); };
     var lab={};
-    for(var r=1;r<=rows.length;r++){ var v=A(r); if(v){ (lab[v]=lab[v]||[]).push(r); } }
-    var rowAfter=function(l,after){ var a=lab[l]||[]; for(var i=0;i<a.length;i++){ if(a[i]>(after||0))return a[i]; } return null; };
+    for(var r=1;r<=rows.length;r++){ var v=A(r); if(v){ var nk=_dlNormLabel(v); (lab[nk]=lab[nk]||[]).push(r); } }
+    var rowAfter=function(l,after){ var a=lab[_dlNormLabel(l)]||[]; for(var i=0;i<a.length;i++){ if(a[i]>(after||0))return a[i]; } return null; };
     var mgrRow=rowAfter('Managers',0);
     function block(start,end,after,skip){
       var s=rowAfter(start,after||0); if(s==null)return [];
@@ -19838,6 +19855,20 @@ function dlBuildPlan(ds){
      never reading this one, so a covering RA never showed up in Houseman
      at all — Carlos's report, Julia Say on 2026-08-20. */
   day.gra.forEach(function(p){ if(p[1]==='HOUSEMAN')P.hm.push(p[0]); });
+  /* On-screen diagnosis for an empty House Attendants block — Carlos's
+     ask after a long back-and-forth chasing this exact thing through the
+     browser console: the page itself should say WHY it's empty, so a
+     screenshot of the page is enough next time, no console needed.
+     Three different real causes look identical as "nobody in" otherwise:
+     the Houseman section wasn't found on the sheet at all (label typo/
+     case drift — see the _dlNormLabel fix), Section assignment has no
+     Houseman names on file, or everyone in the schedule for today is
+     genuinely off. */
+  if(!P.hm.length){
+    if(!day.hp.length)P.hmEmptyReason="Couldn't find a Houseman section on this week's schedule sheet";
+    else if(!S.hm.length)P.hmEmptyReason='Section assignment has no Houseman names on file';
+    else P.hmEmptyReason=S.hm.length+' Houseman name'+(S.hm.length===1?'':'s')+' on file, 0 marked working today';
+  }
   /* PM Houseman — Carlos found this one missing (Paty covering wasn't
      showing). The old check only ever looked up the Sections file's
      FIXED name (Yesenia) inside the wrong blocks ('td' and 'hp'), so it
@@ -22765,7 +22796,7 @@ function renderDailyLineup(){
      assignment file, which can't know that ahead of time. Its own row
      per person since it's per-person, not the single shared line the
      other roles use. */
-  function dlFloorsRoleBlock(label,arr,each){
+  function dlFloorsRoleBlock(label,arr,each,emptyReason){
     var has=arr&&arr.length;
     var body=has
       ? arr.map(function(n){
@@ -22778,7 +22809,9 @@ function renderDailyLineup(){
             +(val?'#C9A84C':'var(--border2)')+';border-radius:5px;background:'+(val?'var(--gt)':'#fff')+';">'
             +'</div>';
         }).join('')
-      : '<div style="color:var(--text3);font-style:italic;font-size:12px;margin-top:3px;">nobody in</div>';
+      : '<div style="color:var(--text3);font-style:italic;font-size:12px;margin-top:3px;">nobody in'
+        +(emptyReason?'<div style="font-style:normal;font-size:10px;color:var(--red);margin-top:2px;">&#9888; '+escHtml(emptyReason)+'</div>':'')
+        +'</div>';
     return '<div style="border-left:3px solid '+(has?'var(--gold)':'var(--border2)')+';background:'+(has?'var(--surface)':'transparent')+';border-radius:0 6px 6px 0;padding:6px 10px;margin-bottom:6px;">'
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
       +'<span style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">'+label+'</span>'
@@ -22789,7 +22822,7 @@ function renderDailyLineup(){
   html+='<div style="padding:10px 16px;">';
   html+=dlRoleBlock('Coordinator',P.am_coord);
   html+=dlFloorsRoleBlock('Floor supervisors',P.sup,dlEach(P.toCleanDep,P.sup.length,'departures'));
-  html+=dlFloorsRoleBlock('House attendants',P.hm,dlEach(P.toCleanDep,P.hm.length,'departures'));
+  html+=dlFloorsRoleBlock('House attendants',P.hm,dlEach(P.toCleanDep,P.hm.length,'departures'),P.hmEmptyReason);
   html+=dlRoleBlock('Lobby AM',P.lobby_am);
   html+='</div>';
 
