@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.34.0"/>
+<meta name="app-version" content="7.35.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.35.0', date:'2026-08-23',
+    features:['Late Departures: the estimated workload moved to the top-right of each attendant\'s card, bigger and in navy instead of small gray text — Carlos\'s ask, it was barely visible. Right under her counts, the card now also shows Daily Stand Up (a fixed 20 min at the start of every shift) and how long she then waited with nothing to clean before her first room was actually ready — the real evidence behind the whole point of this section. Shift start follows Carlos\'s own hours: 9:00 AM Saturday/Sunday, 8:15 AM Monday-Friday.']
+  },
+  {
     v:'7.34.0', date:'2026-08-23',
     features:['Late Departures now shows an estimated clean-time in minutes next to each of an attendant\'s rooms, and a total "Est. workload" for her day — Carlos\'s own average figures: 45 min for a checked-out Suite, 30 min for any other checked-out room, 30 min for an occupied (Stayover) Suite, 20 min for any other occupied room. Turns the room/floor/suite counts already on the card into an actual estimated hours figure, not just a tally.']
   },
@@ -8839,6 +8843,20 @@ function _ldCleanMinutes(isSuite,isOccupied){
   if(isOccupied)return isSuite?LATEDEP_CLEAN_MIN.suiteOccupied:LATEDEP_CLEAN_MIN.standardOccupied;
   return isSuite?LATEDEP_CLEAN_MIN.suiteCheckedOut:LATEDEP_CLEAN_MIN.standardCheckedOut;
 }
+/* Room Attendant shift start, by day of week — Carlos's own numbers:
+   9:00 AM Saturday/Sunday, 8:15 AM Monday-Friday. Daily Stand Up is a
+   fixed 20 minutes right at the start of every shift, every day. Together
+   these give a real "how long did she wait with nothing to clean after
+   stand-up" figure — Carlos's actual point since the very first ask: on a
+   heavy-late-departure day, there's often nowhere to work yet. */
+var LATEDEP_STANDUP_MIN=20;
+function _ldShiftStartMin(dow){
+  return (dow===0||dow===6)?(9*60):(8*60+15);
+}
+function _ldTimeToMin(hhmm){
+  var p=hhmm.split(':');
+  return parseInt(p[0],10)*60+parseInt(p[1],10);
+}
 /* {total, suites, floors} for one attendant's full room list that day —
    every status (Departed/Due Out/Stayover), same source as "rooms
    assigned". Carlos's ask: floors + suites + late count together tell the
@@ -9270,7 +9288,13 @@ function renderLateDep(){
         var attOpen=!!lateDepAttExpanded[attKey];
         var nameJs=a.attendant.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
         html+='<div onclick="toggleLateDepAttendant(\''+d.ds+'\',\''+nameJs+'\')" style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;'+(attOpen?'grid-column:1/-1;':'')+'">';
+        html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">';
         html+='<div style="font-size:10.5px;font-weight:700;color:var(--text1);">'+escHtml(a.attendant)+'</div>';
+        if(a.assigned&&a.assigned.totalMinutes){
+          var estH=Math.floor(a.assigned.totalMinutes/60),estM=a.assigned.totalMinutes%60;
+          html+='<div style="font-size:13px;font-weight:800;color:var(--navy);white-space:nowrap;">'+estH+'h'+(estM?' '+estM+'m':'')+'</div>';
+        }
+        html+='</div>';
         html+='<div style="font-size:11px;color:var(--text2);font-weight:600;margin-top:2px;">'+(a.assigned?a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
         if(a.assigned){
           html+='<div style="font-size:11px;font-weight:600;margin-top:1px;">'
@@ -9279,9 +9303,17 @@ function renderLateDep(){
             +'<span style="color:var(--gd);">'+a.assigned.occupied+' occupied</span></div>';
         }
         html+='<div style="font-size:10px;font-weight:700;margin-top:3px;color:'+(a.after11>0?'var(--red)':'var(--text3)')+';">'+a.after11+' of '+a.total+' at/after 11 AM</div>';
-        if(a.assigned&&a.assigned.totalMinutes){
-          var estH=Math.floor(a.assigned.totalMinutes/60),estM=a.assigned.totalMinutes%60;
-          html+='<div style="font-size:10px;color:var(--text3);margin-top:2px;">Est. '+estH+'h'+(estM?' '+estM+'m':'')+' workload</div>';
+        /* Daily Stand Up (fixed 20 min, every shift) + how long she then
+           waited with nothing to clean before her first room was actually
+           ready — Carlos's real point since the first ask: on a heavy-
+           late-departure day there's often nowhere to work yet. Shift
+           start is Carlos's own numbers: 9:00 AM Sat/Sun, 8:15 AM Mon-Fri. */
+        html+='<div style="font-size:10px;color:var(--text3);margin-top:4px;">Daily Stand Up: '+LATEDEP_STANDUP_MIN+' min</div>';
+        if(a.rooms.length){
+          var standupEnd=_ldShiftStartMin(d.dow)+LATEDEP_STANDUP_MIN;
+          var firstMin=_ldTimeToMin(a.rooms[0].depTime);
+          var waitMin=Math.max(0,firstMin-standupEnd);
+          html+='<div style="font-size:10px;color:var(--text2);font-weight:600;">'+(waitMin>0?waitMin+' min wait after stand-up':'No wait after stand-up')+'</div>';
         }
         if(attOpen){
           html+='<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">';

@@ -218,5 +218,20 @@ module.exports = {
     // back to our own PDF count, so the tile is never blank.
     const mondayNoLabor = allWithLabor.find((d) => d.ds === '2026-08-24');
     t.eq(mondayNoLabor.total, 10, 'a day with nothing uploaded in Labor falls back to the PDF-parsed total');
+
+    // ── Daily Stand Up + wait-after-standup — Carlos's own shift hours:
+    // 9:00 AM Sat/Sun, 8:15 AM Mon-Fri, plus a fixed 20-min stand-up ──
+    t.eq(win._ldShiftStartMin(0), 9 * 60, 'Sunday shift starts 9:00 AM');
+    t.eq(win._ldShiftStartMin(6), 9 * 60, 'Saturday shift starts 9:00 AM');
+    t.eq(win._ldShiftStartMin(1), 8 * 60 + 15, 'Monday shift starts 8:15 AM');
+    t.eq(win._ldShiftStartMin(5), 8 * 60 + 15, 'Friday shift starts 8:15 AM');
+    t.eq(win._ldTimeToMin('09:33'), 9 * 60 + 33, 'HH:MM converts to minutes-since-midnight');
+    // Sunday: stand-up runs 9:00-9:20. Gabriela's earliest room (1501,
+    // sorted first) is 07:04 — before stand-up even starts, so no wait.
+    const standupEndSun = win._ldShiftStartMin(0) + win.LATEDEP_STANDUP_MIN;
+    t.eq(standupEndSun, 9 * 60 + 20, "Sunday's stand-up ends at 9:20 AM");
+    const firstRoomMin = win._ldTimeToMin(grouped.find((a) => a.attendant === 'Gabriela').rooms[0].depTime);
+    t.eq(firstRoomMin, 7 * 60 + 4, "Gabriela's earliest checked-out room is 07:04, well before stand-up ends");
+    t.assert(firstRoomMin < standupEndSun, 'confirms this case has zero real wait — her first room was ready before stand-up even ended');
   }
 };
