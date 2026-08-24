@@ -248,8 +248,13 @@ module.exports = {
     t.eq(win._ldFmtDur(480), '8h', 'a whole-hour duration omits the minutes');
     // A light Sunday: standup ends 9:20, first vacant at 07:04 (no wait),
     // Gabriela's workload is 195 min (3h15m) — she finishes well inside
-    // her 8h30m shift.
-    const gabFinish = win._ldShiftStartMin(0) + win.LATEDEP_STANDUP_MIN + 0 + summary.totalMinutes;
-    t.assert(gabFinish < win._ldShiftEndMin(0), "Gabriela's light day finishes on time, well before shift end");
+    // her 8h30m shift, even counting the 30-min break as elapsed time.
+    const gabFinish = win._ldShiftStartMin(0) + win.LATEDEP_STANDUP_MIN + 0 + summary.totalMinutes + win.LATEDEP_BREAK_MIN;
+    t.assert(gabFinish < win._ldShiftEndMin(0), "Gabriela's light day finishes on time, well before shift end, break included");
+
+    // ── Carlos's correction: "Scheduled shift" is working time only —
+    // the 30-min break is elapsed clock time, not cleaning time ──
+    t.eq(win.LATEDEP_BREAK_MIN, 30, '30-minute break, every shift');
+    t.eq(win._ldShiftEndMin(0) - win._ldShiftStartMin(0) - win.LATEDEP_BREAK_MIN, 480, 'Scheduled (working) shift is 8h once the break is subtracted from the 8h30m clock span');
   }
 };

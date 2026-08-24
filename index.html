@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.36.0"/>
+<meta name="app-version" content="7.36.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.36.1', date:'2026-08-23',
+    fixes:['Fixed the Shift Timeline\'s "Scheduled shift" showing 8h30m — Carlos\'s correction: 30 of those minutes are an unpaid break, not cleaning time, so it now reads 8h. Added a Break line to the timeline for that same 30 minutes, and it now counts toward the "Finishes" clock-time estimate too (elapsed time she\'s off the floor, same as Stand Up and the wait for her first vacant), so the math stays consistent with the corrected shift length.']
+  },
+  {
     v:'7.36.0', date:'2026-08-23',
     features:['Late Departures attendant cards now have a full "Shift Timeline" — Carlos\'s ask, so the whole story reads at a glance: her start time, Daily Stand Up (20 min), how long she waited for her first vacant room, her scheduled shift length (8h30m), her estimated workload, and finally whether that adds up to finishing on time or late, with the actual clock time and by how much. Replaces the two standalone Stand Up/wait lines and the top-right hours badge from the last two versions — everything now lives in one clean, ordered block instead of scattered across the card.']
   },
@@ -8854,6 +8858,12 @@ function _ldCleanMinutes(isSuite,isOccupied){
    stand-up" figure — Carlos's actual point since the very first ask: on a
    heavy-late-departure day, there's often nowhere to work yet. */
 var LATEDEP_STANDUP_MIN=20;
+/* 30-minute unpaid break, every shift — Carlos's correction: the
+   8h30m clock span from start to end is NOT all working time, so the
+   "Scheduled shift" figure should read 8h (510 - 30), and the break has
+   to count as elapsed clock time (not cleaning time) toward when she
+   actually finishes, same as Stand Up and the wait for her first vacant. */
+var LATEDEP_BREAK_MIN=30;
 function _ldShiftStartMin(dow){
   return (dow===0||dow===6)?(9*60):(8*60+15);
 }
@@ -9330,11 +9340,11 @@ function renderLateDep(){
         if(a.assigned&&a.assigned.totalMinutes){
           var shiftStart=_ldShiftStartMin(d.dow);
           var shiftEnd=_ldShiftEndMin(d.dow);
-          var shiftLen=shiftEnd-shiftStart;
+          var shiftLen=shiftEnd-shiftStart-LATEDEP_BREAK_MIN; /* working hours only — the 30-min break isn't cleaning time */
           var standupEnd=shiftStart+LATEDEP_STANDUP_MIN;
           var waitMin=0;
           if(a.rooms.length)waitMin=Math.max(0,_ldTimeToMin(a.rooms[0].depTime)-standupEnd);
-          var finishMin=shiftStart+LATEDEP_STANDUP_MIN+waitMin+a.assigned.totalMinutes;
+          var finishMin=shiftStart+LATEDEP_STANDUP_MIN+waitMin+a.assigned.totalMinutes+LATEDEP_BREAK_MIN;
           var overMin=finishMin-shiftEnd;
           function tlRow(label,val,color){
             return '<div style="display:flex;justify-content:space-between;font-size:10px;padding:1.5px 0;">'
@@ -9347,6 +9357,7 @@ function renderLateDep(){
           html+=tlRow('Daily Stand Up',LATEDEP_STANDUP_MIN+' min');
           html+=tlRow('Wait for 1st vacant',a.rooms.length?(waitMin>0?waitMin+' min':'None'):'&#8212;');
           html+=tlRow('Scheduled shift',_ldFmtDur(shiftLen));
+          html+=tlRow('Break',LATEDEP_BREAK_MIN+' min');
           html+=tlRow('Est. workload',_ldFmtDur(a.assigned.totalMinutes),'var(--navy)');
           var finishVal=_ldFmtClock(finishMin)+(overMin>0?' &middot; +'+_ldFmtDur(overMin):(overMin<0?' &middot; '+_ldFmtDur(-overMin)+' to spare':''));
           html+=tlRow(overMin>0?'Finishes late':'Finishes on time',finishVal,overMin>0?'var(--red)':'var(--green)');
