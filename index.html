@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.39.0"/>
+<meta name="app-version" content="7.39.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1292,7 +1292,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <span class="nav-icon">&#128683;</span> DNDs
   </div>
   <div class="nav-item" id="nav-latedep" onclick="showPage('latedep')">
-    <span class="nav-icon">&#128715;</span> Late Departures
+    <span class="nav-icon">&#128715;</span> Room Assignment Analysis
   </div>
 
   <div class="nav-section-label">Finance</div>
@@ -1647,7 +1647,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <div id="page-latedep" style="display:none;">
       <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
       <div class="page-header">
-        <div class="page-title">&#128715; Late Departures</div>
+        <div class="page-title">&#128715; Room Assignment Analysis</div>
         <div class="page-sub">How many rooms check out after 11 AM, and which days run heaviest</div>
       </div>
       <input type="file" id="lateDepFile" accept=".pdf" style="display:none;" onchange="handleLateDepUpload(this)">
@@ -4570,6 +4570,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.39.1', date:'2026-08-24',
+    changes:['Renamed "Late Departures" to "Room Assignment Analysis" in the sidebar and page header, per Carlos\'s ask.'],
+    fixes:['Each attendant\'s card lost its total room count when the checked-out/occupied split was added — brought back as "N rooms" alongside the floors/suites line, so the full room total Carlos asked for earlier is visible again, not just the two sub-counts.']
+  },
   {
     v:'7.39.0', date:'2026-08-24',
     fixes:['Daily Lineup\'s Schedule Draft reader now matches a block label (Houseman, Managers, AM Lobby, etc.) regardless of case or extra spaces, instead of requiring an exact-case match. A hand-typed label that drifts even slightly — "HOUSEMAN" instead of "Houseman", a doubled space — used to make that ENTIRE block come up empty on every date on that sheet, with nothing to show anything had gone wrong. This is the most likely real cause of the Houseman-empty bug chased across two computers this session: the schedule file itself checked out correct every other way (right sheet, right raw cell values, right code), which points at exactly this kind of silent label mismatch.'],
@@ -9258,7 +9263,7 @@ function _ldAggregate(rooms){
 function handleLateDepUpload(input){
   var file=input.files[0];
   if(!file)return;
-  showToast('⏳ Reading Late Departures report...');
+  showToast('⏳ Reading Room Assignment Analysis report...');
   var reader=new FileReader();
   reader.onload=function(e){
     var typedarray=new Uint8Array(e.target.result);
@@ -9294,7 +9299,7 @@ function handleLateDepUpload(input){
           }
           saveLateDepForDate(ds,agg);
         });
-        showToast((mismatches?'⚠️ ':'✓ ')+'Late Departures loaded — '+days.length+' day'+(days.length===1?'':'s')+(mismatches?' · '+mismatches+' room-count mismatch'+(mismatches===1?'':'es')+', check flagged cards':''));
+        showToast((mismatches?'⚠️ ':'✓ ')+'Room Assignment Analysis loaded — '+days.length+' day'+(days.length===1?'':'s')+(mismatches?' · '+mismatches+' room-count mismatch'+(mismatches===1?'':'es')+', check flagged cards':''));
         if(currentPage==='latedep')renderLateDep();
       }).catch(function(err){
         showToast('❌ Error reading report: '+err.message);
@@ -9433,7 +9438,7 @@ function renderLateDep(){
         if(a.assigned&&a.assigned.auditOk===false){
           html+='<div style="font-size:9.5px;font-weight:700;color:var(--red);margin-top:2px;">&#9888; Counted '+a.assigned.total+' rooms, sheet says '+a.assigned.reportedTotal+' &mdash; check for a parsing gap</div>';
         }
-        html+='<div style="font-size:11px;color:var(--text2);font-weight:600;margin-top:2px;">'+(a.assigned?a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
+        html+='<div style="font-size:11px;color:var(--text2);font-weight:600;margin-top:2px;">'+(a.assigned?a.assigned.total+' room'+(a.assigned.total===1?'':'s')+' &middot; '+a.assigned.floors+' floor'+(a.assigned.floors===1?'':'s')+' &middot; '+a.assigned.suites+' suite'+(a.assigned.suites===1?'':'s'):'&#8212;')+'</div>';
         if(a.assigned){
           html+='<div style="font-size:11px;font-weight:600;margin-top:1px;">'
             +'<span style="color:var(--gd);">'+a.assigned.checkedOut+' checked out</span>'
