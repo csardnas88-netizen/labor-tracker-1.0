@@ -527,13 +527,18 @@ module.exports = {
     t.assert(/Nothing to copy/.test(win.document.getElementById('toastMsg').textContent),
       'and he is told why, rather than the button silently doing nothing');
 
-    // Rendered: the button sits next to the name, and only for a row
+    // Rendered: the fill action lives in the "⋮" menu now, and only
+    // shows up once that person's menu is opened, and only for a row
     // that actually has something to copy.
     win.renderSchedule();
+    win.schedTogglePersonMenu('gra', 'Mayra');
+    win.schedTogglePersonMenu('gra', 'Rolando');
     const fillHtml = html();
-    t.assert(/schedFillWeek\('gra','Mayra'\)/.test(fillHtml), "Mayra's row offers the fill button");
+    t.assert(/schedFillWeek\('gra','Mayra'\)/.test(fillHtml), "Mayra's open menu offers the fill action");
     t.assert(!/schedFillWeek\('gra','Rolando'\)/.test(fillHtml),
-      "Rolando's row does not — an all-blank row has nothing worth offering to copy");
+      "Rolando's open menu does not — an all-blank row has nothing worth offering to copy");
+    win.schedTogglePersonMenu('gra', 'Mayra');
+    win.schedTogglePersonMenu('gra', 'Rolando');
 
     // ── 15) A row that came from the workbook is removable too ──
     // Carlos's stated goal: the app should REPLACE Excel, not defer to
@@ -548,11 +553,14 @@ module.exports = {
     t.eq(win.schedDayTotal(win.dlLoadSchedule(), sat, 'laundry'), laundryTotalBefore - 1,
       'and the crew total drops with her, same as removing anyone else');
 
-    // Rendered: every row gets the × now, not just borrowed ones.
+    // Rendered: every row's open menu gets the remove action now, not
+    // just borrowed ones.
     win.renderSchedule();
+    win.schedTogglePersonMenu('laundry', 'Olga A');
     const removeHtml = html();
     t.assert(/schedRemovePerson\('laundry','Olga A'\)/.test(removeHtml),
-      "a workbook row (Olga A, never borrowed) still offers its own × — removability no longer depends on where the row came from");
+      "a workbook row (Olga A, never borrowed) still offers removal in its menu — removability no longer depends on where the row came from");
+    win.schedTogglePersonMenu('laundry', 'Olga A');
 
     // ── 16) Building a week without Excel ──
     // Carlos's larger goal: the app should replace Excel entirely, not
@@ -627,9 +635,11 @@ module.exports = {
       "Rolando's row this week starts blank, same as everyone else in the week built in step 16");
 
     win.renderSchedule();
+    win.schedTogglePersonMenu('gra', 'Rolando');
     const copyHtml = html();
     t.assert(/schedCopyLastWeek\('gra','Rolando'\)/.test(copyHtml),
-      'the copy-last-week button appears now that last week has something to copy');
+      "the copy-last-week action appears in Rolando's open menu now that last week has something to copy");
+    win.schedTogglePersonMenu('gra', 'Rolando');
 
     win.schedCopyLastWeek('gra', 'Rolando');
     const afterCopy = win.dlLoadSchedule();
@@ -1204,7 +1214,9 @@ module.exports = {
     win.schedToggleWeekendPref('Amara');
     t.eq(win.schedWeekendPrefFor(win.dlLoadSchedule(), 'Amara'), 'preferWork', 'toggling once marks Amara as preferring to work weekends');
     win.renderSchedule();
-    t.assert(/Prefers to work weekends/.test(html()), 'the button title reflects the mark once set');
+    win.schedTogglePersonMenu('sup', 'Amara');
+    t.assert(/Prefers to work weekends/.test(html()), "the mark shows in Amara's open menu once set");
+    win.schedTogglePersonMenu('sup', 'Amara');
     win.schedToggleWeekendPref('Amara');
     t.eq(win.schedWeekendPrefFor(win.dlLoadSchedule(), 'Amara'), null, 'toggling again clears it — a switch, not a one-way mark');
 
@@ -1229,6 +1241,50 @@ module.exports = {
     const reparsed23 = { days: { [thisDates20[0]]: { sheet: 'reuploaded', occ: '', dep: '', tdOcc: '', sup: [['Amara', '1']] } }, count: 1 };
     const carried23 = win.schedCarryWeekendPref(before23, reparsed23);
     t.eq(carried23.weekendPref[win.dlNorm('Amara')], 'preferWork', 'schedCarryWeekendPref keeps the mark across a fresh workbook parse');
+
+    // ── 23b) "Wants specific days off" — Carlos's ask: a standing
+    // preference wider than just weekends (e.g. always Monday+Tuesday),
+    // tried first by Auto-fill ahead of its own fairness rotation, same
+    // "always wins" precedence weekendPref already has. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH23b = { days: {} };
+    thisDates20.forEach((ds) => { SCH23b.days[ds] = { sheet: 't', occ: '100', dep: '80', tdOcc: '', sup: [['Cora', '1'], ['Deko', '1']] }; });
+    win.dlSaveSchedule(SCH23b);
+    win.schedViewWeekStart = wk20(0);
+
+    t.eq(win.schedDayOffPrefFor(win.dlLoadSchedule(), 'Cora').length, 0, 'nobody has a day-off preference before it is set');
+    const originalPrompt = win.prompt;
+    win.prompt = () => 'Mon,Tue';
+    win.schedSetDayOffPref('Cora');
+    win.prompt = originalPrompt;
+    // schedWeekDates()/dates[] order is Sat=0,Sun=1,Mon=2,Tue=3...
+    t.eq(win.schedDayOffPrefFor(win.dlLoadSchedule(), 'Cora').join(','), '2,3', '"Mon,Tue" parses to day indices 2 and 3');
+
+    // Auto-fill has to actually try Monday+Tuesday first for Cora, even
+    // though the fairness rotation on a brand-new crew would otherwise
+    // put her first in line for a Saturday+Sunday weekend off.
+    const confirmed23b = win.confirm; win.confirm = () => true;
+    win.schedAutoFill();
+    win.confirm = confirmed23b;
+    const afterAuto23b = win.dlLoadSchedule();
+    const coraVal = (i) => afterAuto23b.days[thisDates20[i]].sup.filter((p) => p[0] === 'Cora')[0][1];
+    t.eq(coraVal(2), 'OFF', "Cora's Monday (index 2, her preferred day) is OFF");
+    t.eq(coraVal(3), 'OFF', "Cora's Tuesday (index 3, her preferred day) is OFF too");
+
+    // Clearing it (blank prompt input) removes the mark.
+    win.prompt = () => '';
+    win.schedSetDayOffPref('Cora');
+    win.prompt = originalPrompt;
+    t.eq(win.schedDayOffPrefFor(win.dlLoadSchedule(), 'Cora').length, 0, 'a blank prompt clears the preference');
+
+    // Survives a re-upload, same as the exempt/weekendPref marks.
+    win.prompt = () => 'Wed';
+    win.schedSetDayOffPref('Cora');
+    win.prompt = originalPrompt;
+    const before23b = win.dlLoadSchedule();
+    const reparsed23b = { days: { [thisDates20[0]]: { sheet: 'reuploaded', occ: '', dep: '', tdOcc: '', sup: [['Cora', '1']] } }, count: 1 };
+    const carried23b = win.schedCarryDayOffPref(before23b, reparsed23b);
+    t.eq(carried23b.dayOffPref[win.dlNorm('Cora')].join(','), '4', 'schedCarryDayOffPref keeps the mark across a fresh workbook parse ("Wed" = index 4)');
 
     // ── FLEX and VAC (Request Off write-through) are fixed for Auto-fill,
     // exactly like R-OFF — Carlos's ask: those three all represent a
