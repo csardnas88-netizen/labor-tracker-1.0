@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.1"/>
+<meta name="app-version" content="7.40.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.2', date:'2026-08-27',
+    changes:['The "prefers specific days off" picker no longer uses a text prompt — Carlos\'s ask, since typing days by hand meant closing and reopening it just to add a second day. It\'s now a row of day buttons right in the "⋮" menu; tap Mon, tap Tue, both stick at once, no typing and no reopening.']
+  },
   {
     v:'7.40.1', date:'2026-08-26',
     changes:['Collapsed the row of small per-person icons on the Schedule page (fill week, copy last week, exempt, weekend preference, day-off preference, remove) into a single "⋮" button next to each name — Carlos\'s ask, the icons were hard to see and hard to tell apart. Clicking it opens a text-labeled list of the same actions instead; nothing was removed, just no longer six unlabeled glyphs crammed next to a name. The "⋮" itself turns gold when that person has any mark set, so it\'s still obvious at a glance without opening the menu.']
@@ -20523,19 +20527,14 @@ function schedCarryWeekendPref(oldSch,newSch){
    precedence weekendPref already has, just for a wider set of days. */
 function schedDayOffPrefFor(SCH,name){ return (SCH&&SCH.dayOffPref&&SCH.dayOffPref[dlNorm(name)])||[]; }
 var SCHED_DOW_ABBR=['Sat','Sun','Mon','Tue','Wed','Thu','Fri'];
-function schedSetDayOffPref(name){
+function schedToggleDayOffPrefDay(name,idx){
   var SCH=dlLoadSchedule(); if(!SCH)return;
-  var current=schedDayOffPrefFor(SCH,name).map(function(i){return SCHED_DOW_ABBR[i];}).join(',');
-  var raw=prompt('Which days does '+name+' prefer off? (e.g. Mon,Tue — Sat/Sun/Mon/Tue/Wed/Thu/Fri, comma separated, blank to clear)',current);
-  if(raw===null)return; // cancelled
-  var picked=[];
-  raw.split(',').forEach(function(tok){
-    tok=tok.trim(); if(!tok)return;
-    var idx=SCHED_DOW_ABBR.findIndex(function(a){return a.toLowerCase()===tok.toLowerCase().slice(0,3);});
-    if(idx!==-1&&picked.indexOf(idx)===-1)picked.push(idx);
-  });
   if(!SCH.dayOffPref)SCH.dayOffPref={};
   var k=dlNorm(name);
+  var picked=schedDayOffPrefFor(SCH,name).slice();
+  var pos=picked.indexOf(idx);
+  if(pos!==-1)picked.splice(pos,1); else picked.push(idx);
+  picked.sort(function(a,b){return a-b;});
   if(picked.length)SCH.dayOffPref[k]=picked; else delete SCH.dayOffPref[k];
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
@@ -21907,7 +21906,14 @@ function renderSchedule(){
         if(minOff){
           html+=menuBtn(exempt?'&#8856; Irregular arrangement — click to un-mark':'&#8856; Mark as irregular (exempt from Schedule Checks)','schedToggleCheckExempt(\''+nmJs+'\')',exempt);
           html+=menuBtn(prefersWork?'&#9728; Prefers to work weekends — click to clear':'&#9728; Mark as preferring to work weekends','schedToggleWeekendPref(\''+nmJs+'\')',prefersWork);
-          html+=menuBtn(dayOffPrefList.length?'&#128197; Prefers off: '+dayOffPrefList.map(function(i){return SCHED_DOW_ABBR[i];}).join(', ')+' — click to change':'&#128197; Set specific days preferred off','schedSetDayOffPref(\''+nmJs+'\')',dayOffPrefList.length>0);
+          html+='<div style="padding:4px 6px 2px;">'
+            +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">&#128197; Prefers off (tap to toggle, pick as many as you like)</div>'
+            +'<div style="display:flex;gap:3px;flex-wrap:wrap;">';
+          for(var dpi=0;dpi<SCHED_DOW_ABBR.length;dpi++){
+            var dpOn=dayOffPrefList.indexOf(dpi)!==-1;
+            html+='<button onclick="schedToggleDayOffPrefDay(\''+nmJs+'\','+dpi+')" style="border:1px solid '+(dpOn?'var(--gd)':'var(--border)')+';background:'+(dpOn?'var(--gd)':'transparent')+';color:'+(dpOn?'#fff':'var(--text1)')+';font-weight:700;font-size:10px;padding:3px 7px;border-radius:5px;cursor:pointer;">'+SCHED_DOW_ABBR[dpi]+'</button>';
+          }
+          html+='</div></div>';
         }
         html+=menuBtn('&times; Remove from crew, this week onward','schedRemovePerson(\''+b.key+'\',\''+nmJs+'\')');
         html+='</div>';

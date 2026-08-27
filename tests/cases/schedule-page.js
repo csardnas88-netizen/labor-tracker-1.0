@@ -1253,12 +1253,13 @@ module.exports = {
     win.schedViewWeekStart = wk20(0);
 
     t.eq(win.schedDayOffPrefFor(win.dlLoadSchedule(), 'Cora').length, 0, 'nobody has a day-off preference before it is set');
-    const originalPrompt = win.prompt;
-    win.prompt = () => 'Mon,Tue';
-    win.schedSetDayOffPref('Cora');
-    win.prompt = originalPrompt;
+    // Carlos's ask: pick multiple days without closing and reopening —
+    // each tap toggles one day and stays open, so two taps in a row
+    // (Mon, then Tue) should land both days at once.
     // schedWeekDates()/dates[] order is Sat=0,Sun=1,Mon=2,Tue=3...
-    t.eq(win.schedDayOffPrefFor(win.dlLoadSchedule(), 'Cora').join(','), '2,3', '"Mon,Tue" parses to day indices 2 and 3');
+    win.schedToggleDayOffPrefDay('Cora', 2);
+    win.schedToggleDayOffPrefDay('Cora', 3);
+    t.eq(win.schedDayOffPrefFor(win.dlLoadSchedule(), 'Cora').join(','), '2,3', 'tapping Mon then Tue picks day indices 2 and 3, both held at once');
 
     // Auto-fill has to actually try Monday+Tuesday first for Cora, even
     // though the fairness rotation on a brand-new crew would otherwise
@@ -1271,16 +1272,14 @@ module.exports = {
     t.eq(coraVal(2), 'OFF', "Cora's Monday (index 2, her preferred day) is OFF");
     t.eq(coraVal(3), 'OFF', "Cora's Tuesday (index 3, her preferred day) is OFF too");
 
-    // Clearing it (blank prompt input) removes the mark.
-    win.prompt = () => '';
-    win.schedSetDayOffPref('Cora');
-    win.prompt = originalPrompt;
-    t.eq(win.schedDayOffPrefFor(win.dlLoadSchedule(), 'Cora').length, 0, 'a blank prompt clears the preference');
+    // Clearing it: tapping an already-picked day toggles it back off,
+    // and toggling off the last one removes the mark entirely.
+    win.schedToggleDayOffPrefDay('Cora', 2);
+    win.schedToggleDayOffPrefDay('Cora', 3);
+    t.eq(win.schedDayOffPrefFor(win.dlLoadSchedule(), 'Cora').length, 0, 'toggling both picked days back off clears the preference');
 
     // Survives a re-upload, same as the exempt/weekendPref marks.
-    win.prompt = () => 'Wed';
-    win.schedSetDayOffPref('Cora');
-    win.prompt = originalPrompt;
+    win.schedToggleDayOffPrefDay('Cora', 4);
     const before23b = win.dlLoadSchedule();
     const reparsed23b = { days: { [thisDates20[0]]: { sheet: 'reuploaded', occ: '', dep: '', tdOcc: '', sup: [['Cora', '1']] } }, count: 1 };
     const carried23b = win.schedCarryDayOffPref(before23b, reparsed23b);
