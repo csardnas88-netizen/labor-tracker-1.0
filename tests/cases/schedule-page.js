@@ -745,6 +745,19 @@ module.exports = {
     t.assert(!checks.some((c) => /Vanessa/.test(c.text) && c.type === 'weekend'),
       'a full weekend just two weeks back is recent enough that she is not flagged, even though this week has none either');
 
+    // Carlos's ask: someone marked as preferring to WORK weekends should
+    // never trigger this warning — the whole point of that mark is that
+    // she isn't supposed to get a full weekend off, so "overdue" doesn't
+    // apply to her. The days-off warning is a separate rule and stays on.
+    win.schedToggleWeekendPref('Elmer Galindo');
+    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
+    t.assert(!checks.some((c) => /Elmer Galindo/.test(c.text) && c.type === 'weekend'),
+      'once marked as preferring to work weekends, Elmer drops out of the weekend-off warning');
+    win.schedToggleWeekendPref('Elmer Galindo'); // clear it back for the rest of the fixture
+    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
+    t.assert(checks.some((c) => c.type === 'weekend' && /Elmer Galindo hasn't had a full weekend off/.test(c.text)),
+      'clearing the mark brings the warning back — same overdue history as before');
+
     // Not enough history at all (fewer than 3 prior weeks on file) should
     // never read as "never had one" — that would punish a schedule the
     // app simply hasn't seen much of yet.

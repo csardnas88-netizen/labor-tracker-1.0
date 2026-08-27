@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.2"/>
+<meta name="app-version" content="7.40.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.3', date:'2026-08-27',
+    changes:['Schedule Checks no longer warns "hasn\'t had a full weekend off" about anyone marked as preferring to work weekends — Carlos\'s ask, that warning existed to catch someone being unfairly skipped, which doesn\'t apply to someone who\'s asked not to get weekends off in the first place. The "fewer days off than usual" warning is untouched; this only trims the weekend-specific one.']
+  },
   {
     v:'7.40.2', date:'2026-08-27',
     changes:['The "prefers specific days off" picker no longer uses a text prompt — Carlos\'s ask, since typing days by hand meant closing and reopening it just to add a second day. It\'s now a row of day buttons right in the "⋮" menu; tap Mon, tap Tue, both stick at once, no typing and no reopening.']
@@ -20649,7 +20653,10 @@ function schedScheduleChecks(SCH,dates){
         out.push({crew:b.label,type:'off',
           text:nm+' has '+off+' day'+(off===1?'':'s')+' off this week (usually '+minOff+')'});
       }
-      if(!schedHasFullWeekend(SCH,dates,b.key,nm)){
+      /* Carlos's ask: someone marked as preferring to WORK weekends
+         should never trigger the "hasn't had a full weekend off"
+         warning — that's the point of the mark, not an oversight. */
+      if(!schedHasFullWeekend(SCH,dates,b.key,nm)&&schedWeekendPrefFor(SCH,nm)!=='preferWork'){
         var gap=schedWeekendGap(SCH,b.key,nm,parseLocalDate(dates[0]));
         if(gap.checked>=3&&(gap.weeksAgo==null||gap.weeksAgo>3)){
           out.push({crew:b.label,type:'weekend',
