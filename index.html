@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.39.2"/>
+<meta name="app-version" content="7.39.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.39.3', date:'2026-08-26',
+    fixes:['Removing someone from a crew ("✕") now clears her from that week AND every week already built after it, not just the one you\'re looking at — Carlos\'s report: Susan, Julia, and Sandra kept reappearing in Laundry no matter how many times he removed them, because an already-built future week still had them, and that\'s the week "Build week from crew list" copies its roster from next. A past week is deliberately left untouched — if she really did work that crew before, looking back should still show it.']
+  },
   {
     v:'7.39.2', date:'2026-08-24',
     changes:['Room Assignment Analysis card layout, per Carlos\'s ask: the first line now reads "N rooms · X checked out · Y occupied" together, and floors/suites moved down to their own line underneath.']
@@ -21404,19 +21408,31 @@ function schedAddPerson(bk,name){
    removed here can come back if that same file is re-uploaded later
    (dlParseSchedule reads the file fresh every time) — expected, not a
    bug, and only matters at all if he goes back to uploading. */
+/* Removes THIS week and every week ON OR AFTER it — never anything before.
+   Carlos's real bug: removing someone only cleared the week he was
+   looking at, so an already-built FUTURE week (built earlier, before he
+   removed her) still carried her forward as "the" reference roster the
+   next time he built a week after that — she kept coming back no matter
+   how many times he removed her from whatever he happened to be viewing.
+   Past weeks are deliberately left alone: if she really did work that
+   crew historically, looking back at an old week should still show it —
+   removing her going forward isn't the same as erasing that she was ever
+   there. */
 function schedRemovePerson(bk,name){
   name=String(name==null?'':name).trim();
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days)return;
-  if(!confirm('Remove '+name+' from this crew for this week?'))return;
-  schedWeekDates().forEach(function(ds){
-    var arr=SCH.days[ds]&&SCH.days[ds][bk]; if(!arr)return;
+  if(!confirm('Remove '+name+' from this crew, starting this week? (Past weeks keep their own history.)'))return;
+  var cutoff=_schedWeekStart();
+  Object.keys(SCH.days).forEach(function(ds){
+    if(parseLocalDate(ds)<cutoff)return;
+    var arr=SCH.days[ds][bk]; if(!arr)return;
     for(var i=arr.length-1;i>=0;i--) if(dlNorm(arr[i][0])===dlNorm(name))arr.splice(i,1);
   });
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   renderSchedule();
-  showToast('&#10003; '+name+' removed');
+  showToast('&#10003; '+name+' removed from this week onward');
 }
 function schedPickPerson(bk,sel){
   var v=sel.value; sel.selectedIndex=0;
@@ -21823,7 +21839,7 @@ function renderSchedule(){
             +(prefersWork?'Prefers to work weekends — Auto-fill will not offer '+escHtml(nm)+' a weekend off. Click to clear.'
                          :'Mark '+escHtml(nm)+' as preferring to work weekends — Auto-fill will steer weekends off away from them')+'"'
             +' style="flex-shrink:0;border:none;background:transparent;color:'+(prefersWork?'var(--gd)':'var(--text3)')+';font-size:11px;line-height:1;cursor:pointer;padding:0 2px;opacity:'+(prefersWork?'1':'.5')+';">&#9728;</button>':'')
-        +'<button onclick="schedRemovePerson(\''+b.key+'\',\''+nmJs+'\')" title="Remove '+escHtml(nm)+' from this crew for this week"'
+        +'<button onclick="schedRemovePerson(\''+b.key+'\',\''+nmJs+'\')" title="Remove '+escHtml(nm)+' from this crew, this week onward (past weeks keep their history)"'
             +' style="flex-shrink:0;border:none;background:transparent;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0 2px;">&times;</button>'
         +'</div>';
       dates.forEach(function(ds,di){
