@@ -635,6 +635,28 @@ module.exports = {
       "Rolando's row this week starts blank, same as everyone else in the week built in step 16");
 
     win.renderSchedule();
+
+    // ── Last-week work-day badge — Carlos's ask: a quick read on how
+    // hard someone worked last week, right next to her name, while
+    // filling in THIS week. Rolando's fabricated lwPattern above has 4
+    // worked days ('1','OFF','1','1','OFF','R-OFF','1' — OFF/R-OFF don't
+    // count), so the badge should read exactly 4, not last week's day
+    // count or this week's. ──
+    const rolMenuIdx = html().indexOf("schedTogglePersonMenu('gra','Rolando')");
+    t.assert(rolMenuIdx !== -1, "Rolando's name span is on the rendered Room Attendant crew card");
+    const rolSegment = html().substring(Math.max(0, rolMenuIdx - 300), rolMenuIdx);
+    t.assert(/4d wk/.test(rolSegment) && /Worked 4 days last week/.test(rolSegment),
+      "Rolando's badge reads 4 — matching the 4 worked days in his fabricated last-week pattern, not last week's full 7 or this week's (still blank)");
+
+    // Debora has nothing at all in last week's dates — the badge must be
+    // absent, not a false "0d wk" (which would misread as a rested week
+    // when really there's just no record of one).
+    const debMenuIdx = html().indexOf("schedTogglePersonMenu('gra','Debora')");
+    if (debMenuIdx !== -1) {
+      const debSegment = html().substring(Math.max(0, debMenuIdx - 300), debMenuIdx);
+      t.assert(!/\dd wk/.test(debSegment), 'Debora, with no last week on file at all, gets no badge — blank, never a false zero');
+    }
+
     win.schedTogglePersonMenu('gra', 'Rolando');
     const copyHtml = html();
     t.assert(/schedCopyLastWeek\('gra','Rolando'\)/.test(copyHtml),

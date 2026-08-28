@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.3"/>
+<meta name="app-version" content="7.40.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.4', date:'2026-08-27',
+    changes:['Each name on the Schedule page now shows a small badge with how many days that person actually worked LAST week — Carlos\'s ask, a way to see a heavy or light prior week at a glance while handing out this week\'s days, without opening last week separately. Turns red at 6+ days as a heads-up. Blank when last week isn\'t on file for that person at all, so "no data" never reads the same as a real day off.']
+  },
   {
     v:'7.40.3', date:'2026-08-27',
     changes:['Schedule Checks no longer warns "hasn\'t had a full weekend off" about anyone marked as preferring to work weekends — Carlos\'s ask, that warning existed to catch someone being unfairly skipped, which doesn\'t apply to someone who\'s asked not to get weekends off in the first place. The "fewer days off than usual" warning is untouched; this only trims the weekend-specific one.']
@@ -21896,6 +21900,15 @@ function renderSchedule(){
         var lcell=lday&&lday[b.key]&&lday[b.key].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0];
         if(lcell&&String(lcell[1]||'').trim()!=='')hasLastWeek=true;
       }
+      /* Carlos's ask: a quick read on how many days this person actually
+         worked LAST week, right while building the week on screen — so a
+         string of long weeks (or a very light one) is visible before he
+         finishes handing out this week's days too. Reuses the same
+         work-day count as the week's own "Total" column, just pointed at
+         last week's dates instead. Blank (not "0") when last week isn't
+         on file for her at all — a real 0 (fully off) should never read
+         the same as "no data". */
+      var lwWorkDays=hasLastWeek?_schedWorkDaysFor(SCH,lwDates,b.key,idx,nm):null;
       var menuKey=b.key+'|'+dlNorm(nm), menuOpen=!!schedPersonMenuOpen[menuKey];
       var anyMark=exempt||prefersWork||dayOffPrefList.length;
       html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-bottom:3px;'
@@ -21903,6 +21916,7 @@ function renderSchedule(){
       html+='<div style="display:flex;align-items:center;gap:3px;min-width:0;">'
         +'<span style="font-size:11px;font-weight:600;color:'+(borrowed?'var(--gd)':'var(--text1)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"'
         +' title="'+escHtml(nm)+(borrowed?' — borrowed into this crew':'')+(fullWeekend?' — full weekend off':'')+'">'+escHtml(nm)+'</span>'
+        +(lwWorkDays!=null?'<span title="Worked '+lwWorkDays+' day'+(lwWorkDays===1?'':'s')+' last week" style="flex-shrink:0;font-size:9px;font-weight:800;color:'+(lwWorkDays>=6?'var(--red)':'var(--text3)')+';border:1px solid '+(lwWorkDays>=6?'var(--red-border,var(--red))':'var(--border)')+';border-radius:8px;padding:1px 5px;line-height:1.4;">'+lwWorkDays+'d wk</span>':'')
         +'<button onclick="schedTogglePersonMenu(\''+b.key+'\',\''+nmJs+'\')" title="More options for '+escHtml(nm)+(anyMark?' (has a mark set)':'')+'"'
             +' style="flex-shrink:0;border:none;background:transparent;color:'+(anyMark?'var(--gd)':'var(--text3)')+';font-size:13px;font-weight:800;line-height:1;cursor:pointer;padding:0 4px;">&#8942;</button>'
         +'</div>';
