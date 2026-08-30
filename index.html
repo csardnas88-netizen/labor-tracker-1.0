@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.4"/>
+<meta name="app-version" content="7.40.6"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,14 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.40.6', date:'2026-08-30',
+    fixes:['Fixed a real data-loss bug: the Schedule Draft used to sync as one whole block, so a device on an older local copy could save something unrelated and wipe out an entire week another device had already built — traced from Carlos\'s report that the week he\'d just built disappeared, confirmed against the actual saved record, which ended exactly where a manager\'s older device left off. Now a pull combines weeks together instead of one replacing the other outright: a week (or a person mark) either side is simply missing is always kept, and only a week both sides genuinely edited differently is decided by which save is newer.']
+  },
+  {
+    v:'7.40.5', date:'2026-08-27',
+    changes:['Moved the last-week work-day badge off the cramped spot next to each name and gave it its own "Last week" column, right after Days — Carlos\'s ask. Same number, same red-at-6+ heads-up, just easier to read.']
+  },
+  {
     v:'7.40.4', date:'2026-08-27',
     changes:['Each name on the Schedule page now shows a small badge with how many days that person actually worked LAST week — Carlos\'s ask, a way to see a heavy or light prior week at a glance while handing out this week\'s days, without opening last week separately. Turns red at 6+ days as a heads-up. Blank when last week isn\'t on file for that person at all, so "no data" never reads the same as a real day off.']
   },
@@ -7717,16 +7725,12 @@ function _syncFromSheetsPull(){
           }
         }
         if(key==='dl_schedule'&&all[key]&&all[key].days){
-          var localSch=dlLoadSchedule();
-          if(!localSch||String(all[key].savedAt||'')>String(localSch.savedAt||'')){
-            safeSetItem('hk_dl_schedule',JSON.stringify(all[key])); updated=true;
-          }
+          var mSch=_schedMergeRecord(dlLoadSchedule(),all[key]);
+          if(mSch.changed){ safeSetItem('hk_dl_schedule',JSON.stringify(mSch.rec)); updated=true; }
         }
         if(key==='dl_schedule_snapshot'&&all[key]&&all[key].days){
-          var localSnap=dlLoadScheduleSnapshot();
-          if(!localSnap||String(all[key].savedAt||'')>String(localSnap.savedAt||'')){
-            safeSetItem('hk_dl_schedule_snapshot',JSON.stringify(all[key])); updated=true;
-          }
+          var mSnap=_schedMergeRecord(dlLoadScheduleSnapshot(),all[key]);
+          if(mSnap.changed){ safeSetItem('hk_dl_schedule_snapshot',JSON.stringify(mSnap.rec)); updated=true; }
         }
         if(key.indexOf('dl_day_')===0&&all[key]&&typeof all[key]==='object'){
           safeSetItem('hk_'+key,JSON.stringify(all[key])); updated=true;
@@ -19650,6 +19654,43 @@ function dlLoadSections(){ try{var s=localStorage.getItem('hk_dl_sections');retu
 function dlSaveSections(o){ o.savedAt=new Date().toISOString(); safeSetItem('hk_dl_sections',JSON.stringify(o)); try{supaPut('dl_sections',o);}catch(e){} }
 function dlLoadSchedule(){ try{var s=localStorage.getItem('hk_dl_schedule');return s?JSON.parse(s):null;}catch(e){return null;} }
 function dlSaveSchedule(o){ safeSetItem('hk_dl_schedule',JSON.stringify(o)); try{supaPut('dl_schedule',o);}catch(e){} }
+/* Carlos's real bug, 2026-08-30: dl_schedule/dl_schedule_snapshot used
+   to be pulled as one whole blob — whichever side had the newer
+   top-level savedAt replaced the other ENTIRELY, including weeks it
+   had never even seen. He built next week's Schedule Draft on his own
+   device; a manager's device, still on an older local copy, saved
+   something unrelated a few hours later; that manager's copy (missing
+   the new week) became the newer savedAt and wiped it out completely —
+   confirmed against the real Supabase row, which ended exactly on the
+   manager's last loaded date.
+
+   This unions day-keys (and the three person-level mark maps) instead
+   of replacing wholesale: a day or mark either side is simply missing
+   is always kept, never deleted just because the other side happens to
+   have a newer overall timestamp. Only a day/mark BOTH sides actually
+   have is decided by which side is newer — the same-day double-edit
+   case this can't fully resolve, but a far smaller loss than an entire
+   future week disappearing. */
+function _schedMergeRecord(local,remote){
+  if(!remote||!remote.days)return {rec:local,changed:false};
+  if(!local)return {rec:remote,changed:true};
+  var remoteNewer=String(remote.savedAt||'')>String(local.savedAt||'');
+  var merged={days:Object.assign({},local.days)};
+  Object.keys(remote.days).forEach(function(ds){
+    if(!merged.days[ds]||remoteNewer)merged.days[ds]=remote.days[ds];
+  });
+  ['checkExempt','weekendPref','dayOffPref'].forEach(function(f){
+    var mf=Object.assign({},local[f]||{});
+    var rf=remote[f]||{};
+    Object.keys(rf).forEach(function(k){
+      if(!(k in mf)||remoteNewer)mf[k]=rf[k];
+    });
+    if(Object.keys(mf).length)merged[f]=mf;
+  });
+  merged.count=Object.keys(merged.days).length;
+  merged.savedAt=remoteNewer?remote.savedAt:local.savedAt;
+  return {rec:merged,changed:JSON.stringify(merged)!==JSON.stringify(local)};
+}
 /* Carlos's ask, 2026-08-23: while he's still actively building/testing
    the Schedule Draft page's live editor (Auto-fill, cover chains,
    manual cell edits, Call-Offs marking CALL-OFF on a cell), he does NOT
@@ -21699,7 +21740,11 @@ function renderSchedule(){
      column) so the seven date columns still line up pixel-for-pixel
      between the header, the people, and the total/ratio/Unifocus rows
      underneath them. */
-  var COLS_C=COLS+' 40px';
+  /* A second extra column, right after Days — Carlos's ask, moved out
+     of the small badge that used to sit next to each name (hard to
+     read squeezed in there) and given its own labeled column instead,
+     same idea as Days getting one. */
+  var COLS_C=COLS+' 40px 50px';
   function headRowCrew(){
     var h='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:end;margin-bottom:5px;">';
     h+='<div></div>';
@@ -21710,6 +21755,7 @@ function renderSchedule(){
         +'<div style="font-size:10px;font-weight:800;color:'+(isToday?'var(--gd)':'var(--text2)')+';">'+d.getDate()+'</div></div>';
     });
     h+='<div style="text-align:center;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;color:var(--text3);">Days</div>';
+    h+='<div style="text-align:center;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;color:var(--text3);">Last week</div>';
     return h+'</div>';
   }
 
@@ -21916,7 +21962,6 @@ function renderSchedule(){
       html+='<div style="display:flex;align-items:center;gap:3px;min-width:0;">'
         +'<span style="font-size:11px;font-weight:600;color:'+(borrowed?'var(--gd)':'var(--text1)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"'
         +' title="'+escHtml(nm)+(borrowed?' — borrowed into this crew':'')+(fullWeekend?' — full weekend off':'')+'">'+escHtml(nm)+'</span>'
-        +(lwWorkDays!=null?'<span title="Worked '+lwWorkDays+' day'+(lwWorkDays===1?'':'s')+' last week" style="flex-shrink:0;font-size:9px;font-weight:800;color:'+(lwWorkDays>=6?'var(--red)':'var(--text3)')+';border:1px solid '+(lwWorkDays>=6?'var(--red-border,var(--red))':'var(--border)')+';border-radius:8px;padding:1px 5px;line-height:1.4;">'+lwWorkDays+'d wk</span>':'')
         +'<button onclick="schedTogglePersonMenu(\''+b.key+'\',\''+nmJs+'\')" title="More options for '+escHtml(nm)+(anyMark?' (has a mark set)':'')+'"'
             +' style="flex-shrink:0;border:none;background:transparent;color:'+(anyMark?'var(--gd)':'var(--text3)')+';font-size:13px;font-weight:800;line-height:1;cursor:pointer;padding:0 4px;">&#8942;</button>'
         +'</div>';
@@ -21960,6 +22005,10 @@ function renderSchedule(){
          from a 4-day week without counting by hand. Repainted in place
          by _schedRefreshTotals whenever a cell on this row changes. */
       html+='<div id="scd_'+b.key+'_'+idx+'" style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+_schedWorkDaysFor(SCH,dates,b.key,idx,nm)+'</div>';
+      /* Last week's work-day count, its own column now (moved out of the
+         cramped name badge) — Carlos's ask. Blank, not "0", when last
+         week isn't on file for her at all. */
+      html+='<div style="text-align:center;font-size:10.5px;font-weight:800;color:'+(lwWorkDays!=null&&lwWorkDays>=6?'var(--red)':'var(--text3)')+';" title="'+(lwWorkDays!=null?'Worked '+lwWorkDays+' day'+(lwWorkDays===1?'':'s')+' last week':'No record of last week for '+escHtml(nm))+'">'+(lwWorkDays!=null?lwWorkDays:'&middot;')+'</div>';
       html+='</div>';
     });
 

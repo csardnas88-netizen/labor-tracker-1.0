@@ -73,6 +73,7 @@ const cases = [
   require('./cases/realtime-retry-cap'),
   require('./cases/daily-lineup-label-drift'),
   require('./cases/sched-remove-person-future-not-past'),
+  require('./cases/schedule-week-merge'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
