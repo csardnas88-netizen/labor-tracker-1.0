@@ -74,6 +74,7 @@ const cases = [
   require('./cases/daily-lineup-label-drift'),
   require('./cases/sched-remove-person-future-not-past'),
   require('./cases/schedule-week-merge'),
+  require('./cases/req-notebook-trends'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.7"/>
+<meta name="app-version" content="7.40.8"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.8', date:'2026-08-30',
+    features:['Added a "Trends" tab to Request Off — Carlos\'s ask, a way to check a fairness complaint ("she always gets the weekend and I never do") against the real record instead of a feeling. Shows every logged request broken down by day of week, per person, with a Weekend column and everyone ranked by it, filterable to R-OFF/Flex/Vacation/All. The same person raising a complaint often turns out to have just as many herself once it\'s laid out this way.']
+  },
   {
     v:'7.40.7', date:'2026-08-30',
     changes:['Request Off\'s Calendar tab now lists everyone out on a given day, not just the first two with a "+N more" — Carlos\'s ask. A busy day just makes that day\'s box taller instead of hiding names.']
@@ -22226,7 +22230,7 @@ var RN_TYPE_COLOR={
 };
 function rnSetTab(t){ rnActiveTab=t; renderReqNotebook(); }
 function rnTabsHtml(){
-  var tabs=[['new','+ New'],['week','HK Week'],['calendar','Calendar']];
+  var tabs=[['new','+ New'],['week','HK Week'],['calendar','Calendar'],['trends','Trends']];
   var html='<div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;">';
   tabs.forEach(function(t){
     var active=(rnActiveTab===t[0]);
@@ -22275,6 +22279,74 @@ function rnLoadManagers(){
    browse views. */
 function rnEntriesForDate(ds){
   return loadReqNotebook().filter(function(r){ return (r.dates||[]).indexOf(ds)!==-1; });
+}
+/* ── Trends — Carlos's ask: when someone complains "she always gets the
+   weekend off and I never do", there needs to be a real record to check
+   that against instead of just a feeling. Breaks every logged request
+   down by day of week per person, across all of Request Off's history,
+   so two people's actual Saturday/Sunday counts sit side by side. Reuses
+   SCHED_DOW_ABBR's own Sat-first order so this reads the same way the
+   Schedule page's day-off preference already does. */
+function rnTrendsType(){ return window._rnTrendsType||'roff'; }
+function rnSetTrendsType(t){ window._rnTrendsType=t; renderReqNotebook(); }
+function rnTrendsData(){
+  var type=rnTrendsType();
+  var byName={};
+  loadReqNotebook().forEach(function(r){
+    if(type!=='all'&&r.type!==type)return;
+    var nm=String(r.name||'').trim(); if(!nm)return;
+    if(!byName[nm])byName[nm]={dow:[0,0,0,0,0,0,0],total:0};
+    (r.dates||[]).forEach(function(ds){
+      var d=parseLocalDate(ds); if(!d)return;
+      var idx=(d.getDay()+1)%7; // Sun=0..Sat=6 -> Sat=0..Fri=6, matches SCHED_DOW_ABBR
+      byName[nm].dow[idx]++;
+      byName[nm].total++;
+    });
+  });
+  return byName;
+}
+function rnTrendsHtml(){
+  var type=rnTrendsType();
+  var data=rnTrendsData();
+  var names=Object.keys(data);
+  names.sort(function(a,b){
+    var wa=data[a].dow[0]+data[a].dow[1], wb=data[b].dow[0]+data[b].dow[1];
+    if(wb!==wa)return wb-wa;
+    return data[b].total-data[a].total;
+  });
+  var html='<div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5;">See which day of the week each person actually gets logged for, so a claim like &quot;she always gets the weekend and I never do&quot; can be checked against the real record — including whether the person raising it has had just as many herself.</div>';
+  html+='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">';
+  [['roff','R-OFF'],['flex','Flex'],['vac','Vacation'],['all','All types']].forEach(function(t){
+    var active=(type===t[0]);
+    html+='<button onclick="rnSetTrendsType(\''+t[0]+'\')" style="border:1px solid '+(active?'var(--navy)':'var(--border)')+';background:'+(active?'var(--navy)':'transparent')+';color:'+(active?'#fff':'var(--text1)')+';font-weight:700;font-size:11px;padding:5px 11px;border-radius:99px;cursor:pointer;">'+t[1]+'</button>';
+  });
+  html+='</div>';
+  if(!names.length){
+    html+='<div style="font-size:12px;color:var(--text3);padding:24px 0;text-align:center;">No '+(type==='all'?'requests':rnTypeLabel(type)+' requests')+' logged yet — nothing to compare.</div>';
+    return html;
+  }
+  html+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:520px;">';
+  html+='<thead><tr style="border-bottom:1px solid var(--border);">'
+    +'<th style="text-align:left;padding:6px 8px;color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:.3px;">Employee</th>';
+  SCHED_DOW_ABBR.forEach(function(ab,i){
+    html+='<th style="text-align:center;padding:6px 4px;color:'+(i<2?'var(--navy)':'var(--text3)')+';font-size:9px;text-transform:uppercase;letter-spacing:.3px;">'+ab+'</th>';
+  });
+  html+='<th style="text-align:center;padding:6px 8px;color:var(--navy);font-size:9px;text-transform:uppercase;letter-spacing:.3px;">Weekend</th>'
+    +'<th style="text-align:center;padding:6px 8px;color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:.3px;">Total</th>'
+    +'</tr></thead><tbody>';
+  names.forEach(function(nm){
+    var row=data[nm], wknd=row.dow[0]+row.dow[1];
+    html+='<tr style="border-bottom:1px solid var(--border);">'
+      +'<td style="padding:6px 8px;font-weight:700;color:var(--text1);white-space:nowrap;">'+escHtml(nm)+'</td>';
+    row.dow.forEach(function(c,i){
+      html+='<td style="text-align:center;padding:6px 4px;font-weight:'+(c?'800':'400')+';color:'+(c?(i<2?'var(--navy)':'var(--text1)'):'var(--border2)')+';">'+(c||'&middot;')+'</td>';
+    });
+    html+='<td style="text-align:center;padding:6px 8px;font-weight:800;color:var(--navy);background:rgba(21,101,192,.08);">'+wknd+'</td>'
+      +'<td style="text-align:center;padding:6px 8px;font-weight:700;color:var(--text2);">'+row.total+'</td>'
+      +'</tr>';
+  });
+  html+='</tbody></table></div>';
+  return html;
 }
 /* ── HK Week board — one column per day of the operational week (Sat
    start, same as the Schedule page), a colored pill per request that
@@ -22642,6 +22714,10 @@ function renderReqNotebook(){
   }
   if(rnActiveTab==='calendar'){
     html+='<div class="card" style="padding:14px;">'+rnCalendarViewHtml()+'</div>';
+    el.innerHTML=html; return;
+  }
+  if(rnActiveTab==='trends'){
+    html+='<div class="card" style="padding:14px;">'+rnTrendsHtml()+'</div>';
     el.innerHTML=html; return;
   }
 
