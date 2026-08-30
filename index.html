@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.9"/>
+<meta name="app-version" content="7.40.10"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.10', date:'2026-08-30',
+    fixes:['Fixed the Schedule\'s exported Excel printing 7:00 AM - 3:30 PM (the AM Public Area time) for PM Public Area Attendants like Vanesa — Carlos\'s report about Sarahi Gonzalez and Vanesa Garcia. The Schedule Draft\'s own "AM Lobby" crew has no AM/PM split at all; the export now checks the Section Assignments upload, which already has its own real Lobby AM/PM list (the same one the Daily Lineup already reads), and prints PM\'s 2:30 PM - 11:00 PM for anyone listed there as PM.']
+  },
   {
     v:'7.40.9', date:'2026-08-30',
     fixes:['Fixed the Trends tab\'s Saturday, Sunday, and Weekend column headers being unreadable — they used the same navy color as the header row\'s own background, so they were technically there but invisible. Carlos\'s report.'],
@@ -21277,8 +21281,26 @@ var SCHED_SHIFT_TIMES={
   pmhm:   {weekday:'2:30 PM - 11:00 PM', weekend:'2:30 PM - 11:00 PM'},
   night:  {weekday:'10:00 PM - 6:30 AM', weekend:'10:00 PM - 6:30 AM'}
 };
-function schedShiftTimeText(bk,ds){
+/* Carlos's report: Sarahi (Gonzalez) and Vanesa (Garcia) are PM Public
+   Area Attendants, but the exported Excel printed 7:00 AM - 3:30 PM for
+   them anyway — the Schedule Draft's own "lobby" crew has no AM/PM
+   split at all, it's one flat list, so every "1" in it always got the
+   AM time. The real AM/PM split already exists, just in a different
+   upload: the Section Assignments file's "HM & Supervisor" sheet has
+   its own Lobby AM/PM rows (dlLoadSections().lobby, each row
+   ["Lobby AM"/"Lobby PM", name]) — the exact same source the Daily
+   Lineup already reads for this (P.lobby_pm above). Confirmed with
+   Carlos: PM Public Area is 2:30 PM - 11:00 PM. */
+var SCHED_LOBBY_PM_TIME={weekday:'2:30 PM - 11:00 PM', weekend:'2:30 PM - 11:00 PM'};
+function schedIsLobbyPm(name){
+  if(!name)return false;
+  var sec=dlLoadSections();
+  if(!sec||!sec.lobby)return false;
+  return sec.lobby.some(function(p){ return /PM/.test(p[0])&&dlNorm(p[1])===dlNorm(name); });
+}
+function schedShiftTimeText(bk,ds,name){
   var t=SCHED_SHIFT_TIMES[bk]; if(!t)return null;
+  if(bk==='lobby'&&schedIsLobbyPm(name))t=SCHED_LOBBY_PM_TIME;
   var dow=parseLocalDate(ds).getDay();
   return (dow===0||dow===6)?t.weekend:t.weekday;
 }
@@ -21356,7 +21378,7 @@ async function schedExportExcel(){
         return row?String(row[1]||'').trim():'';
       });
       var displayData=rawData.map(function(v,i){
-        if(v==='1'){ var t=schedShiftTimeText(b.key,dates[i]); if(t)return t; }
+        if(v==='1'){ var t=schedShiftTimeText(b.key,dates[i],nm); if(t)return t; }
         return v;
       });
       var row=ws.addRow(['',nm].concat(displayData));

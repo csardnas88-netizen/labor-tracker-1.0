@@ -1082,6 +1082,27 @@ module.exports = {
     t.eq(win.schedShiftTimeText('mgr', ds21[0]), null,
       'Managers has no shift-time lookup — Carlos marks that crew Open/Close by hand instead');
 
+    // Carlos's real report: Vanesa/Sarahi are PM Public Area Attendants,
+    // but the exported Excel printed 7:00 AM - 3:30 PM (Lobby's AM time)
+    // for them anyway — the Schedule Draft's own "lobby" crew has no
+    // AM/PM split at all. Fixed by cross-referencing the Section
+    // Assignments upload (dl_sections), which already has its own real
+    // Lobby AM/PM split for the Daily Lineup's use — same source, no
+    // guessing from name text. ──
+    win.localStorage.setItem('hk_dl_sections', JSON.stringify({
+      lobby: [['Lobby AM', 'Maria M'], ['Lobby PM', 'Sarahi'], ['Lobby AM Floater', 'Gabriela'], ['Lobby PM F', 'Fabiola'], ['Lobby PM', 'Vanesa']]
+    }));
+    t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Vanesa'), '2:30 PM - 11:00 PM',
+      "Vanesa is listed 'Lobby PM' in Section Assignments — her Schedule export time is PM's 2:30 PM - 11:00 PM, not AM's 7:00 AM - 3:30 PM");
+    t.eq(win.schedShiftTimeText('lobby', ds21[0], 'Vanesa'), '2:30 PM - 11:00 PM',
+      "PM Public Area is the same time every day of the week, like Turndown/GRA");
+    t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Maria M'), '7:00 AM - 3:30 PM',
+      "Maria M is listed 'Lobby AM' — she still gets the AM time, unaffected");
+    t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Gabriela'), '7:00 AM - 3:30 PM',
+      "'Lobby AM Floater' correctly does not match the /PM/ check just because it shares the word Lobby");
+    t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Someone Not In Sections'), '7:00 AM - 3:30 PM',
+      'someone with no match at all in Section Assignments falls back to the plain AM lobby time, same as before this fix');
+
     // A titular missing from this week's roster entirely is skipped, not
     // guessed at — schedCellFor returns '' and the chain never fires.
     const SCH21d = { days: { [ds21[0]]: { lobby: [], gra: [['Gabriela Cuevas', '1']] } } };
