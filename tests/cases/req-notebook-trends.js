@@ -43,6 +43,25 @@ module.exports = {
     t.assert(susanIdx !== -1 && mariaIdx !== -1 && susanIdx < mariaIdx,
       "Susan (2 weekend days) is ranked above Maria (1) — the exact comparison Carlos wants to check a fairness complaint against");
 
+    // ── Carlos's real report: Sat/Sun/Weekend headers were invisible
+    // because the app's global "thead tr{background:navy}" swallowed
+    // var(--navy) text — the exact color those headers used. Pin that
+    // the header block no longer uses navy-on-navy anywhere. ──
+    const theadSegment = html.substring(html.indexOf('<thead'), html.indexOf('</thead>'));
+    t.assert(!/color:var\(--navy\)/.test(theadSegment),
+      'no header cell uses navy text against the global navy header background anymore (the exact bug Carlos reported — Sat/Sun/Weekend were unreadable)');
+
+    // ── Click a name to see the actual dates behind the count ──
+    t.assert(!/Sat Sep 5/.test(html), 'no dates are shown before a name is clicked');
+    win.rnToggleTrendsName('Susan');
+    const openHtml = win.document.getElementById('reqNotebookContent').innerHTML;
+    t.assert(/Sat Sep 5/.test(openHtml) && /Sat Sep 12/.test(openHtml),
+      "clicking Susan's name reveals the exact dates behind her count of 2 — Carlos's ask, so the number isn't just trusted blind");
+    t.assert(!/Sun Sep 6/.test(openHtml), "only Susan's dates open — Maria's Sunday isn't shown just because Susan's row is expanded");
+    win.rnToggleTrendsName('Susan'); // click again to close
+    const closedHtml = win.document.getElementById('reqNotebookContent').innerHTML;
+    t.assert(!/Sat Sep 5/.test(closedHtml), 'clicking the same name again collapses the date list');
+
     // ── Type filter: switching to Vacation only counts Susan's one vac day, not either R-OFF entry ──
     win.rnSetTrendsType('vac');
     const vacData = win.rnTrendsData();
