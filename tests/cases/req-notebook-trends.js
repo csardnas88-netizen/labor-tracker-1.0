@@ -51,16 +51,29 @@ module.exports = {
     t.assert(!/color:var\(--navy\)/.test(theadSegment),
       'no header cell uses navy text against the global navy header background anymore (the exact bug Carlos reported — Sat/Sun/Weekend were unreadable)');
 
-    // ── Click a name to see the actual dates behind the count ──
-    t.assert(!/Sat Sep 5/.test(html), 'no dates are shown before a name is clicked');
+    // ── Click a name to see a graphic month calendar of the dates behind
+    // the count — Carlos's ask: something to SEE, not a flat list to
+    // read one by one. Both Susan's and Maria's dates fall in September
+    // 2026, so the month header alone can't tell them apart — check the
+    // per-day title tooltip and the per-month weekend tally instead. ──
+    t.assert(!/September 2026/.test(html), 'no calendar is shown before a name is clicked');
     win.rnToggleTrendsName('Susan');
     const openHtml = win.document.getElementById('reqNotebookContent').innerHTML;
-    t.assert(/Sat Sep 5/.test(openHtml) && /Sat Sep 12/.test(openHtml),
-      "clicking Susan's name reveals the exact dates behind her count of 2 — Carlos's ask, so the number isn't just trusted blind");
-    t.assert(!/Sun Sep 6/.test(openHtml), "only Susan's dates open — Maria's Sunday isn't shown just because Susan's row is expanded");
+    t.assert(/September 2026/.test(openHtml), "clicking Susan's name reveals a September 2026 mini calendar");
+    t.assert(/title="Sat Sep 5/.test(openHtml) && /title="Sat Sep 12/.test(openHtml),
+      "her two actual Saturdays are marked on the calendar, not just counted");
+    t.assert(/2 weekend/.test(openHtml), "the month's tally caption reads her 2 weekend days directly — Carlos's ask, no manual counting");
+    t.assert(!/title="Sun Sep 6/.test(openHtml), "only Susan's dates are marked — Maria's Sunday isn't shown just because Susan's row is open");
     win.rnToggleTrendsName('Susan'); // click again to close
     const closedHtml = win.document.getElementById('reqNotebookContent').innerHTML;
-    t.assert(!/Sat Sep 5/.test(closedHtml), 'clicking the same name again collapses the date list');
+    t.assert(!/September 2026/.test(closedHtml), 'clicking the same name again collapses the calendar');
+
+    win.rnToggleTrendsName('Maria');
+    const mariaOpenHtml = win.document.getElementById('reqNotebookContent').innerHTML;
+    t.assert(/title="Sun Sep 6/.test(mariaOpenHtml) && /title="Mon Sep 7/.test(mariaOpenHtml),
+      "Maria's own Sunday+Monday are marked when her row is opened instead");
+    t.assert(/1 weekend/.test(mariaOpenHtml), "Maria's month tally reads 1 weekend, matching her single Sunday");
+    win.rnToggleTrendsName('Maria'); // close before leaving the test
 
     // ── Type filter: switching to Vacation only counts Susan's one vac day, not either R-OFF entry ──
     win.rnSetTrendsType('vac');

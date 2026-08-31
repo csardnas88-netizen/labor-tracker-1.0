@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.10"/>
+<meta name="app-version" content="7.40.11"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.11', date:'2026-08-30',
+    features:['Trends: clicking a name now shows a graphic month calendar of her actual requests instead of a flat date list — Carlos\'s ask, a way to SEE how many weekends or Mondays someone got in a given month instead of counting a list by hand. One mini calendar per month that has entries, each with its own weekend/Mon/Tue/Wed/Thu/Fri tally underneath.']
+  },
   {
     v:'7.40.10', date:'2026-08-30',
     fixes:['Fixed the Schedule\'s exported Excel printing 7:00 AM - 3:30 PM (the AM Public Area time) for PM Public Area Attendants like Vanesa — Carlos\'s report about Sarahi Gonzalez and Vanesa Garcia. The Schedule Draft\'s own "AM Lobby" crew has no AM/PM split at all; the export now checks the Section Assignments upload, which already has its own real Lobby AM/PM list (the same one the Daily Lineup already reads), and prints PM\'s 2:30 PM - 11:00 PM for anyone listed there as PM.']
@@ -22346,6 +22350,36 @@ function rnTrendsDateLabel(ds){
   var idx=(d.getDay()+1)%7;
   return SCHED_DOW_ABBR[idx]+' '+MONTH_NAMES[d.getMonth()].slice(0,3)+' '+d.getDate();
 }
+/* Carlos's ask: a graphic month calendar instead of a flat date list, so
+   "how many weekends did she request this month" or "how many Mondays"
+   is something you can SEE, not add up by hand. One mini-calendar per
+   month that actually has an entry, in order, each with its own per-
+   weekday tally underneath (Sun-first, matching the Calendar tab's own
+   month grid). */
+function rnTrendsMonthCalendarHtml(mk,entries){
+  var parts=mk.split('-'), y=+parts[0], m=+parts[1]-1;
+  var byDs={}; entries.forEach(function(o){ byDs[o.ds]=o; });
+  var first=new Date(y,m,1), startOffset=first.getDay();
+  var daysInMonth=new Date(y,m+1,0).getDate();
+  var dowCount=[0,0,0,0,0,0,0]; // Sun..Sat
+  entries.forEach(function(o){ var d=parseLocalDate(o.ds); if(d)dowCount[d.getDay()]++; });
+  var weekend=dowCount[0]+dowCount[6];
+  var html='<div style="margin-bottom:14px;">'
+    +'<div style="font-size:11px;font-weight:800;color:var(--navy);margin-bottom:3px;">'+MONTH_NAMES[m]+' '+y+'</div>'
+    +'<div style="font-size:9.5px;color:var(--text3);margin-bottom:6px;">'+entries.length+' day'+(entries.length===1?'':'s')+' this month &middot; <b style="color:var(--navy);">'+weekend+' weekend</b> &middot; Mon '+dowCount[1]+' &middot; Tue '+dowCount[2]+' &middot; Wed '+dowCount[3]+' &middot; Thu '+dowCount[4]+' &middot; Fri '+dowCount[5]+'</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;max-width:270px;">';
+  ['S','M','T','W','T','F','S'].forEach(function(d,i){
+    html+='<div style="text-align:center;font-size:8px;font-weight:700;color:'+(i===0||i===6?'var(--gold)':'var(--text3)')+';">'+d+'</div>';
+  });
+  for(var i=0;i<startOffset;i++)html+='<div></div>';
+  for(var day=1;day<=daysInMonth;day++){
+    var d=new Date(y,m,day), ds=dateStr(d), hit=byDs[ds];
+    var isWknd=(d.getDay()===0||d.getDay()===6);
+    html+='<div title="'+(hit?rnTrendsDateLabel(ds)+' — '+rnTypeLabel(hit.type):'')+'" style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:5px;font-size:10px;font-weight:'+(hit?'800':'400')+';background:'+(hit?'var(--gold)':'transparent')+';color:'+(hit?'var(--navy)':(isWknd?'var(--text2)':'var(--text3)'))+';">'+day+'</div>';
+  }
+  html+='</div></div>';
+  return html;
+}
 function rnTrendsHtml(){
   var type=rnTrendsType();
   var data=rnTrendsData();
@@ -22395,12 +22429,12 @@ function rnTrendsHtml(){
       +'<td style="text-align:center;padding:6px 8px;font-weight:700;color:var(--text2);">'+row.total+'</td>'
       +'</tr>';
     if(isOpen){
-      var sorted=row.dates.slice().sort(function(a,b){return a.ds<b.ds?-1:a.ds>b.ds?1:0;});
-      html+='<tr><td colspan="10" style="padding:2px 10px 10px 20px;background:var(--surface);">'
-        +'<div style="display:flex;flex-wrap:wrap;gap:5px;">'
-        +sorted.map(function(o){
-          return '<span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:99px;background:#fff;border:1px solid var(--border);color:var(--text1);">'+rnTrendsDateLabel(o.ds)+(type==='all'?' &middot; '+rnTypeLabel(o.type):'')+'</span>';
-        }).join('')
+      var byMonth={};
+      row.dates.forEach(function(o){ var mk=o.ds.slice(0,7); (byMonth[mk]=byMonth[mk]||[]).push(o); });
+      var months=Object.keys(byMonth).sort();
+      html+='<tr><td colspan="10" style="padding:2px 10px 12px 20px;background:var(--surface);">'
+        +'<div style="display:flex;flex-wrap:wrap;gap:20px;">'
+        +months.map(function(mk){ return rnTrendsMonthCalendarHtml(mk,byMonth[mk]); }).join('')
         +'</div></td></tr>';
     }
   });
