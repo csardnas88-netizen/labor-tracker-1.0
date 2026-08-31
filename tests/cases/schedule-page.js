@@ -1165,6 +1165,33 @@ module.exports = {
     win.schedApplyLaundryMirror(SCH21jm2, [ds21[0]]);
     t.eq(SCH21jm2.days[ds21[0]].laundry[1][1], 'R-OFF', "Jorge's own R-OFF is never overwritten by the mirror, even though Victoriano is OFF that day too");
 
+    // ── Carlos's ask: he builds Laundry by hand, Victoriano first, not
+    // through Auto-fill — the mirror has to react LIVE to a single
+    // manual edit on Victoriano's own cell (schedSetCell), the same way
+    // the Houseman-based chain already does, not just on the next full
+    // Auto-fill run. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH21jm3 = { days: {} };
+    ds21.forEach((ds) => { SCH21jm3.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', laundry: [['Victoriano Ch', '1'], ['Jorge Gonzalez', '']] }; });
+    win.dlSaveSchedule(SCH21jm3);
+    win.schedSetCell('laundry', 0, 'Victoriano Ch', ds21[0], 'TAILOR', null);
+    const afterLive = win.dlLoadSchedule();
+    t.eq(afterLive.days[ds21[0]].laundry[1][1], '1',
+      "a single manual edit setting Victoriano to TAILOR immediately mirrors Jorge to '1', with no Auto-fill run needed");
+
+    win.schedSetCell('laundry', 0, 'Victoriano Ch', ds21[0], '1', null);
+    const afterLiveBack = win.dlLoadSchedule();
+    t.eq(afterLiveBack.days[ds21[0]].laundry[1][1], '',
+      'setting Victoriano back to working releases Jorge back to blank, live, same as the TAILOR edit');
+
+    // Editing JORGE's own cell directly must never immediately overwrite
+    // what was just typed — only an edit to Victoriano's cell triggers
+    // the mirror.
+    win.schedSetCell('laundry', 1, 'Jorge Gonzalez', ds21[1], '1', null);
+    const afterJorgeEdit = win.dlLoadSchedule();
+    t.eq(afterJorgeEdit.days[ds21[1]].laundry[1][1], '1',
+      "editing Jorge's own cell directly sticks — the mirror only fires off of Victoriano's edits, not Jorge's");
+
 
     // Yesenia (PM Houseman): exactly 1 day off, forced deterministic via
     // a pre-set R-OFF so the cover check lands on a known day. Paty

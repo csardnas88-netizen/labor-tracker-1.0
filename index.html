@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.15"/>
+<meta name="app-version" content="7.40.16"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.16', date:'2026-08-30',
+    features:['Jorge\'s Laundry cell now mirrors Victoriano\'s live, the moment Victoriano\'s own cell is edited by hand — Carlos\'s ask, since he builds Laundry himself, Victoriano first, not through Auto-fill. Same instant-react pattern the Houseman-based cover chain already had; editing Jorge\'s own cell directly still always sticks.']
+  },
   {
     v:'7.40.15', date:'2026-08-30',
     fixes:['Fixed a lowercase "off" cell (Excel autocomplete, or free-typed) silently counting as a WORKED day everywhere except the cell\'s own color — Claudia Villanueva\'s "Last week" badge read 6 instead of 5. The on-screen styling already recognized lowercase off; the counting logic (Total column, Last week badge, Schedule Checks, Auto-fill\'s "don\'t touch this, it\'s already decided" guard, the cover chains) now does too, matching any case the same as the uppercase version.']
@@ -20459,11 +20463,21 @@ function schedSetCell(bk,idx,name,ds,val,el){
      Auto-fill run. */
   var chainMember=schedIsChainMember(bk,name);
   if(chainMember)schedApplyCoverChainsForDate(SCH,ds);
+  /* Carlos's ask: he builds Laundry by hand, Victoriano first, not
+     through Auto-fill — Jorge's direct Laundry row (see
+     schedApplyLaundryMirror) has to react live to each of Victoriano's
+     own edits too, the same way the Houseman-based chain above already
+     does, rather than only updating on the next full Auto-fill run.
+     Scoped to editing VICTORIANO's own cell specifically — editing
+     Jorge's cell directly must never immediately overwrite what was
+     just typed. */
+  var isVictorianoLaundryEdit=(bk==='laundry'&&dlNorm(name)===dlNorm('Victoriano Ch'));
+  if(isVictorianoLaundryEdit)schedApplyLaundryMirror(SCH,[ds]);
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
-  if(chainMember){
-    /* The chain reaction can change a DIFFERENT cell on this same day
-       (Jorge's own row) — that needs the full grid repainted so it
+  if(chainMember||isVictorianoLaundryEdit){
+    /* The chain/mirror reaction can change a DIFFERENT cell on this same
+       day (Jorge's own row) — that needs the full grid repainted so it
        actually shows, unlike the single-cell case below. */
     renderSchedule();
     return;
