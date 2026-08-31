@@ -1410,5 +1410,25 @@ module.exports = {
     t.eq(win.schedDayTotal(miniSCH24, dates24[0], 'sup'), 1, 'FLEX and VAC cells do not count toward the day total, only the "1"');
     t.eq(win.schedIsOff('FLEX'), true, 'schedIsOff treats FLEX as off, same as OFF/R-OFF/VAC');
     t.eq(win.schedIsOff('VAC'), true);
+
+    // ── Carlos's real report: Claudia Villanueva's "Last week" badge
+    // read 6 instead of 5. Root cause: one of her seven days was a
+    // lowercase "off" (Excel autocomplete, or free-typed) — the on-
+    // screen cell styling already recognized it as a day off
+    // (_schedCellCss special-cased it), but schedIsOff/schedIsWorkDay
+    // did an exact-case '==='  comparison and missed it, silently
+    // counting a rest day as worked. Fixed by comparing case-
+    // insensitively. ──
+    t.eq(win.schedIsOff('off'), true, 'a lowercase "off" is recognized exactly the same as "OFF" now');
+    t.eq(win.schedIsOff('Off'), true, 'mixed case too');
+    t.eq(win.schedIsWorkDay('off'), false, 'so it no longer counts as a worked day');
+    const claudiaFull = { days: {} };
+    const claudiaWkStart = new Date(2026, 8, 5); // Sat Sep 5 2026, matches the real report's week
+    const claudiaDs = [];
+    for (let i = 0; i < 7; i++) { const d = new Date(claudiaWkStart); d.setDate(d.getDate() + i); claudiaDs.push(win.dateStr(d)); }
+    const claudiaVals = ['OFF', '1', '1', '1', '1', '1', 'off'];
+    claudiaDs.forEach((ds, i) => { claudiaFull.days[ds] = { gra: [['Claudia Villanueva', claudiaVals[i]]] }; });
+    t.eq(win._schedWorkDaysFor(claudiaFull, claudiaDs, 'gra', 0, 'Claudia Villanueva'), 5,
+      "Claudia's work-day count reads 5 (one real OFF + one lowercase \"off\"), not 6 — the exact bug Carlos reported");
   }
 };

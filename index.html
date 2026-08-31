@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.14"/>
+<meta name="app-version" content="7.40.15"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.15', date:'2026-08-30',
+    fixes:['Fixed a lowercase "off" cell (Excel autocomplete, or free-typed) silently counting as a WORKED day everywhere except the cell\'s own color — Claudia Villanueva\'s "Last week" badge read 6 instead of 5. The on-screen styling already recognized lowercase off; the counting logic (Total column, Last week badge, Schedule Checks, Auto-fill\'s "don\'t touch this, it\'s already decided" guard, the cover chains) now does too, matching any case the same as the uppercase version.']
+  },
   {
     v:'7.40.14', date:'2026-08-30',
     fixes:['Fixed Auto-fill giving Jorge Gonzalez his own independent days off in Laundry, unrelated to Victoriano Ch — Carlos\'s report, since he moved Jorge onto Laundry\'s own crew list directly. Jorge is now excluded from Laundry\'s fairness rotation and instead mirrors Victoriano\'s day directly: working exactly when Victoriano is OFF/R-OFF/TAILOR/CALL-OFF, and off whenever Victoriano is actually working — never both idle, never both in Laundry at once. His own granted Request Off days still win over the mirror. The existing Houseman-based Victoriano/Jorge cover chain is untouched.']
@@ -20650,13 +20654,19 @@ function schedTogglePersonMenu(bk,name){
   schedPersonMenuOpen[k]=!schedPersonMenuOpen[k];
   renderSchedule();
 }
-function schedIsOff(v){ v=String(v||'').trim(); return v==='OFF'||v==='R-OFF'||v==='FLEX'||v==='VAC'; }
+/* Case-insensitive on purpose — Carlos's real bug: a cell typed as
+   lowercase "off" (Excel autocomplete, or the "Someone else…" free-text
+   picker) rendered as a day off on screen (_schedCellCss already
+   special-cased it) but silently counted as a WORKED day everywhere
+   else — Claudia Villanueva's "Last week" badge read 6 instead of 5
+   because her one lowercase "off" wasn't recognized here. */
+function schedIsOff(v){ v=String(v||'').trim().toUpperCase(); return v==='OFF'||v==='R-OFF'||v==='FLEX'||v==='VAC'; }
 /* A day this person is actually a body on the schedule — a real shift,
    including a relabeled cell that means she's covering another crew
    (LOBBY/HOUSEMAN/TAILOR/LAUNDRY/PM). Blank, any flavor of off, and
    CALL-OFF are all "not a work day". Used for the per-person weekly
    work-day count Carlos asked for. */
-function schedIsWorkDay(v){ v=String(v||'').trim(); return v!==''&&v!=='CALL-OFF'&&!schedIsOff(v); }
+function schedIsWorkDay(v){ v=String(v||'').trim(); return v!==''&&v.toUpperCase()!=='CALL-OFF'&&!schedIsOff(v); }
 /* The crew's current people list, same "first loaded date with a
    non-empty array" rule the main Schedule render uses to find who's on
    a crew — kept in sync here so the per-person work-day count can be
@@ -20691,6 +20701,15 @@ function schedCellFor(SCH,ds,bk,name){
   var row=(day[bk]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
   return row?String(row[1]||'').trim():'';
 }
+/* Case-insensitive compare against a fixed status code — same real bug
+   as schedIsOff above, but for the few places that check OFF/R-OFF/
+   TAILOR/CALL-OFF one-by-one instead of through it (Auto-fill's own
+   "don't touch this, it's already decided" guard, the cover chains,
+   the Laundry mirror). A stray lowercase "tailor" or "off" — Excel
+   autocomplete, or free-typed through "Someone else…" — must be
+   recognized exactly the same as the uppercase version everywhere,
+   not just on screen. */
+function schedStatusIs(v,code){ return String(v||'').trim().toUpperCase()===code; }
 function schedOffCount(SCH,dates,bk,name){
   var n=0;
   dates.forEach(function(ds){ if(schedIsOff(schedCellFor(SCH,ds,bk,name)))n++; });
@@ -20875,7 +20894,7 @@ function schedAutoFillCrew(SCH,dates,bk,names,offCount,wk){
      doesn't also hand him an OFF day that week expecting him to be idle)
      without ever silently overwriting Carlos's mark back to '1' or 'OFF'
      the next time Auto-fill runs. */
-  var isFixedOff=function(nm,i){ var v=cellVal(nm,i); return v==='R-OFF'||v==='FLEX'||v==='VAC'||v==='TAILOR'||v==='CALL-OFF'; };
+  var isFixedOff=function(nm,i){ var v=cellVal(nm,i); return schedStatusIs(v,'R-OFF')||schedStatusIs(v,'FLEX')||schedStatusIs(v,'VAC')||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); };
   /* schedSupHpNeeded's 9999 stands for "everyone" (Schedule Builder's own
      'ALL') — clamped to the crew's actual size here, where names.length
      is known. */
@@ -20954,7 +20973,7 @@ function schedRepairShortfalls(SCH,dates,bk,names){
   /* TAILOR is protected the same as R-OFF/FLEX/VAC here too — a shortfall
      swap must never treat Victoriano's Taylor day as a spare working day
      to pull from, nor overwrite it with a plain OFF. */
-  var isFixedOffFn=function(nm,i){ var v=cellVal(nm,i); return v==='R-OFF'||v==='FLEX'||v==='VAC'||v==='TAILOR'||v==='CALL-OFF'; };
+  var isFixedOffFn=function(nm,i){ var v=cellVal(nm,i); return schedStatusIs(v,'R-OFF')||schedStatusIs(v,'FLEX')||schedStatusIs(v,'VAC')||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); };
   var needFn=function(i){ var day=SCH.days[dates[i]]; if(!day)return 0; return Math.min(schedAutoNeed(day,bk),names.length); };
   var working=days.map(function(i){ return names.filter(function(nm){return !isOffCellFn(nm,i);}).length; });
   var guard=0;
@@ -21052,7 +21071,7 @@ function schedApplyOvernight(SCH,dates){
     if(!offDays)return;   // not one of the two fixed-pattern people — left alone
     dates.forEach(function(ds,i){
       var row=schedRawCell(SCH,ds,'night',nm);
-      if(!row||row[1]==='R-OFF'||row[1]==='FLEX'||row[1]==='VAC')return;
+      if(!row||schedStatusIs(row[1],'R-OFF')||schedStatusIs(row[1],'FLEX')||schedStatusIs(row[1],'VAC'))return;
       row[1]=offDays.indexOf(i)!==-1?'OFF':'1';
     });
   });
@@ -21118,7 +21137,7 @@ function schedApplyCoverChainsForDate(SCH,ds){
       }
       return;
     }
-    if(titularCell===''||(titularCell!=='OFF'&&titularCell!=='R-OFF'&&titularCell!=='TAILOR'&&titularCell!=='CALL-OFF'))return;
+    if(titularCell===''||!(schedStatusIs(titularCell,'OFF')||schedStatusIs(titularCell,'R-OFF')||schedStatusIs(titularCell,'TAILOR')||schedStatusIs(titularCell,'CALL-OFF')))return;
     for(var i=1;i<cc.chain.length;i++){
       var c=cc.chain[i];
       var cell=schedCellFor(SCH,ds,c.homeCrew,c.name);
@@ -21152,8 +21171,8 @@ function schedApplyLaundryMirror(SCH,dates){
     var jRow=schedRawCell(SCH,ds,'laundry','Jorge Gonzalez');
     if(!jRow)return; // Jorge not on this week's roster
     var jCell=String(jRow[1]||'').trim();
-    if(jCell==='R-OFF'||jCell==='FLEX'||jCell==='VAC'||jCell==='CALL-OFF')return;
-    var vUnavailable=(vCell==='OFF'||vCell==='R-OFF'||vCell==='TAILOR'||vCell==='CALL-OFF');
+    if(schedStatusIs(jCell,'R-OFF')||schedStatusIs(jCell,'FLEX')||schedStatusIs(jCell,'VAC')||schedStatusIs(jCell,'CALL-OFF'))return;
+    var vUnavailable=(schedStatusIs(vCell,'OFF')||schedStatusIs(vCell,'R-OFF')||schedStatusIs(vCell,'TAILOR')||schedStatusIs(vCell,'CALL-OFF'));
     jRow[1]=vUnavailable?'1':'';
   });
 }
