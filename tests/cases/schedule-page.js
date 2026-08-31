@@ -1082,6 +1082,14 @@ module.exports = {
     t.eq(win.schedShiftTimeText('mgr', ds21[0]), null,
       'Managers has no shift-time lookup — Carlos marks that crew Open/Close by hand instead');
 
+    // Carlos's ask: Managers gets its own dropdown vocabulary — a plain
+    // "1" says nothing useful for a shift-based crew — while every other
+    // crew keeps the full housekeeping list unchanged.
+    t.eq(win.schedValuesFor('mgr').join(','), ',Open,Close,Mid,OFF,R-OFF,VAC,FLEX',
+      "Managers' own dropdown offers exactly Open/Close/Mid/Off/R-Off/Vac/Flex, no LOBBY/HOUSEMAN/TAILOR/LAUNDRY/'1'");
+    t.eq(win.schedValuesFor('gra').join(','), win.SCHED_VALUES.join(','),
+      'every other crew still gets the full shared housekeeping vocabulary, unchanged');
+
     // Carlos's real report: Vanesa/Sarahi are PM Public Area Attendants,
     // but the exported Excel printed 7:00 AM - 3:30 PM (Lobby's AM time)
     // for them anyway — the Schedule Draft's own "lobby" crew has no
@@ -1133,6 +1141,30 @@ module.exports = {
     t.eq(win.schedIsChainMember('laundry', 'Victoriano Ch'), true, 'Victoriano Ch (titular) is recognized as a chain member');
     t.eq(win.schedIsChainMember('hp', 'Jorge Gonzalez'), true, 'Jorge Gonzalez (backup) is recognized as a chain member');
     t.eq(win.schedIsChainMember('laundry', 'Karla Varela'), false, 'an unrelated Laundry attendant is not a chain member');
+
+    // ── Carlos's real report: he moved Jorge onto Laundry's own crew
+    // list directly (a second real setup, alongside the Houseman-chain
+    // above — both exist for him). Auto-fill's usual fairness rotation
+    // gave Jorge his own independent days off there, unrelated to
+    // Victoriano's — schedApplyLaundryMirror fixes that direct row by
+    // mirroring Victoriano's resolved cell instead. ──
+    const SCH21jm = {
+      days: {
+        [ds21[0]]: { laundry: [['Victoriano Ch', 'TAILOR'], ['Jorge Gonzalez', 'OFF']] },
+        [ds21[1]]: { laundry: [['Victoriano Ch', '1'], ['Jorge Gonzalez', '1']] },
+        [ds21[2]]: { laundry: [['Victoriano Ch', 'OFF'], ['Jorge Gonzalez', '']] },
+      },
+    };
+    win.schedApplyLaundryMirror(SCH21jm, [ds21[0], ds21[1], ds21[2]]);
+    t.eq(SCH21jm.days[ds21[0]].laundry[1][1], '1', "Jorge's direct Laundry row works on a day Victoriano is TAILOR — mirrored, not independently rotated");
+    t.eq(SCH21jm.days[ds21[1]].laundry[1][1], '', "Jorge is off the day Victoriano actually works Laundry himself — never both at once");
+    t.eq(SCH21jm.days[ds21[2]].laundry[1][1], '1', "Jorge works the day Victoriano is a plain OFF too, same as TAILOR");
+
+    // Jorge's own granted absence (Request Off) still wins over the mirror.
+    const SCH21jm2 = { days: { [ds21[0]]: { laundry: [['Victoriano Ch', 'OFF'], ['Jorge Gonzalez', 'R-OFF']] } } };
+    win.schedApplyLaundryMirror(SCH21jm2, [ds21[0]]);
+    t.eq(SCH21jm2.days[ds21[0]].laundry[1][1], 'R-OFF', "Jorge's own R-OFF is never overwritten by the mirror, even though Victoriano is OFF that day too");
+
 
     // Yesenia (PM Houseman): exactly 1 day off, forced deterministic via
     // a pre-set R-OFF so the cover check lands on a known day. Paty

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.11"/>
+<meta name="app-version" content="7.40.14"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,18 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.14', date:'2026-08-30',
+    fixes:['Fixed Auto-fill giving Jorge Gonzalez his own independent days off in Laundry, unrelated to Victoriano Ch — Carlos\'s report, since he moved Jorge onto Laundry\'s own crew list directly. Jorge is now excluded from Laundry\'s fairness rotation and instead mirrors Victoriano\'s day directly: working exactly when Victoriano is OFF/R-OFF/TAILOR/CALL-OFF, and off whenever Victoriano is actually working — never both idle, never both in Laundry at once. His own granted Request Off days still win over the mirror. The existing Houseman-based Victoriano/Jorge cover chain is untouched.']
+  },
+  {
+    v:'7.40.13', date:'2026-08-30',
+    features:['Managers now has its own dropdown on the Schedule page — Open, Close, Mid, Off, R-Off, Vac, Flex — instead of sharing the full housekeeping list (a plain "1" never said which shift). Carlos\'s ask. Every other crew is unchanged.']
+  },
+  {
+    v:'7.40.12', date:'2026-08-30',
+    changes:['Lobby section in the exported Excel now groups its people by shift — every AM Lobby name together, then every PM Lobby name together — instead of whatever order they sit in the crew list. Also made every row in the export taller and its type bigger throughout (Carlos\'s ask: too cramped to read at a glance on a printed page).']
+  },
   {
     v:'7.40.11', date:'2026-08-30',
     features:['Trends: clicking a name now shows a graphic month calendar of her actual requests instead of a flat date list — Carlos\'s ask, a way to SEE how many weekends or Mondays someone got in a given month instead of counting a list by hand. One mini calendar per month that has entries, each with its own weekend/Mon/Tue/Wed/Thu/Fri tally underneath.']
@@ -20278,6 +20290,17 @@ function schedUfExpectedForShift(SCH,pos,shiftIndex,ds){
    extra option on that cell, so opening the picker can never silently
    throw away something he typed in Excel. */
 var SCHED_VALUES=['','1','OFF','R-OFF','CALL-OFF','FLEX','VAC','PM','LOBBY','HOUSEMAN','TAILOR','LAUNDRY'];
+/* Managers' own vocabulary — Carlos's ask: a plain "1" doesn't say
+   anything useful for this crew (which shift?), so Managers gets its
+   own dropdown instead of sharing every housekeeping crew's list.
+   OFF/R-OFF/VAC/FLEX stay the exact same values every other crew
+   already uses (schedIsOff/schedIsWorkDay check for these verbatim,
+   and Request Off's R-OFF write-through depends on the literal string
+   'R-OFF') — only the "working" options change, from '1' to Open/
+   Close/Mid, which Carlos was already typing in by hand as ad-hoc
+   values before this existed. */
+var SCHED_VALUES_MGR=['','Open','Close','Mid','OFF','R-OFF','VAC','FLEX'];
+function schedValuesFor(bk){ return bk==='mgr'?SCHED_VALUES_MGR:SCHED_VALUES; }
 var SCHED_DAYNAMES=['Saturday','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday'];
 var schedViewWeekStart=null;
 
@@ -21109,6 +21132,31 @@ function schedApplyCoverChainsForDate(SCH,ds){
 function schedApplyCoverChains(SCH,dates){
   dates.forEach(function(ds){ schedApplyCoverChainsForDate(SCH,ds); });
 }
+/* Jorge Gonzalez mirrors Victoriano Ch directly, day for day: working
+   Laundry exactly when Victoriano is unavailable for it (OFF, R-OFF,
+   TAILOR, or CALL-OFF), and off whenever Victoriano is actually working
+   it. Carlos's rule — never both idle, never both in Laundry the same
+   day — and Carlos's real report: with Jorge sitting as an ordinary
+   member of Laundry's own crew list, Auto-fill's usual fairness
+   rotation gave him his own independent days off, unrelated to
+   Victoriano's, which is why schedAutoFill excludes him from that
+   rotation and calls this afterward instead, once Victoriano's own
+   days (and his manually-set TAILOR marks, always protected) are
+   settled. Jorge's own granted absence (R-OFF/FLEX/VAC/CALL-OFF, e.g.
+   from Request Off) is never overwritten — a real day off he's owed
+   still wins over the mirror. */
+function schedApplyLaundryMirror(SCH,dates){
+  dates.forEach(function(ds){
+    var vCell=schedCellFor(SCH,ds,'laundry','Victoriano Ch');
+    if(vCell==='')return; // Victoriano not on this week's roster — nothing to mirror
+    var jRow=schedRawCell(SCH,ds,'laundry','Jorge Gonzalez');
+    if(!jRow)return; // Jorge not on this week's roster
+    var jCell=String(jRow[1]||'').trim();
+    if(jCell==='R-OFF'||jCell==='FLEX'||jCell==='VAC'||jCell==='CALL-OFF')return;
+    var vUnavailable=(vCell==='OFF'||vCell==='R-OFF'||vCell==='TAILOR'||vCell==='CALL-OFF');
+    jRow[1]=vUnavailable?'1':'';
+  });
+}
 /* Whether (bk,name) is anywhere in a cover chain — titular or backup.
    schedSetCell uses this to decide whether an edit needs the heavier
    full-grid repaint (a chain reaction can change a DIFFERENT cell on the
@@ -21203,7 +21251,7 @@ function schedAutoFill(){
   if(!loaded.length){ showToast('&#9888; Build or upload this week first.'); return; }
   var hasOcc=loaded.some(function(ds){ return (parseInt(SCH.days[ds].occ,10)||0)>0; });
   if(!hasOcc){ showToast('&#9888; Enter OCC for at least one day first.'); return; }
-  if(!confirm('Auto-fill this week?\n\nAny R-OFF already on the grid is kept. Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant, Houseman and PM Houseman are filled or replaced, plus Overnight\'s fixed pattern, Yanira\'s PM shift, the Lobby/Laundry cover chains, and the Houseman overflow backups. Managers is left untouched.'))return;
+  if(!confirm('Auto-fill this week?\n\nAny R-OFF already on the grid is kept. Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant, Houseman and PM Houseman are filled or replaced, plus Overnight\'s fixed pattern, Yanira\'s PM shift, the Lobby/Laundry cover chains, Jorge mirroring Victoriano when he\'s a direct Laundry row, and the Houseman overflow backups. Managers is left untouched.'))return;
 
   var wk=schedWeekIndexOf(dates[0]);
   Object.keys(SCHED_AUTO_OFFCOUNT).forEach(function(bk){
@@ -21215,6 +21263,14 @@ function schedAutoFill(){
         var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n);
       });
     });
+    /* Jorge Gonzalez isn't a real independent Laundry rotation slot — his
+       whole role is covering Victoriano's own days off/Tailor days, never
+       both of them idle or both working at once. Giving him his own turn
+       in the fairness rotation was handing him days unrelated to
+       Victoriano's, which is the exact mismatch Carlos reported. Excluded
+       here; schedApplyLaundryMirror below sets his cell directly off of
+       Victoriano's resolved one, once Victoriano's own days are decided. */
+    if(bk==='laundry')names=names.filter(function(n){ return dlNorm(n)!==dlNorm('Jorge Gonzalez'); });
     if(!names.length)return;
     schedAutoFillCrew(SCH,dates,bk,names,SCHED_AUTO_OFFCOUNT[bk],wk);
   });
@@ -21222,13 +21278,15 @@ function schedAutoFill(){
   /* Special roles, in dependency order: Yesenia/Paty needs Turndown
      already filled; the PM-supervisor relabel and cover chains need
      Supervisors/Lobby/Laundry/Room Attendant/Houseman already filled;
-     the Houseman overflow backfill reacts to Houseman's state AFTER a
-     cover chain may have pulled someone (Jorge G) out of it, so it runs
+     the Laundry mirror needs Victoriano's own Laundry days already
+     decided; the Houseman overflow backfill reacts to Houseman's state
+     AFTER a cover chain may have pulled someone out of it, so it runs
      last, same order Schedule Builder's own autoFill uses. */
   schedApplyYesenia(SCH,dates,wk);
   schedApplyOvernight(SCH,dates);
   schedApplyPmSupervisor(SCH,dates);
   schedApplyCoverChains(SCH,dates);
+  schedApplyLaundryMirror(SCH,dates);
   schedApplyHpOverflow(SCH,dates);
 
   SCH.savedAt=new Date().toISOString();
@@ -21252,6 +21310,9 @@ function schedAutoFill(){
 var SCHED_XLS_COLORS={
   '1':      {bg:'FFEBF5FB',font:'FF1B2B4B'},
   'PM':     {bg:'FFEBF5FB',font:'FF1A5276'},
+  'Open':   {bg:'FFEBF5FB',font:'FF1B2B4B'},
+  'Close':  {bg:'FFEBF5FB',font:'FF1B2B4B'},
+  'Mid':    {bg:'FFEBF5FB',font:'FF1B2B4B'},
   'OFF':    {bg:'FFECECEC',font:'FF999999'},
   'R-OFF':  {bg:'FFFAF3DC',font:'FF8B6914'},
   'CALL-OFF': {bg:'FFF9EBEA',font:'FFC0392B'},
@@ -21360,13 +21421,22 @@ async function schedExportExcel(){
       });
     });
     if(!names.length)return;
+    /* Lobby prints as one section either way (it's always been a single
+       crew, AM and PM together) — Carlos's ask was for the PEOPLE inside
+       it to be grouped by shift instead of whatever order they happen to
+       sit in the crew list: every AM Lobby name together, then every PM
+       Lobby name together, now that the two actually print different
+       times (schedIsLobbyPm, added for the same AM/PM fix). */
+    if(b.key==='lobby'){
+      names.sort(function(x,y){ return (schedIsLobbyPm(x)?1:0)-(schedIsLobbyPm(y)?1:0); });
+    }
 
     var deptRow=ws.addRow(['',b.label.toUpperCase()]);
-    deptRow.height=22;
+    deptRow.height=26;
     for(var c=2;c<=9;c++){
       var cell=deptRow.getCell(c);
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2C4270'}};
-      cell.font={color:{argb:'FFE8C96B'},bold:true,size:12};
+      cell.font={color:{argb:'FFE8C96B'},bold:true,size:13};
       cell.alignment={vertical:'middle'};
     }
 
@@ -21385,10 +21455,12 @@ async function schedExportExcel(){
         if(v==='1'){ var t=schedShiftTimeText(b.key,dates[i],nm); if(t)return t; }
         return v;
       });
+      /* Bigger rows/type throughout — Carlos's ask, the export was too
+         cramped to read at a glance on a printed page. */
       var row=ws.addRow(['',nm].concat(displayData));
-      row.height=28;
+      row.height=36;
       var nameCell=row.getCell(2);
-      nameCell.font={size:12};
+      nameCell.font={size:13};
       nameCell.alignment={vertical:'middle',horizontal:'left'};
       rawData.forEach(function(v,i){
         var cell=row.getCell(3+i);
@@ -21397,9 +21469,9 @@ async function schedExportExcel(){
         var colors=SCHED_XLS_COLORS[v];
         if(colors){
           cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:colors.bg}};
-          cell.font={color:{argb:colors.font},size:12};
+          cell.font={color:{argb:colors.font},size:13};
         } else {
-          cell.font={size:12};
+          cell.font={size:13};
         }
       });
     });
@@ -22030,7 +22102,7 @@ function renderSchedule(){
                  : day[b.key].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0]);
         if(!cell){ html+='<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>'; return; }
         var v=String(cell[1]||'').trim();
-        var opts=SCHED_VALUES.slice();
+        var opts=schedValuesFor(b.key).slice();
         if(v&&opts.indexOf(v)===-1)opts.push(v);
         html+='<select onchange="schedSetCell(\''+b.key+'\','+idx+',\''+nmJs+'\',\''+ds+'\',this.value,this)" style="'+_schedCellCss(v)+'">'
           +opts.map(function(o){
