@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.16"/>
+<meta name="app-version" content="7.40.18"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.18', date:'2026-08-30',
+    fixes:['Fixed Susan/Julia/Sandra still coming back to Laundry after being removed — Carlos\'s repeated report. Removing someone now permanently retires her from that crew: a new week built afterward, or a re-uploaded workbook that still lists her, both skip her going forward. Nothing about her real work history in already-existing weeks changes. Bringing her back is a normal "+ Add someone to this crew" pick any time — that clears the retirement.']
+  },
+  {
+    v:'7.40.17', date:'2026-08-30',
+    features:['Jorge\'s Houseman cell now shows "LAUNDRY" automatically on any day he\'s covering Victoriano, even if that Houseman row starts completely blank — Carlos\'s ask, he shouldn\'t have to first type in Jorge\'s whole normal Houseman pattern before it\'ll show. Releases back to "1" once Victoriano resumes Laundry himself; a real granted day off on Jorge\'s Houseman row (from Request Off) still wins.']
+  },
   {
     v:'7.40.16', date:'2026-08-30',
     features:['Jorge\'s Laundry cell now mirrors Victoriano\'s live, the moment Victoriano\'s own cell is edited by hand — Carlos\'s ask, since he builds Laundry himself, Victoriano first, not through Auto-fill. Same instant-react pattern the Houseman-based cover chain already had; editing Jorge\'s own cell directly still always sticks.']
@@ -20152,7 +20160,20 @@ function dlUploadSchedule(input){
       try{
         var SCH=dlParseSchedule(wb);
         if(!SCH.count)throw new Error('No dates found in range. Is this the Schedule Draft?');
-        try{ SCH=schedCarryAddedRows(dlLoadSchedule(),SCH); SCH=schedCarryCheckExempt(dlLoadSchedule(),SCH); SCH=schedCarryWeekendPref(dlLoadSchedule(),SCH); SCH=schedCarryDayOffPref(dlLoadSchedule(),SCH); }catch(e){}
+        try{ SCH=schedCarryAddedRows(dlLoadSchedule(),SCH); SCH=schedCarryCheckExempt(dlLoadSchedule(),SCH); SCH=schedCarryWeekendPref(dlLoadSchedule(),SCH); SCH=schedCarryDayOffPref(dlLoadSchedule(),SCH); SCH=schedCarryRetired(dlLoadSchedule(),SCH); }catch(e){}
+        /* Carlos's real recurring bug: a workbook that still lists
+           someone he'd already retired (schedRemovePerson) brought her
+           right back on every re-upload, since the fresh parse never
+           knew about the retirement — dlParseSchedule reads the file
+           at face value. Filtered out here, on every day this upload
+           covers, same permanent-going-forward rule schedCreateWeek's
+           roster copy already gets. */
+        Object.keys(SCH.days).forEach(function(ds){
+          SCHED_BLOCKS.forEach(function(b){
+            if(!SCH.days[ds][b.key])return;
+            SCH.days[ds][b.key]=SCH.days[ds][b.key].filter(function(p){ return !schedIsRetired(SCH,b.key,p[0]); });
+          });
+        });
         dlSaveSchedule(SCH);
         /* The Daily Lineup's frozen source — captured fresh from THIS
            upload, exactly as parsed, before any live edit on the
@@ -20603,6 +20624,28 @@ function schedToggleCheckExempt(name){
 }
 function schedCarryCheckExempt(oldSch,newSch){
   if(oldSch&&oldSch.checkExempt)newSch.checkExempt=Object.assign({},oldSch.checkExempt);
+  return newSch;
+}
+/* ── permanently retiring someone from a crew ──
+   Carlos's real recurring bug: schedRemovePerson only ever clears
+   already-built weeks (this one + future ones already on file) — a
+   week built AFTER the removal, or a re-upload of a workbook that
+   still lists her, brought her right back no matter how many times he
+   removed her. Retiring is the permanent version: a flag on the
+   PERSON+CREW that schedCreateWeek's roster copy AND dlUploadSchedule's
+   fresh parse both check going forward, so neither path can silently
+   re-add her again — only Carlos deliberately picking her from "+ Add
+   someone to this crew" clears the flag. Like every other person-level
+   mark, this never touches a day that already exists — a past week she
+   really worked keeps showing it exactly as before. */
+function schedIsRetired(SCH,bk,name){ return !!(SCH&&SCH.retired&&SCH.retired[bk+'|'+dlNorm(name)]); }
+function schedSetRetired(SCH,bk,name,val){
+  if(!SCH.retired)SCH.retired={};
+  var k=bk+'|'+dlNorm(name);
+  if(val)SCH.retired[k]=true; else delete SCH.retired[k];
+}
+function schedCarryRetired(oldSch,newSch){
+  if(oldSch&&oldSch.retired)newSch.retired=Object.assign({},oldSch.retired);
   return newSch;
 }
 /* ── "doesn't want the weekend off" ── Carlos's ask: some people would
@@ -21177,17 +21220,44 @@ function schedApplyCoverChains(SCH,dates){
    days (and his manually-set TAILOR marks, always protected) are
    settled. Jorge's own granted absence (R-OFF/FLEX/VAC/CALL-OFF, e.g.
    from Request Off) is never overwritten — a real day off he's owed
-   still wins over the mirror. */
+   still wins over the mirror.
+
+   Also drives Jorge's HOUSEMAN cell the same way, straight off of
+   Victoriano's status — Carlos's ask: he shouldn't have to first type
+   in Jorge's whole normal Houseman pattern before the app will show
+   "LAUNDRY" there on a covering day; the Laundry mirror above already
+   knows with certainty which days those are. Unlike the older
+   Houseman-based SCHED_COVER_CHAINS entry for this same pair (left in
+   place, harmless — it only ever fires when Jorge's Houseman cell
+   already happens to read '1'), this doesn't require his Houseman
+   cell to already say anything: blank counts too. A day Jorge is NOT
+   covering leaves his Houseman cell exactly as Carlos set it — this
+   never invents his regular Houseman schedule, only ever writes
+   "LAUNDRY" on a covering day and releases it back on a non-covering
+   one if that's what it still says. */
 function schedApplyLaundryMirror(SCH,dates){
   dates.forEach(function(ds){
     var vCell=schedCellFor(SCH,ds,'laundry','Victoriano Ch');
     if(vCell==='')return; // Victoriano not on this week's roster — nothing to mirror
-    var jRow=schedRawCell(SCH,ds,'laundry','Jorge Gonzalez');
-    if(!jRow)return; // Jorge not on this week's roster
-    var jCell=String(jRow[1]||'').trim();
-    if(schedStatusIs(jCell,'R-OFF')||schedStatusIs(jCell,'FLEX')||schedStatusIs(jCell,'VAC')||schedStatusIs(jCell,'CALL-OFF'))return;
     var vUnavailable=(schedStatusIs(vCell,'OFF')||schedStatusIs(vCell,'R-OFF')||schedStatusIs(vCell,'TAILOR')||schedStatusIs(vCell,'CALL-OFF'));
-    jRow[1]=vUnavailable?'1':'';
+    var jRow=schedRawCell(SCH,ds,'laundry','Jorge Gonzalez');
+    if(jRow){
+      var jCell=String(jRow[1]||'').trim();
+      if(!(schedStatusIs(jCell,'R-OFF')||schedStatusIs(jCell,'FLEX')||schedStatusIs(jCell,'VAC')||schedStatusIs(jCell,'CALL-OFF'))){
+        jRow[1]=vUnavailable?'1':'';
+      }
+    }
+    var jHpRow=schedRawCell(SCH,ds,'hp','Jorge Gonzalez');
+    if(jHpRow){
+      var jHpCell=String(jHpRow[1]||'').trim();
+      if(schedStatusIs(jHpCell,'R-OFF')||schedStatusIs(jHpCell,'FLEX')||schedStatusIs(jHpCell,'VAC')||schedStatusIs(jHpCell,'CALL-OFF')){
+        // a real granted absence on his Houseman row wins, same as Laundry above
+      } else if(vUnavailable){
+        jHpRow[1]='LAUNDRY';
+      } else if(schedStatusIs(jHpCell,'LAUNDRY')){
+        jHpRow[1]='1'; // release back once Victoriano resumes Laundry himself
+      }
+    }
   });
 }
 /* Whether (bk,name) is anywhere in a cover chain — titular or backup.
@@ -21547,6 +21617,14 @@ function schedCreateWeek(){
     return;
   }
   var roster=schedRosterForDates(SCH,_schedDatesForWeekStart(refStart));
+  /* Anyone permanently retired (schedRemovePerson) is filtered out of
+     the copied crew list here — the actual fix for Carlos's real
+     recurring bug: a person removed from an older week kept coming
+     back the moment a NEWER week got built from it, since the roster
+     copy itself never knew she'd been retired. */
+  SCHED_BLOCKS.forEach(function(b){
+    roster[b.key]=roster[b.key].filter(function(n){ return !schedIsRetired(SCH,b.key,n); });
+  });
   if(!SCHED_BLOCKS.some(function(b){return roster[b.key].length;})){
     showToast('&#9888; The most recently loaded week is empty — nothing to copy the crew list from.');
     return;
@@ -21650,6 +21728,10 @@ function schedAddPerson(bk,name){
     if(!SCH.days[ds][bk])SCH.days[ds][bk]=[];
     SCH.days[ds][bk].push([name,'','added']);
   });
+  /* A deliberate re-add always wins over an earlier retirement — Carlos
+     picking her from this same picker again is exactly how he brings
+     someone back once he needs her, per schedSetRetired's own doc. */
+  schedSetRetired(SCH,bk,name,false);
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   renderSchedule();
@@ -21681,13 +21763,14 @@ function schedRemovePerson(bk,name){
   name=String(name==null?'':name).trim();
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days)return;
-  if(!confirm('Remove '+name+' from this crew, starting this week? (Past weeks keep their own history.)'))return;
+  if(!confirm('Remove '+name+' from this crew for good, starting this week?\n\nShe won\'t be carried into any new week built after this, or come back if you re-upload a workbook that still lists her — add her again from "+ Add someone to this crew" any time you need her back. Past weeks keep their own history.'))return;
   var cutoff=_schedWeekStart();
   Object.keys(SCH.days).forEach(function(ds){
     if(parseLocalDate(ds)<cutoff)return;
     var arr=SCH.days[ds][bk]; if(!arr)return;
     for(var i=arr.length-1;i>=0;i--) if(dlNorm(arr[i][0])===dlNorm(name))arr.splice(i,1);
   });
+  schedSetRetired(SCH,bk,name,true);
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   renderSchedule();
