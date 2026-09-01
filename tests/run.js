@@ -75,6 +75,7 @@ const cases = [
   require('./cases/sched-remove-person-future-not-past'),
   require('./cases/schedule-week-merge'),
   require('./cases/req-notebook-trends'),
+  require('./cases/schedule-resync-request-off'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

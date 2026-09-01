@@ -517,6 +517,17 @@ module.exports = {
     t.eq(win.dlLoadSchedule().days['2026-08-18'].gra.filter((p) => p[0] === 'Karla Varela')[0][1], '1',
       "a day deliberately set to OFF is overwritten by the fill too — real copy-paste, not a smart merge");
 
+    // Carlos's real report: a granted Request Off day (R-OFF/FLEX/VAC)
+    // got wiped out by this exact button on a week where several
+    // requests had already written through. A GRANTED absence someone
+    // is already counting on is different from a plain schedule value —
+    // same protection Auto-fill already gives R-OFF — so it survives
+    // the fill even though a plain OFF (tested above) still doesn't.
+    win.schedSetCell('gra', kIdx2, 'Karla Varela', '2026-08-19', 'R-OFF', null);
+    win.schedFillWeek('gra', 'Karla Varela');
+    t.eq(win.dlLoadSchedule().days['2026-08-19'].gra.filter((p) => p[0] === 'Karla Varela')[0][1], 'R-OFF',
+      "a granted R-OFF day survives Fill Week even though a plain OFF does not");
+
     // Someone with nothing typed anywhere has nothing to copy, and the
     // week must not be silently touched.
     win.schedAddPerson('gra', 'Rolando');
@@ -1191,6 +1202,30 @@ module.exports = {
     const afterJorgeEdit = win.dlLoadSchedule();
     t.eq(afterJorgeEdit.days[ds21[1]].laundry[1][1], '1',
       "editing Jorge's own cell directly sticks — the mirror only fires off of Victoriano's edits, not Jorge's");
+
+    // ── Carlos's real follow-up: he re-added Jorge to Houseman under
+    // his full name (matching the old cover chain's expected name), but
+    // that fresh row starts BLANK (schedAddPerson never guesses a
+    // schedule) — the old chain requires the Houseman cell to already
+    // read '1' before it'll swap to LAUNDRY, so nothing happened until
+    // he filled in Jorge's whole normal pattern first. Carlos's ask:
+    // it should just work off of what Laundry already knows. The
+    // extended mirror now drives Jorge's Houseman cell directly,
+    // blank or not. ──
+    const SCH21jm4 = {
+      days: {
+        [ds21[0]]: { laundry: [['Victoriano Ch', 'TAILOR'], ['Jorge Gonzalez', '']], hp: [['Jorge Gonzalez', '']] },
+        [ds21[1]]: { laundry: [['Victoriano Ch', '1'], ['Jorge Gonzalez', '']], hp: [['Jorge Gonzalez', 'LAUNDRY']] },
+        [ds21[2]]: { laundry: [['Victoriano Ch', 'OFF'], ['Jorge Gonzalez', '']], hp: [['Jorge Gonzalez', 'R-OFF']] },
+      },
+    };
+    win.schedApplyLaundryMirror(SCH21jm4, [ds21[0], ds21[1], ds21[2]]);
+    t.eq(SCH21jm4.days[ds21[0]].hp[0][1], 'LAUNDRY',
+      "Jorge's Houseman cell reads LAUNDRY on a day Victoriano is TAILOR, even though it started completely blank");
+    t.eq(SCH21jm4.days[ds21[1]].hp[0][1], '1',
+      'a day Victoriano actually works Laundry himself releases a leftover LAUNDRY label on Houseman back to 1');
+    t.eq(SCH21jm4.days[ds21[2]].hp[0][1], 'R-OFF',
+      "Jorge's own granted R-OFF on his Houseman row wins over the mirror there too, same protection Laundry gets");
 
 
     // Yesenia (PM Houseman): exactly 1 day off, forced deterministic via

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.18"/>
+<meta name="app-version" content="7.40.19"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.19', date:'2026-08-31',
+    features:['Added a "Re-sync Request Off to this week" button to the Schedule page — Carlos\'s real report: after the Aug 29 data-loss incident, several already-captured requests drifted back to plain schedule values once the week was rebuilt and Auto-filled, even though the notebook still had them correctly. Re-applies every Request Off entry that touches the viewed week using the same write-through a fresh capture already uses.'],
+    fixes:['"Fill rest of week with X" no longer overwrites a granted Request Off day (R-OFF/Flex/Vacation) — same protection Auto-fill already gives it. A plain OFF is still overwritten, same as before; only a real granted absence is protected now.']
+  },
   {
     v:'7.40.18', date:'2026-08-30',
     fixes:['Fixed Susan/Julia/Sandra still coming back to Laundry after being removed — Carlos\'s repeated report. Removing someone now permanently retires her from that crew: a new week built afterward, or a re-uploaded workbook that still lists her, both skip her going forward. Nothing about her real work history in already-existing weeks changes. Bringing her back is a normal "+ Add someone to this crew" pick any time — that clears the retirement.']
@@ -21664,12 +21669,53 @@ function schedFillWeek(bk,name){
     if(row&&String(row[1]||'').trim()!=='')src=String(row[1]).trim();
   }
   if(src==null){ showToast('&#9888; Nothing to copy — every day is still blank'); return; }
-  if(!confirm('Fill '+name+'’s whole week with "'+src+'"?\n\nThis overwrites every day, including any already set to something else.'))return;
-  dates.forEach(function(ds){ var row=findRow(ds); if(row)row[1]=src; });
+  if(!confirm('Fill '+name+'’s whole week with "'+src+'"?\n\nThis overwrites every day, including any already set to something else — except a granted day off (R-OFF/Flex/Vacation), which is always kept.'))return;
+  /* Carlos's real report: a Request Off day (R-OFF/FLEX/VAC) got wiped
+     out by this button on a week where several requests had already
+     written through — the whole point of "fill every day, no
+     exceptions" is real for a plain schedule value, but a GRANTED
+     absence someone is already counting on is a different kind of
+     thing, same protection Auto-fill already gives it. */
+  var skipped=0;
+  dates.forEach(function(ds){
+    var row=findRow(ds); if(!row)return;
+    if(schedStatusIs(row[1],'R-OFF')||schedStatusIs(row[1],'FLEX')||schedStatusIs(row[1],'VAC')){ skipped++; return; }
+    row[1]=src;
+  });
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   renderSchedule();
-  showToast('&#10003; Filled with "'+src+'"');
+  showToast('&#10003; Filled with "'+src+'"'+(skipped?' ('+skipped+' granted day'+(skipped===1?'':'s')+' off kept)':''));
+}
+/* Carlos's real recurring bug: several Request Off entries wrote
+   through correctly at capture time, but the cell later drifted back
+   to a plain value (Auto-fill run on a week rebuilt blank after the
+   real Aug 29 data-loss incident, or "Fill week" before it protected
+   granted absences above). Re-applies every notebook entry that
+   touches the viewed week, using the exact same write-through
+   (reqWriteToSchedule) a fresh capture already uses — a manual
+   "resync to source of truth", not a new write path. */
+function schedResyncRequestOff(){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days){ showToast('&#9888; No schedule loaded'); return; }
+  var dates=schedWeekDates();
+  var loaded=dates.filter(function(ds){return !!SCH.days[ds];});
+  if(!loaded.length){ showToast('&#9888; This week isn\'t loaded — nothing to resync.'); return; }
+  var relevant=loadReqNotebook().filter(function(r){
+    return (r.dates||[]).some(function(ds){return loaded.indexOf(ds)!==-1;});
+  });
+  if(!relevant.length){ showToast('No Request Off entries touch this week.'); return; }
+  if(!confirm('Re-apply '+relevant.length+' Request Off '+(relevant.length===1?'entry':'entries')+' to this week?\n\nEach one re-writes its R-OFF/Flex/Vacation status onto the matching cell for the days it covers, overwriting whatever is there now.'))return;
+  var touched=0,names={};
+  relevant.forEach(function(r){
+    var datesThisWeek=(r.dates||[]).filter(function(ds){return loaded.indexOf(ds)!==-1;});
+    if(!datesThisWeek.length)return;
+    var res=reqWriteToSchedule(r.name,r.crewKey,datesThisWeek,r.type);
+    touched+=res.written.length;
+    if(res.written.length)names[r.name]=1;
+  });
+  renderSchedule();
+  showToast('&#10003; Re-applied '+touched+' day'+(touched===1?'':'s')+' across '+Object.keys(names).length+' '+(Object.keys(names).length===1?'person':'people'));
 }
 /* "Copy last week" — Carlos's ask for something smarter than "Fill
    week": a real week is rarely one value repeated seven times, days
@@ -22312,6 +22358,7 @@ function renderSchedule(){
   html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--text3);margin-top:2px;">';
   html+='<span>Edits save and sync as you make them.</span>';
   html+='<button onclick="document.getElementById(\'schedFileInput\').click()" style="padding:3px 10px;border:1px solid var(--border);border-radius:99px;background:#fff;font-size:10px;font-weight:700;color:var(--text2);cursor:pointer;">Re-upload workbook</button>';
+  html+='<button onclick="schedResyncRequestOff()" title="Re-writes every Request Off entry that touches this week back onto its cell — for when a cell drifted away from what was actually requested" style="padding:3px 10px;border:1px solid var(--border);border-radius:99px;background:#fff;font-size:10px;font-weight:700;color:var(--text2);cursor:pointer;">Re-sync Request Off to this week</button>';
   html+='</div>';
 
   el.innerHTML=html;
