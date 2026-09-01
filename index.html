@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.24"/>
+<meta name="app-version" content="7.40.25"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.25', date:'2026-08-31',
+    fixes:['Fixed PM Turndown/GRA\'s "Rooms" header row always showing dots for a week built in the app instead of uploaded from Excel — there was no manual entry point for that number anywhere. Added "Turndown Rooms" to the OCC/Departures card at the top of the Schedule page, right next to OCC and Departures, so a week built by hand has somewhere to type it too. Labeled with a hover tooltip on both fields — Carlos\'s reminder: Turndown Rooms is THAT SAME night\'s occupancy, not the night before like the OCC field just above it, since turndown service happens in the evening for guests staying that night.']
+  },
   {
     v:'7.40.24', date:'2026-08-31',
     features:['Marking anyone\'s own cell LAUNDRY — any position, not just a designated backup — now puts her on Laundry\'s own crew card for that day too, instead of just counting toward its total invisibly. Carlos\'s ask.','Gabriela Cuevas (Room Attendant) and Gabriela (Lobby) — the same real person, listed on both crews — now stay in sync: whichever side goes OFF (or a granted R-OFF/Vacation) pulls the other side to match, live the moment either cell is edited. Carlos\'s real report: he\'d set her OFF on Lobby but Room Attendant still showed her working the same days.'],
@@ -22156,10 +22160,20 @@ function renderSchedule(){
   html+='<div style="min-width:520px;">';
   html+=headRow();
 
-  /* ── the two numbers everything else divides by ── */
-  [['occ','OCC'],['dep','Departures']].forEach(function(f){
+  /* ── the numbers everything else divides by ── */
+  /* Carlos's real report: PM Turndown's own Rooms header row (inside
+     its crew card, added in 7.40.21) always showed dots for a week
+     built in the app instead of uploaded from Excel — day.tdOcc had no
+     manual entry point anywhere, only ever set by parsing an uploaded
+     workbook's own Turndown OCC row (tdOccRow in dlParseSchedule).
+     Given the exact same treatment as OCC/Departures here so a week
+     built by hand has somewhere to type it too. */
+  [['occ','OCC','Rooms occupied the NIGHT BEFORE this date — what AM Room Attendant cleans that morning.'],
+   ['dep','Departures',null],
+   ['tdOcc','Turndown Rooms','Rooms occupied THIS SAME NIGHT — turndown happens in the evening for guests staying that night, not the morning\'s cleaning count. Do not copy the OCC row above; it\'s a different night.']
+  ].forEach(function(f){
     html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:4px;">';
-    html+='<div style="font-size:10.5px;font-weight:800;color:var(--navy);">'+f[1]+'</div>';
+    html+='<div style="font-size:10.5px;font-weight:800;color:var(--navy);"'+(f[2]?' title="'+escHtml(f[2])+'"':'')+'>'+f[1]+'</div>';
     dates.forEach(function(ds){
       var day=SCH.days[ds];
       if(!day){ html+='<div></div>'; return; }
