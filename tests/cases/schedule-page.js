@@ -1163,6 +1163,75 @@ module.exports = {
     t.eq(win.schedIsChainMember('hp', 'Jorge Gonzalez'), true, 'Jorge Gonzalez (backup) is recognized as a chain member');
     t.eq(win.schedIsChainMember('laundry', 'Karla Varela'), false, 'an unrelated Laundry attendant is not a chain member');
 
+    // ── Carlos's ask: marking ANY crew member's own cell LAUNDRY (any
+    // position, not just a designated cover) should put her on
+    // Laundry's own crew card for that day too — schedSyncLaundryCoverRow. ──
+    const SCH21lc = { days: { [ds21[0]]: { gra: [['Someone RA', '1']], laundry: [['Real Laundry Person', '1']] } } };
+    const changed1 = win.schedSyncLaundryCoverRow(SCH21lc, ds21[0], 'gra', 'Someone RA', 'LAUNDRY');
+    t.assert(changed1, 'marking a Room Attendant LAUNDRY reports a real change');
+    t.assert(SCH21lc.days[ds21[0]].laundry.some((p) => p[0] === 'Someone RA' && p[1] === '1'),
+      "she now has a real row on Laundry's own crew list for that day, not just an invisible headcount bump");
+    t.assert(SCH21lc.days[ds21[0]].laundry.some((p) => p[0] === 'Real Laundry Person'),
+      "the crew's own real members are untouched");
+
+    // Switching her cell to something else releases the added row again.
+    const changed2 = win.schedSyncLaundryCoverRow(SCH21lc, ds21[0], 'gra', 'Someone RA', '1');
+    t.assert(changed2, 'switching her cell back off LAUNDRY reports a change too');
+    t.assert(!SCH21lc.days[ds21[0]].laundry.some((p) => p[0] === 'Someone RA'),
+      'and the added row is gone — released, same as a cover-chain release');
+
+    // A row that's a REAL Laundry crew member (not one this sync added)
+    // is never removed just because someone happens to share her name
+    // and stops being LAUNDRY elsewhere — the 'cover' tag is what makes
+    // a row eligible for release, not just matching by name.
+    const SCH21lc2 = { days: { [ds21[0]]: { laundry: [['Real Laundry Person', '1']] } } };
+    const changed3 = win.schedSyncLaundryCoverRow(SCH21lc2, ds21[0], 'gra', 'Real Laundry Person', '1');
+    t.assert(!changed3, 'no change reported when the cell is not LAUNDRY and there is no cover row to release');
+    t.assert(SCH21lc2.days[ds21[0]].laundry.some((p) => p[0] === 'Real Laundry Person'),
+      "a real Laundry crew member's own row is untouched by this sync entirely");
+
+    // ── Carlos's real report: Gabriela Cuevas (Room Attendant) and
+    // Gabriela (Lobby) are the same real person, listed independently
+    // on both crews — different spelling on each. He set her OFF on
+    // Lobby (Sat/Sun/Mon) but Room Attendant still showed her working
+    // Sat/Sun. schedApplyLinkedPeopleForDate pulls the other side to
+    // match whichever side is actually unavailable. ──
+    const SCH21gc = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', 'OFF']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21gc, ds21[0]);
+    t.eq(SCH21gc.days[ds21[0]].gra[0][1], 'OFF', "Gabriela Cuevas's Room Attendant cell follows Lobby's OFF — she can't be resting on one and working the other");
+
+    // The exact status text is mirrored, not generic-ified — a granted
+    // R-OFF on one side shows as a real R-OFF on the other too.
+    const SCH21gc2 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', 'R-OFF']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21gc2, ds21[0]);
+    t.eq(SCH21gc2.days[ds21[0]].gra[0][1], 'R-OFF', "a granted R-OFF on Lobby mirrors as a real R-OFF on Room Attendant, not a plain OFF");
+
+    // It works the other direction too — Room Attendant OFF pulls Lobby.
+    const SCH21gc3 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', 'OFF']], lobby: [['Gabriela', '1']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21gc3, ds21[0]);
+    t.eq(SCH21gc3.days[ds21[0]].lobby[0][1], 'OFF', 'the mirror runs both directions — Room Attendant OFF pulls Lobby to match too');
+
+    // Neither side is touched if she isn't even on both crews that week.
+    const SCH21gc4 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', 'OFF']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21gc4, ds21[0]);
+    t.eq(SCH21gc4.days[ds21[0]].gra[0][1], 'OFF', 'with no Lobby row at all that week, her Room Attendant cell is simply left alone');
+
+    // ── Both new mirrors also react live to a single manual edit
+    // (schedSetCell), not just Auto-fill — Carlos's real reports were
+    // both about editing by hand. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH21live = { days: {} };
+    ds21.forEach((ds) => { SCH21live.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', gra: [['Someone RA', '1'], ['Gabriela Cuevas', '1']], lobby: [['Gabriela', '1']], laundry: [] }; });
+    win.dlSaveSchedule(SCH21live);
+    win.schedSetCell('gra', 0, 'Someone RA', ds21[0], 'LAUNDRY', null);
+    const afterLiveLaundry = win.dlLoadSchedule();
+    t.assert(afterLiveLaundry.days[ds21[0]].laundry.some((p) => p[0] === 'Someone RA'),
+      'a single live edit marking her LAUNDRY immediately adds her to the Laundry crew card, no Auto-fill run needed');
+    win.schedSetCell('lobby', 0, 'Gabriela', ds21[0], 'OFF', null);
+    const afterLiveGabriela = win.dlLoadSchedule();
+    t.eq(afterLiveGabriela.days[ds21[0]].gra.filter((p) => p[0] === 'Gabriela Cuevas')[0][1], 'OFF',
+      "a single live edit setting Gabriela's Lobby cell OFF immediately mirrors onto her Room Attendant cell too");
+
     // ── Carlos's real report: he moved Jorge onto Laundry's own crew
     // list directly (a second real setup, alongside the Houseman-chain
     // above — both exist for him). Auto-fill's usual fairness rotation

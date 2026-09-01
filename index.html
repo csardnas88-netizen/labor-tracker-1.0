@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.23"/>
+<meta name="app-version" content="7.40.24"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.24', date:'2026-08-31',
+    features:['Marking anyone\'s own cell LAUNDRY — any position, not just a designated backup — now puts her on Laundry\'s own crew card for that day too, instead of just counting toward its total invisibly. Carlos\'s ask.','Gabriela Cuevas (Room Attendant) and Gabriela (Lobby) — the same real person, listed on both crews — now stay in sync: whichever side goes OFF (or a granted R-OFF/Vacation) pulls the other side to match, live the moment either cell is edited. Carlos\'s real report: he\'d set her OFF on Lobby but Room Attendant still showed her working the same days.'],
+  },
   {
     v:'7.40.23', date:'2026-08-31',
     changes:['A "TURNDOWN" cell now gets the same color treatment as HOUSEMAN/LAUNDRY/TAILOR/LOBBY in the exported Excel, instead of printing in plain black — a follow-up to Paty\'s new TURNDOWN label.']
@@ -20516,12 +20520,29 @@ function schedSetCell(bk,idx,name,ds,val,el){
      just typed. */
   var isVictorianoLaundryEdit=(bk==='laundry'&&dlNorm(name)===dlNorm('Victoriano Ch'));
   if(isVictorianoLaundryEdit)schedApplyLaundryMirror(SCH,[ds]);
+  /* Carlos's ask: marking ANYONE — any position, not just a designated
+     backup — as LAUNDRY on a given day should put her on Laundry's own
+     crew card for that day too, not just count toward its total
+     invisibly (_schedCoverInflow already did the counting; this adds
+     the actual visible row). Reactive both ways: switching the cell
+     to something else releases the row again, same as a cover-chain
+     release. */
+  var laundryRowChanged=schedSyncLaundryCoverRow(SCH,ds,bk,name,row[1]);
+  /* Carlos's real report: Gabriela Cuevas (Room Attendant) and Gabriela
+     (Lobby) are the same real person, listed independently on both
+     crews — she can't be resting on one and working the other the same
+     day. Whichever side just went OFF (or TAILOR/CALL-OFF) pulls the
+     other side to match, live, the moment either cell is edited. */
+  var linkedMember=SCHED_LINKED_PEOPLE.some(function(pair){
+    return (pair.a.crew===bk&&dlNorm(pair.a.name)===dlNorm(name))||(pair.b.crew===bk&&dlNorm(pair.b.name)===dlNorm(name));
+  });
+  if(linkedMember)schedApplyLinkedPeopleForDate(SCH,ds);
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
-  if(chainMember||isVictorianoLaundryEdit){
-    /* The chain/mirror reaction can change a DIFFERENT cell on this same
-       day (Jorge's own row) — that needs the full grid repainted so it
-       actually shows, unlike the single-cell case below. */
+  if(chainMember||isVictorianoLaundryEdit||laundryRowChanged||linkedMember){
+    /* The chain/mirror reaction can change a DIFFERENT cell (or crew
+       card) on this same day — that needs the full grid repainted so
+       it actually shows, unlike the single-cell case below. */
     renderSchedule();
     return;
   }
@@ -21304,6 +21325,63 @@ function schedApplyLaundryMirror(SCH,dates){
     }
   });
 }
+/* Carlos's ask: marking ANY crew member's own cell LAUNDRY (any
+   position, not just a designated backup) should put her on Laundry's
+   own crew card for that day too — the count already included her
+   (_schedCoverInflow), but she never actually showed up in the list.
+   Adds/removes a real row in that single day's laundry array, tagged
+   'cover' so it's told apart from a real Laundry crew member (never
+   carried across a re-upload the way an 'added' row is — this is
+   purely a reflection of today's LAUNDRY label, gone the moment that
+   label is). Returns whether it actually changed anything, so the
+   caller knows whether a full repaint is needed. */
+function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
+  if(bk==='laundry')return false;
+  var day=SCH.days[ds]; if(!day)return false;
+  if(!day.laundry)day.laundry=[];
+  var idx=-1;
+  for(var i=0;i<day.laundry.length;i++) if(dlNorm(day.laundry[i][0])===dlNorm(name)){idx=i;break;}
+  if(schedStatusIs(val,'LAUNDRY')){
+    if(idx!==-1)return false;
+    day.laundry.push([name,'1','cover']);
+    return true;
+  }
+  if(idx!==-1&&day.laundry[idx][2]==='cover'){
+    day.laundry.splice(idx,1);
+    return true;
+  }
+  return false;
+}
+/* Carlos's real report: Gabriela Cuevas (Room Attendant) and Gabriela
+   (Lobby) are the same real person, listed independently on both
+   crews — different name spelling on each, same as the cover chains
+   above already had to account for. She can't be resting on one crew
+   and working the other the same day; whichever side is OFF (or
+   TAILOR/CALL-OFF, same "unavailable" set the cover chains use) pulls
+   the other side to match, mirroring the exact status text (so a
+   granted R-OFF stays visibly R-OFF on both, not generic-ified to a
+   plain OFF). Skipped entirely if either side isn't even on this
+   week's roster — nothing to sync against. */
+var SCHED_LINKED_PEOPLE=[
+  {a:{crew:'gra',name:'Gabriela Cuevas'}, b:{crew:'lobby',name:'Gabriela'}}
+];
+function _schedIsUnavailable(v){ return schedIsOff(v)||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); }
+function schedApplyLinkedPeopleForDate(SCH,ds){
+  SCHED_LINKED_PEOPLE.forEach(function(pair){
+    var aCell=schedCellFor(SCH,ds,pair.a.crew,pair.a.name);
+    var bCell=schedCellFor(SCH,ds,pair.b.crew,pair.b.name);
+    if(aCell===''||bCell==='')return;
+    var aOff=_schedIsUnavailable(aCell), bOff=_schedIsUnavailable(bCell);
+    if(aOff&&!bOff){
+      var bRow=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
+      if(bRow)bRow[1]=aCell;
+    } else if(bOff&&!aOff){
+      var aRow=schedRawCell(SCH,ds,pair.a.crew,pair.a.name);
+      if(aRow)aRow[1]=bCell;
+    }
+  });
+}
+function schedApplyLinkedPeople(SCH,dates){ dates.forEach(function(ds){ schedApplyLinkedPeopleForDate(SCH,ds); }); }
 /* Whether (bk,name) is anywhere in a cover chain — titular or backup.
    schedSetCell uses this to decide whether an edit needs the heavier
    full-grid repaint (a chain reaction can change a DIFFERENT cell on the
@@ -21434,6 +21512,7 @@ function schedAutoFill(){
   schedApplyPmSupervisor(SCH,dates);
   schedApplyCoverChains(SCH,dates);
   schedApplyLaundryMirror(SCH,dates);
+  schedApplyLinkedPeople(SCH,dates);
   schedApplyHpOverflow(SCH,dates);
 
   SCH.savedAt=new Date().toISOString();
