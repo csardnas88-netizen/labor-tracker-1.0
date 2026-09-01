@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.19"/>
+<meta name="app-version" content="7.40.20"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.20', date:'2026-08-31',
+    changes:['Doubled every row height in the exported Schedule Excel (department headers, the day/date header, and each employee row) — Carlos\'s ask, still too thin to read comfortably when printed.']
+  },
   {
     v:'7.40.19', date:'2026-08-31',
     features:['Added a "Re-sync Request Off to this week" button to the Schedule page — Carlos\'s real report: after the Aug 29 data-loss incident, several already-captured requests drifted back to plain schedule values once the week was rebuilt and Auto-filled, even though the notebook still had them correctly. Re-applies every Request Off entry that touches the viewed week using the same write-through a fresh capture already uses.'],
@@ -21505,7 +21509,7 @@ async function schedExportExcel(){
 
   var headerRow=ws.addRow(['','Employee Name'].concat(dates.map(function(ds,i){return SCHED_DAYNAMES[i].slice(0,3);})));
   var dateRow=ws.addRow(['',''].concat(dates.map(function(ds){var d=parseLocalDate(ds);return (d.getMonth()+1)+'/'+d.getDate();})));
-  headerRow.height=26; dateRow.height=20;
+  headerRow.height=52; dateRow.height=40;
   [headerRow,dateRow].forEach(function(row){
     for(var c=2;c<=9;c++){
       var cell=row.getCell(c);
@@ -21540,7 +21544,7 @@ async function schedExportExcel(){
     }
 
     var deptRow=ws.addRow(['',b.label.toUpperCase()]);
-    deptRow.height=26;
+    deptRow.height=52;
     for(var c=2;c<=9;c++){
       var cell=deptRow.getCell(c);
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2C4270'}};
@@ -21566,7 +21570,7 @@ async function schedExportExcel(){
       /* Bigger rows/type throughout — Carlos's ask, the export was too
          cramped to read at a glance on a printed page. */
       var row=ws.addRow(['',nm].concat(displayData));
-      row.height=36;
+      row.height=72;
       var nameCell=row.getCell(2);
       nameCell.font={size:13};
       nameCell.alignment={vertical:'middle',horizontal:'left'};
