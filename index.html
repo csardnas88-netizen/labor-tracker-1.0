@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.38"/>
+<meta name="app-version" content="7.40.39"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.39', date:'2026-09-01',
+    changes:['Removed the full "Turndown Rooms" row from the Schedule page\'s manual-entry card — Carlos\'s ask, now that six of its seven boxes fill themselves in from OCC it was just confusing whoever\'s building the schedule. Only the week\'s last day has no following day inside it to derive from, so it keeps a single small box of its own, labeled "Turndown Rooms — [day] only" — the one number that still needs typing, same as his old sheet\'s separate "Turndown Friday OCC" cell.']
+  },
   {
     v:'7.40.38', date:'2026-09-01',
     features:['Turndown Rooms is no longer a second number Carlos has to type by hand — he walked through exactly how he built it in his old pre-app Excel: he copied the FOLLOWING day\'s OCC in as THIS day\'s Turndown count (OCC is defined as "the night before its own date", so the next day\'s OCC IS the same-night count Turndown needs). Now auto-fills live the moment OCC is entered, still editable if a day needs overriding, and self-heals for a week that already had OCC typed in before this existed. The last day of the week has no following day inside it, so it stays a manual entry, same as his old sheet\'s separate "Turndown Friday OCC" cell.']
@@ -22612,16 +22616,8 @@ function renderSchedule(){
   html+=headRow();
 
   /* ── the numbers everything else divides by ── */
-  /* Carlos's real report: PM Turndown's own Rooms header row (inside
-     its crew card, added in 7.40.21) always showed dots for a week
-     built in the app instead of uploaded from Excel — day.tdOcc had no
-     manual entry point anywhere, only ever set by parsing an uploaded
-     workbook's own Turndown OCC row (tdOccRow in dlParseSchedule).
-     Given the exact same treatment as OCC/Departures here so a week
-     built by hand has somewhere to type it too. */
   [['occ','OCC','Rooms occupied the NIGHT BEFORE this date — what AM Room Attendant cleans that morning.'],
-   ['dep','Departures',null],
-   ['tdOcc','Turndown Rooms','Rooms occupied THIS SAME NIGHT — turndown happens in the evening for guests staying that night, not the morning\'s cleaning count. Auto-filled from the FOLLOWING day\'s OCC (exactly how Carlos built it by hand — OCC is defined as the night before its own date, so the next day\'s OCC IS this same night\'s count); still editable if you need to override a day. The last day of the week has no following day inside this week, so it stays manual, same as his old sheet\'s separate "Turndown Friday OCC" cell.']
+   ['dep','Departures',null]
   ].forEach(function(f){
     html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:4px;">';
     html+='<div style="font-size:10.5px;font-weight:800;color:var(--navy);"'+(f[2]?' title="'+escHtml(f[2])+'"':'')+'>'+f[1]+'</div>';
@@ -22634,6 +22630,21 @@ function renderSchedule(){
     });
     html+='</div>';
   });
+  /* Carlos's ask: the rest of Turndown Rooms is now fully automatic
+     (schedDeriveTdOccFromOcc/schedBackfillTdOcc), so a whole extra row
+     of boxes that mostly just fill themselves was confusing whoever's
+     actually building the schedule. Only the LAST day of the week has
+     no following day inside this week to copy from, so it's the one
+     number that still needs typing — same as his old sheet's separate
+     "Turndown Friday OCC" cell. */
+  var _tdLastDs=dates[dates.length-1];
+  if(SCH.days[_tdLastDs]){
+    html+='<div style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;padding-top:8px;border-top:1px dashed var(--border);">'
+      +'<div style="font-size:10.5px;font-weight:800;color:var(--navy);" title="Every other day\'s Turndown Rooms fills in automatically from the following day\'s OCC. '+SCHED_DAYNAMES[dates.length-1]+' has no following day inside this week, so it still needs its own number here — same as his old sheet\'s separate &quot;Turndown Friday OCC&quot; cell.">Turndown Rooms &mdash; '+SCHED_DAYNAMES[dates.length-1]+' only</div>'
+      +'<input type="number" min="0" value="'+escHtml(SCH.days[_tdLastDs].tdOcc||'')+'" id="schedNumIn_'+_tdLastDs+'_tdOcc" onchange="schedSetNum(\''+_tdLastDs+'\',\'tdOcc\',this.value)"'
+      +' style="width:70px;padding:3px 2px;font-size:11px;font-weight:800;text-align:center;color:var(--navy);border:1px solid var(--border);border-radius:5px;background:#fff;box-sizing:border-box;font-family:inherit;">'
+      +'</div>';
+  }
   html+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;">'
     +'<button class="btn btn-navy btn-sm" onclick="schedAutoFill()">Auto-fill this week</button> '
     +'<button class="btn btn-ghost btn-sm" onclick="schedExportExcel()">Export Excel</button>'
