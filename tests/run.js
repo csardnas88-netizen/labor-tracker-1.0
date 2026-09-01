@@ -76,6 +76,7 @@ const cases = [
   require('./cases/schedule-week-merge'),
   require('./cases/req-notebook-trends'),
   require('./cases/schedule-resync-request-off'),
+  require('./cases/training-sync-clobber'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.36"/>
+<meta name="app-version" content="7.40.37"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.40.37', date:'2026-09-01',
+    fixes:['Training: marking someone Complete could sometimes erase another employee\'s progress — Carlos\'s real report. Root cause: hk_trainings pushed the WHOLE list as one blob with no server-side merge, so if this device hadn\'t yet picked up another device\'s more recent mark, saving simply overwrote the whole record and silently erased it — the same whole-blob-clobber bug already fixed elsewhere for month data and the Schedule Draft, just never applied to Training. Marking someone Complete (single or bulk) now fetches the current remote copy and merges it in before pushing, so a save can only ADD progress, never erase it. Deleting or creating a training is unaffected, deliberately — merging remote back in right after a delete would have resurrected it.']
+  },
+  {
     v:'7.40.36', date:'2026-09-01',
     features:['The OCC/Departures Carlos types into the Schedule page to build the week now flows straight into the Occupancy page\'s "Sched" box — already documented there as "the number that actually built the schedule" — instead of him having to type the same two numbers in twice. Live on every edit, and self-heals on the Occupancy page too, so a week already built before this connection existed catches up the moment the page opens, matching Carlos\'s real report (Sched reading blank for a week that already had OCC/Departures the whole time).']
   },
@@ -8045,29 +8049,7 @@ function _syncFromSheetsPull(){
           if(Array.isArray(remoteTr)&&remoteTr.length>0){
             var localTr=[];
             try{var ltr=localStorage.getItem('hk_trainings');if(ltr)localTr=JSON.parse(ltr);}catch(e){}
-            var trById={};
-            localTr.forEach(function(t){if(t&&t.id)trById[t.id]=t;});
-            remoteTr.forEach(function(rt){
-              if(!rt||!rt.id)return;
-              try{trMigrateProg(rt);}catch(e){}
-              var l=trById[rt.id];
-              if(!l){trById[rt.id]=rt;return;}
-              try{trMigrateProg(l);}catch(e){}
-              /* merge: keep the most recently edited meta. Merge per-employee
-                 STATUS by newest edit timestamp (trMergeProg) so a status change
-                 — including a revert from complete back to pending/in-progress —
-                 propagates deterministically instead of a stale union silently
-                 resurrecting an old completion. */
-              var merged=Object.assign({},rt,l);
-              if(rt.updated&&(!l.updated||Date.parse(rt.updated)>Date.parse(l.updated||0))){
-                merged.title=rt.title;merged.scope=rt.scope;merged.dlHK=rt.dlHK;merged.dlHR=rt.dlHR;
-              }
-              merged.prog=(typeof trMergeProg==='function')?trMergeProg(rt.prog,l.prog):Object.assign({},rt.prog||{},l.prog||{});
-              merged.hrPending=Object.assign({},rt.hrPending||{},l.hrPending||{});
-              try{trSyncDoneMirror(merged);}catch(e){merged.done=Object.assign({},rt.done||{},l.done||{});}
-              trById[rt.id]=merged;
-            });
-            var mergedTr=Object.keys(trById).map(function(k){return trById[k];});
+            var mergedTr=trMergeLists(localTr,remoteTr);
             safeSetItem('hk_trainings',JSON.stringify(mergedTr));
             updated=true;
           }
@@ -16516,6 +16498,68 @@ function saveTrainings(list){
   safeSetItem('hk_trainings',JSON.stringify(list));
   try{supaPut('hk_trainings',list);}catch(e){}
 }
+/* Carlos's real report: marking someone Complete sometimes erased OTHER
+   employees' progress. Root cause — hk_trainings pushes the WHOLE array
+   as one blob (supaPut is a raw overwrite, no server-side merge), so if
+   THIS device's local copy hasn't yet picked up another device's more
+   recent mark (no pull happened to land in between), pushing simply
+   replaces the whole row and silently erases that mark — the exact same
+   whole-blob-clobber class already fixed for month data and the
+   Schedule Draft, just never applied here. saveTrainingsMerged fetches
+   the CURRENT remote copy right before pushing and merges it in first
+   (the same per-employee newest-`at` merge the pull path already uses,
+   pulled out into trMergeLists below so both paths share one
+   implementation), so a push can only ADD progress this device didn't
+   know about, never erase it.
+   Used ONLY by the mark-complete paths (applyTrStatus, applyBulkMark),
+   which only ever add/update prog entries — never by deleteTraining,
+   saveNewTraining, or the HR-import flows. Merging remote back in right
+   after a local delete would resurrect the very training just removed
+   (the merge has no concept of an intentional deletion, no tombstone),
+   so those keep the plain overwrite-push. */
+function saveTrainingsMerged(list){
+  safeSetItem('hk_trainings',JSON.stringify(list));
+  authedFetch(SUPA_URL+"/rest/v1/labor_data?select=value&key=eq.hk_trainings",{method:"GET"})
+    .then(function(r){ return r.ok?r.json():[]; })
+    .then(function(rows){
+      var remote=null;
+      try{ remote=(rows&&rows[0])?JSON.parse(rows[0].value):null; }catch(e){}
+      var merged=trMergeLists(loadTrainings(),remote);
+      safeSetItem('hk_trainings',JSON.stringify(merged));
+      supaPut('hk_trainings',merged);
+    })
+    .catch(function(){ try{supaPut('hk_trainings',loadTrainings());}catch(e){} });
+}
+/* Merges a REMOTE trainings array into a LOCAL one, per-training and
+   then per-employee, keeping whichever side's progress entry has the
+   newer `at` timestamp (trMergeProg) — a status change, including a
+   revert, always wins over a stale one instead of a naive union
+   silently resurrecting an old completion. Shared by the pull path
+   (syncFromSheets) and saveTrainingsMerged above, so there is exactly
+   one merge implementation to keep correct. A training present locally
+   but missing from remote (or the reverse) is kept as-is either way. */
+function trMergeLists(localList,remoteList){
+  if(!Array.isArray(remoteList)||!remoteList.length)return Array.isArray(localList)?localList:[];
+  var localTr=Array.isArray(localList)?localList:[];
+  var trById={};
+  localTr.forEach(function(t){if(t&&t.id)trById[t.id]=t;});
+  remoteList.forEach(function(rt){
+    if(!rt||!rt.id)return;
+    try{trMigrateProg(rt);}catch(e){}
+    var l=trById[rt.id];
+    if(!l){trById[rt.id]=rt;return;}
+    try{trMigrateProg(l);}catch(e){}
+    var merged=Object.assign({},rt,l);
+    if(rt.updated&&(!l.updated||Date.parse(rt.updated)>Date.parse(l.updated||0))){
+      merged.title=rt.title;merged.scope=rt.scope;merged.dlHK=rt.dlHK;merged.dlHR=rt.dlHR;
+    }
+    merged.prog=(typeof trMergeProg==='function')?trMergeProg(rt.prog,l.prog):Object.assign({},rt.prog||{},l.prog||{});
+    merged.hrPending=Object.assign({},rt.hrPending||{},l.hrPending||{});
+    try{trSyncDoneMirror(merged);}catch(e){merged.done=Object.assign({},rt.done||{},l.done||{});}
+    trById[rt.id]=merged;
+  });
+  return Object.keys(trById).map(function(k){return trById[k];});
+}
 
 /* ──────────────────────────────────────────────────────────────
    TRAINING STATUS MODEL (v6.5.0)
@@ -17027,7 +17071,7 @@ function applyTrStatus(tid, empId, st){
   if(!t)return;
   trSetStatusObj(t, empId, st);
   t.updated=new Date().toISOString();
-  saveTrainings(list);           /* writes localStorage + supaPut('hk_trainings') */
+  saveTrainingsMerged(list);     /* writes localStorage + a merge-then-push, see its own comment */
   renderTraining();
   updateTrainingBadge();
   var nm=trEmpName(empId);
@@ -17163,7 +17207,7 @@ function applyBulkMark(tid){
   }
   trSyncDoneMirror(t);
   t.updated=new Date().toISOString();
-  saveTrainings(list);
+  saveTrainingsMerged(list);
   document.getElementById('bulkMarkModal').remove();
   renderTraining();
   updateTrainingBadge();
