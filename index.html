@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.35"/>
+<meta name="app-version" content="7.40.36"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.40.36', date:'2026-09-01',
+    features:['The OCC/Departures Carlos types into the Schedule page to build the week now flows straight into the Occupancy page\'s "Sched" box — already documented there as "the number that actually built the schedule" — instead of him having to type the same two numbers in twice. Live on every edit, and self-heals on the Occupancy page too, so a week already built before this connection existed catches up the moment the page opens, matching Carlos\'s real report (Sched reading blank for a week that already had OCC/Departures the whole time).']
+  },
+  {
     v:'7.40.35', date:'2026-09-01',
     changes:['Exported Schedule Excel, Carlos\'s follow-up asks: PM Houseman moved right after PM Turndown/GRA (his real backup pair) instead of the very end; the day/date reference row under every single position pulled back out, kept only at the very top and once more for Room Attendant; row heights trimmed back down a bit (still bigger than the original size, just not so tall it forces extra pages); orientation switched back to portrait.']
   },
@@ -7656,6 +7660,54 @@ function saveOccForecastDay(weekKey,ds,field,raw){
 function saveDepForecastDay(weekKey,ds,field,raw){
   if(_occfcSetField(weekKey,ds,field,raw)===null)return;
   try{ _depfcRefreshWeek(weekKey); }catch(e){}
+}
+/* Carlos's real ask: the "Sched" box on the Occupancy page is already
+   documented as "the number that actually built the schedule" — so it
+   should just BE the OCC/Departures he types into the Schedule page,
+   not a second copy he has to type in twice. Schedule Draft's day.occ/
+   day.dep is the source of truth; this pushes it into every week's
+   occForecast record, across every day currently loaded in the
+   schedule, not just the one being viewed. Called live after every
+   OCC/Departures edit on the Schedule page (schedSetNum) AND on every
+   Occupancy page render (self-healing, same pattern as the Laundry
+   cover-row sync) so an already-built week like Carlos's real report —
+   the Sched column reading blank even though the schedule had OCC/
+   Departures the whole time — catches up the moment the page is
+   opened, no manual re-entry needed. Always overwrites rather than
+   filling blanks only: since Schedule IS the source of truth here,
+   these two numbers should never be allowed to drift apart. */
+function occForecastBackfillFromSchedule(){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days)return false;
+  var changed=false;
+  var touchedWeeks={};
+  Object.keys(SCH.days).forEach(function(ds){
+    var day=SCH.days[ds];
+    var occN=parseInt(day.occ,10);
+    var depN=parseInt(day.dep,10);
+    if(isNaN(occN)&&isNaN(depN))return;
+    var weekKey=occForecastWeekKey(parseLocalDate(ds));
+    var rec=loadOccForecast(weekKey)||{days:{}};
+    var days=rec.days||{};
+    var cur=_occfcNormDay(days[ds]);
+    var dayChanged=false;
+    if(!isNaN(occN)&&cur.sched!==occN){ cur.sched=occN; dayChanged=true; }
+    if(!isNaN(depN)&&cur.depSched!==depN){ cur.depSched=depN; dayChanged=true; }
+    if(dayChanged){
+      days[ds]=cur;
+      rec.days=days;
+      rec.savedAt=new Date().toISOString();
+      safeSetItem('hk_occfc_'+weekKey,JSON.stringify(rec));
+      touchedWeeks[weekKey]=true;
+      changed=true;
+    }
+  });
+  if(changed){
+    Object.keys(touchedWeeks).forEach(function(weekKey){
+      try{ supaPut('occfc_'+weekKey,loadOccForecast(weekKey)); }catch(e){}
+    });
+  }
+  return changed;
 }
 
 /* Merge every project_<id> row (plus the legacy projects_data blob as a
@@ -16006,6 +16058,13 @@ function renderOccupancy(){
   var el=document.getElementById('occupancyContent');
   if(!el)return;
 
+  /* Self-heal, same pattern as the Laundry cover-row sync: a week
+     already built in the Schedule Draft before this connection existed
+     (or built any other way that isn't the live schedSetNum edit —
+     Fill Week, an Excel upload) catches up the moment this page opens,
+     instead of staying blank forever. */
+  try{ occForecastBackfillFromSchedule(); }catch(e){}
+
   var mData=loadMonthData(monthKey(viewMonth));
   var days=mData.days||{};
   var rooms=mData.rooms||{};
@@ -20627,6 +20686,12 @@ function schedSetNum(ds,field,val){
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   _schedRefreshTotals(SCH,null);
+  /* Carlos's ask: the OCC/Departures he types here to build the
+     schedule is the same number the Occupancy page's "Sched" box wants
+     — push it through live instead of making him type it twice. */
+  if(field==='occ'||field==='dep'){
+    try{ occForecastBackfillFromSchedule(); }catch(e){}
+  }
 }
 
 /* ── borrowing someone into another crew ──

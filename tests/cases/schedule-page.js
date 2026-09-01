@@ -216,6 +216,32 @@ module.exports = {
     t.assert(String(win.dlLoadSchedule().savedAt) >= String(before),
       'savedAt advances on an edit, so another device does not win with older data');
 
+    // ── Carlos's real report: the Occupancy page's "Sched" box — "the
+    // number that actually built the schedule" — stayed blank even
+    // though he'd already typed OCC/Departures right here to build the
+    // week. schedSetNum now pushes it straight through to occForecast's
+    // sched/depSched fields, live, no separate typing. ──
+    const occWk = win.occForecastWeekKey(win.parseLocalDate(sat));
+    const occRec = win.loadOccForecast(occWk);
+    t.eq(occRec.days[sat].sched, 175, "the Schedule page's OCC (175) landed in Occupancy's Sched box for the same day");
+    t.eq(occRec.days[sat].depSched, 70, 'and Departures (70) landed in depSched the same way');
+
+    // ── occForecastBackfillFromSchedule: the retroactive/self-heal
+    // side — a week already built in the Schedule Draft BEFORE this
+    // connection existed (Carlos's real screenshot: Sched read blank
+    // for a week that already had OCC/Departures) catches up the
+    // moment it runs, not just on the next fresh edit. ──
+    win.localStorage.removeItem('hk_occfc_' + occWk);
+    t.assert(!win.loadOccForecast(occWk), 'Occupancy has nothing for this week yet, simulating the pre-existing gap');
+    const backfilled = win.occForecastBackfillFromSchedule();
+    t.assert(backfilled, 'reports a real change when Schedule data exists but Occupancy is empty');
+    const afterBackfill = win.loadOccForecast(occWk);
+    t.eq(afterBackfill.days[sat].sched, 175, "Saturday's OCC is backfilled from the Schedule Draft that was already there");
+    t.eq(afterBackfill.days[sat].depSched, 70, 'same for Departures');
+
+    // Running it again with nothing changed reports no further change.
+    t.assert(!win.occForecastBackfillFromSchedule(), 'a second pass with nothing new to sync reports changed:false');
+
     // ── 6) The page renders, and a week with nothing loaded says so ──
     win.showPage('schedule');
     const html = () => win.document.getElementById('scheduleContent').innerHTML;
