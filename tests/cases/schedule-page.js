@@ -1262,6 +1262,28 @@ module.exports = {
     win.schedApplyLinkedPeopleForDate(SCH21gc4, ds21[0]);
     t.eq(SCH21gc4.days[ds21[0]].gra[0][1], 'OFF', 'with no Lobby row at all that week, her Room Attendant cell is simply left alone');
 
+    // ── Carlos's real report, v7.40.28: Sandra genuinely works both Room
+    // Attendant and Laundry on different days — not a mistake, unlike
+    // Yesenia/Paty's stray duplicate rows earlier — but her OFF day on
+    // one crew wasn't carrying over to the other, same spelling on both
+    // ("Sandra", no alias like Gabriela Cuevas/Gabriela needed). Added
+    // to SCHED_LINKED_PEOPLE alongside her. ──
+    const SCH21sd = { days: { [ds21[0]]: { gra: [['Sandra', 'OFF']], laundry: [['Sandra', '1']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21sd, ds21[0]);
+    t.eq(SCH21sd.days[ds21[0]].laundry[0][1], 'OFF', "Sandra's Laundry row follows her Room Attendant OFF — she can't be resting on one and working the other");
+
+    // schedApplyLinkedPeopleForDate/schedApplyLinkedPeople now report
+    // whether anything actually changed, so a render-time retroactive
+    // pass (renderSchedule's self-heal) knows whether to save. A
+    // same-day mismatch reports true; an already-consistent day and one
+    // where a side is missing entirely both report false.
+    t.assert(win.schedApplyLinkedPeopleForDate({ days: { [ds21[0]]: { gra: [['Sandra', 'OFF']], laundry: [['Sandra', '1']] } } }, ds21[0]),
+      'a real mismatch reports changed:true');
+    t.assert(!win.schedApplyLinkedPeopleForDate({ days: { [ds21[0]]: { gra: [['Sandra', 'OFF']], laundry: [['Sandra', 'OFF']] } } }, ds21[0]),
+      'both sides already agreeing reports changed:false — nothing to save');
+    t.assert(!win.schedApplyLinkedPeopleForDate({ days: { [ds21[0]]: { gra: [['Sandra', 'OFF']] } } }, ds21[0]),
+      'no Laundry row at all that week reports changed:false too');
+
     // ── Both new mirrors also react live to a single manual edit
     // (schedSetCell), not just Auto-fill — Carlos's real reports were
     // both about editing by hand. ──

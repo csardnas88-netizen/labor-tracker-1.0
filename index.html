@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.27"/>
+<meta name="app-version" content="7.40.29"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.29', date:'2026-09-01',
+    changes:['Exported Schedule Excel: positions now print in Carlos\'s old pre-app order — Managers, Supervisors, Laundry, Lobby Attendant, Turndown Attendant, Overnight, Room Attendant, Houseman, PM Houseman — instead of whatever order the crew cards sit in on the Schedule page.','A day-name/date reference row is now repeated directly under EVERY position\'s own header, not just once at the very top of the sheet, so flipping to any printed page still shows which day is which.']
+  },
+  {
+    v:'7.40.28', date:'2026-09-01',
+    fixes:['Sandra (Room Attendant / Laundry) added to the Gabriela Cuevas-style linked-people mirror — Carlos confirmed she genuinely works both crews on different days, not a mistake, but her OFF day on one wasn\'t carrying over to the other. Also made the mirror self-heal on every render, the same way the Laundry cover-row sync just did, so an existing mismatch (from before either of them was added, or from an Excel upload/Fill Week that bypassed the live sync) gets corrected the moment the week is opened, not just on the next manual edit.']
+  },
   {
     v:'7.40.27', date:'2026-09-01',
     fixes:['Marking someone LAUNDRY only put them on Laundry\'s own crew card when the mark itself came from a single live click (schedSetCell) — Carlos\'s real report: Julia marked LAUNDRY by hand for both Saturday and Sunday only showed up on the Laundry crew card for Saturday. Now self-heals on every render (schedSyncAllLaundryCoverRows), scanning every day for a LAUNDRY mark and adding the missing cover row no matter how it got there — a bulk Fill Week copy, an Excel upload, or another device\'s sync.']
@@ -21456,12 +21464,24 @@ function schedSyncAllLaundryCoverRows(SCH,dates){
    the other side to match, mirroring the exact status text (so a
    granted R-OFF stays visibly R-OFF on both, not generic-ified to a
    plain OFF). Skipped entirely if either side isn't even on this
-   week's roster — nothing to sync against. */
+   week's roster — nothing to sync against.
+   Sandra (Room Attendant / Laundry) added the same way, same spelling
+   on both — Carlos's real report, confirmed her working both crews on
+   different days isn't a mistake (unlike Yesenia/Paty's duplicate rows
+   earlier), he just needs her OFF day to actually carry over instead of
+   the two crews disagreeing. */
 var SCHED_LINKED_PEOPLE=[
-  {a:{crew:'gra',name:'Gabriela Cuevas'}, b:{crew:'lobby',name:'Gabriela'}}
+  {a:{crew:'gra',name:'Gabriela Cuevas'}, b:{crew:'lobby',name:'Gabriela'}},
+  {a:{crew:'gra',name:'Sandra'}, b:{crew:'laundry',name:'Sandra'}}
 ];
 function _schedIsUnavailable(v){ return schedIsOff(v)||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); }
+/* Returns whether anything actually changed, so a caller doing a
+   retroactive/render-time pass (schedApplyLinkedPeople below) knows
+   whether the record needs saving back — the live single-edit callers
+   (schedSetCell, schedAutoFill) already know they need to save
+   regardless and simply ignore this. */
 function schedApplyLinkedPeopleForDate(SCH,ds){
+  var changed=false;
   SCHED_LINKED_PEOPLE.forEach(function(pair){
     var aCell=schedCellFor(SCH,ds,pair.a.crew,pair.a.name);
     var bCell=schedCellFor(SCH,ds,pair.b.crew,pair.b.name);
@@ -21469,14 +21489,19 @@ function schedApplyLinkedPeopleForDate(SCH,ds){
     var aOff=_schedIsUnavailable(aCell), bOff=_schedIsUnavailable(bCell);
     if(aOff&&!bOff){
       var bRow=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
-      if(bRow)bRow[1]=aCell;
+      if(bRow&&bRow[1]!==aCell){ bRow[1]=aCell; changed=true; }
     } else if(bOff&&!aOff){
       var aRow=schedRawCell(SCH,ds,pair.a.crew,pair.a.name);
-      if(aRow)aRow[1]=bCell;
+      if(aRow&&aRow[1]!==bCell){ aRow[1]=bCell; changed=true; }
     }
   });
+  return changed;
 }
-function schedApplyLinkedPeople(SCH,dates){ dates.forEach(function(ds){ schedApplyLinkedPeopleForDate(SCH,ds); }); }
+function schedApplyLinkedPeople(SCH,dates){
+  var changed=false;
+  dates.forEach(function(ds){ if(schedApplyLinkedPeopleForDate(SCH,ds))changed=true; });
+  return changed;
+}
 /* Whether (bk,name) is anywhere in a cover chain — titular or backup.
    schedSetCell uses this to decide whether an edit needs the heavier
    full-grid repaint (a chain reaction can change a DIFFERENT cell on the
@@ -21740,7 +21765,18 @@ async function schedExportExcel(){
   var thin={style:'thin',color:{argb:'FFD9D9D9'}};
   var cellBorder={top:thin,left:thin,bottom:thin,right:thin};
 
-  SCHED_BLOCKS.forEach(function(b){
+  /* Carlos's ask: match the order his old (pre-app) printed schedule
+     used, not whatever order the crew cards happen to sit in on the
+     Schedule page. PM Houseman isn't in his numbered list — kept right
+     after Houseman since they're the same role split AM/PM, and any
+     future SCHED_BLOCKS entry not named here still prints (appended at
+     the end) rather than silently vanishing from the export. */
+  var SCHED_XLS_ORDER=['mgr','sup','laundry','lobby','td','night','gra','hp','pmhm'];
+  var _schedBlocksByKey={}; SCHED_BLOCKS.forEach(function(b){ _schedBlocksByKey[b.key]=b; });
+  var orderedBlocks=SCHED_XLS_ORDER.map(function(k){ return _schedBlocksByKey[k]; }).filter(Boolean);
+  SCHED_BLOCKS.forEach(function(b){ if(SCHED_XLS_ORDER.indexOf(b.key)===-1)orderedBlocks.push(b); });
+
+  orderedBlocks.forEach(function(b){
     var names=[],seen={};
     dates.forEach(function(ds){
       var day=SCH.days[ds]; if(!day)return;
@@ -21768,6 +21804,22 @@ async function schedExportExcel(){
       cell.font={color:{argb:'FFE8C96B'},bold:true,size:13};
       cell.alignment={vertical:'middle'};
     }
+
+    /* Carlos's ask: a day/date reference repeated directly under EVERY
+       position, not just once at the very top of the sheet — so flipping
+       to any printed page still shows which day is which without paging
+       back. Same day-name/date pair as the sheet's own top header. */
+    var deptHeaderRow=ws.addRow(['','Employee Name'].concat(dates.map(function(ds,i){return SCHED_DAYNAMES[i].slice(0,3);})));
+    var deptDateRow=ws.addRow(['',''].concat(dates.map(function(ds){var d=parseLocalDate(ds);return (d.getMonth()+1)+'/'+d.getDate();})));
+    deptHeaderRow.height=26; deptDateRow.height=22;
+    [deptHeaderRow,deptDateRow].forEach(function(row){
+      for(var c=2;c<=9;c++){
+        var cell=row.getCell(c);
+        cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF243660'}};
+        cell.font={color:{argb:'FFFFFFFF'},bold:true,size:10};
+        cell.alignment={horizontal:'center',vertical:'middle'};
+      }
+    });
 
     names.forEach(function(nm){
       /* Raw codes drive color and are what "1"/"OFF"/etc. actually ARE;
@@ -22159,6 +22211,12 @@ function renderSchedule(){
      device's newer data. */
   if(SCH&&schedNormalizePmHm(SCH)){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   if(SCH&&SCH.days&&schedSyncAllLaundryCoverRows(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
+  /* Same self-healing idea, for SCHED_LINKED_PEOPLE: a mismatch that
+     arrived any way other than a live single-cell edit (Fill Week, an
+     Excel upload, another device) never gets corrected on its own
+     otherwise — Carlos's real report about Sandra's Room Attendant OFF
+     not carrying over to Laundry. */
+  if(SCH&&SCH.days&&schedApplyLinkedPeople(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   var html='';
   html+='<input type="file" id="schedFileInput" accept=".xlsx,.xls" style="display:none;" onchange="dlUploadSchedule(this)">';
 
