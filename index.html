@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.34"/>
+<meta name="app-version" content="7.40.35"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.35', date:'2026-09-01',
+    changes:['Exported Schedule Excel, Carlos\'s follow-up asks: PM Houseman moved right after PM Turndown/GRA (his real backup pair) instead of the very end; the day/date reference row under every single position pulled back out, kept only at the very top and once more for Room Attendant; row heights trimmed back down a bit (still bigger than the original size, just not so tall it forces extra pages); orientation switched back to portrait.']
+  },
   {
     v:'7.40.34', date:'2026-09-01',
     fixes:['The Laundry cover sync worked for Sandra but not for Rubia — Carlos\'s real report. Root cause: Rubia is now a PERMANENT member of Laundry\'s own crew list (Carlos added her by hand once), so her row already exists (blank) by the time she\'s marked LAUNDRY on a fresh day, and the sync bailed out without ever setting it to \'1\' because it only knew how to ADD a missing row, not update one that was already there. Sandra has no permanent row so this never bit her. Fixed — updates an existing row\'s value too, whenever it does not already say she\'s working.'],
@@ -21825,7 +21829,7 @@ async function schedExportExcel(){
      Carlos already asked for stay exactly as big as he set them. Tight
      margins claw back a bit more per page on top of that. */
   ws.pageSetup={
-    orientation:'landscape',
+    orientation:'portrait', /* Carlos's ask, switched back from landscape */
     fitToPage:true, fitToWidth:1, fitToHeight:0,
     margins:{left:0.25,right:0.25,top:0.4,bottom:0.4,header:0.2,footer:0.2},
     horizontalCentered:true
@@ -21856,7 +21860,7 @@ async function schedExportExcel(){
 
   var headerRow=ws.addRow(['','Employee Name'].concat(dates.map(function(ds,i){return SCHED_DAYNAMES[i].slice(0,3);})));
   var dateRow=ws.addRow(['',''].concat(dates.map(function(ds){var d=parseLocalDate(ds);return (d.getMonth()+1)+'/'+d.getDate();})));
-  headerRow.height=52; dateRow.height=40;
+  headerRow.height=40; dateRow.height=32;
   [headerRow,dateRow].forEach(function(row){
     for(var c=2;c<=9;c++){
       var cell=row.getCell(c);
@@ -21870,11 +21874,11 @@ async function schedExportExcel(){
 
   /* Carlos's ask: match the order his old (pre-app) printed schedule
      used, not whatever order the crew cards happen to sit in on the
-     Schedule page. PM Houseman isn't in his numbered list — kept right
-     after Houseman since they're the same role split AM/PM, and any
-     future SCHED_BLOCKS entry not named here still prints (appended at
-     the end) rather than silently vanishing from the export. */
-  var SCHED_XLS_ORDER=['mgr','sup','laundry','lobby','td','night','gra','hp','pmhm'];
+     Schedule page. PM Houseman moved right after PM Turndown (his real
+     backup relationship, Paty) — any future SCHED_BLOCKS entry not
+     named here still prints (appended at the end) rather than silently
+     vanishing from the export. */
+  var SCHED_XLS_ORDER=['mgr','sup','laundry','lobby','td','pmhm','night','gra','hp'];
   var _schedBlocksByKey={}; SCHED_BLOCKS.forEach(function(b){ _schedBlocksByKey[b.key]=b; });
   var orderedBlocks=SCHED_XLS_ORDER.map(function(k){ return _schedBlocksByKey[k]; }).filter(Boolean);
   SCHED_BLOCKS.forEach(function(b){ if(SCHED_XLS_ORDER.indexOf(b.key)===-1)orderedBlocks.push(b); });
@@ -21900,7 +21904,7 @@ async function schedExportExcel(){
     }
 
     var deptRow=ws.addRow(['',b.label.toUpperCase()]);
-    deptRow.height=52;
+    deptRow.height=40;
     for(var c=2;c<=9;c++){
       var cell=deptRow.getCell(c);
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2C4270'}};
@@ -21914,22 +21918,25 @@ async function schedExportExcel(){
        column it used to sit left-aligned in. */
     ws.mergeCells('B'+deptRow.number+':I'+deptRow.number);
 
-    /* Carlos's ask: a day/date reference repeated directly under EVERY
-       position, not just once at the very top of the sheet — so flipping
-       to any printed page still shows which day is which without paging
-       back. Same day-name/date pair as the sheet's own top header. */
-    var deptHeaderRow=ws.addRow(['','Employee Name'].concat(dates.map(function(ds,i){return SCHED_DAYNAMES[i].slice(0,3);})));
-    var deptDateRow=ws.addRow(['',''].concat(dates.map(function(ds){var d=parseLocalDate(ds);return (d.getMonth()+1)+'/'+d.getDate();})));
-    deptHeaderRow.height=26; deptDateRow.height=22;
-    [deptHeaderRow,deptDateRow].forEach(function(row){
-      for(var c=2;c<=9;c++){
-        var cell=row.getCell(c);
-        cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF243660'}};
-        cell.font={color:{argb:'FFFFFFFF'},bold:true,size:10};
-        cell.alignment={horizontal:'center',vertical:'middle'};
-        cell.border=cellBorder;
-      }
-    });
+    /* Carlos's follow-up ask: the day/date reference under every single
+       position was taking too much space (more pages to print) — pulled
+       back out, kept ONLY at the very top of the sheet (already printed
+       above, over Managers) and once more here for Room Attendant, the
+       one section he specifically wanted it repeated for. */
+    if(b.key==='gra'){
+      var deptHeaderRow=ws.addRow(['','Employee Name'].concat(dates.map(function(ds,i){return SCHED_DAYNAMES[i].slice(0,3);})));
+      var deptDateRow=ws.addRow(['',''].concat(dates.map(function(ds){var d=parseLocalDate(ds);return (d.getMonth()+1)+'/'+d.getDate();})));
+      deptHeaderRow.height=26; deptDateRow.height=22;
+      [deptHeaderRow,deptDateRow].forEach(function(row){
+        for(var c=2;c<=9;c++){
+          var cell=row.getCell(c);
+          cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF243660'}};
+          cell.font={color:{argb:'FFFFFFFF'},bold:true,size:10};
+          cell.alignment={horizontal:'center',vertical:'middle'};
+          cell.border=cellBorder;
+        }
+      });
+    }
 
     names.forEach(function(nm){
       /* Raw codes drive color and are what "1"/"OFF"/etc. actually ARE;
@@ -21947,9 +21954,11 @@ async function schedExportExcel(){
         return v;
       });
       /* Bigger rows/type throughout — Carlos's ask, the export was too
-         cramped to read at a glance on a printed page. */
+         cramped to read at a glance on a printed page. Trimmed back down
+         a bit from 72 (his follow-up ask: still bigger than the original
+         36, just not so tall it forces extra pages when printing). */
       var row=ws.addRow(['',nm].concat(displayData));
-      row.height=72;
+      row.height=54;
       var nameCell=row.getCell(2);
       nameCell.font={size:13};
       nameCell.alignment={vertical:'middle',horizontal:'left'};
