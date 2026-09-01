@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.29"/>
+<meta name="app-version" content="7.40.30"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.30', date:'2026-09-01',
+    features:['The Laundry sync now works in reverse too, Carlos\'s ask: clearing someone\'s own row on Laundry\'s own crew card back to not-working (Rubia\'s real case) releases the "LAUNDRY" word left on her home crew\'s cell, live — instead of it sitting there claiming she\'s covering a day Laundry itself now says she isn\'t. Works whether her Laundry row is auto-added or one Carlos added by hand, and self-heals on render the same way the forward direction already does.']
+  },
   {
     v:'7.40.29', date:'2026-09-01',
     changes:['Exported Schedule Excel: positions now print in Carlos\'s old pre-app order — Managers, Supervisors, Laundry, Lobby Attendant, Turndown Attendant, Overnight, Room Attendant, Houseman, PM Houseman — instead of whatever order the crew cards sit in on the Schedule page.','A day-name/date reference row is now repeated directly under EVERY position\'s own header, not just once at the very top of the sheet, so flipping to any printed page still shows which day is which.']
@@ -20555,6 +20559,11 @@ function schedSetCell(bk,idx,name,ds,val,el){
      to something else releases the row again, same as a cover-chain
      release. */
   var laundryRowChanged=schedSyncLaundryCoverRow(SCH,ds,bk,name,row[1]);
+  /* The reverse direction, Carlos's ask: editing someone's own row
+     WITHIN Laundry's own crew card back to not-working releases the
+     LAUNDRY word left on her home crew's cell — same day, live, not
+     just on the next render. */
+  var laundryReleaseChanged=(bk==='laundry')&&schedReleaseStaleLaundryLabels(SCH,ds);
   /* Carlos's real report: Gabriela Cuevas (Room Attendant) and Gabriela
      (Lobby) are the same real person, listed independently on both
      crews — she can't be resting on one and working the other the same
@@ -20566,7 +20575,7 @@ function schedSetCell(bk,idx,name,ds,val,el){
   if(linkedMember)schedApplyLinkedPeopleForDate(SCH,ds);
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
-  if(chainMember||isVictorianoLaundryEdit||isSarahiLobbyEdit||laundryRowChanged||linkedMember){
+  if(chainMember||isVictorianoLaundryEdit||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||linkedMember){
     /* The chain/mirror reaction can change a DIFFERENT cell (or crew
        card) on this same day — that needs the full grid repainted so
        it actually shows, unlike the single-cell case below. */
@@ -21451,6 +21460,32 @@ function schedSyncAllLaundryCoverRows(SCH,dates){
         if(!schedStatusIs(p[1],'LAUNDRY'))return;
         if(schedSyncLaundryCoverRow(SCH,ds,b.key,name,p[1]))changed=true;
       });
+    });
+    if(schedReleaseStaleLaundryLabels(SCH,ds))changed=true;
+  });
+  return changed;
+}
+/* The other direction, Carlos's real ask: if he clears someone's own
+   Laundry-crew row back to not-working (OFF, blank, whatever — marked
+   from Laundry's own crew card, not the home crew that read "LAUNDRY"),
+   the LAUNDRY word left behind on her home crew's cell (Room Attendant,
+   etc.) has to go away too, back to a plain '1' — otherwise it just sits
+   there claiming she's covering Laundry when Laundry itself now says
+   she isn't. Works regardless of whether her Laundry row is a 'cover'
+   row (auto-added by the forward sync) or a permanent 'added' member
+   row (Carlos adding her by hand, like Rubia) — either way, the home
+   cell only means anything while Laundry's own row backs it up. */
+function schedReleaseStaleLaundryLabels(SCH,ds){
+  var day=SCH.days&&SCH.days[ds]; if(!day)return false;
+  var changed=false;
+  SCHED_BLOCKS.forEach(function(b){
+    if(b.key==='laundry')return;
+    (day[b.key]||[]).forEach(function(p){
+      if(!schedStatusIs(p[1],'LAUNDRY'))return;
+      var name=String(p[0]||'').trim(); if(!name)return;
+      var lRow=(day.laundry||[]).filter(function(r){ return dlNorm(r[0])===dlNorm(name); })[0];
+      var stillWorking=lRow&&String(lRow[1]||'').trim()==='1';
+      if(!stillWorking){ p[1]='1'; changed=true; }
     });
   });
   return changed;

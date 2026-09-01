@@ -1236,6 +1236,46 @@ module.exports = {
     t.assert(!SCH21al.days[ds21[2]].laundry.some((p) => p[0] === 'Julia'),
       'an ordinary day with no LAUNDRY mark anywhere gets nothing added');
 
+    // ── Carlos's real report, v7.40.30: the reverse direction — Rubia
+    // (Room Attendant) covers Laundry, so her Room Attendant cell reads
+    // LAUNDRY and she has a row on Laundry's own crew card. He wanted
+    // clearing HER OWN Laundry row (marked OFF, from Laundry's own crew
+    // card, not the Room Attendant side) to make the word "LAUNDRY"
+    // disappear from Room Attendant too. schedReleaseStaleLaundryLabels
+    // is the reverse of schedSyncLaundryCoverRow — works whether her
+    // Laundry row is an auto-added 'cover' tag or a permanent 'added'
+    // membership row (Carlos's real case with Rubia), since either way
+    // the home cell's LAUNDRY only means anything while Laundry's own
+    // row still backs it up. ──
+    const SCH21rl = { days: { [ds21[0]]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', 'OFF', 'added']] } } };
+    t.assert(win.schedReleaseStaleLaundryLabels(SCH21rl, ds21[0]), 'reports a real change when a home cell is released');
+    t.eq(SCH21rl.days[ds21[0]].gra[0][1], '1', "Rubia's Room Attendant cell releases back to '1' once her own Laundry row says she isn't working");
+
+    // A LAUNDRY label whose Laundry row still genuinely says '1' is left
+    // completely alone — this only fires when Laundry itself disagrees.
+    const SCH21rl2 = { days: { [ds21[0]]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '1', 'added']] } } };
+    t.assert(!win.schedReleaseStaleLaundryLabels(SCH21rl2, ds21[0]), 'no change reported when Laundry itself still confirms she is working');
+    t.eq(SCH21rl2.days[ds21[0]].gra[0][1], 'LAUNDRY', 'her Room Attendant cell is untouched in that case');
+
+    // schedSyncAllLaundryCoverRows (the render-time self-heal) now folds
+    // the reverse release in too — so a stale LAUNDRY label left behind
+    // from before this feature existed gets cleaned up the moment the
+    // week is opened, same as the forward direction already does.
+    const SCH21rl3 = { days: { [ds21[0]]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '', 'added']] } } };
+    t.assert(win.schedSyncAllLaundryCoverRows(SCH21rl3, ds21), 'the combined self-heal reports a change for a stale label too');
+    t.eq(SCH21rl3.days[ds21[0]].gra[0][1], '1', 'and actually releases it, retroactively');
+
+    // ── The reverse direction also reacts LIVE to a single manual edit
+    // on Laundry's own crew card, not just Auto-fill or a render. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH21rlLive = { days: {} };
+    ds21.forEach((ds) => { SCH21rlLive.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '1', 'added']] }; });
+    win.dlSaveSchedule(SCH21rlLive);
+    win.schedSetCell('laundry', 0, 'Rubia', ds21[0], 'OFF', null);
+    const afterRubiaLive = win.dlLoadSchedule();
+    t.eq(afterRubiaLive.days[ds21[0]].gra[0][1], '1',
+      "marking Rubia OFF directly on Laundry's own crew card immediately releases the LAUNDRY word on Room Attendant, no render needed");
+
     // ── Carlos's real report: Gabriela Cuevas (Room Attendant) and
     // Gabriela (Lobby) are the same real person, listed independently
     // on both crews — different spelling on each. He set her OFF on
