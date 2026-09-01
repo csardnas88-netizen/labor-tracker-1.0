@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.22"/>
+<meta name="app-version" content="7.40.23"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.23', date:'2026-08-31',
+    changes:['A "TURNDOWN" cell now gets the same color treatment as HOUSEMAN/LAUNDRY/TAILOR/LOBBY in the exported Excel, instead of printing in plain black — a follow-up to Paty\'s new TURNDOWN label.']
+  },
   {
     v:'7.40.22', date:'2026-08-31',
     fixes:['Paty\'s day off on Turndown no longer sits idle alongside Yesenia\'s — Carlos\'s real report, a Thursday where both landed off at once. Now she always covers Yesenia\'s day off, even if Auto-fill had already given her a plain day off that same day; a REAL granted day off of her own (R-OFF/Flex/Vacation) still wins.'],
@@ -21463,6 +21467,7 @@ var SCHED_XLS_COLORS={
   'HOUSEMAN': {bg:'FFF9EBEA',font:'FF7B241C'},
   'LAUNDRY':  {bg:'FFF9EBEA',font:'FF7B241C'},
   'TAILOR':   {bg:'FFF9EBEA',font:'FF7B241C'},
+  'TURNDOWN': {bg:'FFF9EBEA',font:'FF7B241C'},
   'TURNDOWN': {bg:'FFF9EBEA',font:'FF7B241C'}
 };
 /* Real clock-in/clock-out times, confirmed with Carlos — separate from
