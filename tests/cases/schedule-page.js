@@ -1238,6 +1238,25 @@ module.exports = {
     t.assert(SCH21lc2.days[ds21[0]].laundry.some((p) => p[0] === 'Real Laundry Person'),
       "a real Laundry crew member's own row is untouched by this sync entirely");
 
+    // ── Carlos's real report, v7.40.34: worked for Sandra but not for
+    // Rubia. Rubia is a PERMANENT 'added' member of Laundry (Carlos
+    // added her once already) — her row sits there every day, blank or
+    // not, so it already exists (idx !== -1) by the time she's marked
+    // LAUNDRY on a fresh day, and the old code bailed out without ever
+    // setting the value. Sandra has no permanent row (only a 'cover' row
+    // that gets fully removed each release), so idx is always -1 again
+    // next time and the push path fires normally — that's why only one
+    // of them was broken. ──
+    const SCH21rubia = { days: { [ds21[0]]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '', 'added']] } } };
+    const rubiaChanged = win.schedSyncLaundryCoverRow(SCH21rubia, ds21[0], 'gra', 'Rubia', 'LAUNDRY');
+    t.assert(rubiaChanged, 'reports a real change for a permanent member whose row already existed blank');
+    t.eq(SCH21rubia.days[ds21[0]].laundry[0][1], '1', "Rubia's existing (blank) Laundry row is updated to '1', not silently left alone — this is the actual bug fix");
+    t.eq(SCH21rubia.days[ds21[0]].laundry[0][2], 'added', "her row's tag stays 'added' — this only fixes the value, it doesn't retag a permanent member as a 'cover' row");
+
+    // Already correctly synced — no redundant write reported.
+    const SCH21rubia2 = { days: { [ds21[0]]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '1', 'added']] } } };
+    t.assert(!win.schedSyncLaundryCoverRow(SCH21rubia2, ds21[0], 'gra', 'Rubia', 'LAUNDRY'), 'no change reported once the permanent row already says 1');
+
     // ── Carlos's real report, v7.40.27: Julia marked LAUNDRY by hand on
     // both Saturday AND Sunday only showed up on Laundry's own crew card
     // for Saturday — the live sync above only reacts to a single-cell
@@ -1285,10 +1304,20 @@ module.exports = {
     // schedSyncAllLaundryCoverRows (the render-time self-heal) now folds
     // the reverse release in too — so a stale LAUNDRY label left behind
     // from before this feature existed gets cleaned up the moment the
-    // week is opened, same as the forward direction already does.
-    const SCH21rl3 = { days: { [ds21[0]]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '', 'added']] } } };
+    // week is opened, same as the forward direction already does. A
+    // BLANK Laundry row (v7.40.34: the actual Rubia bug) is the forward
+    // direction's job — it gets synced to '1', not released — the
+    // reverse release only fires when Laundry EXPLICITLY says she isn't
+    // working (e.g. OFF), not merely blank/not-yet-synced.
+    const SCH21rl3 = { days: { [ds21[0]]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', 'OFF', 'added']] } } };
     t.assert(win.schedSyncAllLaundryCoverRows(SCH21rl3, ds21), 'the combined self-heal reports a change for a stale label too');
     t.eq(SCH21rl3.days[ds21[0]].gra[0][1], '1', 'and actually releases it, retroactively');
+
+    // The blank case instead gets forward-synced to working, not released.
+    const SCH21rl3b = { days: { [ds21[0]]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '', 'added']] } } };
+    t.assert(win.schedSyncAllLaundryCoverRows(SCH21rl3b, ds21), 'a blank permanent row still reports a change');
+    t.eq(SCH21rl3b.days[ds21[0]].laundry[0][1], '1', "Rubia's blank Laundry row is synced to '1' — this is the forward-sync bug fix, not a release");
+    t.eq(SCH21rl3b.days[ds21[0]].gra[0][1], 'LAUNDRY', 'so her Room Attendant cell correctly stays LAUNDRY, not released');
 
     // ── The reverse direction also reacts LIVE to a single manual edit
     // on Laundry's own crew card, not just Auto-fill or a render. ──
