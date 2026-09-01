@@ -1240,23 +1240,41 @@ module.exports = {
 
     // Yesenia (PM Houseman): exactly 1 day off, forced deterministic via
     // a pre-set R-OFF so the cover check lands on a known day. Paty
-    // covers on that day if she's actually working her own Turndown
-    // shift; if she's off too, the day is left for Carlos, per his
-    // answer that nobody covers automatically in that case.
+    // covers on that day; every OTHER day, her Turndown cell now reads
+    // "TURNDOWN" instead of a bare "1" — Carlos's ask, so it's explicit
+    // which of her two jobs she's actually doing that day.
     const SCH21e = { days: {} };
     ds21.forEach((ds) => { SCH21e.days[ds] = { pmhm: [['Yesenia', '']], td: [['Paty', '1']] }; });
     SCH21e.days[ds21[3]].pmhm[0][1] = 'R-OFF'; // Yesenia's one day off, forced to Tuesday
     win.schedApplyYesenia(SCH21e, ds21, 0);
     t.eq(SCH21e.days[ds21[3]].pmhm[0][1], 'R-OFF', "Yesenia's forced day off is unchanged");
-    t.eq(SCH21e.days[ds21[3]].td[0][1], 'HOUSEMAN', "Paty covers on Yesenia's day off, since Paty is working her own Turndown shift that day");
+    t.eq(SCH21e.days[ds21[3]].td[0][1], 'HOUSEMAN', "Paty covers on Yesenia's day off");
     ds21.forEach((ds, i) => { if (i !== 3) t.eq(SCH21e.days[ds].pmhm[0][1], '1', ds + ': Yesenia works every other day, exactly the 6-day pattern'); });
+    ds21.forEach((ds, i) => { if (i !== 3) t.eq(SCH21e.days[ds].td[0][1], 'TURNDOWN', ds + ": Paty's own Turndown days now read TURNDOWN, not a bare 1"); });
 
+    // Carlos's real correction, 2026-08-31: Paty's own day off used to
+    // be left alone if it happened to land on the same day as
+    // Yesenia's ("nobody covers automatically" was the old rule) — he
+    // since asked for the opposite: Paty has to actually cover that
+    // day (a real Thursday collision was what surfaced this). A plain
+    // algorithmic OFF is overridden to HOUSEMAN now, same as if she'd
+    // been working.
     const SCH21f = { days: {} };
     ds21.forEach((ds) => { SCH21f.days[ds] = { pmhm: [['Yesenia', '']], td: [['Paty', '1']] }; });
     SCH21f.days[ds21[3]].pmhm[0][1] = 'R-OFF';
     SCH21f.days[ds21[3]].td[0][1] = 'OFF'; // Paty off too, same day
     win.schedApplyYesenia(SCH21f, ds21, 0);
-    t.eq(SCH21f.days[ds21[3]].td[0][1], 'OFF', "Paty being off too is left exactly as Carlos said — nobody automatic, no HOUSEMAN forced onto her OFF day");
+    t.eq(SCH21f.days[ds21[3]].td[0][1], 'HOUSEMAN', "Paty's plain OFF colliding with Yesenia's day off is overridden — she covers instead of both being off at once");
+
+    // A REAL granted absence of Paty's own (R-OFF/FLEX/VAC/CALL-OFF)
+    // still wins over the cover — the same protection every other
+    // granted absence gets everywhere else in this app.
+    const SCH21f2 = { days: {} };
+    ds21.forEach((ds) => { SCH21f2.days[ds] = { pmhm: [['Yesenia', '']], td: [['Paty', '1']] }; });
+    SCH21f2.days[ds21[3]].pmhm[0][1] = 'R-OFF';
+    SCH21f2.days[ds21[3]].td[0][1] = 'R-OFF'; // Paty's own GRANTED day off, same day
+    win.schedApplyYesenia(SCH21f2, ds21, 0);
+    t.eq(SCH21f2.days[ds21[3]].td[0][1], 'R-OFF', "Paty's own granted R-OFF still wins over the cover, unlike a plain algorithmic OFF");
 
     // Houseman overflow: Rubia then Julia, pulled only as far as needed
     // and only from an actually-working Room Attendant day. ("Rubia" and
