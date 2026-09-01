@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.31"/>
+<meta name="app-version" content="7.40.33"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.33', date:'2026-09-01',
+    changes:['The position name in the exported Schedule Excel (MANAGERS, SUPERVISORS, etc.) is now centered across its whole gold band, instead of left-aligned in the narrow name column — Carlos\'s ask.']
+  },
+  {
+    v:'7.40.32', date:'2026-09-01',
+    fixes:['Exported Schedule Excel printed 5 pages, and only came down by manually ticking "Fit all columns on one page" in Excel — which is also what was shrinking the font unreadably small. There was no page setup at all before this; now set to landscape, exactly one page wide with as many pages tall as it takes (no font shrinking involved), plus tighter margins — Carlos\'s row/column sizes are untouched, this only reclaims the horizontal split he was fixing by hand every time.']
+  },
   {
     v:'7.40.31', date:'2026-09-01',
     fixes:['Laundry\'s Unifocus total showed "6, OVER" with only 5 literal rows on the card, all summing to 5 — Carlos\'s real report, Wednesday. Root cause: Jorge Gonzalez now has both a literal row on Laundry\'s own crew list (his real mirror of Victoriano) AND the older Houseman-based cover-chain entry for the same pair, which kept crediting him a second time off his Houseman cell whenever both happened to be true the same day. The headcount now skips that second credit whenever he already has a literal row in the crew being counted.']
@@ -21783,6 +21791,23 @@ async function schedExportExcel(){
 
   var wb=new ExcelJS.Workbook();
   var ws=wb.addWorksheet('Schedule');
+  /* Carlos's real report: printing came out 5 pages, and only because
+     he manually ticked "Fit all columns on one page" in Excel's print
+     dialog every time — which is also what was shrinking the font down
+     to unreadable. With no pageSetup at all, ExcelJS/Excel defaults to
+     portrait with no scaling, so the 9 wide columns split across
+     multiple page-widths on top of however many page-heights the rows
+     need — landscape plus "exactly 1 page wide, as many tall as it
+     takes" (fitToWidth:1, fitToHeight:0) reclaims the horizontal split
+     without asking Excel to shrink anything, so the row/column sizes
+     Carlos already asked for stay exactly as big as he set them. Tight
+     margins claw back a bit more per page on top of that. */
+  ws.pageSetup={
+    orientation:'landscape',
+    fitToPage:true, fitToWidth:1, fitToHeight:0,
+    margins:{left:0.25,right:0.25,top:0.4,bottom:0.4,header:0.2,footer:0.2},
+    horizontalCentered:true
+  };
   /* Day columns widened from 13 to 19 — a shift-time string like
      "8:15 AM - 4:45 PM" (18 chars) was wrapping onto two lines at the
      old width, which on some Excel builds (Carlos's work computer,
@@ -21852,8 +21877,13 @@ async function schedExportExcel(){
       var cell=deptRow.getCell(c);
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2C4270'}};
       cell.font={color:{argb:'FFE8C96B'},bold:true,size:13};
-      cell.alignment={vertical:'middle'};
+      cell.alignment={vertical:'middle',horizontal:'center'};
     }
+    /* Carlos's ask: center the position name in its own gold band —
+       merged across the full width it already prints (columns B-I) so
+       it centers over the whole bar, not just within the narrow name
+       column it used to sit left-aligned in. */
+    ws.mergeCells('B'+deptRow.number+':I'+deptRow.number);
 
     /* Carlos's ask: a day/date reference repeated directly under EVERY
        position, not just once at the very top of the sheet — so flipping
