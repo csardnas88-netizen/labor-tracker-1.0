@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.30"/>
+<meta name="app-version" content="7.40.31"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.31', date:'2026-09-01',
+    fixes:['Laundry\'s Unifocus total showed "6, OVER" with only 5 literal rows on the card, all summing to 5 — Carlos\'s real report, Wednesday. Root cause: Jorge Gonzalez now has both a literal row on Laundry\'s own crew list (his real mirror of Victoriano) AND the older Houseman-based cover-chain entry for the same pair, which kept crediting him a second time off his Houseman cell whenever both happened to be true the same day. The headcount now skips that second credit whenever he already has a literal row in the crew being counted.']
+  },
   {
     v:'7.40.30', date:'2026-09-01',
     features:['The Laundry sync now works in reverse too, Carlos\'s ask: clearing someone\'s own row on Laundry\'s own crew card back to not-working (Rubia\'s real case) releases the "LAUNDRY" word left on her home crew\'s cell, live — instead of it sitting there claiming she\'s covering a day Laundry itself now says she isn\'t. Works whether her Laundry row is auto-added or one Carlos added by hand, and self-heals on render the same way the forward direction already does.']
@@ -20473,14 +20477,25 @@ function _schedCrewLabel(bk){
    them normally (or doesn't, exactly when a cover is due). Only a
    backup whose HOME crew differs from the crew they're covering needs
    adding in — a same-crew titular is already covered by the loop above,
-   and double-counting them would be wrong. */
+   and double-counting them would be wrong.
+   Carlos's real report: Laundry showed a "6 — OVER" total with only 5
+   literal rows summing to 5. Root cause — Jorge Gonzalez now ALSO sits
+   as a literal row in Laundry's own list (schedApplyLaundryMirror),
+   already counted once by the arr loop above, while this same function
+   kept crediting him a SECOND time off his Houseman cell (the older,
+   still-live SCHED_COVER_CHAINS entry for the same pair). Skipped here
+   whenever the backup already has a literal row in the crew being
+   judged — the arr loop already has them covered, direct or not. */
 function _schedCoverInflow(SCH,ds,bk){
   var n=0;
+  var arr=(SCH.days&&SCH.days[ds]&&SCH.days[ds][bk])||[];
   SCHED_COVER_CHAINS.forEach(function(cc){
     if(cc.crew!==bk)return;
     cc.chain.forEach(function(m){
       if(m.homeCrew===bk)return;
-      if(schedCellFor(SCH,ds,m.homeCrew,m.name)===cc.label)n++;
+      if(schedCellFor(SCH,ds,m.homeCrew,m.name)!==cc.label)return;
+      if(arr.some(function(p){ return dlNorm(p[0])===dlNorm(m.name); }))return;
+      n++;
     });
   });
   return n;

@@ -1106,6 +1106,31 @@ module.exports = {
     };
     t.eq(win.schedDayTotal(SCH21m, ds21[0], 'laundry'), 2,
       'Jorge Gonzalez marked LAUNDRY on his own literal Laundry row counts as a body, same as Olga A on "1" — Victoriano Ch (OFF) still does not');
+
+    // ── Carlos's real report, v7.40.31: Laundry showed "6, OVER" with
+    // only 5 literal rows summing to 5. Root cause — Jorge Gonzalez now
+    // has BOTH a literal Laundry row (schedApplyLaundryMirror) AND the
+    // older Houseman-based SCHED_COVER_CHAINS entry still crediting him
+    // a second time off his 'hp' cell, whenever both happen to be true
+    // the same day (Victoriano unavailable drives both at once). ──
+    const SCH21dbl = {
+      days: {
+        [ds21[0]]: {
+          laundry: [['Isabel D', '1'], ['Olga A', '1'], ['Petronila', '1'], ['Victoriano Ch', 'OFF'], ['Jorge Gonzalez', '1'], ['Gady', '1']],
+          hp: [['Jorge Gonzalez', 'LAUNDRY']],
+        },
+      },
+    };
+    t.eq(win.schedDayTotal(SCH21dbl, ds21[0], 'laundry'), 5,
+      "Jorge Gonzalez's literal row counts once, even though his Houseman cell ALSO reads LAUNDRY that same day — this is the actual double-count bug fix");
+
+    // The old Houseman-based chain still credits him normally on a week
+    // where he has NO literal Laundry row at all (the legacy case this
+    // chain was originally kept alive for).
+    const SCH21dbl2 = { days: { [ds21[0]]: { laundry: [['Isabel D', '1']], hp: [['Jorge Gonzalez', 'LAUNDRY']] } } };
+    t.eq(win.schedDayTotal(SCH21dbl2, ds21[0], 'laundry'), 2,
+      'with no literal Laundry row for him this week, the Houseman-cell credit still applies — nothing lost for the legacy case');
+
     // A DIFFERENT crew's cell reading "LAUNDRY" still means "gone,
     // covering elsewhere" and must stay excluded from ITS OWN crew — the
     // one case this does NOT flip is a crew judging its own members.
