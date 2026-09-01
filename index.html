@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.20"/>
+<meta name="app-version" content="7.40.21"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.21', date:'2026-08-31',
+    features:['PM Turndown/GRA now shows a "Rooms" header row above the date columns — Carlos\'s ask, same design as the "Departures" row Supervisors/Houseman/Room Attendant already have, just driven by Turndown\'s own same-day room count instead.']
+  },
   {
     v:'7.40.20', date:'2026-08-31',
     changes:['Doubled every row height in the exported Schedule Excel (department headers, the day/date header, and each employee row) — Carlos\'s ask, still too thin to read comfortably when printed.']
@@ -22168,19 +22172,24 @@ function renderSchedule(){
     html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
     html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(b.label)+'</div>';
     html+='<div style="padding:10px 14px 12px;overflow-x:auto;"><div style="min-width:520px;">';
-    /* Departures, right above the date header — Carlos's ask, for the
-       three crews whose "each" figure is driven by it (Supervisors,
-       Houseman, Room Attendant) so he can check the day's departures
-       without scrolling up to the OCC/Departures card. Read-only on
-       purpose (Carlos's correction) — just a mirror of what's already
-       typed in that card, not a second place to edit the same number. */
-    if((b.ratios||[]).some(function(r){return r.num==='dep';})){
+    /* Departures (or Rooms, for Turndown/GRA), right above the date
+       header — Carlos's ask, for the crews whose "each" figure is
+       driven by it (Supervisors, Houseman, Room Attendant use
+       Departures; PM Turndown/GRA uses Rooms, same design, same
+       spot) so he can check the day's number without scrolling up to
+       the OCC/Departures card. Read-only on purpose (Carlos's
+       correction) — just a mirror of what's already typed in that
+       card, not a second place to edit the same number. */
+    var _hdrRatio=(b.ratios||[]).filter(function(r){return r.num==='dep'||r.num==='tdOcc';})[0];
+    if(_hdrRatio){
+      var _hdrLabel=_hdrRatio.num==='dep'?'Departures':'Rooms';
       html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-bottom:6px;">';
-      html+='<div style="font-size:9.5px;font-weight:800;color:var(--navy);">Departures</div>';
+      html+='<div style="font-size:9.5px;font-weight:800;color:var(--navy);">'+_hdrLabel+'</div>';
       dates.forEach(function(ds){
         var day=SCH.days[ds];
         if(!day){ html+='<div></div>'; return; }
-        html+='<div style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+(day.dep!=null&&day.dep!==''?escHtml(day.dep):'&middot;')+'</div>';
+        var _v=day[_hdrRatio.num];
+        html+='<div style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+(_v!=null&&_v!==''?escHtml(_v):'&middot;')+'</div>';
       });
       html+='</div>';
     }

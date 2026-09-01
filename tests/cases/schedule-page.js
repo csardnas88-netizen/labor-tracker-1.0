@@ -960,6 +960,16 @@ module.exports = {
       t.assert(working >= 1, ds + " still meets Turndown's need of 1 despite Monday's shortage");
     });
 
+    // Carlos's ask: PM Turndown/GRA gets the same read-only "day's
+    // number" header row above the date columns that Supervisors/
+    // Houseman/Room Attendant already have for Departures — for
+    // Turndown that number is Rooms (day.tdOcc), not Departures.
+    win.renderSchedule();
+    const tdHtml = html();
+    const tdRoomsIdx = tdHtml.indexOf('>Rooms<');
+    t.assert(tdRoomsIdx !== -1, "Turndown/GRA's card has a 'Rooms' header row, same design as Supervisors' 'Departures' one");
+    t.assert(/>48</.test(tdHtml.substring(tdRoomsIdx, tdRoomsIdx + 400)), "the Rooms row actually shows that day's tdOcc value (48)");
+
     // ── 21) Special-role machinery — confirmed directly with Carlos on
     // 2026-08-16 (Overnight's fixed pattern, Yanira's PM shift, the
     // Lobby/Laundry cover chains, Yesenia/Paty, the Houseman overflow
