@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.37"/>
+<meta name="app-version" content="7.40.38"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.38', date:'2026-09-01',
+    features:['Turndown Rooms is no longer a second number Carlos has to type by hand — he walked through exactly how he built it in his old pre-app Excel: he copied the FOLLOWING day\'s OCC in as THIS day\'s Turndown count (OCC is defined as "the night before its own date", so the next day\'s OCC IS the same-night count Turndown needs). Now auto-fills live the moment OCC is entered, still editable if a day needs overriding, and self-heals for a week that already had OCC typed in before this existed. The last day of the week has no following day inside it, so it stays a manual entry, same as his old sheet\'s separate "Turndown Friday OCC" cell.']
+  },
   {
     v:'7.40.37', date:'2026-09-01',
     fixes:['Training: marking someone Complete could sometimes erase another employee\'s progress — Carlos\'s real report. Root cause: hk_trainings pushed the WHOLE list as one blob with no server-side merge, so if this device hadn\'t yet picked up another device\'s more recent mark, saving simply overwrote the whole record and silently erased it — the same whole-blob-clobber bug already fixed elsewhere for month data and the Schedule Draft, just never applied to Training. Marking someone Complete (single or bulk) now fetches the current remote copy and merges it in before pushing, so a save can only ADD progress, never erase it. Deleting or creating a training is unaffected, deliberately — merging remote back in right after a delete would have resurrected it.']
@@ -20723,10 +20727,60 @@ function schedSetCell(bk,idx,name,ds,val,el){
   if(el)el.style.cssText=_schedCellCss(String(val||'').trim());
   _schedRefreshTotals(SCH,bk);
 }
+/* Carlos walked through exactly how he built Turndown Rooms by hand in
+   his old pre-app Excel: he copied the FOLLOWING day's OCC number in as
+   THIS day's Turndown count. Makes sense once you line it up with OCC's
+   own definition (already established above: "rooms occupied the NIGHT
+   BEFORE this date") — the night before Sunday's date is Saturday
+   night, so Sunday's OCC figure IS the same-night count Turndown needs
+   for Saturday evening service. A one-day shift of the same OCC field,
+   not a second independent number after all — confirmed against his
+   real numbers (Sat Turndown 242 = Sun OCC 242, Sun Turndown 232 = Mon
+   OCC 232, and so on through the week).
+   The exception, also straight from his real sheet: the LAST day of the
+   week (Friday) has no "next day" inside this week to copy — his old
+   sheet had a separate manually-typed "Turndown Friday OCC" cell for
+   exactly that reason, so Friday stays a manual entry here too, same as
+   before this ask. */
+function schedIsHotelWeekEnd(ds){ return parseLocalDate(ds).getDay()===5; } // Friday, the last day of a Sat-Fri hotel week
+function schedDeriveTdOccFromOcc(SCH,ds,occVal){
+  var prevDs=prevDateStr(ds);
+  if(!prevDs||!SCH.days[prevDs])return false;
+  if(schedIsHotelWeekEnd(prevDs))return false; // Friday keeps its manual entry, exactly like his old sheet
+  SCH.days[prevDs].tdOcc=String(occVal==null?'':occVal).trim();
+  return true;
+}
+/* Retroactive version, same reasoning as the Laundry cover-row sync:
+   the live derivation above only fires on a fresh OCC edit through
+   schedSetNum, so a week that already had OCC typed in before this
+   feature existed would stay blank forever otherwise. Scoped to the
+   week actually being viewed (not every week ever built) and ONLY
+   fills a BLANK Turndown Rooms box — never overwrites a real value,
+   whether that's a genuine number parsed from an Excel upload's own
+   Turndown OCC row, or a day Carlos deliberately typed something
+   different. The live path above is the only one allowed to overwrite,
+   since that's a direct, current edit — this is just catching up
+   whatever was never touched at all. */
+function schedBackfillTdOcc(SCH,dates){
+  var changed=false;
+  dates.forEach(function(ds,i){
+    if(schedIsHotelWeekEnd(ds))return; // last day of the week stays manual
+    var day=SCH.days[ds]; if(!day)return;
+    if(String(day.tdOcc||'').trim()!=='')return; // never touch a real value
+    var nextDay=SCH.days[dates[i+1]]; if(!nextDay)return;
+    var occV=String(nextDay.occ||'').trim();
+    if(occV==='')return;
+    day.tdOcc=occV;
+    changed=true;
+  });
+  return changed;
+}
 function schedSetNum(ds,field,val){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days||!SCH.days[ds])return;
   SCH.days[ds][field]=String(val==null?'':val).trim();
+  var prevDs=null;
+  if(field==='occ'&&schedDeriveTdOccFromOcc(SCH,ds,SCH.days[ds][field]))prevDs=prevDateStr(ds);
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   _schedRefreshTotals(SCH,null);
@@ -20735,6 +20789,17 @@ function schedSetNum(ds,field,val){
      — push it through live instead of making him type it twice. */
   if(field==='occ'||field==='dep'){
     try{ occForecastBackfillFromSchedule(); }catch(e){}
+  }
+  /* Update the previous day's Turndown Rooms box directly rather than a
+     full renderSchedule() — the manager is typically tabbing across a
+     whole week of OCC boxes in one sitting, and a full re-render would
+     tear down whichever input they're about to tab into next (same
+     reasoning _occfcRefreshWeek already documents for Occupancy). */
+  if(prevDs){
+    var tdInput=document.getElementById('schedNumIn_'+prevDs+'_tdOcc');
+    if(tdInput)tdInput.value=SCH.days[prevDs].tdOcc;
+    var tdHdr=document.getElementById('schedHdrRatio_td_'+prevDs);
+    if(tdHdr)tdHdr.textContent=SCH.days[prevDs].tdOcc||'·';
   }
 }
 
@@ -22446,6 +22511,7 @@ function renderSchedule(){
      otherwise — Carlos's real report about Sandra's Room Attendant OFF
      not carrying over to Laundry. */
   if(SCH&&SCH.days&&schedApplyLinkedPeople(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
+  if(SCH&&SCH.days&&schedBackfillTdOcc(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   var html='';
   html+='<input type="file" id="schedFileInput" accept=".xlsx,.xls" style="display:none;" onchange="dlUploadSchedule(this)">';
 
@@ -22555,14 +22621,14 @@ function renderSchedule(){
      built by hand has somewhere to type it too. */
   [['occ','OCC','Rooms occupied the NIGHT BEFORE this date — what AM Room Attendant cleans that morning.'],
    ['dep','Departures',null],
-   ['tdOcc','Turndown Rooms','Rooms occupied THIS SAME NIGHT — turndown happens in the evening for guests staying that night, not the morning\'s cleaning count. Do not copy the OCC row above; it\'s a different night.']
+   ['tdOcc','Turndown Rooms','Rooms occupied THIS SAME NIGHT — turndown happens in the evening for guests staying that night, not the morning\'s cleaning count. Auto-filled from the FOLLOWING day\'s OCC (exactly how Carlos built it by hand — OCC is defined as the night before its own date, so the next day\'s OCC IS this same night\'s count); still editable if you need to override a day. The last day of the week has no following day inside this week, so it stays manual, same as his old sheet\'s separate "Turndown Friday OCC" cell.']
   ].forEach(function(f){
     html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:4px;">';
     html+='<div style="font-size:10.5px;font-weight:800;color:var(--navy);"'+(f[2]?' title="'+escHtml(f[2])+'"':'')+'>'+f[1]+'</div>';
     dates.forEach(function(ds){
       var day=SCH.days[ds];
       if(!day){ html+='<div></div>'; return; }
-      html+='<input type="number" min="0" value="'+escHtml(day[f[0]]||'')+'" onchange="schedSetNum(\''+ds+'\',\''+f[0]+'\',this.value)"'
+      html+='<input type="number" min="0" value="'+escHtml(day[f[0]]||'')+'" id="schedNumIn_'+ds+'_'+f[0]+'" onchange="schedSetNum(\''+ds+'\',\''+f[0]+'\',this.value)"'
         +' style="width:100%;min-width:0;padding:3px 2px;font-size:11px;font-weight:800;text-align:center;color:var(--navy);'
         +'border:1px solid var(--border);border-radius:5px;background:#fff;box-sizing:border-box;font-family:inherit;">';
     });
@@ -22700,7 +22766,7 @@ function renderSchedule(){
         var day=SCH.days[ds];
         if(!day){ html+='<div></div>'; return; }
         var _v=day[_hdrRatio.num];
-        html+='<div style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+(_v!=null&&_v!==''?escHtml(_v):'&middot;')+'</div>';
+        html+='<div id="schedHdrRatio_'+b.key+'_'+ds+'" style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+(_v!=null&&_v!==''?escHtml(_v):'&middot;')+'</div>';
       });
       html+='</div>';
     }

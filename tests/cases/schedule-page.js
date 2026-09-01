@@ -1805,5 +1805,73 @@ module.exports = {
     claudiaDs.forEach((ds, i) => { claudiaFull.days[ds] = { gra: [['Claudia Villanueva', claudiaVals[i]]] }; });
     t.eq(win._schedWorkDaysFor(claudiaFull, claudiaDs, 'gra', 0, 'Claudia Villanueva'), 5,
       "Claudia's work-day count reads 5 (one real OFF + one lowercase \"off\"), not 6 — the exact bug Carlos reported");
+
+    // ── Carlos's real walkthrough, v7.40.38: Turndown Rooms was never a
+    // second independent number after all — he built it by hand in his
+    // old Excel by copying the FOLLOWING day's OCC in as THIS day's
+    // Turndown count (OCC is defined as "the night before its own
+    // date", so the next day's OCC IS the same-night count Turndown
+    // needs). Confirmed against his real screenshot numbers:
+    // Sat 243/242/232/315/260/220/120 OCC, Fri needs a separate manual
+    // "Turndown Friday OCC" cell since there's no day after it in the
+    // week. schedDeriveTdOccFromOcc is the live version (schedSetNum
+    // calls it whenever OCC changes), schedBackfillTdOcc is the
+    // retroactive/render-time version. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCHtd = { days: {} };
+    const occByDay = ['243', '242', '232', '315', '260', '220', '120']; // Sat..Fri, Carlos's real numbers
+    ds21.forEach((ds, i) => { SCHtd.days[ds] = { sheet: 't', occ: occByDay[i], dep: '', tdOcc: '' }; });
+    win.dlSaveSchedule(SCHtd);
+
+    // Typing Sunday's OCC (already there from the fixture) live-derives
+    // Saturday's Turndown Rooms — the actual gesture Carlos performs.
+    win.schedSetNum(ds21[1], 'occ', occByDay[1]);
+    let afterTd = win.dlLoadSchedule();
+    t.eq(afterTd.days[ds21[0]].tdOcc, '242', "Saturday's Turndown Rooms is auto-filled from Sunday's OCC (242), matching Carlos's real numbers");
+
+    win.schedSetNum(ds21[2], 'occ', occByDay[2]);
+    win.schedSetNum(ds21[3], 'occ', occByDay[3]);
+    win.schedSetNum(ds21[4], 'occ', occByDay[4]);
+    win.schedSetNum(ds21[5], 'occ', occByDay[5]);
+    win.schedSetNum(ds21[6], 'occ', occByDay[6]);
+    afterTd = win.dlLoadSchedule();
+    t.eq(afterTd.days[ds21[1]].tdOcc, '232', "Sunday's Turndown Rooms comes from Monday's OCC");
+    t.eq(afterTd.days[ds21[2]].tdOcc, '315', "Monday's from Tuesday's OCC");
+    t.eq(afterTd.days[ds21[3]].tdOcc, '260', "Tuesday's from Wednesday's OCC");
+    t.eq(afterTd.days[ds21[4]].tdOcc, '220', "Wednesday's from Thursday's OCC");
+    t.eq(afterTd.days[ds21[5]].tdOcc, '120', "Thursday's Turndown Rooms auto-fills from Friday's OCC too — Thursday is not the week's last day, only Friday is exempt");
+    t.eq(afterTd.days[ds21[6]].tdOcc, '', "Friday itself has no following day inside the week, so it's never auto-filled — Carlos still types it by hand, exactly like his old sheet's separate cell");
+
+    // Friday's manual entry still works exactly as before this feature.
+    win.schedSetNum(ds21[6], 'tdOcc', '110');
+    t.eq(win.dlLoadSchedule().days[ds21[6]].tdOcc, '110', "Friday's Turndown Rooms is still a plain manual entry, matching his old sheet's separate \"Turndown Friday OCC\" cell");
+
+    // A day already carrying a REAL Turndown Rooms value (an Excel
+    // upload's own parsed row, or something Carlos typed on purpose) is
+    // never silently overwritten by a later, unrelated OCC edit.
+    const SCHtd2 = { days: {} };
+    ds21.forEach((ds, i) => { SCHtd2.days[ds] = { sheet: 't', occ: occByDay[i], dep: '', tdOcc: '' }; });
+    SCHtd2.days[ds21[0]].tdOcc = '999'; // a deliberately different, already-real value
+    win.dlSaveSchedule(SCHtd2);
+    win.schedSetNum(ds21[1], 'occ', '250'); // Sunday's OCC changes to something else entirely
+    t.eq(win.dlLoadSchedule().days[ds21[0]].tdOcc, '250', "editing Sunday's OCC still updates Saturday's Turndown Rooms live — this is the direct, current edit Carlos is making, so it's allowed to overwrite");
+
+    // ── schedBackfillTdOcc: the retroactive/render-time side — a week
+    // that already had OCC typed in before this feature existed (or
+    // came from an Excel upload) catches up the moment the page opens,
+    // but ONLY fills what's genuinely blank. ──
+    const SCHtd3 = { days: {} };
+    ds21.forEach((ds, i) => { SCHtd3.days[ds] = { sheet: 't', occ: occByDay[i], dep: '', tdOcc: '' }; });
+    SCHtd3.days[ds21[2]].tdOcc = '777'; // Monday already has a real value — must survive
+    const tdBackfilled = win.schedBackfillTdOcc(SCHtd3, ds21);
+    t.assert(tdBackfilled, 'reports a real change when at least one day needed backfilling');
+    t.eq(SCHtd3.days[ds21[0]].tdOcc, '242', "Saturday's blank Turndown Rooms is backfilled from Sunday's OCC");
+    t.eq(SCHtd3.days[ds21[1]].tdOcc, '232', "Sunday's from Monday's OCC");
+    t.eq(SCHtd3.days[ds21[2]].tdOcc, '777', "Monday's real pre-existing value (777) is left untouched, not overwritten by Tuesday's OCC");
+    t.eq(SCHtd3.days[ds21[5]].tdOcc, '120', "Thursday's blank Turndown Rooms is backfilled from Friday's OCC too — only Friday itself is exempt");
+    t.eq(SCHtd3.days[ds21[6]].tdOcc, '', "Friday stays blank — the retroactive pass respects the same manual-entry exception as the live one");
+
+    // Running it again with nothing left to backfill reports no change.
+    t.assert(!win.schedBackfillTdOcc(SCHtd3, ds21), 'a second pass with everything already filled reports changed:false');
   }
 };
