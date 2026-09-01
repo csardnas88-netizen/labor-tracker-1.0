@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.26"/>
+<meta name="app-version" content="7.40.27"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.27', date:'2026-09-01',
+    fixes:['Marking someone LAUNDRY only put them on Laundry\'s own crew card when the mark itself came from a single live click (schedSetCell) — Carlos\'s real report: Julia marked LAUNDRY by hand for both Saturday and Sunday only showed up on the Laundry crew card for Saturday. Now self-heals on every render (schedSyncAllLaundryCoverRows), scanning every day for a LAUNDRY mark and adding the missing cover row no matter how it got there — a bulk Fill Week copy, an Excel upload, or another device\'s sync.']
+  },
   {
     v:'7.40.26', date:'2026-09-01',
     fixes:['Andrea\'s Turndown cell kept snapping back to "LOBBY" the moment Carlos tried to type something else into it on a day Sarahi was off — the old Sarahi/Andrea cover chain reacted to ANY edit on either side, backup included, so editing Andrea\'s own cell immediately re-ran the chain and overwrote it. Replaced with a direct-row mirror, same shape as Jorge Gonzalez/Victoriano Ch: Andrea gets her own literal row on Lobby (Carlos adds her there by hand, same as Jorge on Laundry) driven off Sarahi\'s status, and her Turndown cell now only reacts to SARAHI\'s edits, never her own — so it can finally be moved by hand.']
@@ -21413,6 +21417,36 @@ function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
   }
   return false;
 }
+/* Retroactive version of the sync above — that one only reacts to a
+   LIVE single-cell edit (schedSetCell), so a LAUNDRY mark that arrived
+   any other way (typed into an Excel upload before it's parsed in,
+   Auto-fill, a Supabase pull from another device) never got its cover
+   row created. Carlos's real report: Julia marked LAUNDRY by hand in
+   his uploaded Schedule Draft simply never showed up on Laundry's own
+   crew card. Scans every crew/day for a LAUNDRY cell and makes sure the
+   cover row exists — safe to run repeatedly, schedSyncLaundryCoverRow
+   itself already no-ops once the row is there.
+   Only calls into schedSyncLaundryCoverRow for a cell that actually
+   reads LAUNDRY — that function unconditionally creates day.laundry=[]
+   the moment it's called, even when it ends up doing nothing else, and
+   calling it for every ordinary cell on every day would litter an empty
+   Laundry array onto days that have nothing to do with it, changing
+   what the renderer sees there for no reason. */
+function schedSyncAllLaundryCoverRows(SCH,dates){
+  var changed=false;
+  dates.forEach(function(ds){
+    var day=SCH.days&&SCH.days[ds]; if(!day)return;
+    SCHED_BLOCKS.forEach(function(b){
+      if(b.key==='laundry')return;
+      (day[b.key]||[]).forEach(function(p){
+        var name=String(p[0]||'').trim(); if(!name)return;
+        if(!schedStatusIs(p[1],'LAUNDRY'))return;
+        if(schedSyncLaundryCoverRow(SCH,ds,b.key,name,p[1]))changed=true;
+      });
+    });
+  });
+  return changed;
+}
 /* Carlos's real report: Gabriela Cuevas (Room Attendant) and Gabriela
    (Lobby) are the same real person, listed independently on both
    crews — different name spelling on each, same as the cover chains
@@ -22124,6 +22158,7 @@ function renderSchedule(){
      own copy, not an edit that should win a sync race against another
      device's newer data. */
   if(SCH&&schedNormalizePmHm(SCH)){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
+  if(SCH&&SCH.days&&schedSyncAllLaundryCoverRows(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   var html='';
   html+='<input type="file" id="schedFileInput" accept=".xlsx,.xls" style="display:none;" onchange="dlUploadSchedule(this)">';
 

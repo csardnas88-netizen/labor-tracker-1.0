@@ -1213,6 +1213,29 @@ module.exports = {
     t.assert(SCH21lc2.days[ds21[0]].laundry.some((p) => p[0] === 'Real Laundry Person'),
       "a real Laundry crew member's own row is untouched by this sync entirely");
 
+    // ── Carlos's real report, v7.40.27: Julia marked LAUNDRY by hand on
+    // both Saturday AND Sunday only showed up on Laundry's own crew card
+    // for Saturday — the live sync above only reacts to a single-cell
+    // edit through schedSetCell, so a LAUNDRY mark that arrived any
+    // other way (a Fill Week copy, an Excel upload, another device's
+    // pull) never got its cover row created. schedSyncAllLaundryCoverRows
+    // scans every day and fills in whatever's missing, safe to re-run. ──
+    const SCH21al = {
+      days: {
+        [ds21[0]]: { gra: [['Julia', 'LAUNDRY']], laundry: [['Julia', '1']] }, // Saturday already synced
+        [ds21[1]]: { gra: [['Julia', 'LAUNDRY']], laundry: [] }, // Sunday never synced — the reported bug
+        [ds21[2]]: { gra: [['Julia', '1']], laundry: [] }, // an ordinary day — nothing to sync
+      },
+    };
+    const allChanged = win.schedSyncAllLaundryCoverRows(SCH21al, ds21);
+    t.assert(allChanged, 'reports a real change when at least one day needed a cover row added');
+    t.assert(SCH21al.days[ds21[0]].laundry.filter((p) => p[0] === 'Julia').length === 1,
+      "Saturday, already synced, is not duplicated by a second pass");
+    t.assert(SCH21al.days[ds21[1]].laundry.some((p) => p[0] === 'Julia' && p[1] === '1'),
+      "Sunday's missing cover row is added retroactively — this is the actual bug fix");
+    t.assert(!SCH21al.days[ds21[2]].laundry.some((p) => p[0] === 'Julia'),
+      'an ordinary day with no LAUNDRY mark anywhere gets nothing added');
+
     // ── Carlos's real report: Gabriela Cuevas (Room Attendant) and
     // Gabriela (Lobby) are the same real person, listed independently
     // on both crews — different spelling on each. He set her OFF on
