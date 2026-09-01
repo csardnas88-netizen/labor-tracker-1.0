@@ -1011,13 +1011,14 @@ module.exports = {
     t.eq(win.schedDayTotal(SCH21b, ds21[0], 'sup'), 2, "Yanira's PM still counts toward the Unifocus headcount total");
     t.eq(win.schedRatioCount(SCH21b, ds21[0], 'sup'), 1, 'but she is excluded from the departures-each ratio, leaving just the one AM supervisor');
 
-    // Cover chains: single-tier (Sarahi -> Andrea, Victoriano Ch ->
-    // Jorge Gonzalez), two-tier escalation (Marroquin -> Gabriela Cuevas
-    // -> Sandra S), no-cover-needed, and no-one-available-to-cover.
-    // Names here are spelled exactly as they appear in Carlos's real
-    // Schedule Draft, confirmed 2026-08-16 — see the header comment on
-    // SCHED_COVER_CHAINS in index.html for why these differ from how he
-    // described them in chat.
+    // Cover chains: two-tier escalation (Marroquin -> Gabriela Cuevas ->
+    // Sandra S), no-cover-needed, and no-one-available-to-cover. Sarahi's
+    // chain (-> Andrea) and Victoriano Ch's (-> Jorge Gonzalez) moved to
+    // their own direct-row mirrors (schedApplyLobbyMirror /
+    // schedApplyLaundryMirror, tested separately below) — see the header
+    // comment on SCHED_COVER_CHAINS in index.html. Names here are spelled
+    // exactly as they appear in Carlos's real Schedule Draft, confirmed
+    // 2026-08-16.
     const SCH21c = {
       days: {
         [ds21[0]]: { // titular off, first-tier cover available
@@ -1036,12 +1037,6 @@ module.exports = {
           lobby: [['Marroquin', '1']],
           gra: [['Gabriela Cuevas', '1'], ['Sandra S', '1']],
         },
-        [ds21[4]]: { // Lobby PM chain + Laundry chain, same day
-          lobby: [['Sarahi', 'OFF']],
-          td: [['Andrea', '1'], ['Paty', '1']],
-          laundry: [['Victoriano Ch', 'OFF']],
-          hp: [['Jorge Gonzalez', '1']],
-        },
       },
     };
     win.schedApplyCoverChains(SCH21c, ds21);
@@ -1051,24 +1046,52 @@ module.exports = {
     t.eq(SCH21c.days[ds21[2]].gra[0][1], 'OFF', 'with nobody available in the chain, everyone just stays off — nothing forced');
     t.eq(SCH21c.days[ds21[2]].gra[1][1], 'OFF', 'same for the second tier — no cover fabricated out of thin air');
     t.eq(SCH21c.days[ds21[3]].gra[0][1], '1', "Marroquin working means no cover triggers at all — Gabriela Cuevas stays on her own crew");
-    t.eq(SCH21c.days[ds21[4]].td[0][1], 'LOBBY', "Andrea covers Lobby PM on Sarahi's day off");
-    t.eq(SCH21c.days[ds21[4]].hp[0][1], 'LAUNDRY', "Jorge Gonzalez covers Laundry on Victoriano Ch's day off — a different chain, same day, doesn't interfere");
-    t.eq(SCH21c.days[ds21[4]].td[1][1], '1', "Paty is unrelated to either chain that day and stays untouched");
+    // The titular's own crew is untouched by this — nothing added twice.
+    t.eq(win.schedDayTotal(SCH21c, ds21[3], 'lobby'), 1,
+      "an ordinary day with no cover in play (Marroquin working) counts exactly the literal row, nothing added twice");
+
+    // ── schedApplyLobbyMirror: Andrea mirrors Sarahi directly, same
+    // shape as Jorge Gonzalez/Victoriano Ch — a literal Lobby row plus
+    // her own Turndown cell relabeled, both driven off Sarahi's status,
+    // not the old chain that used to fight Carlos's own edits. ──
+    const SCH21sa = {
+      days: {
+        [ds21[0]]: { lobby: [['Sarahi', 'OFF'], ['Andrea', '']], td: [['Andrea', '1'], ['Paty', '1']] },
+        [ds21[3]]: { lobby: [['Sarahi', '1'], ['Andrea', 'LOBBY']], td: [['Andrea', 'LOBBY']] },
+      },
+    };
+    win.schedApplyLobbyMirror(SCH21sa, ds21);
+    t.eq(SCH21sa.days[ds21[0]].lobby[1][1], '1', "Andrea's own literal Lobby row goes to '1' on a day Sarahi is off");
+    t.eq(SCH21sa.days[ds21[0]].td[0][1], 'LOBBY', "Andrea's Turndown cell reads LOBBY that same day");
+    t.eq(SCH21sa.days[ds21[0]].td[1][1], '1', 'Paty is unrelated to this mirror and stays untouched');
+    t.eq(SCH21sa.days[ds21[3]].lobby[1][1], '', "Andrea's Lobby row releases back to blank once Sarahi resumes her own PM shift");
+    t.eq(SCH21sa.days[ds21[3]].td[0][1], '1', "Andrea's Turndown cell releases back to '1' the same day, since it still read LOBBY");
+
+    // Carlos's ask: Andrea marked LOBBY on her own literal Lobby row (once
+    // Carlos adds her there by hand) is a real body doing Lobby's work
+    // that day, just like Jorge Gonzalez marked LAUNDRY on Houseman —
+    // the Lobby crew's own headcount counts her.
+    const SCH21saTotal = { days: { [ds21[0]]: { lobby: [['Sarahi', 'OFF'], ['Andrea', '1']] } } };
+    t.eq(win.schedDayTotal(SCH21saTotal, ds21[0], 'lobby'), 1,
+      "Lobby's headcount counts Andrea's own literal row the same as any other crew member — Sarahi (OFF) does not");
+
+    // Carlos's real report: editing Andrea's OWN Turndown cell must never
+    // be immediately overwritten — this is the actual bug he hit ("no me
+    // deja mover el horario de Lobby de Andrea en la seccion de
+    // Turndown"). schedIsChainMember no longer recognizes Andrea/Sarahi
+    // at all (moved off SCHED_COVER_CHAINS entirely), so schedSetCell's
+    // chainMember branch can't refire on her edit anymore.
+    t.eq(win.schedIsChainMember('td', 'Andrea'), false, "Andrea is no longer a SCHED_COVER_CHAINS member — she's a direct-row mirror now, not a chain backup");
+    t.eq(win.schedIsChainMember('lobby', 'Sarahi'), false, 'same for Sarahi — the old Lobby-PM chain entry is gone');
 
     // Carlos's ask: Jorge marked LAUNDRY on his own Houseman row is a real
     // body doing Laundry that day ("sería el lavador") — the Laundry
     // crew's own headcount has to count him, not just show it in his cell.
-    t.eq(win.schedDayTotal(SCH21c, ds21[4], 'laundry'), 1,
+    const SCH21jl = { days: { [ds21[0]]: { laundry: [['Victoriano Ch', 'OFF']], hp: [['Jorge Gonzalez', 'LAUNDRY']] } } };
+    win.schedApplyCoverChains(SCH21jl, ds21);
+    t.eq(SCH21jl.days[ds21[0]].hp[0][1], 'LAUNDRY', "Jorge Gonzalez still covers Laundry on Victoriano Ch's day off via the (unchanged) Houseman-based chain");
+    t.eq(win.schedDayTotal(SCH21jl, ds21[0], 'laundry'), 1,
       "Laundry's headcount counts Jorge Gonzalez (LAUNDRY) even though Victoriano Ch (OFF) is the only literal row in the laundry array");
-    // Symmetrically, Andrea covering Lobby PM (a different chain, same
-    // convention) counts toward 'lobby' the same way.
-    t.eq(win.schedDayTotal(SCH21c, ds21[4], 'lobby'), 1,
-      "Lobby's headcount counts Andrea (LOBBY) covering Sarahi's PM shift the same way");
-    // The titular's own crew is untouched by this — Victoriano Ch (OFF)
-    // still contributes 0 from the array loop, and _schedCoverInflow adds
-    // nothing extra for him since his home crew IS the crew being judged.
-    t.eq(win.schedDayTotal(SCH21c, ds21[3], 'lobby'), 1,
-      "an ordinary day with no cover in play (Marroquin working) counts exactly the literal row, nothing added twice");
 
     // Carlos's real file, screenshot in hand: Jorge Gonzalez isn't
     // arriving via the hp->laundry cross-crew chain at all this week —
@@ -1306,6 +1329,34 @@ module.exports = {
     t.eq(SCH21jm4.days[ds21[2]].hp[0][1], 'R-OFF',
       "Jorge's own granted R-OFF on his Houseman row wins over the mirror there too, same protection Laundry gets");
 
+    // ── Carlos's real bug report, v7.40.26: "no me deja mover el
+    // horario de Lobby de Andrea en la seccion de Turndown" — under the
+    // OLD chain, editing Andrea's own Turndown cell re-fired the whole
+    // chain (schedIsChainMember matched her as a backup too) and could
+    // immediately stomp what he'd just typed back to LOBBY. Live,
+    // end-to-end: editing SARAHI's cell reacts, editing ANDREA's own
+    // cell sticks. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH21sl = { days: {} };
+    ds21.forEach((ds) => { SCH21sl.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', lobby: [['Sarahi', '1'], ['Andrea', '']], td: [['Andrea', '1']] }; });
+    win.dlSaveSchedule(SCH21sl);
+    win.schedSetCell('lobby', 0, 'Sarahi', ds21[0], 'OFF', null);
+    const afterSarahiLive = win.dlLoadSchedule();
+    t.eq(afterSarahiLive.days[ds21[0]].lobby[1][1], '1', "a single manual edit setting Sarahi to OFF immediately mirrors Andrea's own Lobby row to '1', no Auto-fill needed");
+    t.eq(afterSarahiLive.days[ds21[0]].td[0][1], 'LOBBY', "Andrea's Turndown cell relabels to LOBBY the same moment");
+
+    win.schedSetCell('lobby', 0, 'Sarahi', ds21[0], '1', null);
+    const afterSarahiLiveBack = win.dlLoadSchedule();
+    t.eq(afterSarahiLiveBack.days[ds21[0]].lobby[1][1], '', 'setting Sarahi back to working releases Andrea back to blank on Lobby, live');
+    t.eq(afterSarahiLiveBack.days[ds21[0]].td[0][1], '1', 'and back to a plain 1 on Turndown, same moment');
+
+    // The actual reported bug: editing ANDREA's own Turndown cell must
+    // never be immediately overwritten, even on a day Sarahi is off.
+    win.schedSetCell('lobby', 0, 'Sarahi', ds21[1], 'OFF', null);
+    win.schedSetCell('td', 0, 'Andrea', ds21[1], '1', null);
+    const afterAndreaEdit = win.dlLoadSchedule();
+    t.eq(afterAndreaEdit.days[ds21[1]].td[0][1], '1',
+      "editing Andrea's own Turndown cell to '1' sticks — it no longer snaps back to LOBBY just because Sarahi happens to be off that day");
 
     // Yesenia (PM Houseman): exactly 1 day off, forced deterministic via
     // a pre-set R-OFF so the cover check lands on a known day. Paty
