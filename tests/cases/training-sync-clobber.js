@@ -120,5 +120,64 @@ module.exports = {
     t.assert(!win3.loadTrainings().some((x) => x.id === 'tr3'), 'deleted training is gone locally');
     const pushed3 = JSON.parse(table3['hk_trainings'] || '[]');
     t.assert(!pushed3.some((x) => x.id === 'tr3'), 'and gone from what was pushed — delete is not undone by a merge');
+
+    // ── Carlos's real report: the clobber kept happening even on the
+    // version that shipped this fix. Root cause — the GET that fetches
+    // remote before merging used authedFetch directly, which only
+    // refreshes an expiring token PROACTIVELY; a token that goes stale
+    // in the gap between that check and the request landing still came
+    // back a 401 with no retry, and the old code silently treated ANY
+    // non-ok response as "remote has nothing", pushing an unmerged local
+    // copy — the exact clobber this mechanism exists to prevent.
+    // _fetchRemoteTrainings now retries once after a forced refresh on a
+    // 401, same as supaPut already does on the write side. ──
+    let getAttempts = 0;
+    let authCalls = 0;
+    const table4 = {};
+    table4['hk_trainings'] = JSON.stringify([
+      { id: 'tr4', title: 'Fire Safety', scope: 'all', done: {}, prog: { empY: { st: 'complete', at: Date.now() - 60000, date: '2026-09-01' } }, updated: '2026-09-01T10:00:00.000Z' },
+    ]);
+    const fetchImpl4 = (url, opts) => {
+      opts = opts || {};
+      const method = (opts.method || 'GET').toUpperCase();
+      const u = String(url);
+      if (u.indexOf('/auth/v1/token') !== -1) {
+        authCalls++;
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ access_token: 'fresh', refresh_token: 'r2', expires_in: 3600 }) });
+      }
+      if (u.indexOf('/auth/v1/') !== -1) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ access_token: 't', refresh_token: 'r', expires_in: 3600 }) });
+      }
+      if (u.indexOf('/rest/v1/labor_data') !== -1 && method === 'GET') {
+        getAttempts++;
+        // First attempt: the token looked fine locally but the server
+        // has already rejected it — the retry (after a forced refresh)
+        // must succeed and actually return the real remote data.
+        if (getAttempts === 1) return Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({}) });
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([{ key: 'hk_trainings', value: table4['hk_trainings'] }]) });
+      }
+      if (u.indexOf('/rest/v1/labor_data') !== -1 && method === 'POST') {
+        const body = JSON.parse(opts.body);
+        table4[body.key] = body.value;
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]), text: () => Promise.resolve('[]') });
+    };
+    const seed4 = Object.assign(fakeSession(), { hk_sa_ref: 'ref0' }, {
+      hk_trainings: [
+        { id: 'tr4', title: 'Fire Safety', scope: 'all', done: {}, prog: {}, updated: '2026-09-01T09:00:00.000Z' },
+      ],
+    });
+    const { win: win4 } = await loadApp({ seed: seed4, fetchImpl: fetchImpl4 });
+    await new Promise((r) => setTimeout(r, 60));
+    getAttempts = 0; authCalls = 0;
+    win4.applyTrStatus('tr4', 'empX', 'complete');
+    await new Promise((r) => setTimeout(r, 120));
+
+    t.eq(getAttempts, 2, 'the 401 on the pre-push GET is retried once, not silently treated as "remote has nothing"');
+    t.eq(authCalls, 1, 'the retry forces exactly one session refresh first');
+    const pushed4 = JSON.parse(table4['hk_trainings']).filter((x) => x.id === 'tr4')[0];
+    t.eq(win4.trGetStatus(pushed4, 'empY'), 'complete', "Employee Y's mark survives — the retried GET actually found and merged the real remote data");
+    t.eq(win4.trGetStatus(pushed4, 'empX'), 'complete', "and this device's own new mark is there too");
   },
 };

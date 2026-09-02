@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.39"/>
+<meta name="app-version" content="7.40.40"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.40', date:'2026-09-01',
+    fixes:['The Training clobber fix from earlier today (v7.40.37) still let progress get erased — Carlos\'s real report, reproduced on the CURRENT version, not a stale tab. Root cause: the pre-push fetch that checks the remote copy used authedFetch directly, which only refreshes an expiring session token PROACTIVELY, before the request goes out. A token that went stale in the gap between that check and the request actually landing came back a 401 with no retry — and the old code silently treated ANY non-ok response as "remote has nothing," pushing an unmerged local copy, the exact clobber this whole mechanism exists to prevent. Now retries once after forcing a session refresh on a 401, the same protection supaPut already has on the write side, just never had on this read.']
+  },
   {
     v:'7.40.39', date:'2026-09-01',
     changes:['Removed the full "Turndown Rooms" row from the Schedule page\'s manual-entry card — Carlos\'s ask, now that six of its seven boxes fill themselves in from OCC it was just confusing whoever\'s building the schedule. Only the week\'s last day has no following day inside it to derive from, so it keeps a single small box of its own, labeled "Turndown Rooms — [day] only" — the one number that still needs typing, same as his old sheet\'s separate "Turndown Friday OCC" cell.']
@@ -16527,16 +16531,50 @@ function saveTrainings(list){
    so those keep the plain overwrite-push. */
 function saveTrainingsMerged(list){
   safeSetItem('hk_trainings',JSON.stringify(list));
-  authedFetch(SUPA_URL+"/rest/v1/labor_data?select=value&key=eq.hk_trainings",{method:"GET"})
-    .then(function(r){ return r.ok?r.json():[]; })
-    .then(function(rows){
-      var remote=null;
-      try{ remote=(rows&&rows[0])?JSON.parse(rows[0].value):null; }catch(e){}
-      var merged=trMergeLists(loadTrainings(),remote);
-      safeSetItem('hk_trainings',JSON.stringify(merged));
-      supaPut('hk_trainings',merged);
-    })
-    .catch(function(){ try{supaPut('hk_trainings',loadTrainings());}catch(e){} });
+  _fetchRemoteTrainings().then(function(remote){
+    var merged=trMergeLists(loadTrainings(),remote);
+    safeSetItem('hk_trainings',JSON.stringify(merged));
+    supaPut('hk_trainings',merged);
+  }).catch(function(){
+    /* Could not confirm remote's current state at all (offline, or a
+       session that's genuinely dead, not just momentarily stale) — push
+       local anyway rather than losing this edit outright. supaPut's own
+       retry/refresh still covers a transient 401 on the actual write;
+       the next successful pull-merge (syncFromSheets) reconciles
+       whatever this particular push couldn't see. */
+    try{supaPut('hk_trainings',loadTrainings());}catch(e){}
+  });
+}
+/* GET hk_trainings straight from Supabase. Carlos's real report: the
+   clobber kept happening even on the version that was supposed to fix
+   it. Root cause — authedFetch only refreshes an expiring token
+   PROACTIVELY, before the request goes out; a token that goes stale in
+   the gap between that check and the request actually landing still
+   comes back 401 with no retry, same class of race supaPut already
+   guards against on the PUT side (see its own comment) but this GET
+   never did. The old code silently treated ANY non-ok response —
+   401 included — as "remote has nothing" and pushed an unmerged local
+   copy, which is exactly the clobber this whole mechanism exists to
+   prevent. Now retries once after a forced refresh on a 401, same as
+   supaPut. Resolves to the parsed remote array, or null if genuinely
+   unavailable (offline, or refresh itself failed). */
+function _fetchRemoteTrainings(){
+  var url=SUPA_URL+"/rest/v1/labor_data?select=value&key=eq.hk_trainings";
+  function go(){ return authedFetch(url,{method:"GET"}); }
+  return go().then(function(r){
+    if(r.status===401){
+      return _authRefresh().then(function(ok){
+        if(!ok){ var e=new Error('session-expired'); throw e; }
+        return go();
+      });
+    }
+    return r;
+  }).then(function(r){
+    if(!r.ok)throw new Error('fetch-failed: '+r.status);
+    return r.json();
+  }).then(function(rows){
+    try{ return (rows&&rows[0])?JSON.parse(rows[0].value):null; }catch(e){ return null; }
+  });
 }
 /* Merges a REMOTE trainings array into a LOCAL one, per-training and
    then per-employee, keeping whichever side's progress entry has the
