@@ -68,7 +68,7 @@ const cases = [
   require('./cases/req-notebook'),
   require('./cases/toast-entities'),
   require('./cases/dl-sections-sync'),
-  require('./cases/dl-schedule-snapshot-decouple'),
+  require('./cases/dl-schedule-live-connect'),
   require('./cases/late-departures'),
   require('./cases/realtime-retry-cap'),
   require('./cases/daily-lineup-label-drift'),

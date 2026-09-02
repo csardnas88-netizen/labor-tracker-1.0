@@ -98,7 +98,7 @@ module.exports = {
     // ── Case 1: the label is typed exactly as expected — sanity check the
     // fixture itself works before testing the drifted variants. ──
     const good = win.dlParseSchedule(scheduleWb('Houseman', 'Total HP'), new Date(2026, 7, 13));
-    win.dlSaveSchedule(good); win.dlSaveScheduleSnapshot(good);
+    win.dlSaveSchedule(good);
     let P = win.dlBuildPlan('2026-08-14');
     t.eq(P.hm.join(','), 'Mauricia,Diana', 'baseline: Mauricia and Diana are in, David is OFF');
     t.eq(P.hmEmptyReason, undefined, 'no reason string when the block is not empty');
@@ -108,7 +108,7 @@ module.exports = {
     // invisible to the eye. This must still resolve correctly now. ──
     const capsSchedule = win.dlParseSchedule(scheduleWb('HOUSEMAN', 'Total  HP'), new Date(2026, 7, 13));
     t.assert(capsSchedule.days['2026-08-14'].hp.length > 0, "the block is found even though the label is in caps");
-    win.dlSaveSchedule(capsSchedule); win.dlSaveScheduleSnapshot(capsSchedule);
+    win.dlSaveSchedule(capsSchedule);
     P = win.dlBuildPlan('2026-08-14');
     t.eq(P.hm.join(','), 'Mauricia,Diana', 'and the plan comes out identical to the exact-case version');
 
@@ -117,7 +117,7 @@ module.exports = {
     // needs to say why instead of looking like an ordinary quiet day. ──
     const missingSchedule = win.dlParseSchedule(scheduleWb('Housekeepers', 'Total HP'), new Date(2026, 7, 13));
     t.eq(missingSchedule.days['2026-08-14'].hp.length, 0, "a genuinely different label finds nothing, as expected");
-    win.dlSaveSchedule(missingSchedule); win.dlSaveScheduleSnapshot(missingSchedule);
+    win.dlSaveSchedule(missingSchedule);
     P = win.dlBuildPlan('2026-08-14');
     t.eq(P.hm.length, 0, 'Houseman comes up empty');
     t.assert(/find|section/i.test(P.hmEmptyReason || ''), 'and the plan explains that the section itself could not be found, not just "nobody in"');

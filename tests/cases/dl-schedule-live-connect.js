@@ -1,15 +1,13 @@
-/* Carlos's ask, 2026-08-23: the Daily Lineup must ignore the Schedule
-   Draft page's live editing entirely while he's still building/testing
-   it there — Auto-fill, cover chains, manual cell edits, Call-Offs
-   marking CALL-OFF — none of that should move the Lineup until he
-   uploads a fresh Excel. Only dlUploadSchedule (and its test
-   equivalent, saving to the snapshot too) should ever change what
-   dlBuildPlan reads.
-
-   This is the opposite of how the two used to share one record
-   (hk_dl_schedule) — see the SCHEDULE DRAFT header comment in
-   index.html for the history. Pinning both halves: a live edit does
-   NOT reach the Lineup, and a real re-upload DOES. */
+/* Carlos's ask, 2026-09-01: connect the Daily Lineup back to the live
+   Schedule Draft. From 2026-08-23 to here, the Lineup deliberately read
+   a FROZEN copy saved only at upload time, so his in-progress editing
+   on that page (Auto-fill, cover chains, manual cell edits, Call-Offs)
+   never leaked into the Lineup he actually prints and runs the hotel
+   from. Now that the Schedule Draft page is his everyday tool — not
+   in-progress work — he wants the two connected again: dlBuildPlan
+   reads hk_dl_schedule directly, same record the Schedule page itself
+   edits, no separate snapshot step. See the SCHEDULE DRAFT header
+   comment in index.html for the full history. */
 const { loadApp, fakeSession } = require('../_harness');
 
 const SERIAL = (y, m, d) => Date.UTC(y, m, d) / 86400000 + 25569;
@@ -82,18 +80,18 @@ function sectionsWb() {
 }
 
 module.exports = {
-  name: "Daily Lineup reads a frozen upload snapshot, not the live Schedule Draft edits, per Carlos's 2026-08-23 ask",
+  name: "Daily Lineup reads the live Schedule Draft directly, per Carlos's 2026-09-01 ask to reconnect the two",
   async run(t) {
     const { win } = await loadApp({ seed: Object.assign(fakeSession(), { 'hk_rooms_migrated_v2': '1' }) });
     await new Promise((r) => setTimeout(r, 60));
     win.XLSX.utils.sheet_to_json = (ws) => ws._rows;
 
-    // ── The real upload path: parse, save live, freeze a snapshot. ──
+    // ── The real upload path: parse, save live — no separate snapshot
+    // step anymore. ──
     const S = win.dlParseSections(sectionsWb());
     win.dlSaveSections(S);
     const SCH = win.dlParseSchedule(scheduleWb('1'), new Date(2026, 7, 13));
     win.dlSaveSchedule(SCH);
-    win.dlSaveScheduleSnapshot(JSON.parse(JSON.stringify(SCH)));
 
     const ds = '2026-08-14';
     let P = win.dlBuildPlan(ds);
@@ -102,26 +100,26 @@ module.exports = {
 
     // ── A live edit on the Schedule Draft page (schedSetCell, the exact
     // function every on-screen cell edit, Auto-fill, and Call-Offs all
-    // funnel through) must NOT move the Lineup. ──
+    // funnel through) now moves the Lineup immediately — the whole
+    // point of reconnecting the two. ──
     const liveIdx = win.dlLoadSchedule().days[ds].hp.findIndex((p) => p[0] === 'David');
     win.schedSetCell('hp', liveIdx, 'David', ds, 'OFF', null);
     t.eq(win.dlLoadSchedule().days[ds].hp[liveIdx][1], 'OFF', 'the live copy really did change');
     P = win.dlBuildPlan(ds);
-    t.assert(P.hm.indexOf('David') !== -1, "but the Lineup still shows David — it never looked at the live edit");
+    t.assert(P.hm.indexOf('David') === -1, "and the Lineup now reflects it — David is off, straight from the live edit, no re-upload needed");
 
-    // ── Same for a Call-Off: marking one writes CALL-OFF onto the LIVE
-    // schedule (schedApplyCallOff), which must stay invisible here too. ──
+    // ── Same for a Call-Off: marking one writes CALL-OFF onto the live
+    // schedule (schedApplyCallOff), and the Lineup sees that live too. ──
+    win.schedSetCell('hp', liveIdx, 'David', ds, '1', null); // back to working first
     win.schedSetCell('hp', liveIdx, 'David', ds, 'CALL-OFF', null);
     P = win.dlBuildPlan(ds);
-    t.assert(P.hm.indexOf('David') !== -1, "a Call-Off marked on the live schedule does not remove David from today's already-frozen Lineup either");
+    t.assert(P.hm.indexOf('David') === -1, 'a Call-Off marked on the live schedule removes David from the Lineup immediately');
 
-    // ── A genuine re-upload (dlUploadSchedule's real path: parse fresh,
-    // save live, THEN refresh the snapshot) DOES change what the Lineup
-    // shows — this is a real correction, not stale forever. ──
+    // ── A genuine re-upload still works exactly as before — parse
+    // fresh, save live, and the Lineup reflects that too. ──
     const SCH2 = win.dlParseSchedule(scheduleWb('OFF'), new Date(2026, 7, 13));
     win.dlSaveSchedule(SCH2);
-    win.dlSaveScheduleSnapshot(JSON.parse(JSON.stringify(SCH2)));
     P = win.dlBuildPlan(ds);
-    t.assert(P.hm.indexOf('David') === -1, 'a fresh re-upload with David OFF correctly updates the Lineup — this is not a frozen-forever snapshot, just frozen between uploads');
+    t.assert(P.hm.indexOf('David') === -1, 'a fresh re-upload with David OFF still correctly updates the Lineup');
   }
 };

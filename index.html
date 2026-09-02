@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.40"/>
+<meta name="app-version" content="7.40.41"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.40.41', date:'2026-09-01',
+    features:['The Daily Lineup now reads the Schedule Draft page directly, live — Carlos\'s ask. From 2026-08-23 it deliberately read a frozen copy saved only at upload time, so his in-progress editing there (Auto-fill, cover chains, manual cells, Call-Offs) wouldn\'t leak into the Lineup he prints and runs the hotel from. Now that the Schedule Draft page is his everyday tool, the two are reconnected: any edit there — Auto-fill, a manual cell, a Call-Off, or a real Excel re-upload — shows up on the Lineup immediately, no separate upload step needed.']
+  },
+  {
     v:'7.40.40', date:'2026-09-01',
     fixes:['The Training clobber fix from earlier today (v7.40.37) still let progress get erased — Carlos\'s real report, reproduced on the CURRENT version, not a stale tab. Root cause: the pre-push fetch that checks the remote copy used authedFetch directly, which only refreshes an expiring session token PROACTIVELY, before the request goes out. A token that went stale in the gap between that check and the request actually landing came back a 401 with no retry — and the old code silently treated ANY non-ok response as "remote has nothing," pushing an unmerged local copy, the exact clobber this whole mechanism exists to prevent. Now retries once after forcing a session refresh on a 401, the same protection supaPut already has on the write side, just never had on this read.']
   },
@@ -7915,10 +7919,6 @@ function _syncFromSheetsPull(){
         if(key==='dl_schedule'&&all[key]&&all[key].days){
           var mSch=_schedMergeRecord(dlLoadSchedule(),all[key]);
           if(mSch.changed){ safeSetItem('hk_dl_schedule',JSON.stringify(mSch.rec)); updated=true; }
-        }
-        if(key==='dl_schedule_snapshot'&&all[key]&&all[key].days){
-          var mSnap=_schedMergeRecord(dlLoadScheduleSnapshot(),all[key]);
-          if(mSnap.changed){ safeSetItem('hk_dl_schedule_snapshot',JSON.stringify(mSnap.rec)); updated=true; }
         }
         if(key.indexOf('dl_day_')===0&&all[key]&&typeof all[key]==='object'){
           safeSetItem('hk_'+key,JSON.stringify(all[key])); updated=true;
@@ -19960,18 +19960,6 @@ function _schedMergeRecord(local,remote){
   merged.savedAt=remoteNewer?remote.savedAt:local.savedAt;
   return {rec:merged,changed:JSON.stringify(merged)!==JSON.stringify(local)};
 }
-/* Carlos's ask, 2026-08-23: while he's still actively building/testing
-   the Schedule Draft page's live editor (Auto-fill, cover chains,
-   manual cell edits, Call-Offs marking CALL-OFF on a cell), he does NOT
-   want any of that in-progress work leaking into the Daily Lineup he
-   actually prints and runs the hotel from every day — only the exact
-   Excel he uploaded should count there, "por ahora". A frozen copy,
-   saved ONLY at upload time (dlUploadSchedule) and never touched again
-   by anything the Schedule Draft page does. dlBuildPlan reads this
-   instead of the live hk_dl_schedule. The live copy is untouched and
-   keeps working exactly as before for everything else. */
-function dlLoadScheduleSnapshot(){ try{var s=localStorage.getItem('hk_dl_schedule_snapshot');return s?JSON.parse(s):null;}catch(e){return null;} }
-function dlSaveScheduleSnapshot(o){ safeSetItem('hk_dl_schedule_snapshot',JSON.stringify(o)); try{supaPut('dl_schedule_snapshot',o);}catch(e){} }
 /* The blank lineup form ships WITH the app (./lineup-template.xlsx) and
    is cached by the service worker, so there is nothing to upload and it
    works offline. Asking Carlos to upload a Daily line up in order to
@@ -20180,10 +20168,13 @@ function dlLook(day,grp,name){
   return real?real[1]:null;
 }
 function dlBuildPlan(ds){
-  /* Reads the FROZEN upload snapshot, not the live Schedule Draft —
-     Carlos's ask while that page is still in-progress work. See
-     dlLoadScheduleSnapshot above. */
-  var S=dlLoadSections(), SCH=dlLoadScheduleSnapshot();
+  /* Reads the live Schedule Draft directly — Carlos's ask, now that he
+     builds most weeks right on that page instead of always uploading a
+     fresh Excel file. Until 2026-09-01 this read a frozen upload-time
+     snapshot instead, deliberately decoupled from live edits while that
+     page was still in-progress work; reconnected now that it's the
+     everyday tool. */
+  var S=dlLoadSections(), SCH=dlLoadSchedule();
   if(!S||!SCH||!SCH.days)return null;
   var day=SCH.days[ds];
   if(!day)return null;
@@ -20395,10 +20386,6 @@ function dlUploadSchedule(input){
           });
         });
         dlSaveSchedule(SCH);
-        /* The Daily Lineup's frozen source — captured fresh from THIS
-           upload, exactly as parsed, before any live edit on the
-           Schedule Draft page can touch it. */
-        dlSaveScheduleSnapshot(JSON.parse(JSON.stringify(SCH)));
         showToast('✓ Schedule loaded — '+SCH.count+' days');
         renderDailyLineup();
         try{ if(currentPage==='schedule')renderSchedule(); }catch(e){}
@@ -20414,11 +20401,11 @@ function dlUploadSchedule(input){
    in place.
 
    It reads and writes hk_dl_schedule, its own live record — edited
-   here freely (Auto-fill, cover chains, manual cells, Call-Offs).
-   The Daily Lineup does NOT read this one anymore: as of 2026-08-23,
-   Carlos asked for it to stay on exactly what he last uploaded from
-   Excel while this page is still in-progress work, not a finished
-   product — see dlLoadScheduleSnapshot, frozen at upload time only.
+   here freely (Auto-fill, cover chains, manual cells, Call-Offs). The
+   Daily Lineup reads this same live record too, as of 2026-09-01 —
+   Carlos asked for the two to stay connected now that this page is his
+   everyday tool, not the in-progress work it was on 2026-08-23 when he
+   first asked for a frozen, upload-only copy instead.
 
    Uploading the workbook again replaces the weeks it covers. That is
    the intended direction — Excel is still where he builds a new week —
@@ -23820,13 +23807,10 @@ function dlSetOcc(which,val){
 function renderDailyLineup(){
   var el=document.getElementById('dailyLineupContent');
   if(!el)return;
-  /* The snapshot, not the live Schedule Draft — this page has to gate
-     on (and report the day count of) whatever dlBuildPlan actually
-     reads, or "days loaded" could read a number the Lineup itself
-     isn't using. A schedule uploaded before this version exists in the
-     live copy but not yet as a snapshot; step 2 correctly asks for one
-     upload to create it, rather than silently building blank lineups. */
-  var S=dlLoadSections(), SCH=dlLoadScheduleSnapshot();
+  /* The live Schedule Draft — this page has to gate on (and report the
+     day count of) whatever dlBuildPlan actually reads, or "days loaded"
+     could read a number the Lineup itself isn't using. */
+  var S=dlLoadSections(), SCH=dlLoadSchedule();
   var html='';
 
   /* Two hidden inputs, reachable from wherever the page needs them —
