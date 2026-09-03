@@ -1393,7 +1393,46 @@ module.exports = {
     const SCH21gcW = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', 'R-OFF']] } } };
     win.schedApplyLinkedPeopleForDate(SCH21gcW, ds21[0], { crew: 'gra', name: 'Gabriela Cuevas' });
     t.eq(SCH21gcW.days[ds21[0]].gra[0][1], '1', "the cell Carlos just set to working STAYS working — this is the reported bug");
-    t.eq(SCH21gcW.days[ds21[0]].lobby[0][1], '1', "and the other crew's stale R-OFF is released to match, instead of reverting him");
+    t.eq(SCH21gcW.days[ds21[0]].lobby[0][1], 'ROOMS', "and the other crew's stale R-OFF is released — as ROOMS, not a plain '1', since she's working Rooms that day, not Lobby");
+
+    // ── Carlos's follow-up the same day: with both cells reading '1' the
+    // grid said she was working Lobby that Sunday, which isn't true.
+    // Marking her working on Room Attendant now relabels the Lobby row
+    // ROOMS — where she actually is — even when Lobby already read a
+    // plain '1' and there was no absence to reconcile. ──
+    const SCH21rm = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', '1']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21rm, ds21[0], { crew: 'gra', name: 'Gabriela Cuevas' });
+    t.eq(SCH21rm.days[ds21[0]].lobby[0][1], 'ROOMS', "a Lobby row still reading a plain '1' is relabeled ROOMS when she's marked working on Room Attendant");
+    t.eq(SCH21rm.days[ds21[0]].gra[0][1], '1', 'and the Room Attendant cell he actually edited is untouched');
+
+    // ROOMS must not count toward Lobby's own headcount — she isn't
+    // there. schedDayTotal only counts a number or that crew's own
+    // cover label, so this falls out for free; asserted so a future
+    // change to the total can't quietly start double-counting her.
+    t.eq(win.schedDayTotal(SCH21rm, ds21[0], 'lobby'), 0, "a ROOMS cell adds nothing to Lobby's total — she's working Rooms, not Lobby");
+
+    // But it IS a day worked, same as any other cross-crew label.
+    t.assert(win.schedIsWorkDay('ROOMS'), "ROOMS still counts as a worked day in the Days column, like LOBBY/HOUSEMAN/TAILOR");
+
+    // The relabel never argues with a deliberate decision: putting her
+    // genuinely on Lobby holds, and does NOT get flipped back to ROOMS
+    // on the next render — the deadlock this whole pair keeps risking.
+    const SCH21rm2 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', '1']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21rm2, ds21[0], { crew: 'lobby', name: 'Gabriela' });
+    t.eq(SCH21rm2.days[ds21[0]].lobby[0][1], '1', 'editing the Lobby side to working leaves it working — no ROOMS relabel fighting him back');
+    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21rm2, ds21[0]), 'and a render-time pass over that same day reports no change, so it stays put');
+
+    // Anything he deliberately typed on the Lobby cell other than a
+    // plain '1' is left alone rather than being overwritten by ROOMS.
+    const SCH21rm3 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', 'PM']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21rm3, ds21[0], { crew: 'gra', name: 'Gabriela Cuevas' });
+    t.eq(SCH21rm3.days[ds21[0]].lobby[0][1], 'PM', 'a PM shift on the Lobby row is a real decision and is never relabeled ROOMS');
+
+    // Sandra has no awayLabel (Room Attendant / Laundry) — both working
+    // is a legitimate state there and nothing is relabeled.
+    const SCH21rm4 = { days: { [ds21[0]]: { gra: [['Sandra', '1']], laundry: [['Sandra', '1']] } } };
+    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21rm4, ds21[0], { crew: 'gra', name: 'Sandra' }), 'a linked pair with no away-label defined is left alone when both sides are working');
+    t.eq(SCH21rm4.days[ds21[0]].laundry[0][1], '1', "Sandra's Laundry row keeps its plain '1'");
 
     // Same in the other direction — editing the Lobby side back to
     // working releases Room Attendant's R-OFF.

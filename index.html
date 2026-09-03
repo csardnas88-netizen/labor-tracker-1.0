@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.44"/>
+<meta name="app-version" content="7.40.45"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.45', date:'2026-09-03',
+    features:['New "ROOMS" cell value on the Schedule, and Gabriela Cuevas\'s Lobby row now takes it automatically whenever she\'s marked working on Room Attendant — Carlos\'s ask right after the fix below. Releasing her Request Off left both her crews reading a plain "1", which said she was working Lobby that Sunday when she\'s really in Rooms. ROOMS names where she actually is, and unlike "1" it adds nothing to Lobby\'s own headcount, while still counting as a day worked in her Days column — the same way LOBBY/HOUSEMAN/TAILOR already behave. It only ever replaces a plain "1": a PM shift or any other label he deliberately put on that cell is left exactly as it is, and putting her genuinely on Lobby holds without being relabeled back.']
+  },
   {
     v:'7.40.44', date:'2026-09-03',
     fixes:['Fixed being unable to move Gabriela Cuevas off a Request Off back to a working day — Carlos\'s real report, Sunday September 6. She is listed on two crews (Room Attendant as "Gabriela Cuevas", Lobby as "Gabriela") and the two are linked so she can never be resting on one while working the other. But the link had no idea which side had just been edited, so it always resolved toward the absence: setting Room Attendant to a working day let Lobby\'s still-R-OFF pull it straight back, and setting Lobby to working let Room Attendant\'s R-OFF do exactly the same. That left no way at all to bring her back — it would have taken clearing both cells in the same instant, which the grid gives no way to do. The cell you just edited is now the one that wins, so a working edit releases the other crew instead of being reverted by it. Marking either side OFF/R-OFF still carries the exact status across to the other, unchanged, and a pass with no edit behind it (Auto-fill, an Excel upload, another device\'s data) still resolves toward the absence, since nothing there says which side is newer. Sandra (Room Attendant / Laundry) is linked the same way and gets the same fix.']
@@ -20611,7 +20615,7 @@ function schedUfExpectedForShift(SCH,pos,shiftIndex,ds){
    not on this list (a stray "0.75", a lowercase "off") is offered as an
    extra option on that cell, so opening the picker can never silently
    throw away something he typed in Excel. */
-var SCHED_VALUES=['','1','OFF','R-OFF','CALL-OFF','FLEX','VAC','PM','LOBBY','HOUSEMAN','TAILOR','LAUNDRY','TURNDOWN'];
+var SCHED_VALUES=['','1','OFF','R-OFF','CALL-OFF','FLEX','VAC','PM','LOBBY','ROOMS','HOUSEMAN','TAILOR','LAUNDRY','TURNDOWN'];
 /* Managers' own vocabulary — Carlos's ask: a plain "1" doesn't say
    anything useful for this crew (which shift?), so Managers gets its
    own dropdown instead of sharing every housekeeping crew's list.
@@ -21843,8 +21847,15 @@ function schedReleaseStaleLaundryLabels(SCH,ds){
    different days isn't a mistake (unlike Yesenia/Paty's duplicate rows
    earlier), he just needs her OFF day to actually carry over instead of
    the two crews disagreeing. */
+/* `awayLabel` — what THIS side's cell should read when the person is
+   working the OTHER crew that day. Carlos's ask: with Gabriela Cuevas
+   marked '1' on Room Attendant, her Lobby row reading a plain '1' too
+   said she was working Lobby that Sunday, which isn't true — she's in
+   Rooms. 'ROOMS' names where she actually is, and (unlike '1') doesn't
+   count toward Lobby's own headcount, since schedDayTotal only counts
+   a number or that crew's own cover label. */
 var SCHED_LINKED_PEOPLE=[
-  {a:{crew:'gra',name:'Gabriela Cuevas'}, b:{crew:'lobby',name:'Gabriela'}},
+  {a:{crew:'gra',name:'Gabriela Cuevas'}, b:{crew:'lobby',name:'Gabriela',awayLabel:'ROOMS'}},
   {a:{crew:'gra',name:'Sandra'}, b:{crew:'laundry',name:'Sandra'}}
 ];
 function _schedIsUnavailable(v){ return schedIsOff(v)||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); }
@@ -21872,9 +21883,12 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
     var bCell=schedCellFor(SCH,ds,pair.b.crew,pair.b.name);
     if(aCell===''||bCell==='')return;
     var aOff=_schedIsUnavailable(aCell), bOff=_schedIsUnavailable(bCell);
-    if(aOff===bOff)return;   // both resting or both working — nothing to reconcile
     var editedIsA=!!edited&&edited.crew===pair.a.crew&&dlNorm(edited.name)===dlNorm(pair.a.name);
     var editedIsB=!!edited&&edited.crew===pair.b.crew&&dlNorm(edited.name)===dlNorm(pair.b.name);
+    var bothSame=(aOff===bOff);
+    /* Both resting or both working, with no edit behind it: nothing to
+       reconcile, and nothing that says which side would be newer. */
+    if(bothSame&&!editedIsA&&!editedIsB)return;
     /* With no edited side named (Auto-fill, an Excel upload, another
        device's data on render) there's nothing to say which side is
        newer, so the absence still wins — the original behaviour, and
@@ -21887,10 +21901,19 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
     /* An absence mirrors its exact text, so a granted R-OFF stays
        visibly R-OFF on both crews. Coming back the other way there's no
        text worth copying (the edited cell could read PM, LOBBY,
-       LAUNDRY...) — the other crew just goes back to a plain working
-       day. */
-    var want=_schedIsUnavailable(srcCell)?srcCell:'1';
-    if(String(dstRow[1]||'').trim()!==want){ dstRow[1]=want; changed=true; }
+       LAUNDRY...) — the other crew goes to its awayLabel if it has one,
+       otherwise to a plain working day. */
+    var srcOff=_schedIsUnavailable(srcCell);
+    var want=srcOff?srcCell:(dst.awayLabel||'1');
+    var cur=String(dstRow[1]||'').trim();
+    if(cur===want)return;
+    /* Both sides already agree on working-vs-resting, so the ONLY thing
+       left worth doing is Carlos's relabel: he just marked her working
+       on this crew, and the other crew still reads a plain '1' as if
+       she were there too. Anything else he deliberately put in that
+       cell (PM, a cover label) is left exactly as it is. */
+    if(bothSame&&!(!srcOff&&dst.awayLabel&&cur==='1'))return;
+    dstRow[1]=want; changed=true;
   });
   return changed;
 }
@@ -22108,7 +22131,7 @@ var SCHED_XLS_COLORS={
   'LAUNDRY':  {bg:'FFF9EBEA',font:'FF7B241C'},
   'TAILOR':   {bg:'FFF9EBEA',font:'FF7B241C'},
   'TURNDOWN': {bg:'FFF9EBEA',font:'FF7B241C'},
-  'TURNDOWN': {bg:'FFF9EBEA',font:'FF7B241C'}
+  'ROOMS':    {bg:'FFF9EBEA',font:'FF7B241C'}
 };
 /* Real clock-in/clock-out times, confirmed with Carlos — separate from
    UNIFOCUS_STANDARDS' shift windows, which are Unifocus's own driver
