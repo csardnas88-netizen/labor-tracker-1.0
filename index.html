@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.46"/>
+<meta name="app-version" content="7.40.47"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.47', date:'2026-09-03',
+    changes:['Managers\' shift options are now AM / PM / MID instead of Open / Close / Mid — Carlos\'s ask. Off, R-Off, Vacation and Flex are unchanged. A week already saved with Open/Close still opens fine and keeps those cells; they simply show as an extra option on their own cell until they\'re picked over.'],
+    fixes:['Found while making that change: the Daily Lineup\'s "AM Coordinator" line has been printing empty every single day. It looks for a plain "1" the way every housekeeping crew is marked, but Managers stopped using "1" the day it got its own Open/Close/Mid vocabulary, so nothing on that crew could ever match — and the PM Coordinator line had the same problem, since "Close" is not "PM". Both now read Managers\' own shift names (and still accept the plain "1" that comes straight off the Excel upload, plus the old Open/Close, so an already-saved week doesn\'t lose its lineup). MID is deliberately on neither line: a mid shift spans both, and putting that name on a printed lineup on its own would be guessing at something Carlos places himself.','Managers\' daily total stays blank, the way it has always shown. Now that "PM" is one of that crew\'s own shift names, the total would otherwise have started counting a PM manager as 1 while leaving an AM or MID manager at 0 — a number that says less than the blank did.']
+  },
   {
     v:'7.40.46', date:'2026-09-03',
     fixes:['The ROOMS relabel added a moment ago now runs on its own for days already saved, instead of only at the moment Gabriela Cuevas\'s Room Attendant cell is edited — Carlos still had to type it by hand on the Sunday that was already in the file. Opening the week is now enough: any day where she reads "1" on Room Attendant and a plain "1" on Lobby repairs itself. The deliberate consequence, worth knowing: a "1" on Room Attendant always wins, so on a day she is genuinely working Lobby, clear the ROOM ATTENDANT cell rather than editing the Lobby one. Only a plain "1" is ever replaced — a PM shift or a cover label on that Lobby cell still survives untouched.']
@@ -20269,8 +20274,13 @@ function dlBuildPlan(ds){
   var day=SCH.days[ds];
   if(!day)return null;
   var P={ds:ds,sheet:day.sheet,occ:day.occ,dep:day.dep};
-  P.am_coord=day.mgr.filter(function(p){return dlIn(p[1]);}).map(function(p){return p[0];});
-  P.pm_coord=day.mgr.filter(function(p){return p[1]==='PM';}).map(function(p){return p[0];});
+  /* Managers use their own shift vocabulary (SCHED_VALUES_MGR), not the
+     plain '1' every housekeeping crew uses — so these two lines can't
+     just call dlIn like the rest below. Under the old Open/Close/Mid
+     wording nothing here matched at all and both coordinator lines
+     printed empty every day; see SCHED_MGR_AM / SCHED_MGR_PM. */
+  P.am_coord=day.mgr.filter(function(p){return _schedMgrIs(p[1],SCHED_MGR_AM);}).map(function(p){return p[0];});
+  P.pm_coord=day.mgr.filter(function(p){return _schedMgrIs(p[1],SCHED_MGR_PM);}).map(function(p){return p[0];});
   P.sup=S.sup.filter(function(p){return dlIn(dlLook(day,'sup',p[1]));}).map(function(p){return p[1];});
   P.sup_pm=(function(){var v=dlLook(day,'sup',S.sup_pm);return (v==='1'||v==='PM')?[S.sup_pm]:[];})();
   P.hm=S.hm.filter(function(p){return dlIn(dlLook(day,'hp',p[1]));}).map(function(p){return p[1];});
@@ -20626,10 +20636,26 @@ var SCHED_VALUES=['','1','OFF','R-OFF','CALL-OFF','FLEX','VAC','PM','LOBBY','ROO
    OFF/R-OFF/VAC/FLEX stay the exact same values every other crew
    already uses (schedIsOff/schedIsWorkDay check for these verbatim,
    and Request Off's R-OFF write-through depends on the literal string
-   'R-OFF') — only the "working" options change, from '1' to Open/
-   Close/Mid, which Carlos was already typing in by hand as ad-hoc
-   values before this existed. */
-var SCHED_VALUES_MGR=['','Open','Close','Mid','OFF','R-OFF','VAC','FLEX'];
+   'R-OFF') — only the "working" options change, from '1' to the shift
+   names, which Carlos was already typing in by hand as ad-hoc values
+   before this existed.
+   Those names went Open/Close/Mid -> AM/PM/MID at Carlos's ask. Not
+   just cosmetic: the Daily Lineup has always read this crew looking for
+   '1' (AM Coordinator) and 'PM' (PM Coordinator), so under the old
+   vocabulary BOTH coordinator lines came out empty every single day —
+   nothing on the mgr crew could ever match. 'PM' now matches by name,
+   and dlBuildPlan accepts 'AM' alongside '1'. Old saved weeks still
+   holding Open/Close are read too, so re-opening one doesn't blank the
+   lineup; a value not on this list is still offered as an extra option
+   on its own cell, so nothing Carlos typed is ever thrown away. */
+var SCHED_VALUES_MGR=['','AM','PM','MID','OFF','R-OFF','VAC','FLEX'];
+/* Which manager cell values put someone on each coordinator line.
+   MID is deliberately on neither: a mid shift spans both, and guessing
+   it onto one would silently put a name on a printed lineup Carlos
+   never put there. He sets that day by hand. */
+var SCHED_MGR_AM=['1','AM','Open'];
+var SCHED_MGR_PM=['PM','Close'];
+function _schedMgrIs(v,list){ v=String(v||'').trim().toUpperCase(); return list.some(function(x){ return x.toUpperCase()===v; }); }
 function schedValuesFor(bk){ return bk==='mgr'?SCHED_VALUES_MGR:SCHED_VALUES; }
 var SCHED_DAYNAMES=['Saturday','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday'];
 var schedViewWeekStart=null;
@@ -20700,7 +20726,13 @@ function schedDayTotal(SCH,ds,bk){
   var ownLabel=_schedCrewLabel(bk);
   arr.forEach(function(p){
     var v=String(p[1]||'').trim();
-    if(v==='PM'){ t+=1; return; }
+    /* Managers are excluded: that crew's whole working vocabulary is
+       shift names (AM/PM/MID), and counting only the PM ones would
+       print a total of 1 on a day with a PM manager and a blank on a
+       day with an AM manager — worse than the blank Managers has always
+       shown. Left exactly as it was before AM/PM/MID replaced
+       Open/Close/Mid, which nothing counted either. */
+    if(v==='PM'&&bk!=='mgr'){ t+=1; return; }
     if(ownLabel&&v===ownLabel){ t+=1; return; }
     var n=parseFloat(v); if(!isNaN(n))t+=n;
   });
@@ -22140,6 +22172,10 @@ function schedAutoFill(){
 var SCHED_XLS_COLORS={
   '1':      {bg:'FFEBF5FB',font:'FF1B2B4B'},
   'PM':     {bg:'FFEBF5FB',font:'FF1A5276'},
+  'AM':     {bg:'FFEBF5FB',font:'FF1B2B4B'},
+  'MID':    {bg:'FFEBF5FB',font:'FF1B2B4B'},
+  /* Managers' old wording, kept so re-exporting a week saved before
+     AM/PM/MID still comes out colored rather than bare. */
   'Open':   {bg:'FFEBF5FB',font:'FF1B2B4B'},
   'Close':  {bg:'FFEBF5FB',font:'FF1B2B4B'},
   'Mid':    {bg:'FFEBF5FB',font:'FF1B2B4B'},
@@ -22161,7 +22197,7 @@ var SCHED_XLS_COLORS={
    two would print the wrong time on a real business document. Export
    only (schedExportExcel below); the on-screen grid stays as plain
    codes since it has to stay compact and editable.
-   Managers is deliberately absent: Carlos marks that crew "Open"/"Close"
+   Managers is deliberately absent: Carlos marks that crew AM/PM/MID
    by hand rather than a shift-time lookup, and Ingrid/Rebeca's "PM" cells
    stay as plain "PM" text, same as they render on screen. */
 /* Plain hyphen, not an en dash — the en dash character didn't render

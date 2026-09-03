@@ -1175,15 +1175,25 @@ module.exports = {
     t.eq(win.schedShiftTimeText('gra', ds21[3]), '8:15 AM - 4:45 PM', 'Room Attendant weekday');
     t.eq(win.schedShiftTimeText('td', ds21[0]), '5:00 PM - 11:00 PM', 'Turndown/GRA is the same every day of the week');
     t.eq(win.schedShiftTimeText('mgr', ds21[0]), null,
-      'Managers has no shift-time lookup — Carlos marks that crew Open/Close by hand instead');
+      'Managers has no shift-time lookup — Carlos marks that crew AM/PM/MID by hand instead');
 
     // Carlos's ask: Managers gets its own dropdown vocabulary — a plain
     // "1" says nothing useful for a shift-based crew — while every other
-    // crew keeps the full housekeeping list unchanged.
-    t.eq(win.schedValuesFor('mgr').join(','), ',Open,Close,Mid,OFF,R-OFF,VAC,FLEX',
-      "Managers' own dropdown offers exactly Open/Close/Mid/Off/R-Off/Vac/Flex, no LOBBY/HOUSEMAN/TAILOR/LAUNDRY/'1'");
+    // crew keeps the full housekeeping list unchanged. Renamed from
+    // Open/Close/Mid to AM/PM/MID at his ask.
+    t.eq(win.schedValuesFor('mgr').join(','), ',AM,PM,MID,OFF,R-OFF,VAC,FLEX',
+      "Managers' own dropdown offers exactly AM/PM/MID/Off/R-Off/Vac/Flex, no LOBBY/HOUSEMAN/TAILOR/LAUNDRY/'1'");
     t.eq(win.schedValuesFor('gra').join(','), win.SCHED_VALUES.join(','),
       'every other crew still gets the full shared housekeeping vocabulary, unchanged');
+
+    // Managers' total stays blank, exactly as it was under Open/Close/Mid.
+    // Counting only the PM ones (the one shift name schedDayTotal treats
+    // as a real body elsewhere) would print "1" on a day with a PM
+    // manager and nothing on a day with an AM manager — worse than the
+    // blank this crew has always shown.
+    const SCH21mg = { days: { [ds21[0]]: { mgr: [['Rebeca', 'AM'], ['Ingrid', 'PM'], ['Alejandro', 'MID']] } } };
+    t.eq(win.schedDayTotal(SCH21mg, ds21[0], 'mgr'), 0,
+      "a PM manager no longer quietly counts as 1 in Managers' own total while AM/MID count 0");
 
     // Carlos's real report: Vanesa/Sarahi are PM Public Area Attendants,
     // but the exported Excel printed 7:00 AM - 3:30 PM (Lobby's AM time)

@@ -223,6 +223,25 @@ module.exports = {
     t.eq(P.sup_pm.join(','), 'Yanira', 'the PM supervisor is picked up from her PM code, not a 1');
     t.eq(P.hm.join(','), 'Mauricia,David,Diana', 'housemen in, with the floater appended');
     t.eq(P.pm_coord.join(','), 'Ingrid', 'PM coordinator');
+    // Managers use their own shift vocabulary, so these two lines can't
+    // just look for a plain '1' like every housekeeping crew. Both the
+    // legacy '1' (this fixture, straight off Carlos's workbook) and the
+    // AM/PM names the Schedule's own picker now writes must resolve.
+    t.eq(P.am_coord.join(','), 'Carlos,Manny', "AM coordinators come off the managers block, reading Excel's plain '1'");
+    const mgrSch = win.dlLoadSchedule();
+    mgrSch.days['2026-08-14'].mgr = [['Carlos', 'AM'], ['Manny', 'MID'], ['Ingrid', 'PM']];
+    win.dlSaveSchedule(mgrSch);
+    const Pmgr = win.dlBuildPlan('2026-08-14');
+    t.eq(Pmgr.am_coord.join(','), 'Carlos', "the Schedule picker's own 'AM' resolves too, not just Excel's '1'");
+    t.eq(Pmgr.pm_coord.join(','), 'Ingrid', "and 'PM' still resolves — it always did, which is why only the AM line was ever blank");
+    t.eq(Pmgr.am_coord.concat(Pmgr.pm_coord).indexOf('Manny'), -1,
+      'MID is deliberately on neither line — a mid shift spans both and Carlos places that day himself');
+    const mgrSch2 = win.dlLoadSchedule();
+    mgrSch2.days['2026-08-14'].mgr = [['Carlos', 'Open'], ['Manny', '1'], ['Ingrid', 'Close']];
+    win.dlSaveSchedule(mgrSch2);
+    const PmgrOld = win.dlBuildPlan('2026-08-14');
+    t.eq(PmgrOld.am_coord.join(','), 'Carlos,Manny', 'a week saved under the old Open/Close wording still builds a lineup');
+    t.eq(PmgrOld.pm_coord.join(','), 'Ingrid', "old 'Close' still reads as the PM coordinator");
     t.eq(P.td.join(','), 'Guadalupe,Andrea,Lorena', 'turndown: the one range owner in, plus both floaters');
     t.eq(P.night.join(','), 'Melvin,Luis', 'overnight');
 
