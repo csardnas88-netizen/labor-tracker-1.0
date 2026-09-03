@@ -1414,13 +1414,23 @@ module.exports = {
     // But it IS a day worked, same as any other cross-crew label.
     t.assert(win.schedIsWorkDay('ROOMS'), "ROOMS still counts as a worked day in the Days column, like LOBBY/HOUSEMAN/TAILOR");
 
-    // The relabel never argues with a deliberate decision: putting her
-    // genuinely on Lobby holds, and does NOT get flipped back to ROOMS
-    // on the next render — the deadlock this whole pair keeps risking.
+    // Carlos's follow-up ask: he still had to type ROOMS by hand on days
+    // already sitting in the file, so the relabel must ALSO run on the
+    // plain render-time pass with no edit behind it — unlike everything
+    // else in this function, a '1' on Room Attendant is simply the fact
+    // that decides it, no "which side is newer" needed.
     const SCH21rm2 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', '1']] } } };
-    win.schedApplyLinkedPeopleForDate(SCH21rm2, ds21[0], { crew: 'lobby', name: 'Gabriela' });
-    t.eq(SCH21rm2.days[ds21[0]].lobby[0][1], '1', 'editing the Lobby side to working leaves it working — no ROOMS relabel fighting him back');
-    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21rm2, ds21[0]), 'and a render-time pass over that same day reports no change, so it stays put');
+    t.assert(win.schedApplyLinkedPeopleForDate(SCH21rm2, ds21[0]), 'a render-time pass with no edit behind it still reports the relabel');
+    t.eq(SCH21rm2.days[ds21[0]].lobby[0][1], 'ROOMS', 'a day already saved with both cells on "1" repairs itself on open — no retyping by hand');
+    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21rm2, ds21[0]), 'and a second pass reports no change, so it settles instead of re-saving forever');
+
+    // The deliberate consequence, and the reason this can't deadlock:
+    // a '1' on Room Attendant always wins, so putting her genuinely on
+    // Lobby is done by clearing the ROOM ATTENDANT cell, not the Lobby
+    // one. With Room Attendant blank, her Lobby '1' is left alone.
+    const SCH21rm2b = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '']], lobby: [['Gabriela', '1']] } } };
+    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21rm2b, ds21[0]), 'with Room Attendant blank there is nothing to reconcile');
+    t.eq(SCH21rm2b.days[ds21[0]].lobby[0][1], '1', 'clearing the Room Attendant cell is how she genuinely goes on Lobby — that "1" is never relabeled');
 
     // Anything he deliberately typed on the Lobby cell other than a
     // plain '1' is left alone rather than being overwritten by ROOMS.

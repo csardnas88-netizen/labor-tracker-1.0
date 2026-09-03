@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.45"/>
+<meta name="app-version" content="7.40.46"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.46', date:'2026-09-03',
+    fixes:['The ROOMS relabel added a moment ago now runs on its own for days already saved, instead of only at the moment Gabriela Cuevas\'s Room Attendant cell is edited — Carlos still had to type it by hand on the Sunday that was already in the file. Opening the week is now enough: any day where she reads "1" on Room Attendant and a plain "1" on Lobby repairs itself. The deliberate consequence, worth knowing: a "1" on Room Attendant always wins, so on a day she is genuinely working Lobby, clear the ROOM ATTENDANT cell rather than editing the Lobby one. Only a plain "1" is ever replaced — a PM shift or a cover label on that Lobby cell still survives untouched.']
+  },
   {
     v:'7.40.45', date:'2026-09-03',
     features:['New "ROOMS" cell value on the Schedule, and Gabriela Cuevas\'s Lobby row now takes it automatically whenever she\'s marked working on Room Attendant — Carlos\'s ask right after the fix below. Releasing her Request Off left both her crews reading a plain "1", which said she was working Lobby that Sunday when she\'s really in Rooms. ROOMS names where she actually is, and unlike "1" it adds nothing to Lobby\'s own headcount, while still counting as a day worked in her Days column — the same way LOBBY/HOUSEMAN/TAILOR already behave. It only ever replaces a plain "1": a PM shift or any other label he deliberately put on that cell is left exactly as it is, and putting her genuinely on Lobby holds without being relabeled back.']
@@ -21885,6 +21889,22 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
     var aOff=_schedIsUnavailable(aCell), bOff=_schedIsUnavailable(bCell);
     var editedIsA=!!edited&&edited.crew===pair.a.crew&&dlNorm(edited.name)===dlNorm(pair.a.name);
     var editedIsB=!!edited&&edited.crew===pair.b.crew&&dlNorm(edited.name)===dlNorm(pair.b.name);
+    /* Carlos's rule, asked for outright after having to retype it by
+       hand: whenever she is working her home crew (a), the other crew's
+       row must say WHERE she is rather than a plain '1', which reads as
+       if she were working there too. Unlike everything below it this
+       needs no notion of which side is newer — a '1' on Room Attendant
+       is simply the fact that decides it — so it runs on every pass,
+       including the render-time self-heal that repairs days already
+       sitting in the file.
+       The consequence, deliberate: to put her genuinely on Lobby, change
+       the ROOM ATTENDANT cell (blank or OFF), not the Lobby one. A '1'
+       left on Room Attendant always wins. Only a plain '1' is replaced,
+       so a PM shift or a cover label typed on the Lobby cell survives. */
+    if(pair.b.awayLabel&&!aOff&&!bOff&&bCell==='1'){
+      var bRowAway=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
+      if(bRowAway){ bRowAway[1]=pair.b.awayLabel; bCell=pair.b.awayLabel; changed=true; }
+    }
     var bothSame=(aOff===bOff);
     /* Both resting or both working, with no edit behind it: nothing to
        reconcile, and nothing that says which side would be newer. */
