@@ -1382,6 +1382,45 @@ module.exports = {
     win.schedApplyLinkedPeopleForDate(SCH21gc4, ds21[0]);
     t.eq(SCH21gc4.days[ds21[0]].gra[0][1], 'OFF', 'with no Lobby row at all that week, her Room Attendant cell is simply left alone');
 
+    // ── Carlos's real report, Sunday Sept 6: he could not move Gabriela
+    // Cuevas off her Request Off back to a working day. The link was
+    // symmetric with no idea which side was newer, so it always resolved
+    // toward the OFF side: set Room Attendant to '1' and Lobby's
+    // still-R-OFF pulled it straight back, set Lobby to '1' and Room
+    // Attendant's R-OFF did the same — a deadlock only breakable by
+    // clearing both cells in the same instant, which the grid gives no
+    // way to do. Naming the just-edited side makes it authoritative. ──
+    const SCH21gcW = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', 'R-OFF']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21gcW, ds21[0], { crew: 'gra', name: 'Gabriela Cuevas' });
+    t.eq(SCH21gcW.days[ds21[0]].gra[0][1], '1', "the cell Carlos just set to working STAYS working — this is the reported bug");
+    t.eq(SCH21gcW.days[ds21[0]].lobby[0][1], '1', "and the other crew's stale R-OFF is released to match, instead of reverting him");
+
+    // Same in the other direction — editing the Lobby side back to
+    // working releases Room Attendant's R-OFF.
+    const SCH21gcW2 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', 'R-OFF']], lobby: [['Gabriela', '1']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21gcW2, ds21[0], { crew: 'lobby', name: 'Gabriela' });
+    t.eq(SCH21gcW2.days[ds21[0]].lobby[0][1], '1', 'editing the Lobby side to working holds too');
+    t.eq(SCH21gcW2.days[ds21[0]].gra[0][1], '1', "and Room Attendant's R-OFF is released rather than winning");
+
+    // Naming the edited side does NOT weaken the original direction:
+    // setting one side OFF still carries the exact status across.
+    const SCH21gcW3 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', 'R-OFF']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21gcW3, ds21[0], { crew: 'lobby', name: 'Gabriela' });
+    t.eq(SCH21gcW3.days[ds21[0]].gra[0][1], 'R-OFF', 'marking the Lobby side R-OFF still writes a real R-OFF onto Room Attendant');
+
+    // A pass with no edited side named (Auto-fill, an Excel upload,
+    // another device's data on render) keeps the old absence-wins rule,
+    // since nothing there says which side is newer.
+    const SCH21gcW4 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', 'R-OFF']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21gcW4, ds21[0]);
+    t.eq(SCH21gcW4.days[ds21[0]].gra[0][1], 'R-OFF', 'with no edited side named, the absence still wins — the safe default for a status nobody just typed');
+
+    // And an edit naming a DIFFERENT person leaves this pair on the
+    // default rule too, rather than being treated as authoritative.
+    const SCH21gcW5 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', 'OFF']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21gcW5, ds21[0], { crew: 'gra', name: 'Sandra' });
+    t.eq(SCH21gcW5.days[ds21[0]].gra[0][1], 'OFF', "an unrelated person's edit doesn't make Gabriela's working cell authoritative");
+
     // ── Carlos's real report, v7.40.28: Sandra genuinely works both Room
     // Attendant and Laundry on different days — not a mistake, unlike
     // Yesenia/Paty's stray duplicate rows earlier — but her OFF day on

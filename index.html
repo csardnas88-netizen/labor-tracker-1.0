@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.43"/>
+<meta name="app-version" content="7.40.44"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.44', date:'2026-09-03',
+    fixes:['Fixed being unable to move Gabriela Cuevas off a Request Off back to a working day — Carlos\'s real report, Sunday September 6. She is listed on two crews (Room Attendant as "Gabriela Cuevas", Lobby as "Gabriela") and the two are linked so she can never be resting on one while working the other. But the link had no idea which side had just been edited, so it always resolved toward the absence: setting Room Attendant to a working day let Lobby\'s still-R-OFF pull it straight back, and setting Lobby to working let Room Attendant\'s R-OFF do exactly the same. That left no way at all to bring her back — it would have taken clearing both cells in the same instant, which the grid gives no way to do. The cell you just edited is now the one that wins, so a working edit releases the other crew instead of being reverted by it. Marking either side OFF/R-OFF still carries the exact status across to the other, unchanged, and a pass with no edit behind it (Auto-fill, an Excel upload, another device\'s data) still resolves toward the absence, since nothing there says which side is newer. Sandra (Room Attendant / Laundry) is linked the same way and gets the same fix.']
+  },
   {
     v:'7.40.43', date:'2026-09-02',
     changes:['The Schedule\'s Lobby crew is now labeled just "Lobby" instead of "AM Lobby", on both the Schedule Draft page and the exported Excel — Carlos\'s ask, since that crew covers both shifts. The Excel importer is unaffected: it still matches the literal "AM lobby" heading in his own workbook, which is a separate thing from what the app displays.'],
@@ -20822,7 +20826,7 @@ function schedSetCell(bk,idx,name,ds,val,el){
   var linkedMember=SCHED_LINKED_PEOPLE.some(function(pair){
     return (pair.a.crew===bk&&dlNorm(pair.a.name)===dlNorm(name))||(pair.b.crew===bk&&dlNorm(pair.b.name)===dlNorm(name));
   });
-  if(linkedMember)schedApplyLinkedPeopleForDate(SCH,ds);
+  if(linkedMember)schedApplyLinkedPeopleForDate(SCH,ds,{crew:bk,name:name});
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   if(chainMember||isVictorianoLaundryEdit||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||linkedMember){
@@ -21849,20 +21853,44 @@ function _schedIsUnavailable(v){ return schedIsOff(v)||schedStatusIs(v,'TAILOR')
    whether the record needs saving back — the live single-edit callers
    (schedSetCell, schedAutoFill) already know they need to save
    regardless and simply ignore this. */
-function schedApplyLinkedPeopleForDate(SCH,ds){
+/* `edited` ({crew,name}) names the cell Carlos just typed into, and that
+   side is authoritative for this pass.
+
+   Carlos's real report (Gabriela Cuevas, Sunday Sept 6): without it,
+   the link was symmetric with no idea which side was newer, so it
+   always resolved toward the OFF side — and bringing her back from
+   R-OFF to working became impossible on EITHER crew. Set Room
+   Attendant to '1' and Lobby's still-R-OFF pulled it straight back;
+   set Lobby to '1' and Room Attendant's R-OFF did the same. A deadlock
+   only breakable by clearing both cells in the same instant, which the
+   grid gives no way to do. Naming the edited side lets a working edit
+   release the other crew instead of being reverted by it. */
+function schedApplyLinkedPeopleForDate(SCH,ds,edited){
   var changed=false;
   SCHED_LINKED_PEOPLE.forEach(function(pair){
     var aCell=schedCellFor(SCH,ds,pair.a.crew,pair.a.name);
     var bCell=schedCellFor(SCH,ds,pair.b.crew,pair.b.name);
     if(aCell===''||bCell==='')return;
     var aOff=_schedIsUnavailable(aCell), bOff=_schedIsUnavailable(bCell);
-    if(aOff&&!bOff){
-      var bRow=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
-      if(bRow&&bRow[1]!==aCell){ bRow[1]=aCell; changed=true; }
-    } else if(bOff&&!aOff){
-      var aRow=schedRawCell(SCH,ds,pair.a.crew,pair.a.name);
-      if(aRow&&aRow[1]!==bCell){ aRow[1]=bCell; changed=true; }
-    }
+    if(aOff===bOff)return;   // both resting or both working — nothing to reconcile
+    var editedIsA=!!edited&&edited.crew===pair.a.crew&&dlNorm(edited.name)===dlNorm(pair.a.name);
+    var editedIsB=!!edited&&edited.crew===pair.b.crew&&dlNorm(edited.name)===dlNorm(pair.b.name);
+    /* With no edited side named (Auto-fill, an Excel upload, another
+       device's data on render) there's nothing to say which side is
+       newer, so the absence still wins — the original behaviour, and
+       the safe direction for a status nobody just typed. */
+    var srcIsA=editedIsA?true:(editedIsB?false:aOff);
+    var src=srcIsA?pair.a:pair.b, dst=srcIsA?pair.b:pair.a;
+    var srcCell=srcIsA?aCell:bCell;
+    var dstRow=schedRawCell(SCH,ds,dst.crew,dst.name);
+    if(!dstRow)return;
+    /* An absence mirrors its exact text, so a granted R-OFF stays
+       visibly R-OFF on both crews. Coming back the other way there's no
+       text worth copying (the edited cell could read PM, LOBBY,
+       LAUNDRY...) — the other crew just goes back to a plain working
+       day. */
+    var want=_schedIsUnavailable(srcCell)?srcCell:'1';
+    if(String(dstRow[1]||'').trim()!==want){ dstRow[1]=want; changed=true; }
   });
   return changed;
 }
