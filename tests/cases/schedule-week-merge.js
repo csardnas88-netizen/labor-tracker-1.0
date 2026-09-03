@@ -75,15 +75,16 @@ module.exports = {
     t.eq(after.days['2026-08-29'].gra[0][1], '1',
       "the day both devices share is still there (identical content either way here, so nothing to lose)");
 
-    // ── The genuine-conflict case still resolves by savedAt: if the
-    // remote side is newer AND both sides have the SAME day with
-    // different content, the newer one wins for that day — this stays
-    // a real merge, not "local always wins". ──
+    // ── The genuine-conflict case still resolves to whichever side
+    // actually edited that SPECIFIC day more recently (per-day _at,
+    // 2026-09-02 follow-up) — this stays a real merge, not "local
+    // always wins". A real device saving this day under the current
+    // code would carry its own _at, so the fixture does too. ──
     getAllRows = [{
       key: 'dl_schedule',
       value: JSON.stringify({
         days: {
-          '2026-08-29': { sheet: 't', occ: '', dep: '', tdOcc: '', gra: [['Rolando', 'OFF']] } // conflicting edit
+          '2026-08-29': { sheet: 't', occ: '', dep: '', tdOcc: '', gra: [['Rolando', 'OFF']], _at: Date.now() + 120000 } // conflicting edit, genuinely newer
         },
         count: 1,
         savedAt: new Date(Date.now() + 60000).toISOString() // clearly newer than anything above

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.41"/>
+<meta name="app-version" content="7.40.43"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,12 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.43', date:'2026-09-02',
+    changes:['The Schedule\'s Lobby crew is now labeled just "Lobby" instead of "AM Lobby", on both the Schedule Draft page and the exported Excel — Carlos\'s ask, since that crew covers both shifts. The Excel importer is unaffected: it still matches the literal "AM lobby" heading in his own workbook, which is a separate thing from what the app displays.'],
+    features:['Call-Offs now re-apply themselves to the Schedule automatically, with no button to press — Carlos\'s ask after Guadalupe Cruz\'s CALL-OFF drifted back to a working day. Unlike a Request Off (a plan he might legitimately revise, which is why that one keeps its manual re-sync button), a Call-Off is a record of a shift already missed, so the cell simply keeps saying so until the record itself is deleted. Deliberately narrow so it can never argue with a real decision: it only ever repairs a cell that has drifted back to WORKING, and leaves any cell already showing an absence — OFF, R-OFF, Vacation, Flex — exactly as it is.'],
+    fixes:['Sync audit, Carlos\'s real report: Guadalupe Cruz\'s Call-Off showed on the Schedule Draft, then reverted hours later — confirmed against Supabase (three different accounts — Carlos, Rebeca, Ingrid — all save the schedule as one whole record with no server-side merge). A device holding a stale local copy of just that one day pushed its own snapshot for an unrelated edit elsewhere, and because ITS save looked newest overall, it silently reverted a day it never actually touched — the same whole-blob-clobber class already fixed for Training, just one level more subtle here since the 2026-08-30 fix already unions day-KEYS but still decided a day BOTH sides already had by a single whole-record timestamp. Fixed two ways together: each day now stamps its own edit time the moment it actually changes, so a merge can tell "this device\'s stale carryover" apart from "this device\'s real edit" one day at a time; and saving now fetches the current server copy and merges it in before pushing, so a stale device\'s own save can no longer silently overwrite a day it never touched.']
+  },
   {
     v:'7.40.41', date:'2026-09-01',
     features:['The Daily Lineup now reads the Schedule Draft page directly, live — Carlos\'s ask. From 2026-08-23 it deliberately read a frozen copy saved only at upload time, so his in-progress editing there (Auto-fill, cover chains, manual cells, Call-Offs) wouldn\'t leak into the Lineup he prints and runs the hotel from. Now that the Schedule Draft page is his everyday tool, the two are reconnected: any edit there — Auto-fill, a manual cell, a Call-Off, or a real Excel re-upload — shows up on the Lineup immediately, no separate upload step needed.']
@@ -19922,7 +19928,69 @@ function dlLoadSections(){ try{var s=localStorage.getItem('hk_dl_sections');retu
    was in which copy won the sync race, not in the parsing. */
 function dlSaveSections(o){ o.savedAt=new Date().toISOString(); safeSetItem('hk_dl_sections',JSON.stringify(o)); try{supaPut('dl_sections',o);}catch(e){} }
 function dlLoadSchedule(){ try{var s=localStorage.getItem('hk_dl_schedule');return s?JSON.parse(s):null;}catch(e){return null;} }
-function dlSaveSchedule(o){ safeSetItem('hk_dl_schedule',JSON.stringify(o)); try{supaPut('dl_schedule',o);}catch(e){} }
+/* Carlos's real report, 2026-09-02: Guadalupe Cruz's Call-Off (marked
+   CALL-OFF on her Turndown cell for Sept 1) showed on the Schedule
+   Draft, then quietly reverted back to '1' hours later — confirmed
+   against Supabase: her cell really is back to '1' server-side, even
+   though the call-off record still shows it was applied. Root cause,
+   traced through the real audit log: THREE different accounts
+   (Carlos, Rebeca, Ingrid) all save dl_schedule as the same one whole
+   blob with NO server-side merge (supaPut is a raw overwrite) — the
+   exact class of bug already fixed for Training (saveTrainingsMerged).
+   A device holding a stale local copy of just that one day — it never
+   pulled the call-off in — pushes its own snapshot for an unrelated
+   edit elsewhere, and since the record's own savedAt is now "this
+   instant", it looks newest even though the ONE DAY it's carrying is
+   actually older. The 2026-08-30 fix below already unions day-KEYS so
+   a whole missing week can't vanish, but a day BOTH sides already have
+   was still decided by that single whole-record timestamp — not
+   granular enough to protect one specific day's edit from a stale
+   device's unrelated save.
+   Fixed two ways, together: (1) stamp each day with its own _at the
+   moment its content actually changes on THIS device (below), so
+   _schedMergeRecord can compare per-day instead of per-record; (2) a
+   push now fetches the current remote copy and merges it in first
+   (same pattern as saveTrainingsMerged), so even the stale device's
+   OWN push can't silently overwrite a day it never actually touched. */
+function dlSaveSchedule(o){
+  if(o&&o.days){
+    var prev=null;
+    try{ var s=localStorage.getItem('hk_dl_schedule'); prev=s?JSON.parse(s):null; }catch(e){}
+    var now=Date.now();
+    Object.keys(o.days).forEach(function(ds){
+      var prevDay=prev&&prev.days&&prev.days[ds];
+      if(!prevDay||JSON.stringify(prevDay)!==JSON.stringify(o.days[ds]))o.days[ds]._at=now;
+    });
+  }
+  safeSetItem('hk_dl_schedule',JSON.stringify(o));
+  _fetchRemoteSchedule().then(function(remote){
+    var m=_schedMergeRecord(o,remote);
+    if(m.changed)safeSetItem('hk_dl_schedule',JSON.stringify(m.rec));
+    try{supaPut('dl_schedule',m.rec);}catch(e){}
+  }).catch(function(){ try{supaPut('dl_schedule',o);}catch(e){} });
+}
+/* Same reactive-401-retry gap as _fetchRemoteTrainings (see its own
+   comment) — authedFetch alone only refreshes proactively, before the
+   request goes out, not on a token that goes stale in the gap right
+   before it lands. Resolves to the parsed remote record, or null. */
+function _fetchRemoteSchedule(){
+  var url=SUPA_URL+"/rest/v1/labor_data?select=value&key=eq.dl_schedule";
+  function go(){ return authedFetch(url,{method:"GET"}); }
+  return go().then(function(r){
+    if(r.status===401){
+      return _authRefresh().then(function(ok){
+        if(!ok){ var e=new Error('session-expired'); throw e; }
+        return go();
+      });
+    }
+    return r;
+  }).then(function(r){
+    if(!r.ok)throw new Error('fetch-failed: '+r.status);
+    return r.json();
+  }).then(function(rows){
+    try{ return (rows&&rows[0])?JSON.parse(rows[0].value):null; }catch(e){ return null; }
+  });
+}
 /* Carlos's real bug, 2026-08-30: dl_schedule/dl_schedule_snapshot used
    to be pulled as one whole blob — whichever side had the newer
    top-level savedAt replaced the other ENTIRELY, including weeks it
@@ -19936,17 +20004,27 @@ function dlSaveSchedule(o){ safeSetItem('hk_dl_schedule',JSON.stringify(o)); try
    This unions day-keys (and the three person-level mark maps) instead
    of replacing wholesale: a day or mark either side is simply missing
    is always kept, never deleted just because the other side happens to
-   have a newer overall timestamp. Only a day/mark BOTH sides actually
-   have is decided by which side is newer — the same-day double-edit
-   case this can't fully resolve, but a far smaller loss than an entire
-   future week disappearing. */
+   have a newer overall timestamp.
+
+   2026-09-02 follow-up (Guadalupe Cruz's Call-Off): a day BOTH sides
+   already have used to be decided by that same single whole-record
+   timestamp too — not granular enough, since a device can hold a day
+   that's individually stale while its OWN save is, by definition,
+   "now". Each day compares by its own _at stamp (set in dlSaveSchedule
+   above) when both sides have one; a day saved before this existed has
+   no _at on either side, so it falls back to the old whole-record
+   comparison, same as always. */
 function _schedMergeRecord(local,remote){
   if(!remote||!remote.days)return {rec:local,changed:false};
   if(!local)return {rec:remote,changed:true};
   var remoteNewer=String(remote.savedAt||'')>String(local.savedAt||'');
   var merged={days:Object.assign({},local.days)};
   Object.keys(remote.days).forEach(function(ds){
-    if(!merged.days[ds]||remoteNewer)merged.days[ds]=remote.days[ds];
+    var l=merged.days[ds], r=remote.days[ds];
+    if(!l){ merged.days[ds]=r; return; }
+    var lAt=l._at||0, rAt=r._at||0;
+    if(lAt||rAt){ if(rAt>lAt)merged.days[ds]=r; return; }
+    if(remoteNewer)merged.days[ds]=r;
   });
   ['checkExempt','weekendPref','dayOffPref'].forEach(function(f){
     var mf=Object.assign({},local[f]||{});
@@ -20416,7 +20494,7 @@ var SCHED_BLOCKS=[
   {key:'laundry',label:'Laundry'},
   {key:'mgr',    label:'Managers'},
   {key:'sup',    label:'Supervisors', ratios:[{label:'departures each',num:'dep'}]},
-  {key:'lobby',  label:'AM Lobby'},
+  {key:'lobby',  label:'Lobby'},
   {key:'td',     label:'PM Turndown / GRA', occField:'tdOcc', ratios:[{label:'rooms each',num:'tdOcc'}]},
   {key:'pmhm',   label:'PM Houseman'},
   {key:'night',  label:'Overnight'},
@@ -20428,7 +20506,11 @@ var SCHED_BLOCKS=[
    staffed to standard, over, or short — per position, per day.
 
    Confirmed with Carlos rather than assumed:
-   - "AM Lobby" is Public Area Attendant.
+   - "Lobby" (labeled "AM Lobby" until 2026-09-02, when Carlos asked for
+     the plain name since the crew covers both shifts) is Public Area
+     Attendant. The Excel PARSER still matches the literal "AM lobby"
+     heading in his own workbook (dlParseSchedule) — that's the file's
+     text, not this display label, and the two are deliberately separate.
    - Room Attendant has no shift length anywhere in the app (its
      standard is a per-room rate, not a banded shift) — headcount uses
      the same 8h every other housekeeping shift uses.
@@ -21847,6 +21929,44 @@ function schedApplyCallOff(ds,empName,pos){
   renderSchedule();
   return {crew:m.crew,name:m.row[0],prevVal:prevVal};
 }
+/* Self-heal: re-applies every logged Call-Off whose Schedule cell has
+   drifted back to a working value. Carlos's ask, and he's right that
+   this shouldn't need a button the way Request Off's re-sync does —
+   a Request Off is a PLAN he might legitimately revise later, so
+   re-applying it silently could fight a deliberate change; a Call-Off
+   is a RECORD of a shift someone already missed, so the cell should
+   simply keep saying so until the record itself is deleted (which
+   already reverts it, via schedRevertCallOff).
+
+   Deliberately narrow, so it can only ever repair the drift and never
+   argue with a real decision: it re-marks ONLY a cell that currently
+   reads a working value ('1', 'PM', or a cover label like LOBBY /
+   HOUSEMAN / LAUNDRY / TURNDOWN). A cell already reading any kind of
+   absence — OFF, R-OFF, VAC, FLEX, TAILOR, or CALL-OFF itself — is
+   left exactly as it is, so a granted absence entered afterward always
+   wins and nothing is marked twice. Only call-offs that were
+   successfully written through in the first place (schedCrew is on the
+   record) are considered; one that never matched a row is still
+   Carlos's to place by hand, same as before. */
+function schedSyncCallOffMarks(SCH,dates){
+  if(!SCH||!SCH.days)return false;
+  var inWeek={}; (dates||[]).forEach(function(ds){ inWeek[ds]=1; });
+  var changed=false;
+  (loadCallOffs()||[]).forEach(function(c){
+    if(!c||!c.date||!c.schedCrew||!c.schedName)return;
+    if(!inWeek[c.date]||!SCH.days[c.date])return;
+    var row=schedRawCell(SCH,c.date,c.schedCrew,c.schedName);
+    if(!row)return;
+    var v=String(row[1]||'').trim();
+    if(v==='')return;                       // nothing scheduled — not ours to fill in
+    if(schedIsOff(v))return;                // OFF / R-OFF / VAC / FLEX already
+    if(schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'))return;
+    row[1]='CALL-OFF';
+    changed=true;
+  });
+  if(changed)dates.forEach(function(ds){ schedApplyCoverChainsForDate(SCH,ds); });
+  return changed;
+}
 /* Reverses schedApplyCallOff — only if the cell still reads CALL-OFF
    (if Carlos already changed it by hand since, that manual edit wins
    and is left alone). */
@@ -21883,7 +22003,7 @@ function schedAutoFill(){
   if(!loaded.length){ showToast('&#9888; Build or upload this week first.'); return; }
   var hasOcc=loaded.some(function(ds){ return (parseInt(SCH.days[ds].occ,10)||0)>0; });
   if(!hasOcc){ showToast('&#9888; Enter OCC for at least one day first.'); return; }
-  if(!confirm('Auto-fill this week?\n\nAny R-OFF already on the grid is kept. Laundry, Supervisors, AM Lobby, PM Turndown/GRA, AM Room Attendant, Houseman and PM Houseman are filled or replaced, plus Overnight\'s fixed pattern, Yanira\'s PM shift, the Lobby/Laundry cover chains, Jorge mirroring Victoriano and Andrea mirroring Sarahi when they\'re a direct Laundry/Lobby row, and the Houseman overflow backups. Managers is left untouched.'))return;
+  if(!confirm('Auto-fill this week?\n\nAny R-OFF already on the grid is kept. Laundry, Supervisors, Lobby, PM Turndown/GRA, AM Room Attendant, Houseman and PM Houseman are filled or replaced, plus Overnight\'s fixed pattern, Yanira\'s PM shift, the Lobby/Laundry cover chains, Jorge mirroring Victoriano and Andrea mirroring Sarahi when they\'re a direct Laundry/Lobby row, and the Houseman overflow backups. Managers is left untouched.'))return;
 
   var wk=schedWeekIndexOf(dates[0]);
   Object.keys(SCHED_AUTO_OFFCOUNT).forEach(function(bk){
@@ -22541,6 +22661,15 @@ function renderSchedule(){
      not carrying over to Laundry. */
   if(SCH&&SCH.days&&schedApplyLinkedPeople(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   if(SCH&&SCH.days&&schedBackfillTdOcc(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
+  /* Same idea for Call-Offs — Carlos's ask, after Guadalupe Cruz's
+     CALL-OFF drifted back to '1'. Unlike the local-only repairs above,
+     this one saves through dlSaveSchedule so the correction actually
+     reaches the other devices instead of each one silently re-fixing
+     its own copy forever. */
+  if(SCH&&SCH.days&&schedSyncCallOffMarks(SCH,schedWeekDates())){
+    SCH.savedAt=new Date().toISOString();
+    try{ dlSaveSchedule(SCH); }catch(e){}
+  }
   var html='';
   html+='<input type="file" id="schedFileInput" accept=".xlsx,.xls" style="display:none;" onchange="dlUploadSchedule(this)">';
 
