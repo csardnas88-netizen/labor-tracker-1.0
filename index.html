@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.47"/>
+<meta name="app-version" content="7.40.48"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.48', date:'2026-09-03',
+    changes:['A manager marked MID now shows on the Daily Lineup\'s AM Coordinator line — Carlos\'s call, since a mid shift covers the morning. It was on neither line a moment ago, which meant a MID manager simply didn\'t appear on the lineup at all. Still only the AM line, never both at once.']
+  },
   {
     v:'7.40.47', date:'2026-09-03',
     changes:['Managers\' shift options are now AM / PM / MID instead of Open / Close / Mid — Carlos\'s ask. Off, R-Off, Vacation and Flex are unchanged. A week already saved with Open/Close still opens fine and keeps those cells; they simply show as an extra option on their own cell until they\'re picked over.'],
@@ -20650,10 +20654,11 @@ var SCHED_VALUES=['','1','OFF','R-OFF','CALL-OFF','FLEX','VAC','PM','LOBBY','ROO
    on its own cell, so nothing Carlos typed is ever thrown away. */
 var SCHED_VALUES_MGR=['','AM','PM','MID','OFF','R-OFF','VAC','FLEX'];
 /* Which manager cell values put someone on each coordinator line.
-   MID is deliberately on neither: a mid shift spans both, and guessing
-   it onto one would silently put a name on a printed lineup Carlos
-   never put there. He sets that day by hand. */
-var SCHED_MGR_AM=['1','AM','Open'];
+   MID goes on the AM line at Carlos's call — a mid shift covers the
+   morning, and leaving it off both lines meant a manager marked MID
+   simply vanished from the lineup. Matching is case-insensitive, so the
+   old 'Mid' from a week saved before AM/PM/MID lands there too. */
+var SCHED_MGR_AM=['1','AM','MID','Open'];
 var SCHED_MGR_PM=['PM','Close'];
 function _schedMgrIs(v,list){ v=String(v||'').trim().toUpperCase(); return list.some(function(x){ return x.toUpperCase()===v; }); }
 function schedValuesFor(bk){ return bk==='mgr'?SCHED_VALUES_MGR:SCHED_VALUES; }

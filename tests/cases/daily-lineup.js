@@ -232,10 +232,9 @@ module.exports = {
     mgrSch.days['2026-08-14'].mgr = [['Carlos', 'AM'], ['Manny', 'MID'], ['Ingrid', 'PM']];
     win.dlSaveSchedule(mgrSch);
     const Pmgr = win.dlBuildPlan('2026-08-14');
-    t.eq(Pmgr.am_coord.join(','), 'Carlos', "the Schedule picker's own 'AM' resolves too, not just Excel's '1'");
+    t.eq(Pmgr.am_coord.join(','), 'Carlos,Manny', "the Schedule picker's own 'AM' resolves too, not just Excel's '1' — and MID joins the AM line at Carlos's call, since a mid shift covers the morning");
     t.eq(Pmgr.pm_coord.join(','), 'Ingrid', "and 'PM' still resolves — it always did, which is why only the AM line was ever blank");
-    t.eq(Pmgr.am_coord.concat(Pmgr.pm_coord).indexOf('Manny'), -1,
-      'MID is deliberately on neither line — a mid shift spans both and Carlos places that day himself');
+    t.eq(Pmgr.pm_coord.indexOf('Manny'), -1, 'a MID manager lands on AM only, never on both lines at once');
     const mgrSch2 = win.dlLoadSchedule();
     mgrSch2.days['2026-08-14'].mgr = [['Carlos', 'Open'], ['Manny', '1'], ['Ingrid', 'Close']];
     win.dlSaveSchedule(mgrSch2);
