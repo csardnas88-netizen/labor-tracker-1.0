@@ -1646,19 +1646,25 @@ module.exports = {
     t.eq(afterAndreaEdit.days[ds21[1]].td[0][1], '1',
       "editing Andrea's own Turndown cell to '1' sticks — it no longer snaps back to LOBBY just because Sarahi happens to be off that day");
 
-    // Yesenia (PM Houseman): exactly 1 day off, forced deterministic via
-    // a pre-set R-OFF so the cover check lands on a known day. Paty
-    // covers on that day; every OTHER day, her Turndown cell now reads
-    // "TURNDOWN" instead of a bare "1" — Carlos's ask, so it's explicit
-    // which of her two jobs she's actually doing that day.
+    // Yesenia (PM Houseman): 2 days off a week — Carlos's real
+    // correction, 2026-09-05, up from 1 — forced deterministic via two
+    // pre-set R-OFFs so the cover check lands on known days (an
+    // algorithm-picked second day off would make the "every other day"
+    // assertion below non-deterministic). Paty covers on BOTH days;
+    // every OTHER day, her Turndown cell reads "TURNDOWN" instead of a
+    // bare "1" — Carlos's ask, so it's explicit which of her two jobs
+    // she's actually doing that day.
     const SCH21e = { days: {} };
     ds21.forEach((ds) => { SCH21e.days[ds] = { pmhm: [['Yesenia', '']], td: [['Paty', '1']] }; });
-    SCH21e.days[ds21[3]].pmhm[0][1] = 'R-OFF'; // Yesenia's one day off, forced to Tuesday
+    SCH21e.days[ds21[3]].pmhm[0][1] = 'R-OFF'; // Yesenia's first day off, forced to Tuesday
+    SCH21e.days[ds21[5]].pmhm[0][1] = 'R-OFF'; // and her second, forced to Thursday
     win.schedApplyYesenia(SCH21e, ds21, 0);
-    t.eq(SCH21e.days[ds21[3]].pmhm[0][1], 'R-OFF', "Yesenia's forced day off is unchanged");
-    t.eq(SCH21e.days[ds21[3]].td[0][1], 'HOUSEMAN', "Paty covers on Yesenia's day off");
-    ds21.forEach((ds, i) => { if (i !== 3) t.eq(SCH21e.days[ds].pmhm[0][1], '1', ds + ': Yesenia works every other day, exactly the 6-day pattern'); });
-    ds21.forEach((ds, i) => { if (i !== 3) t.eq(SCH21e.days[ds].td[0][1], 'TURNDOWN', ds + ": Paty's own Turndown days now read TURNDOWN, not a bare 1"); });
+    t.eq(SCH21e.days[ds21[3]].pmhm[0][1], 'R-OFF', "Yesenia's forced first day off is unchanged");
+    t.eq(SCH21e.days[ds21[5]].pmhm[0][1], 'R-OFF', "and her forced second day off is unchanged");
+    t.eq(SCH21e.days[ds21[3]].td[0][1], 'HOUSEMAN', "Paty covers on Yesenia's first day off");
+    t.eq(SCH21e.days[ds21[5]].td[0][1], 'HOUSEMAN', "and covers on her second day off too — Carlos's ask, she covers BOTH, not just one");
+    ds21.forEach((ds, i) => { if (i !== 3 && i !== 5) t.eq(SCH21e.days[ds].pmhm[0][1], '1', ds + ": Yesenia works every other day — a 2-off, 5-on week, and can include a Sunday like any other day"); });
+    ds21.forEach((ds, i) => { if (i !== 3 && i !== 5) t.eq(SCH21e.days[ds].td[0][1], 'TURNDOWN', ds + ": Paty's own Turndown days now read TURNDOWN, not a bare 1"); });
 
     // Carlos's real correction, 2026-08-31: Paty's own day off used to
     // be left alone if it happened to land on the same day as
@@ -1670,6 +1676,7 @@ module.exports = {
     const SCH21f = { days: {} };
     ds21.forEach((ds) => { SCH21f.days[ds] = { pmhm: [['Yesenia', '']], td: [['Paty', '1']] }; });
     SCH21f.days[ds21[3]].pmhm[0][1] = 'R-OFF';
+    SCH21f.days[ds21[5]].pmhm[0][1] = 'R-OFF'; // her other forced day off, kept out of the way of this collision
     SCH21f.days[ds21[3]].td[0][1] = 'OFF'; // Paty off too, same day
     win.schedApplyYesenia(SCH21f, ds21, 0);
     t.eq(SCH21f.days[ds21[3]].td[0][1], 'HOUSEMAN', "Paty's plain OFF colliding with Yesenia's day off is overridden — she covers instead of both being off at once");
@@ -1680,9 +1687,71 @@ module.exports = {
     const SCH21f2 = { days: {} };
     ds21.forEach((ds) => { SCH21f2.days[ds] = { pmhm: [['Yesenia', '']], td: [['Paty', '1']] }; });
     SCH21f2.days[ds21[3]].pmhm[0][1] = 'R-OFF';
+    SCH21f2.days[ds21[5]].pmhm[0][1] = 'R-OFF';
     SCH21f2.days[ds21[3]].td[0][1] = 'R-OFF'; // Paty's own GRANTED day off, same day
     win.schedApplyYesenia(SCH21f2, ds21, 0);
     t.eq(SCH21f2.days[ds21[3]].td[0][1], 'R-OFF', "Paty's own granted R-OFF still wins over the cover, unlike a plain algorithmic OFF");
+
+    // ── Carlos's real report, week of Sept 12: Paty showed OFF on the
+    // Houseman crew card the same day Turndown showed her genuinely
+    // working Turndown. Root cause — Paty had her own literal row inside
+    // 'pmhm' (an Excel import listing her there), which put her INTO the
+    // crew's name list and made her a subject of the min-days-off
+    // rotation in her own right, completely independent of her real
+    // Turndown status. ──
+    const SCH21py = { days: {} };
+    ds21.forEach((ds) => { SCH21py.days[ds] = { pmhm: [['Yesenia', ''], ['Paty', '1']], td: [['Paty', '1']] }; });
+    SCH21py.days[ds21[3]].pmhm[0][1] = 'R-OFF';
+    SCH21py.days[ds21[5]].pmhm[0][1] = 'R-OFF';
+    win.schedApplyYesenia(SCH21py, ds21, 0);
+    // Paty must never be assigned her own independent OFF day in pmhm's
+    // rotation — this is the bug itself, and the fix is that she's
+    // excluded from the rotation names entirely.
+    ds21.forEach((ds, i) => {
+      if (i === 3 || i === 5) return;
+      t.assert(!win.schedStatusIs(SCH21py.days[ds].pmhm[1][1], 'OFF'),
+        ds + ": Paty's literal pmhm row is never given her own independent day off — she isn't a real pmhm employee");
+    });
+    // And her literal pmhm row is kept mirrored to her real, already-
+    // derived status instead of sitting there disconnected: '1' the day
+    // she's actually covering, 'TURNDOWN' every other day.
+    t.eq(SCH21py.days[ds21[3]].pmhm[1][1], '1', "Paty's literal pmhm row reads '1' the day she's genuinely covering Houseman — she really is there");
+    t.eq(SCH21py.days[ds21[5]].pmhm[1][1], '1', 'same for her second covering day');
+    ds21.forEach((ds, i) => {
+      if (i === 3 || i === 5) return;
+      t.eq(SCH21py.days[ds].pmhm[1][1], 'TURNDOWN', ds + ": every other day her literal pmhm row mirrors TURNDOWN, matching her real Turndown cell — not left OFF or stale");
+    });
+
+    // The exact scenario Carlos reported, reproduced directly and fixed
+    // by the render-time self-heal (schedSyncPatyPmhm), not just a fresh
+    // Auto-fill run — a week that already has the mismatch sitting in
+    // it from before this fix catches up the moment it's opened.
+    const SCH21pyStale = {
+      days: {
+        [ds21[0]]: { pmhm: [['Paty', 'OFF'], ['Yesenia', '1']], td: [['Paty', 'TURNDOWN']] },
+      },
+    };
+    t.assert(win.schedSyncPatyPmhm(SCH21pyStale, [ds21[0]]), 'the self-heal reports a real repair on a stale week');
+    t.eq(SCH21pyStale.days[ds21[0]].pmhm[0][1], 'TURNDOWN', "Carlos's exact real report — Paty's stale OFF in pmhm is corrected to TURNDOWN, matching her real Turndown status");
+    t.assert(!win.schedSyncPatyPmhm(SCH21pyStale, [ds21[0]]), 'and a second pass reports no change — it settles');
+
+    // Editing Paty's own Turndown cell reacts live, the same shape as
+    // the Sarahi/Victoriano mirrors — not just on the next render.
+    const SCH21pyLive = {
+      days: {
+        [ds21[0]]: { pmhm: [['Paty', 'OFF'], ['Yesenia', 'OFF']], td: [['Paty', '1']] },
+      },
+      count: 1, savedAt: new Date().toISOString(),
+    };
+    win.dlSaveSchedule(SCH21pyLive);
+    win.schedSetCell('td', 0, 'Paty', ds21[0], 'HOUSEMAN', null);
+    t.eq(win.dlLoadSchedule().days[ds21[0]].pmhm[0][1], '1',
+      "editing Paty's own Turndown cell to HOUSEMAN live-updates her literal pmhm row to '1' — no page reload needed");
+
+    // A week with no literal Paty row in pmhm at all (the ordinary case)
+    // is completely unaffected — nothing to sync, nothing to exclude.
+    t.eq(win.schedSyncPatyPmhm({ days: { [ds21[0]]: { pmhm: [['Yesenia', '1']], td: [['Paty', 'TURNDOWN']] } } }, [ds21[0]]), false,
+      'no literal Paty row in pmhm means nothing for the self-heal to do');
 
     // Houseman overflow: Rubia then Julia, pulled only as far as needed
     // and only from an actually-working Room Attendant day. ("Rubia" and

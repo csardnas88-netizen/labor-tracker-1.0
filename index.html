@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.50"/>
+<meta name="app-version" content="7.40.51"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,7 +4571,9 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
-    v:'7.40.50', date:'2026-09-05',
+    v:'7.40.51', date:'2026-09-05',
+    changes:['Yesenia (PM Houseman) now gets 2 days off a week instead of 1, and her week can land on a Sunday like any other day — Carlos\'s correction. Paty covers both days off, the same way she already covered one.'],
+    fixes:['Fixed Paty showing OFF on the Houseman crew card the same day Turndown showed her genuinely working — Carlos\'s real report, week of Sept 12. Root cause: Paty had picked up a literal row of her own inside PM Houseman (from an Excel import listing her there), which made her a subject of Auto-fill\'s own day-off rotation in her own right — an OFF day assigned completely independent of her real Turndown schedule, since she isn\'t actually a Houseman employee, only Yesenia\'s designated cover. She\'s now excluded from that rotation entirely, and whenever that literal row exists, it\'s kept mirrored to her real, already-known status instead — "1" the day she\'s actually there covering, "TURNDOWN" every other day, matching her own Turndown cell exactly. Repairs itself the moment a week already carrying the stale mismatch is opened, and reacts live the moment her Turndown cell is edited by hand, not just after a full Auto-fill run.']
     features:['The Schedule\'s "Days" column — this week\'s work-day count for each person — is now color-coded so Carlos can read every headcount case at a glance while he\'s still adjusting the week: yellow for 0-3 (a light week), red for exactly 4 (room for a 5th day), green for exactly 5 (a full week), and purple for 6+ (overtime, so whoever\'s building the schedule sees it immediately instead of only finding out later on the "Last week" badge). Repaints live as cells are edited, same as the count itself.']
   },
   {
@@ -20876,6 +20878,15 @@ function schedSetCell(bk,idx,name,ds,val,el){
      exactly the bug Carlos reported with the old chain-based version. */
   var isSarahiLobbyEdit=(bk==='lobby'&&dlNorm(name)===dlNorm('Sarahi'));
   if(isSarahiLobbyEdit)schedApplyLobbyMirror(SCH,[ds]);
+  /* Same shape again, Paty/Yesenia: editing PATY's own Turndown cell is
+     what actually decides her real status (working Turndown vs. covering
+     Houseman vs. a granted day off), so her literal pmhm row — when one
+     exists that day — has to react live to it too, rather than only
+     catching up on the next render or a full Auto-fill run. Scoped to
+     Paty's own Turndown cell specifically, same reasoning as Sarahi/
+     Victoriano above. */
+  var isPatyTurndownEdit=(bk==='td'&&dlNorm(name)===dlNorm('Paty'));
+  var patyPmhmSynced=isPatyTurndownEdit&&schedSyncPatyPmhmForDate(SCH,ds);
   /* Carlos's ask: marking ANYONE — any position, not just a designated
      backup — as LAUNDRY on a given day should put her on Laundry's own
      crew card for that day too, not just count toward its total
@@ -20900,7 +20911,7 @@ function schedSetCell(bk,idx,name,ds,val,el){
   if(linkedMember)schedApplyLinkedPeopleForDate(SCH,ds,{crew:bk,name:name});
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
-  if(chainMember||isVictorianoLaundryEdit||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||linkedMember){
+  if(chainMember||isVictorianoLaundryEdit||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||linkedMember||patyPmhmSynced){
     /* The chain/mirror reaction can change a DIFFERENT cell (or crew
        card) on this same day — that needs the full grid repainted so
        it actually shows, unlike the single-cell case below. */
@@ -21680,14 +21691,18 @@ function schedApplyPmSupervisor(SCH,dates){
     if(row&&row[1]==='1')row[1]='PM';
   });
 }
-/* Yesenia (PM Houseman) gets exactly 1 day off — reuses the same
-   min-days-off placement as every other crew (needFn naturally returns
-   0 for 'pmhm', since schedAutoNeed only has a formula for the five
-   needs-driven crews, so there's no repair pressure — just a fair day
-   picked the same way). Paty (Turndown/GRA, her only real crew — see
-   the retirement note below) is her one and only backup, covering
-   every day Yesenia is off, working her own Turndown job every day she
-   isn't.
+/* Yesenia (PM Houseman) gets 2 days off a week — Carlos's real correction,
+   2026-09-05, from 1; her week can now include a Sunday like any other
+   day, nothing here ever excluded it. Reuses the same min-days-off
+   placement as every other crew (needFn naturally returns 0 for 'pmhm',
+   since schedAutoNeed only has a formula for the five needs-driven
+   crews, so there's no repair pressure — just fair days picked the same
+   way). Paty (Turndown/GRA, her only real crew — see the retirement note
+   below) is her one and only backup, covering BOTH days Yesenia is off,
+   working her own Turndown job every day she isn't — this already just
+   falls out of "any day Yesenia is off, Paty covers," so 1 day or 2
+   needed no change to the covering logic itself, only to Yesenia's own
+   offCount below.
 
    Carlos's real correction: Paty's own day off used to be left alone
    if it happened to land on the SAME day Yesenia's did — "nobody
@@ -21702,7 +21717,21 @@ function schedApplyPmSupervisor(SCH,dates){
    which of her two jobs she's actually doing that day, so any day she
    isn't covering Houseman (and isn't off) now reads "TURNDOWN"
    instead — same idea as HOUSEMAN/LAUNDRY/TAILOR already being
-   explicit labels rather than a bare "1". */
+   explicit labels rather than a bare "1".
+
+   Carlos's real report, week of Sept 12: Paty showed OFF on the
+   Houseman crew card the same day Turndown showed her genuinely
+   working Turndown. Root cause — Paty had picked up a literal row of
+   her own inside 'pmhm' (from an Excel import listing her there), which
+   put her INTO `names` above and made her a subject of the min-days-off
+   rotation on 'pmhm' in her own right — an OFF day assigned completely
+   independent of her real Turndown schedule, since she isn't actually
+   a pmhm employee, only Yesenia's designated cover. Fixed two ways:
+   she's excluded from the rotation entirely (rotationNames), and if
+   that literal row exists at all, it's kept mirrored to her real,
+   already-known status every pass — '1' the day she's actually there
+   covering, "TURNDOWN" every other day — instead of drifting on its
+   own. */
 function schedApplyYesenia(SCH,dates,wk){
   var names=[],seen={};
   dates.forEach(function(ds){
@@ -21710,22 +21739,55 @@ function schedApplyYesenia(SCH,dates,wk){
     (day.pmhm||[]).forEach(function(p){ var n=String(p[0]||'').trim(); if(!n)return; var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n); });
   });
   if(!names.length)return;
-  schedAutoFillCrew(SCH,dates,'pmhm',names,1,wk);
-  var yesName=names.filter(function(n){ return dlNorm(n)===dlNorm('Yesenia'); })[0];
+  var patyHasPmhmRow=names.some(function(n){ return dlNorm(n)===dlNorm('Paty'); });
+  var rotationNames=names.filter(function(n){ return dlNorm(n)!==dlNorm('Paty'); });
+  if(!rotationNames.length)return;
+  schedAutoFillCrew(SCH,dates,'pmhm',rotationNames,2,wk);
+  var yesName=rotationNames.filter(function(n){ return dlNorm(n)===dlNorm('Yesenia'); })[0];
   if(!yesName)return;
   dates.forEach(function(ds){
     var patyRow=schedRawCell(SCH,ds,'td','Paty');
     if(!patyRow)return;
     var patyCell=String(patyRow[1]||'').trim();
     var patyGranted=schedStatusIs(patyCell,'R-OFF')||schedStatusIs(patyCell,'FLEX')||schedStatusIs(patyCell,'VAC')||schedStatusIs(patyCell,'CALL-OFF');
-    if(patyGranted)return;   // her own real day off always wins, covering or not
-    var yesOff=schedIsOff(schedCellFor(SCH,ds,'pmhm',yesName));
-    if(yesOff){
-      patyRow[1]='HOUSEMAN';
-    } else if(patyCell!==''&&!schedStatusIs(patyCell,'OFF')){
-      patyRow[1]='TURNDOWN';
+    if(!patyGranted){   // her own real day off always wins, covering or not
+      var yesOff=schedIsOff(schedCellFor(SCH,ds,'pmhm',yesName));
+      if(yesOff){
+        patyRow[1]='HOUSEMAN';
+      } else if(patyCell!==''&&!schedStatusIs(patyCell,'OFF')){
+        patyRow[1]='TURNDOWN';
+      }
     }
+    if(patyHasPmhmRow)schedSyncPatyPmhmForDate(SCH,ds);
   });
+}
+/* Keeps Paty's literal 'pmhm' row (when one exists that day — from an
+   Excel import listing her there, not a real pmhm employee, only
+   Yesenia's designated cover) mirrored to her already-known REAL status
+   off her own Turndown cell: '1' the day she's actually there covering
+   Houseman, the exact same label (TURNDOWN, or a granted R-OFF/FLEX/
+   VAC/CALL-OFF) every other day. Split out from schedApplyYesenia so it
+   can also run as a render-time self-heal (schedSyncPatyPmhm below) and
+   live off a direct edit to Paty's own Turndown cell (schedSetCell) —
+   Auto-fill's min-days-off ROTATION only belongs inside
+   schedApplyYesenia itself, run once on demand, but this sync has to
+   catch up a week that already has the stale mismatch sitting in it,
+   same as every other self-healing pass in this file. */
+function schedSyncPatyPmhmForDate(SCH,ds){
+  var pmRow=schedRawCell(SCH,ds,'pmhm','Paty');
+  if(!pmRow)return false;
+  var patyRow=schedRawCell(SCH,ds,'td','Paty');
+  var real=patyRow?String(patyRow[1]||'').trim():'';
+  if(real==='')return false;
+  var want=schedStatusIs(real,'HOUSEMAN')?'1':real;
+  if(pmRow[1]===want)return false;
+  pmRow[1]=want;
+  return true;
+}
+function schedSyncPatyPmhm(SCH,dates){
+  var changed=false;
+  dates.forEach(function(ds){ if(schedSyncPatyPmhmForDate(SCH,ds))changed=true; });
+  return changed;
 }
 /* A titular not working their home crew that day means OFF/R-OFF — or,
    for Victoriano specifically, TAILOR: Carlos's rule is never two people
@@ -22861,6 +22923,12 @@ function renderSchedule(){
      otherwise — Carlos's real report about Sandra's Room Attendant OFF
      not carrying over to Laundry. */
   if(SCH&&SCH.days&&schedApplyLinkedPeople(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
+  /* Same self-healing idea, for Paty's literal pmhm row — Carlos's real
+     report, week of Sept 12: it had drifted independent of her real
+     Turndown status (an OFF day picked by Auto-fill's own rotation
+     before Paty was excluded from it) and had no way to catch up short
+     of re-running the whole week's Auto-fill. */
+  if(SCH&&SCH.days&&schedSyncPatyPmhm(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   /* Carry the OCC/R106 report's own figures into any OCC/Departures box
      still blank — Carlos's ask, so uploading occupancy days ahead gives
      the schedule a head start instead of him retyping it. Deliberately
