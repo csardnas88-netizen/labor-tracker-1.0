@@ -4572,7 +4572,7 @@ function playConfettiSound(){
 var CHANGELOG=[
   {
     v:'7.40.50', date:'2026-09-05',
-    features:['The Schedule\'s "Days" column — this week\'s work-day count for each person — now highlights green at exactly 5 (a full week) and red at exactly 4, so Carlos can spot at a glance, while he\'s still adjusting the week, who has room to take on a 5th day. Repaints live as cells are edited, same as the count itself. Deliberately just these two numbers: 6+ is already flagged red by the separate "Last week" overtime badge, and 0-3 is too ordinary (a new hire, a short week) to call out the same way.']
+    features:['The Schedule\'s "Days" column — this week\'s work-day count for each person — is now color-coded so Carlos can read every headcount case at a glance while he\'s still adjusting the week: yellow for 0-3 (a light week), red for exactly 4 (room for a 5th day), green for exactly 5 (a full week), and purple for 6+ (overtime, so whoever\'s building the schedule sees it immediately instead of only finding out later on the "Last week" badge). Repaints live as cells are edited, same as the count itself.']
   },
   {
     v:'7.40.49', date:'2026-09-05',
@@ -21270,17 +21270,19 @@ function _schedWorkDaysFor(SCH,dates,bk,idx,nm){
   });
   return n;
 }
-/* Carlos's ask: while adjusting the week, spot at a glance who has room
-   for one more day. 4 (highlighted red) is the "could still take a
-   5th" heads-up; 5 (green) means she's already full for the week.
-   Deliberately just these two numbers — 6+ is Auto-fill/Fill-week
-   overtime territory the red "Last week" badge already flags, and a
-   plain 0-3 is too ordinary (a hire mid-week, a light schedule) to call
-   out the same way. */
+/* Carlos's ask: while adjusting the week, spot every headcount case at a
+   glance without counting by hand.
+   - 0-3 (yellow): a light week — room for more than one extra day.
+   - 4 (red): could still take a 5th day.
+   - 5 (green): a full week, exactly to standard.
+   - 6+ (purple): overtime territory — flags it to whoever is building
+     the schedule, same idea as the existing red "Last week" badge but
+     for the week actually being built right now, not the one before it. */
 function _schedDaysCellCss(n){
+  if(n>=6)return 'background:var(--purple-bg);color:var(--purple);border-radius:4px;';
   if(n===5)return 'background:var(--green-bg);color:var(--green);border-radius:4px;';
   if(n===4)return 'background:var(--red-bg);color:var(--red);border-radius:4px;';
-  return 'color:var(--navy);';
+  return 'background:var(--yellow-bg);color:var(--yellow);border-radius:4px;';
 }
 function schedCellFor(SCH,ds,bk,name){
   var day=SCH.days&&SCH.days[ds]; if(!day)return '';

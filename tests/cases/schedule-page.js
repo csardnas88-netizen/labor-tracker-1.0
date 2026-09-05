@@ -518,14 +518,16 @@ module.exports = {
       t.eq(win.document.getElementById('scd_sup_' + rolandoIdx2).textContent, '0',
         'and back off again drops it back to 0');
 
-      // Carlos's ask: spot at a glance, while adjusting the week, who
-      // could still take a 5th day (highlighted red at 4) versus who's
-      // already full (green at 5) — 0/1/2/3/6+ get no highlight at all.
-      t.eq(win._schedDaysCellCss(4).indexOf('var(--red)') !== -1, true, '4 worked days highlights red — room for one more');
-      t.eq(win._schedDaysCellCss(5).indexOf('var(--green)') !== -1, true, '5 worked days highlights green — the week is full');
-      [0, 1, 2, 3, 6, 7].forEach(function (n) {
-        t.assert(win._schedDaysCellCss(n).indexOf('var(--red)') === -1 && win._schedDaysCellCss(n).indexOf('var(--green)') === -1,
-          n + ' worked days gets no highlight — only exactly 4 or 5 do');
+      // Carlos's ask: spot every headcount case at a glance while
+      // adjusting the week — yellow (0-3, a light week), red (4, room
+      // for a 5th day), green (5, a full week), purple (6+, overtime).
+      [0, 1, 2, 3].forEach(function (n) {
+        t.assert(win._schedDaysCellCss(n).indexOf('var(--yellow)') !== -1, n + ' worked days highlights yellow — a light week');
+      });
+      t.assert(win._schedDaysCellCss(4).indexOf('var(--red)') !== -1, '4 worked days highlights red — room for one more');
+      t.assert(win._schedDaysCellCss(5).indexOf('var(--green)') !== -1, '5 worked days highlights green — the week is full');
+      [6, 7].forEach(function (n) {
+        t.assert(win._schedDaysCellCss(n).indexOf('var(--purple)') !== -1, n + ' worked days highlights purple — overtime');
       });
 
       // And it actually paints live on the cell Carlos is looking at,
