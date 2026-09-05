@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.53"/>
+<meta name="app-version" content="7.40.54"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.54', date:'2026-09-05',
+    fixes:['Yesenia is permanently excluded from the Turndown Attendant crew now — Carlos\'s ask. Her only real job is PM Houseman; any row she ends up with under Turndown (a leftover data artifact, not a real assignment like Paty\'s legitimate cover row) is now deleted outright the moment the week is opened, on every loaded week, not just removed once by hand. Auto-fill\'s own fairness rotation for that crew is also protected from ever handing her an independent day off there, same guard Jorge Gonzalez and Andrea already have for their own fully-derived crews. A future re-upload that still lists her under Turndown is purged again rather than permanently protected by a one-time removal.']
+  },
   {
     v:'7.40.53', date:'2026-09-05',
     fixes:['Setting YESENIA\'s own PM Houseman cell OFF didn\'t flip Paty over to cover live — Carlos\'s real report. Only Paty\'s own Turndown cell was wired to react instantly; nothing was listening on Yesenia\'s side, so the cover only caught up on the next render. Both directions now react live.'],
@@ -22260,6 +22264,27 @@ function schedSyncCallOffMarks(SCH,dates){
   if(changed)dates.forEach(function(ds){ schedApplyCoverChainsForDate(SCH,ds); });
   return changed;
 }
+/* Carlos's ask, 2026-09-05: Yesenia isn't a real Turndown employee — her
+   only real job is PM Houseman — so any row she has under 'td' is a
+   leftover data artifact, never a legitimate assignment (unlike Paty's
+   row in 'pmhm', which IS legitimate and gets mirrored rather than
+   deleted, since she really does cover there). Runs on every render, on
+   EVERY loaded week, not just this one — so a stray row surviving in an
+   older or future week self-heals the moment it's opened too, and a
+   future re-upload that still lists her there is purged again rather
+   than permanently protected by a one-time "Remove" click. */
+function schedPurgeYeseniaFromTd(SCH){
+  if(!SCH||!SCH.days)return false;
+  var changed=false;
+  Object.keys(SCH.days).forEach(function(ds){
+    var arr=SCH.days[ds].td;
+    if(!arr)return;
+    for(var i=arr.length-1;i>=0;i--){
+      if(dlNorm(arr[i][0])===dlNorm('Yesenia')){ arr.splice(i,1); changed=true; }
+    }
+  });
+  return changed;
+}
 /* Reverses schedApplyCallOff — only if the cell still reads CALL-OFF
    (if Carlos already changed it by hand since, that manual edit wins
    and is left alone). */
@@ -22321,6 +22346,15 @@ function schedAutoFill(){
        an independent fairness slot — giving her one here would hand
        her days unrelated to Sarahi's. */
     if(bk==='lobby')names=names.filter(function(n){ return dlNorm(n)!==dlNorm('Andrea'); });
+    /* Yesenia isn't a real Turndown employee — Carlos's ask, 2026-09-05.
+       Her home crew is PM Houseman; any row she has under 'td' is a
+       leftover data artifact, the exact reverse case of Paty picking up
+       a stray row in 'pmhm' (schedApplyYesenia already excludes Paty
+       from PM Houseman's own rotation the same way). Excluded here so
+       she's never handed an independent Turndown day-off unrelated to
+       her real PM Houseman schedule, no matter what a future upload
+       carries her in as. */
+    if(bk==='td')names=names.filter(function(n){ return dlNorm(n)!==dlNorm('Yesenia'); });
     if(!names.length)return;
     schedAutoFillCrew(SCH,dates,bk,names,SCHED_AUTO_OFFCOUNT[bk],wk);
   });
@@ -22980,6 +23014,14 @@ function renderSchedule(){
      reaches the other devices instead of each one silently re-fixing
      its own copy forever. */
   if(SCH&&SCH.days&&schedSyncCallOffMarks(SCH,schedWeekDates())){
+    SCH.savedAt=new Date().toISOString();
+    try{ dlSaveSchedule(SCH); }catch(e){}
+  }
+  /* Same reach — every loaded week, not just this one — and pushed
+     through for the same reason: a stray Yesenia row in 'td' should
+     stay gone everywhere, not just on whichever device happened to
+     open the page first. */
+  if(SCH&&SCH.days&&schedPurgeYeseniaFromTd(SCH)){
     SCH.savedAt=new Date().toISOString();
     try{ dlSaveSchedule(SCH); }catch(e){}
   }

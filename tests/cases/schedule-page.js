@@ -1803,6 +1803,48 @@ module.exports = {
     t.eq(win.schedSyncPatyPmhm({ days: { [ds21[0]]: { pmhm: [['Yesenia', '1']], td: [['Paty', '1']] } } }, [ds21[0]]), false,
       'no literal Paty row in pmhm means nothing for the self-heal to do');
 
+    // ── Carlos's ask, 2026-09-05: Yesenia isn't a real Turndown employee
+    // — her only real job is PM Houseman — so any row she has under
+    // 'td' is a leftover data artifact, unlike Paty's legitimate row in
+    // 'pmhm' (which gets mirrored, not deleted). schedPurgeYeseniaFromTd
+    // removes it outright, on every render, on every loaded week. ──
+    const SCH21yp = {
+      days: {
+        [ds21[0]]: { td: [['Paty', '1'], ['Yesenia', 'OFF'], ['Jazmin', '1']] },
+        [ds21[1]]: { td: [['Paty', 'HOUSEMAN'], ['Yesenia', '1']] },
+      },
+    };
+    t.assert(win.schedPurgeYeseniaFromTd(SCH21yp), 'reports a real change when a stray Yesenia row is found in td');
+    t.eq(SCH21yp.days[ds21[0]].td.map((p) => p[0]).join(','), 'Paty,Jazmin', "Yesenia's row is removed from Saturday's Turndown card — Paty and Jazmin are untouched");
+    t.eq(SCH21yp.days[ds21[1]].td.map((p) => p[0]).join(','), 'Paty', 'and from every other loaded week too, not just the one currently being viewed');
+    t.assert(!win.schedPurgeYeseniaFromTd(SCH21yp), 'a second pass reports no change — nothing left to purge');
+
+    // A week with no stray Yesenia row at all is unaffected.
+    t.assert(!win.schedPurgeYeseniaFromTd({ days: { [ds21[0]]: { td: [['Paty', '1']] } } }),
+      'a normal week with no Yesenia row in td reports no change');
+
+    // End-to-end via the real "Auto-fill this week" button: her row is
+    // excluded from the fairness rotation itself (same protection Jorge
+    // Gonzalez/Laundry and Andrea/Lobby already get for their own
+    // fully-derived crews) AND renderSchedule's own purge runs right
+    // after — either one alone would be enough, and together her row
+    // simply isn't there afterward at all.
+    const SCH21ytd = { days: {} };
+    ds21.forEach((ds) => {
+      SCH21ytd.days[ds] = {
+        sheet: 't', occ: '150', dep: '60', tdOcc: '150',
+        td: [['Paty', ''], ['Jazmin', ''], ['Yesenia', '']],
+      };
+    });
+    win.dlSaveSchedule(SCH21ytd);
+    win.schedViewWeekStart = win.parseLocalDate(ds21[0]);
+    win.schedAutoFill();
+    const afterYtd = win.dlLoadSchedule();
+    ds21.forEach((ds) => {
+      t.assert(!afterYtd.days[ds].td.some((p) => p[0] === 'Yesenia'),
+        ds + ": Yesenia's row is gone from Turndown after a real Auto-fill run, not just left OFF");
+    });
+
     // Houseman overflow: Rubia then Julia, pulled only as far as needed
     // and only from an actually-working Room Attendant day. ("Rubia" and
     // "Julia" — not "Rubia T"/"Julia S" — the exact spelling in Carlos's
