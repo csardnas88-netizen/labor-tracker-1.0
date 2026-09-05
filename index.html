@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.49"/>
+<meta name="app-version" content="7.40.50"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.50', date:'2026-09-05',
+    features:['The Schedule\'s "Days" column — this week\'s work-day count for each person — now highlights green at exactly 5 (a full week) and red at exactly 4, so Carlos can spot at a glance, while he\'s still adjusting the week, who has room to take on a 5th day. Repaints live as cells are edited, same as the count itself. Deliberately just these two numbers: 6+ is already flagged red by the separate "Last week" overtime badge, and 0-3 is too ordinary (a new hire, a short week) to call out the same way.']
+  },
   {
     v:'7.40.49', date:'2026-09-05',
     features:['The OCC/R106 report now fills the Schedule\'s own blank OCC and Departures boxes too — Carlos\'s ask, since he uploads occupancy many days in advance and was retyping into the Schedule numbers the app was already holding. It gives him the week started, ready to adjust up or down by how he expects occupancy to move. Turndown Rooms follows in the same pass, since it derives from the next day\'s OCC. It fills BLANK boxes only, permanently: once a box has a number, nothing automatic ever changes it again — not even a later corrected re-upload of the same report — so an estimate typed by hand can never be walked back. A zero in the report is treated as "no figure for that night" and skipped, rather than written in as a real 0. Runs both the moment a report is uploaded and every time the Schedule is opened, so a week created later still picks up occupancy uploaded weeks earlier.']
@@ -21266,6 +21270,18 @@ function _schedWorkDaysFor(SCH,dates,bk,idx,nm){
   });
   return n;
 }
+/* Carlos's ask: while adjusting the week, spot at a glance who has room
+   for one more day. 4 (highlighted red) is the "could still take a
+   5th" heads-up; 5 (green) means she's already full for the week.
+   Deliberately just these two numbers — 6+ is Auto-fill/Fill-week
+   overtime territory the red "Last week" badge already flags, and a
+   plain 0-3 is too ordinary (a hire mid-week, a light schedule) to call
+   out the same way. */
+function _schedDaysCellCss(n){
+  if(n===5)return 'background:var(--green-bg);color:var(--green);border-radius:4px;';
+  if(n===4)return 'background:var(--red-bg);color:var(--red);border-radius:4px;';
+  return 'color:var(--navy);';
+}
 function schedCellFor(SCH,ds,bk,name){
   var day=SCH.days&&SCH.days[ds]; if(!day)return '';
   var row=(day[bk]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
@@ -22775,7 +22791,10 @@ function _schedRefreshTotals(SCH,onlyBk){
     });
     _schedCrewRef(SCH,b.key).forEach(function(p,idx){
       var dEl=document.getElementById('scd_'+b.key+'_'+idx);
-      if(dEl)dEl.textContent=_schedWorkDaysFor(SCH,dates,b.key,idx,p[0]);
+      if(!dEl)return;
+      var wd=_schedWorkDaysFor(SCH,dates,b.key,idx,p[0]);
+      dEl.textContent=wd;
+      dEl.style.cssText='text-align:center;font-size:11px;font-weight:800;padding:2px 0;'+_schedDaysCellCss(wd);
     });
   });
 }
@@ -23219,7 +23238,8 @@ function renderSchedule(){
          "covering" cell) this person has, so he can tell a 1-day week
          from a 4-day week without counting by hand. Repainted in place
          by _schedRefreshTotals whenever a cell on this row changes. */
-      html+='<div id="scd_'+b.key+'_'+idx+'" style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+_schedWorkDaysFor(SCH,dates,b.key,idx,nm)+'</div>';
+      var thisWkDays=_schedWorkDaysFor(SCH,dates,b.key,idx,nm);
+      html+='<div id="scd_'+b.key+'_'+idx+'" style="text-align:center;font-size:11px;font-weight:800;padding:2px 0;'+_schedDaysCellCss(thisWkDays)+'">'+thisWkDays+'</div>';
       /* Last week's work-day count, its own column now (moved out of the
          cramped name badge) — Carlos's ask. Blank, not "0", when last
          week isn't on file for her at all. */

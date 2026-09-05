@@ -517,6 +517,29 @@ module.exports = {
       win.schedSetCell('sup', rolandoIdx2, 'Rolando', sat, 'OFF', null);
       t.eq(win.document.getElementById('scd_sup_' + rolandoIdx2).textContent, '0',
         'and back off again drops it back to 0');
+
+      // Carlos's ask: spot at a glance, while adjusting the week, who
+      // could still take a 5th day (highlighted red at 4) versus who's
+      // already full (green at 5) — 0/1/2/3/6+ get no highlight at all.
+      t.eq(win._schedDaysCellCss(4).indexOf('var(--red)') !== -1, true, '4 worked days highlights red — room for one more');
+      t.eq(win._schedDaysCellCss(5).indexOf('var(--green)') !== -1, true, '5 worked days highlights green — the week is full');
+      [0, 1, 2, 3, 6, 7].forEach(function (n) {
+        t.assert(win._schedDaysCellCss(n).indexOf('var(--red)') === -1 && win._schedDaysCellCss(n).indexOf('var(--green)') === -1,
+          n + ' worked days gets no highlight — only exactly 4 or 5 do');
+      });
+
+      // And it actually paints live on the cell Carlos is looking at,
+      // not just in the helper — moving Rolando from 0 to 4 to 5 days.
+      win.schedSetCell('sup', rolandoIdx2, 'Rolando', sat, '1', null);
+      const datesAll = win.schedWeekDates();
+      datesAll.slice(1,4).forEach(function(ds){ win.schedSetCell('sup', rolandoIdx2, 'Rolando', ds, '1', null); });
+      t.eq(win.document.getElementById('scd_sup_' + rolandoIdx2).textContent, '4', 'Rolando is now at 4 worked days');
+      t.assert(win.document.getElementById('scd_sup_' + rolandoIdx2).style.cssText.indexOf('var(--red)') !== -1,
+        "and his Days cell is actually painted red on screen at 4, not just the helper function");
+      win.schedSetCell('sup', rolandoIdx2, 'Rolando', datesAll[4], '1', null);
+      t.eq(win.document.getElementById('scd_sup_' + rolandoIdx2).textContent, '5', 'a 5th day pushes him to 5');
+      t.assert(win.document.getElementById('scd_sup_' + rolandoIdx2).style.cssText.indexOf('var(--green)') !== -1,
+        'and his Days cell repaints green at 5, replacing the red');
     }
 
     // ── 14) "Fill week" — Carlos's own workflow from Unifocus ──
