@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.48"/>
+<meta name="app-version" content="7.40.49"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.49', date:'2026-09-05',
+    features:['The OCC/R106 report now fills the Schedule\'s own blank OCC and Departures boxes too — Carlos\'s ask, since he uploads occupancy many days in advance and was retyping into the Schedule numbers the app was already holding. It gives him the week started, ready to adjust up or down by how he expects occupancy to move. Turndown Rooms follows in the same pass, since it derives from the next day\'s OCC. It fills BLANK boxes only, permanently: once a box has a number, nothing automatic ever changes it again — not even a later corrected re-upload of the same report — so an estimate typed by hand can never be walked back. A zero in the report is treated as "no figure for that night" and skipped, rather than written in as a real 0. Runs both the moment a report is uploaded and every time the Schedule is opened, so a week created later still picks up occupancy uploaded weeks earlier.']
+  },
   {
     v:'7.40.48', date:'2026-09-03',
     changes:['A manager marked MID now shows on the Daily Lineup\'s AM Coordinator line — Carlos\'s call, since a mid shift covers the morning. It was on neither line a moment ago, which meant a MID manager simply didn\'t appear on the lineup at all. Still only the AM line, never both at once.']
@@ -16364,9 +16368,27 @@ function handleR106Upload(input){
           autoFilled++;
         });
 
-        showToast('✓ OCC loaded — '+autoFilled+' days auto-filled'+(kept>0?' · '+kept+' protected (manual)':'')+(pickupDays>0?' · '+pickupDays+' night'+(pickupDays===1?'':'s')+' changed since the last OCC':''));
+        /* Carlos's ask: this same report fills the Schedule's own blank
+           OCC/Departures boxes too, so uploading days ahead gives the
+           schedule a head start. Reported separately in the toast — it
+           is a different section from the day counts above, and rolling
+           them into one number would read as more (or fewer) Labor days
+           than actually filled. Saved locally only, like the Schedule's
+           other self-repairs: every device holds the same OCC report, so
+           each fills its own copy rather than racing to push identical
+           numbers over another device's real edits. */
+        var schedFilled=0;
+        try{
+          var SCHocc=dlLoadSchedule();
+          if(SCHocc&&SCHocc.days){
+            schedFilled=schedBackfillOccFromR106(SCHocc);
+            if(schedFilled)safeSetItem('hk_dl_schedule',JSON.stringify(SCHocc));
+          }
+        }catch(e){}
+        showToast('✓ OCC loaded — '+autoFilled+' days auto-filled'+(kept>0?' · '+kept+' protected (manual)':'')+(pickupDays>0?' · '+pickupDays+' night'+(pickupDays===1?'':'s')+' changed since the last OCC':'')+(schedFilled>0?' · '+schedFilled+' Schedule day'+(schedFilled===1?'':'s')+' filled':''));
         renderLaborDash();
         if(currentPage==='occupancy')renderOccupancy();
+        if(currentPage==='schedule')renderSchedule();
       });
     }).catch(function(err){
       showToast('❌ Error reading OCC: '+err.message);
@@ -20935,6 +20957,52 @@ function schedBackfillTdOcc(SCH,dates){
   });
   return changed;
 }
+/* Carlos's ask: he uploads the OCC/R106 report many days ahead, which
+   already fills Labor and Occupancy. The Schedule's own OCC/Departures
+   boxes stayed blank, so he retyped numbers the app was already holding.
+   This carries them across — a head start he then adjusts up or down by
+   how he expects occupancy to move.
+
+   BLANK CELLS ONLY, and permanently so: his explicit call over the
+   alternative of refreshing a value that came from R106 and he never
+   touched. Once a box has a number, nothing here ever changes it again,
+   so an estimate he typed can't be walked back by a later re-upload.
+   That also means no source tracking is needed — "is it blank" is the
+   whole rule, and it can't drift or mislabel.
+
+   Only days the Schedule already has are filled: a week he hasn't
+   created yet has nothing to write into. renderSchedule runs this on
+   every open, so a future week picks up whatever OCC data is already
+   stored the moment it's built. */
+/* Returns the NUMBER of schedule days it filled, not a bare flag — the
+   OCC upload's toast reports it, and 0 is falsy so the truthy callers
+   read the same as before. */
+function schedBackfillOccFromR106(SCH){
+  if(!SCH||!SCH.days)return 0;
+  var byMonth={},filled=0;
+  Object.keys(SCH.days).forEach(function(ds){
+    var day=SCH.days[ds]; if(!day)return;
+    var occBlank=String(day.occ||'').trim()==='';
+    var depBlank=String(day.dep||'').trim()==='';
+    if(!occBlank&&!depBlank)return;
+    var mk=ds.slice(0,7);
+    if(byMonth[mk]===undefined){
+      try{ byMonth[mk]=JSON.parse(localStorage.getItem('hk_r106_'+mk)||'{}'); }catch(e){ byMonth[mk]=null; }
+    }
+    var rec=byMonth[mk]&&byMonth[mk][ds];
+    if(!rec||typeof rec!=='object')return;
+    /* Same two figures Labor already reads off this report: net occupied
+       rooms, and Dep. Rooms. A zero is skipped rather than written —
+       on a forward-dated night it means "the report carried no figure",
+       not a real empty hotel, and a literal 0 in the box would read as
+       a decision Carlos made. */
+    var dayFilled=false;
+    if(occBlank&&rec.net>0){ day.occ=String(rec.net); dayFilled=true; }
+    if(depBlank&&rec.dep>0){ day.dep=String(rec.dep); dayFilled=true; }
+    if(dayFilled)filled++;
+  });
+  return filled;
+}
 function schedSetNum(ds,field,val){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days||!SCH.days[ds])return;
@@ -22772,6 +22840,13 @@ function renderSchedule(){
      otherwise — Carlos's real report about Sandra's Room Attendant OFF
      not carrying over to Laundry. */
   if(SCH&&SCH.days&&schedApplyLinkedPeople(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
+  /* Carry the OCC/R106 report's own figures into any OCC/Departures box
+     still blank — Carlos's ask, so uploading occupancy days ahead gives
+     the schedule a head start instead of him retyping it. Deliberately
+     BEFORE schedBackfillTdOcc, which derives each day's Turndown rooms
+     from the NEXT day's OCC: filling OCC first means Turndown follows
+     from it in the same pass rather than a render later. */
+  if(SCH&&SCH.days&&schedBackfillOccFromR106(SCH)){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   if(SCH&&SCH.days&&schedBackfillTdOcc(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   /* Same idea for Call-Offs — Carlos's ask, after Guadalupe Cruz's
      CALL-OFF drifted back to '1'. Unlike the local-only repairs above,

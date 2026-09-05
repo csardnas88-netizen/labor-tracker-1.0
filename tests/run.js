@@ -78,6 +78,7 @@ const cases = [
   require('./cases/schedule-resync-request-off'),
   require('./cases/training-sync-clobber'),
   require('./cases/schedule-call-off-clobber'),
+  require('./cases/schedule-occ-from-r106'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
