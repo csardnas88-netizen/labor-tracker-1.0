@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.60"/>
+<meta name="app-version" content="7.40.61"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.61', date:'2026-09-06',
+    fixes:['Moved the DND tag in Room Assignment Analysis\'s expanded Stayover list onto the LEFT side, next to the room number itself — Carlos\'s ask, the right-side placement next to "Stayover" was hard to scan against the specific room it belonged to. Now it reads "Room 0710 · 20 min · DND" directly.']
+  },
   {
     v:'7.40.60', date:'2026-09-06',
     features:['Room Assignment Analysis: a DND tag now sits right next to the specific room it applies to in an attendant\'s expanded Stayover room list, not just as a total count in the summary line — Carlos\'s follow-up ask, so he can see exactly WHICH room was DND at a glance instead of just how many.']
@@ -9834,7 +9838,7 @@ function renderLateDep(){
             a.assigned.stayoverRooms.forEach(function(room){
               var isDnd=_ldRoomIsDnd(dndSet,room);
               html+='<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;">'
-                +'<span style="color:var(--gd);font-weight:700;">Room '+escHtml(room)+(rm[room]?' &middot; '+rm[room]+' min':'')+'</span><span style="color:var(--gd);">Stayover'+(isDnd?' &middot; <span style="color:var(--red);">DND</span>':'')+'</span></div>';
+                +'<span style="color:var(--gd);font-weight:700;">Room '+escHtml(room)+(rm[room]?' &middot; '+rm[room]+' min':'')+(isDnd?' &middot; <span style="color:var(--red);">DND</span>':'')+'</span><span style="color:var(--gd);">Stayover</span></div>';
             });
           }
           html+='</div>';
