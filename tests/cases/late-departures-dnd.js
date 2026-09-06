@@ -39,5 +39,18 @@ module.exports = {
     // A DND list logged for a DIFFERENT date must not leak into this one.
     win.saveDNDRoomsForDate('2026-09-14', '0205');
     t.eq(win._ldDndCountForRooms(ds, ['0205']), null, "a DND list logged for a different date doesn't cross-contaminate this one");
+
+    // Carlos's follow-up ask: tag the specific room in the expanded room
+    // list, not just a total count in the summary line — _ldDndSetForDate/
+    // _ldRoomIsDnd are the shared building blocks both the count and the
+    // per-room tag are built from, so they can never disagree.
+    win.saveDNDRoomsForDate(ds, '205, 0421');
+    const set = win._ldDndSetForDate(ds);
+    t.assert(!!set, 'a logged list returns a real set, not null');
+    t.eq(win._ldRoomIsDnd(set, '0205'), true, 'zero-padded room matches the un-padded entry logged in the list');
+    t.eq(win._ldRoomIsDnd(set, '0421'), true, 'and the other logged room matches too');
+    t.eq(win._ldRoomIsDnd(set, '0303'), false, "a room not on the list is plainly false, not undefined/truthy by accident");
+    t.eq(win._ldDndSetForDate('2026-09-20'), null, 'a date with nothing logged returns null, not an empty object');
+    t.eq(win._ldRoomIsDnd(null, '0205'), false, 'a null set (nothing logged) is handled without throwing, reads as not-DND');
   },
 };

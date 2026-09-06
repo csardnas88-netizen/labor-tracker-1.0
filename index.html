@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.59"/>
+<meta name="app-version" content="7.40.60"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.60', date:'2026-09-06',
+    features:['Room Assignment Analysis: a DND tag now sits right next to the specific room it applies to in an attendant\'s expanded Stayover room list, not just as a total count in the summary line — Carlos\'s follow-up ask, so he can see exactly WHICH room was DND at a glance instead of just how many.']
+  },
   {
     v:'7.40.59', date:'2026-09-06',
     features:['Room Assignment Analysis attendant cards now show how many of her Occupied (Stayover) rooms were actually DND that day, next to the Occupied count, plus a "really cleaned" line underneath — Carlos\'s ask, so the Occupied number reflects rooms she genuinely serviced instead of just rooms with a guest still in them. Computed live against the DNDs log, not baked into the report at upload time, since DNDs are usually logged separately and often after the report is already in. Only shows up once a DND list has actually been logged for that date — a day nobody logged still reads as nothing, never a false zero.']
@@ -9266,8 +9270,12 @@ function _ldSummarizeAssigned(rooms){
    Returns null (not 0) when nothing has been logged for that date at all
    — same "not logged" vs "zero" distinction the DNDs section already
    relies on (a blank list must never read as "confirmed no DNDs"). */
-function _ldDndCountForRooms(ds,stayoverRooms){
-  if(!stayoverRooms||!stayoverRooms.length)return null;
+/* Room numbers logged as DND for a date, normalized (parseInt, so "0602"
+   and "602" match the same room) — null when nothing at all has been
+   logged for that date, so callers can tell "not logged" apart from a
+   real empty list. Shared by the count above and the per-room "DND" tag
+   in the expanded room list below, so the two can never drift apart. */
+function _ldDndSetForDate(ds){
   var raw=getDNDRoomsForDay(ds);
   if(!raw)return null;
   var dndSet={};
@@ -9275,10 +9283,20 @@ function _ldDndCountForRooms(ds,stayoverRooms){
     var n=parseInt(r,10);
     if(!isNaN(n))dndSet[n]=true;
   });
+  return dndSet;
+}
+function _ldRoomIsDnd(dndSet,room){
+  if(!dndSet)return false;
+  var n=parseInt(room,10);
+  return !isNaN(n)&&!!dndSet[n];
+}
+function _ldDndCountForRooms(ds,stayoverRooms){
+  if(!stayoverRooms||!stayoverRooms.length)return null;
+  var dndSet=_ldDndSetForDate(ds);
+  if(!dndSet)return null;
   var count=0;
   stayoverRooms.forEach(function(r){
-    var n=parseInt(r,10);
-    if(!isNaN(n)&&dndSet[n])count++;
+    if(_ldRoomIsDnd(dndSet,r))count++;
   });
   return count;
 }
@@ -9806,11 +9824,17 @@ function renderLateDep(){
           /* Stayover rooms — gold room number, no checkout time (there
              isn't one; the guest isn't leaving) — Carlos's ask: tell
              checked-out and occupied rooms apart at a glance in the same
-             list, not just in the summary counts above. */
+             list, not just in the summary counts above. A DND tag sits
+             right next to the specific room it applies to (Carlos's
+             follow-up ask), not just as a total count in the summary
+             line above — same live dndSet the count already uses, so the
+             two can never disagree. */
           if(a.assigned&&a.assigned.stayoverRooms){
+            var dndSet=_ldDndSetForDate(d.ds);
             a.assigned.stayoverRooms.forEach(function(room){
+              var isDnd=_ldRoomIsDnd(dndSet,room);
               html+='<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px;">'
-                +'<span style="color:var(--gd);font-weight:700;">Room '+escHtml(room)+(rm[room]?' &middot; '+rm[room]+' min':'')+'</span><span style="color:var(--gd);">Stayover</span></div>';
+                +'<span style="color:var(--gd);font-weight:700;">Room '+escHtml(room)+(rm[room]?' &middot; '+rm[room]+' min':'')+'</span><span style="color:var(--gd);">Stayover'+(isDnd?' &middot; <span style="color:var(--red);">DND</span>':'')+'</span></div>';
             });
           }
           html+='</div>';
