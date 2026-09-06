@@ -17,19 +17,26 @@
    above had filled with the WRONG number) has the flag undefined, not
    true, so treating "undefined" as protected made the button a no-op on
    exactly the boxes it exists to fix. Only an EXPLICIT false (set by
-   schedSetNum once he's actually typed into the box) counts as protected. */
+   schedSetNum once he's actually typed into the box) counts as protected.
+
+   Third real bug, same day: the box must take rec.occ (Total Occ), not
+   rec.net (Total Occ minus Comp rooms) — Carlos's real report, Sept 14
+   read 192 on the R106 but refreshing the box gave 186. A Comp room still
+   needs cleaning, so it must stay in the Schedule's count even though
+   Labor's own budget math excludes it. Every fixture below sets comp>0 on
+   at least one row so occ !== net, and asserts against occ. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "schedRefreshOccFromR106: re-pulls R106 from the NIGHT BEFORE each date, refreshing legacy auto-filled boxes (occAuto undefined) too, but never one Carlos explicitly typed by hand (occAuto===false)",
+  name: "schedRefreshOccFromR106: re-pulls R106 from the NIGHT BEFORE each date using Total Occ (comp rooms included), refreshing legacy auto-filled boxes (occAuto undefined) too, but never one Carlos explicitly typed by hand (occAuto===false)",
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
     await new Promise((r) => setTimeout(r, 60));
 
     win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
-      '2026-09-11': { occ: 320, comp: 2, net: 315, dep: 88 },
-      '2026-09-12': { occ: 250, comp: 0, net: 248, dep: 61 },
-      '2026-09-13': { occ: 230, comp: 0, net: 228, dep: 47 },
+      '2026-09-11': { occ: 320, comp: 5, net: 315, dep: 88 },
+      '2026-09-12': { occ: 250, comp: 2, net: 248, dep: 61 },
+      '2026-09-13': { occ: 230, comp: 2, net: 228, dep: 47 },
     }));
 
     const SCH = {
@@ -54,10 +61,10 @@ module.exports = {
     t.eq(refreshed, 3, 'reports how many days actually changed (09-12 OCC, 09-13 OCC+Departures fill, 09-14 Departures fills)');
 
     const after = win.dlLoadSchedule();
-    t.eq(after.days['2026-09-12'].occ, '315', "a flagged auto-filled box updates to the NIGHT BEFORE's corrected report figure (09-11's report, for 09-12)");
+    t.eq(after.days['2026-09-12'].occ, '320', "a flagged auto-filled box updates to the NIGHT BEFORE's Total Occ (09-11's report, for 09-12), comp rooms included");
     t.eq(after.days['2026-09-12'].dep, '88', 'same for its auto-filled Departures box');
 
-    t.eq(after.days['2026-09-13'].occ, '248', "a legacy box with no occAuto flag at all still refreshes — Carlos's real bug, the button must be able to fix it (09-12's night)");
+    t.eq(after.days['2026-09-13'].occ, '250', "a legacy box with no occAuto flag at all still refreshes — Carlos's real bug, the button must be able to fix it (09-12's night, Total Occ not net)");
     t.eq(after.days['2026-09-13'].dep, '61', 'and its blank Departures box fills the same way');
     t.eq(after.days['2026-09-13'].occAuto, true, 'now explicitly marked auto, so it stops being ambiguous going forward');
 
@@ -69,7 +76,7 @@ module.exports = {
     win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
       // Same dep as the first refresh (88) — only OCC changed in the report,
       // isolating the assertion to the field Carlos actually hand-edited.
-      '2026-09-11': { occ: 320, comp: 2, net: 340, dep: 88 },
+      '2026-09-11': { occ: 360, comp: 5, net: 355, dep: 88 },
     }));
     const second = win.schedRefreshOccFromR106(['2026-09-12']);
     const afterEdit = win.dlLoadSchedule();

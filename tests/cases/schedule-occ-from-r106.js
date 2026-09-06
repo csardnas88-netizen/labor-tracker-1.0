@@ -18,21 +18,30 @@
    real bug (fixed 2026-09-06, Carlos's real report: Sunday Sept 13 showed
    125 instead of the 144 R106 actually carried for that morning), so
    every fixture below keys its R106 rows one day BEFORE the schedule date
-   it fills, on purpose. */
+   it fills, on purpose.
+
+   Second real bug, same day: the box must take rec.occ (Total Occ), not
+   rec.net (Total Occ minus Comp rooms) — Carlos's real report, Sept 14
+   read 192 on the R106 but the box filled 186. Labor's own budget math
+   wants net (comp rooms earn no revenue), but a Comp room still gets
+   cleaned like any other, so the Schedule's "how many rooms to clean" box
+   must keep it in the count. Every fixture below sets comp>0 on at least
+   one row specifically so occ !== net, and asserts against occ. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "The OCC/R106 upload fills the Schedule's blank OCC/Departures boxes from the NIGHT BEFORE each date, and never touches one that already has a number (Carlos's 2026-09-05 ask, night-date fix 2026-09-06)",
+  name: "The OCC/R106 upload fills the Schedule's blank OCC/Departures boxes from the NIGHT BEFORE each date using Total Occ (comp rooms included), and never touches one that already has a number (Carlos's 2026-09-05 ask, night-date + comp-rooms fixes 2026-09-06)",
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
     await new Promise((r) => setTimeout(r, 60));
 
     // A real OCC report, forward-dated the way Carlos uploads it. Each row
-    // is the NIGHT before the schedule date it's meant to fill.
+    // is the NIGHT before the schedule date it's meant to fill. Comp>0 on
+    // several rows so occ !== net — the box must take occ.
     win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
-      '2026-09-04': { occ: 320, comp: 2, net: 315, dep: 88 },
-      '2026-09-05': { occ: 250, comp: 0, net: 248, dep: 61 },
-      '2026-09-06': { occ: 230, comp: 0, net: 228, dep: 47 },
+      '2026-09-04': { occ: 320, comp: 5, net: 315, dep: 88 },
+      '2026-09-05': { occ: 250, comp: 2, net: 248, dep: 61 },
+      '2026-09-06': { occ: 230, comp: 2, net: 228, dep: 47 },
       '2026-09-07': { occ: 0, comp: 0, net: 0, dep: 0 },
     }));
 
@@ -55,14 +64,14 @@ module.exports = {
     const filled = win.schedBackfillOccFromR106(SCH);
     t.eq(filled, 3, 'reports the number of schedule days it actually filled, for the upload toast');
 
-    t.eq(SCH.days['2026-09-05'].occ, '315', "a blank OCC box takes the NIGHT BEFORE's net occupied rooms (09-04's report, for 09-05)");
+    t.eq(SCH.days['2026-09-05'].occ, '320', "a blank OCC box takes the NIGHT BEFORE's Total Occ — 09-04's report (320), for 09-05, comp rooms included");
     t.eq(SCH.days['2026-09-05'].dep, '88', "and the blank Departures box takes that same night's Dep. Rooms");
 
     // The whole point of the blank-only rule.
-    t.eq(SCH.days['2026-09-06'].occ, '265', "Carlos's own estimate is never overwritten, even though the report says 248");
+    t.eq(SCH.days['2026-09-06'].occ, '265', "Carlos's own estimate is never overwritten, even though the report says 250");
     t.eq(SCH.days['2026-09-06'].dep, '61', 'but the still-blank Departures box on that same day does fill');
 
-    t.eq(SCH.days['2026-09-07'].occ, '228', 'a blank OCC fills next to a Departures figure he entered himself');
+    t.eq(SCH.days['2026-09-07'].occ, '230', 'a blank OCC fills next to a Departures figure he entered himself');
     t.eq(SCH.days['2026-09-07'].dep, '50', 'and that hand-entered Departures figure stays exactly as he left it');
 
     // A zero in the report means "no figure for this night", not an empty
@@ -79,27 +88,27 @@ module.exports = {
     // A corrected re-upload must NOT walk back what is now on the grid.
     // This is the fork Carlos chose, so it gets its own assertion.
     win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
-      '2026-09-04': { occ: 340, comp: 2, net: 336, dep: 95 },
-      '2026-09-05': { occ: 260, comp: 0, net: 259, dep: 70 },
+      '2026-09-04': { occ: 340, comp: 5, net: 335, dep: 95 },
+      '2026-09-05': { occ: 260, comp: 2, net: 258, dep: 70 },
     }));
     t.eq(win.schedBackfillOccFromR106(SCH), 0, 'a corrected re-upload fills nothing — those boxes are no longer blank');
-    t.eq(SCH.days['2026-09-05'].occ, '315', 'the number already on the grid survives a corrected report, by design');
+    t.eq(SCH.days['2026-09-05'].occ, '320', 'the number already on the grid survives a corrected report, by design');
     t.eq(SCH.days['2026-09-05'].dep, '88', 'departures likewise');
 
     // But a NEW week, created later, still picks the report up — this is
     // what makes uploading days ahead actually pay off.
     SCH.days['2026-09-06'].occ = '';
     t.eq(win.schedBackfillOccFromR106(SCH), 1, 'a box cleared back to blank becomes eligible again');
-    t.eq(SCH.days['2026-09-06'].occ, '259', 'and takes the latest report figure, not the stale one');
+    t.eq(SCH.days['2026-09-06'].occ, '260', 'and takes the latest report figure, not the stale one');
 
     // A night that falls in the PREVIOUS month is still found correctly —
     // the lookup keys off the night's own month, not the schedule day's.
     win.localStorage.setItem('hk_r106_2026-08', JSON.stringify({
-      '2026-08-31': { occ: 300, comp: 0, net: 296, dep: 40 },
+      '2026-08-31': { occ: 300, comp: 4, net: 296, dep: 40 },
     }));
     const SCH2 = { days: { '2026-09-01': { sheet: 't', occ: '', dep: '', tdOcc: '' } }, count: 1, savedAt: new Date().toISOString() };
     t.eq(win.schedBackfillOccFromR106(SCH2), 1, 'a month boundary still resolves to the correct night, one month back');
-    t.eq(SCH2.days['2026-09-01'].occ, '296', 'and pulls that night\'s net, not anything from the new month');
+    t.eq(SCH2.days['2026-09-01'].occ, '300', 'and pulls that night\'s Total Occ, not anything from the new month');
 
     // Nothing at all to work with is handled without throwing.
     t.eq(win.schedBackfillOccFromR106(null), 0, 'no schedule record at all is a no-op, not a crash');
