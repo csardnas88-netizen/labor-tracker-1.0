@@ -7,19 +7,24 @@
    in the latest report EXCEPT any box he's typed into by hand himself
    (occAuto/depAuto is false there) — same protection the permanent
    backfill already gives a hand-typed estimate, just triggered on demand
-   instead of only once. */
+   instead of only once.
+
+   Same NIGHT-date convention as schedBackfillOccFromR106 (fixed alongside
+   this test, 2026-09-06): the OCC box for schedule date ds reads R106's
+   row for prevDateStr(ds), one calendar day earlier. Every fixture below
+   keys its R106 rows accordingly. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "schedRefreshOccFromR106: a manual button that re-pulls R106 into THIS week, but never overwrites a box Carlos typed by hand (2026-09-06 ask)",
+  name: "schedRefreshOccFromR106: a manual button that re-pulls R106 into THIS week from the NIGHT BEFORE each date, but never overwrites a box Carlos typed by hand (2026-09-06 ask, night-date fix)",
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
     await new Promise((r) => setTimeout(r, 60));
 
     win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
-      '2026-09-12': { occ: 320, comp: 2, net: 315, dep: 88 },
-      '2026-09-13': { occ: 250, comp: 0, net: 248, dep: 61 },
-      '2026-09-14': { occ: 230, comp: 0, net: 228, dep: 47 },
+      '2026-09-11': { occ: 320, comp: 2, net: 315, dep: 88 },
+      '2026-09-12': { occ: 250, comp: 0, net: 248, dep: 61 },
+      '2026-09-13': { occ: 230, comp: 0, net: 228, dep: 47 },
     }));
 
     const SCH = {
@@ -41,13 +46,13 @@ module.exports = {
     t.eq(refreshed, 3, 'reports how many days actually changed, for the button\'s toast (09-12 updates, 09-13 fills its blank Departures, 09-14 fills fresh)');
 
     const after = win.dlLoadSchedule();
-    t.eq(after.days['2026-09-12'].occ, '315', 'an auto-filled box updates to the corrected report figure');
+    t.eq(after.days['2026-09-12'].occ, '315', "an auto-filled box updates to the NIGHT BEFORE's corrected report figure (09-11's report, for 09-12)");
     t.eq(after.days['2026-09-12'].dep, '88', 'same for its auto-filled Departures box');
 
     t.eq(after.days['2026-09-13'].occ, '265', "Carlos's own hand-typed OCC survives the refresh untouched");
-    t.eq(after.days['2026-09-13'].dep, '61', 'but the still-blank Departures box next to it does fill');
+    t.eq(after.days['2026-09-13'].dep, '61', 'but the still-blank Departures box next to it does fill, from the night before (09-12)');
 
-    t.eq(after.days['2026-09-14'].occ, '228', 'a plain blank box fills the same way the permanent backfill already does');
+    t.eq(after.days['2026-09-14'].occ, '228', "a plain blank box fills the same way the permanent backfill already does, from the night before (09-13)");
     t.eq(after.days['2026-09-14'].occAuto, true, 'and is marked auto so a LATER refresh can still update it again');
 
     // Once refreshed, editing that box by hand must protect it going forward.
@@ -55,7 +60,7 @@ module.exports = {
     win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
       // Same dep as the first refresh (88) — only OCC changed in the report,
       // isolating the assertion to the field Carlos actually hand-edited.
-      '2026-09-12': { occ: 320, comp: 2, net: 340, dep: 88 },
+      '2026-09-11': { occ: 320, comp: 2, net: 340, dep: 88 },
     }));
     const second = win.schedRefreshOccFromR106(['2026-09-12']);
     const afterEdit = win.dlLoadSchedule();

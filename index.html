@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.55"/>
+<meta name="app-version" content="7.40.56"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.56', date:'2026-09-06',
+    fixes:['Fixed the Schedule\'s OCC/Departures auto-fill (and the new Refresh button) reading the WRONG night from the R106 report — Carlos\'s real report: Sunday Sept 13 showed 125 rooms to clean when R106 actually carried 144 for that morning. The OCC box for a schedule date always means "rooms occupied the night BEFORE that date," same as everywhere else this figure is used (Labor\'s own Rooms/Departures card), but the fill was reading R106\'s row for the date itself instead of the day before it — one night off, every time. Both the permanent backfill and yesterday\'s new Refresh button now read the correct night. Any week already auto-filled under the old logic should hit Refresh OCC from R106 once to correct it; a box he\'s typed into by hand is never touched either way.']
+  },
   {
     v:'7.40.55', date:'2026-09-06',
     features:['Added a "Refresh OCC from R106" button on the Schedule, next to Auto-fill — Carlos\'s real report: he re-uploaded a corrected R106 for the week of Sept 12 and the schedule\'s OCC/Departures boxes didn\'t pick up the new numbers, since the existing backfill only fills a box the first time it\'s blank and then protects it forever. That permanent rule stays as the default for a week he\'s already built out. This button is the manual override for a week he\'s still actively building: it pulls the latest R106 into every OCC/Departures box in the week on screen, except any box he\'s typed into by hand himself — those stay protected exactly like before, so a hand-typed estimate never gets walked back by a report.']
@@ -21020,11 +21024,19 @@ function schedBackfillOccFromR106(SCH){
     var occBlank=String(day.occ||'').trim()==='';
     var depBlank=String(day.dep||'').trim()==='';
     if(!occBlank&&!depBlank)return;
-    var mk=ds.slice(0,7);
+    /* R106 is stored by NIGHT date, same convention as Labor's own
+       Rooms/Departures card (see the ds/nightDs split there): the schedule's
+       OCC box for date ds is "rooms occupied the night BEFORE ds", so the
+       report row to read is prevDateStr(ds), not ds itself. Reading rec[ds]
+       here (the fix this comment replaces) silently pulled the FOLLOWING
+       night's figure instead — Carlos's real report, Sept 13 showing 125
+       instead of the 144 the R106 actually carried for that morning. */
+    var nightDs=prevDateStr(ds);
+    var mk=nightDs.slice(0,7);
     if(byMonth[mk]===undefined){
       try{ byMonth[mk]=JSON.parse(localStorage.getItem('hk_r106_'+mk)||'{}'); }catch(e){ byMonth[mk]=null; }
     }
-    var rec=byMonth[mk]&&byMonth[mk][ds];
+    var rec=byMonth[mk]&&byMonth[mk][nightDs];
     if(!rec||typeof rec!=='object')return;
     /* Same two figures Labor already reads off this report: net occupied
        rooms, and Dep. Rooms. A zero is skipped rather than written —
@@ -21053,11 +21065,14 @@ function schedRefreshOccFromR106(dates){
   var byMonth={},refreshed=0;
   dates.forEach(function(ds){
     var day=SCH.days[ds]; if(!day)return;
-    var mk=ds.slice(0,7);
+    /* Same NIGHT-date convention as schedBackfillOccFromR106 above — this
+       week's OCC box for ds reads R106's row for prevDateStr(ds). */
+    var nightDs=prevDateStr(ds);
+    var mk=nightDs.slice(0,7);
     if(byMonth[mk]===undefined){
       try{ byMonth[mk]=JSON.parse(localStorage.getItem('hk_r106_'+mk)||'{}'); }catch(e){ byMonth[mk]=null; }
     }
-    var rec=byMonth[mk]&&byMonth[mk][ds];
+    var rec=byMonth[mk]&&byMonth[mk][nightDs];
     if(!rec||typeof rec!=='object')return;
     var occEditable=day.occAuto||String(day.occ||'').trim()==='';
     var depEditable=day.depAuto||String(day.dep||'').trim()==='';
