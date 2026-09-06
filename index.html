@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.58"/>
+<meta name="app-version" content="7.40.59"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.59', date:'2026-09-06',
+    features:['Room Assignment Analysis attendant cards now show how many of her Occupied (Stayover) rooms were actually DND that day, next to the Occupied count, plus a "really cleaned" line underneath — Carlos\'s ask, so the Occupied number reflects rooms she genuinely serviced instead of just rooms with a guest still in them. Computed live against the DNDs log, not baked into the report at upload time, since DNDs are usually logged separately and often after the report is already in. Only shows up once a DND list has actually been logged for that date — a day nobody logged still reads as nothing, never a false zero.']
+  },
   {
     v:'7.40.58', date:'2026-09-06',
     fixes:['Fixed the Schedule\'s OCC boxes (both the permanent backfill and the Refresh button) using "net occupied rooms" (Total Occ minus Comp rooms) instead of Total Occ itself — Carlos\'s real report: R106 read 192 for Sept 14, the box read 186. Labor\'s own budget math wants net, since Comp rooms earn no revenue, but the Schedule box means "how many rooms does she actually have to clean," and a Comp room still gets cleaned like any other room. Both now use Total Occ; Labor\'s own pages are unaffected.']

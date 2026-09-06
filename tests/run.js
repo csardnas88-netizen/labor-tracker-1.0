@@ -80,6 +80,7 @@ const cases = [
   require('./cases/schedule-call-off-clobber'),
   require('./cases/schedule-occ-from-r106'),
   require('./cases/schedule-refresh-occ-from-r106'),
+  require('./cases/late-departures-dnd'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
