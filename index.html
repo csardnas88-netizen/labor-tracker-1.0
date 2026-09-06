@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.62"/>
+<meta name="app-version" content="7.40.63"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.63', date:'2026-09-06',
+    fixes:['Fixed the real reason Sandra S still couldn\'t be moved off Lobby onto Room Attendant, and a second bug Carlos spotted in the same report: Gabriela Cuevas showing LOBBY on Room Attendant (she\'s covering Marroquin) while her own Lobby row still read a stale ROOMS. Root cause of the first: the Marroquin -> Gabriela Cuevas -> Sandra S cover chain re-derives from scratch on every edit ANY of the three make, and a fresh \'1\' Carlos just typed into Sandra S\'s own cell looked identical to the untouched status quo, so she was immediately re-nominated for Lobby cover in the same click. Her own edit now wins instead. Root cause of the second: a cover-chain label like LOBBY on someone\'s home crew is just as real a fact as a plain \'1\' is — it means she\'s genuinely on the OTHER crew that day — but nothing corrected her literal row there to say so; it now relabels to a plain \'1\', same self-healing treatment the ROOMS relabel already gets.']
+  },
   {
     v:'7.40.62', date:'2026-09-06',
     fixes:['Fixed Sandra S (Room Attendant / Lobby) being stuck unable to move off Lobby onto Room Attendant — Carlos\'s real report, the same deadlock Gabriela Cuevas hit before her Room Attendant/Lobby pair existed. Sandra S now gets the same treatment: whichever side he just edited wins, and her Lobby row reads ROOMS instead of a plain \'1\' on a day she\'s really on Room Attendant.']
@@ -20961,7 +20965,7 @@ function schedSetCell(bk,idx,name,ds,val,el){
      has to react live right here rather than only on the next full
      Auto-fill run. */
   var chainMember=schedIsChainMember(bk,name);
-  if(chainMember)schedApplyCoverChainsForDate(SCH,ds);
+  if(chainMember)schedApplyCoverChainsForDate(SCH,ds,{crew:bk,name:name});
   /* Carlos's ask: he builds Laundry by hand, Victoriano first, not
      through Auto-fill — Jorge's direct Laundry row (see
      schedApplyLaundryMirror) has to react live to each of Victoriano's
@@ -22004,7 +22008,7 @@ function schedSyncPatyPmhm(SCH,dates){
    titular cell that's blank or anything else (VAC/FLEX/PM/borrowed
    elsewhere) is left alone in both directions — not a clear enough
    signal to assign OR release a cover. */
-function schedApplyCoverChainsForDate(SCH,ds){
+function schedApplyCoverChainsForDate(SCH,ds,edited){
   SCHED_COVER_CHAINS.forEach(function(cc){
     var titular=cc.chain[0];
     var titularCell=schedCellFor(SCH,ds,titular.homeCrew,titular.name);
@@ -22022,6 +22026,20 @@ function schedApplyCoverChainsForDate(SCH,ds){
       var c=cc.chain[i];
       var cell=schedCellFor(SCH,ds,c.homeCrew,c.name);
       if(cell!=='1')continue;   // not on this week's roster, or off/already covering elsewhere
+      /* Carlos's real report: he set Sandra S's own Room Attendant cell
+         back to '1' (choosing her to work her home crew instead of
+         covering Lobby), and this SAME function — triggered by that very
+         edit, via schedSetCell's chainMember check below — immediately
+         stomped it back to the cover label, since a fresh '1' looks
+         identical to the untouched status quo. The edited context breaks
+         that tie: a backup's OWN cell, just set to '1' by Carlos, is
+         respected and skipped rather than nominated — the same
+         edited-side-wins idea schedApplyLinkedPeopleForDate already uses
+         for this exact pair's other relationship. Skipping her here just
+         means the chain checks the next backup, or leaves the crew
+         short if there isn't one — never forcing a cover Carlos just
+         overrode. */
+      if(edited&&edited.crew===c.homeCrew&&dlNorm(edited.name)===dlNorm(c.name))continue;
       var row=schedRawCell(SCH,ds,c.homeCrew,c.name);
       if(row)row[1]=cc.label;
       return;
@@ -22292,7 +22310,34 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
        the ROOM ATTENDANT cell (blank or OFF), not the Lobby one. A '1'
        left on Room Attendant always wins. Only a plain '1' is replaced,
        so a PM shift or a cover label typed on the Lobby cell survives. */
-    if(pair.b.awayLabel&&!aOff&&!bOff&&bCell==='1'){
+    /* A cover-chain label on her home crew (e.g. 'LOBBY' meaning she's
+       covering Marroquin's Lobby shift, via SCHED_COVER_CHAINS) is NOT
+       the same fact as a plain '1' — a plain '1' means she's on HER OWN
+       crew (a), a cover label means she's on the OTHER crew (b). Each
+       gets its own relabel, and they're mutually exclusive: only one of
+       these two blocks can ever fire for a given aCell. */
+    if(aCell===pair.b.crew.toUpperCase()){
+      /* The reverse of the rule below — Carlos's real report: Gabriela
+         Cuevas showed LOBBY on Room Attendant but her own literal Lobby
+         row still read the stale ROOMS from an earlier day she was
+         genuinely on Room Attendant. The cover label is just as much a
+         fact as a plain '1' is below — she IS on that other crew today —
+         so her literal row there must read a plain '1', not whatever it
+         happened to say before the cover kicked in. Same every-pass
+         treatment, no "which side is newer" needed. */
+      if(bCell!=='1'&&!_schedIsUnavailable(bCell)){
+        var bRowCover=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
+        if(bRowCover){ bRowCover[1]='1'; bCell='1'; changed=true; }
+      }
+    } else if(pair.b.awayLabel&&!aOff&&!bOff&&bCell==='1'){
+      /* Carlos's rule, asked for outright after having to retype it by
+         hand: whenever she is working her home crew (a), the other
+         crew's row must say WHERE she is rather than a plain '1', which
+         reads as if she were working there too. The consequence,
+         deliberate: to put her genuinely on Lobby, change the ROOM
+         ATTENDANT cell (blank or OFF), not the Lobby one. A '1' left on
+         Room Attendant always wins. Only a plain '1' is replaced, so a
+         PM shift or a cover label typed on the Lobby cell survives. */
       var bRowAway=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
       if(bRowAway){ bRowAway[1]=pair.b.awayLabel; bCell=pair.b.awayLabel; changed=true; }
     }

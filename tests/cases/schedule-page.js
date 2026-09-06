@@ -1566,6 +1566,66 @@ module.exports = {
     t.assert(!win.schedApplyLinkedPeopleForDate(SCH21ss2, ds21[0]), 'with Room Attendant blank there is nothing to reconcile');
     t.eq(SCH21ss2.days[ds21[0]].lobby[0][1], '1', 'clearing the Room Attendant cell is how she genuinely goes on Lobby');
 
+    // ── Carlos's follow-up, same day, 2026-09-06: setting Sandra S to '1'
+    // on Room Attendant STILL wouldn't stick on Thursday — a second,
+    // independent bug. SCHED_COVER_CHAINS (Marroquin -> Gabriela Cuevas ->
+    // Sandra S) re-derives Lobby cover from scratch on every edit any
+    // chain member makes (schedIsChainMember matches backups too, not
+    // just the titular), and with Marroquin and Gabriela Cuevas both off,
+    // Sandra S's freshly-typed '1' looked identical to the untouched
+    // status quo — nominated right back to LOBBY in the very same call.
+    // The edited context now lets her own cell edit win instead. ──
+    const SCH21cc1 = { days: { [ds21[0]]: { lobby: [['Marroquin', 'OFF']], gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', '1']] } } };
+    win.schedApplyCoverChainsForDate(SCH21cc1, ds21[0], { crew: 'gra', name: 'Sandra S' });
+    t.eq(SCH21cc1.days[ds21[0]].gra[1][1], '1', "Sandra S's own fresh edit to '1' is respected — she is not re-nominated for Lobby cover in the same call");
+
+    // With no edited context (Auto-fill, a full render pass), the old
+    // default behavior is unchanged — she IS nominated, same as before.
+    const SCH21cc2 = { days: { [ds21[0]]: { lobby: [['Marroquin', 'OFF']], gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', '1']] } } };
+    win.schedApplyCoverChainsForDate(SCH21cc2, ds21[0]);
+    t.eq(SCH21cc2.days[ds21[0]].gra[1][1], 'LOBBY', 'with no edited context at all, Auto-fill can still nominate her normally');
+
+    // Naming a DIFFERENT chain member as edited doesn't protect Sandra S.
+    const SCH21cc3 = { days: { [ds21[0]]: { lobby: [['Marroquin', 'OFF']], gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', '1']] } } };
+    win.schedApplyCoverChainsForDate(SCH21cc3, ds21[0], { crew: 'gra', name: 'Gabriela Cuevas' });
+    t.eq(SCH21cc3.days[ds21[0]].gra[1][1], 'LOBBY', "editing someone ELSE's cell doesn't make Sandra S's untouched '1' authoritative");
+
+    // ── Carlos's other real report, same message: Gabriela Cuevas showed
+    // LOBBY on Room Attendant (she's covering Marroquin) but her own
+    // literal Lobby row still read the stale ROOMS left over from an
+    // earlier day she was genuinely on Room Attendant — the reverse of
+    // the ROOMS relabel above never ran, so it never corrected itself. ──
+    const SCH21rev = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', 'LOBBY']], lobby: [['Gabriela', 'ROOMS']] } } };
+    t.assert(win.schedApplyLinkedPeopleForDate(SCH21rev, ds21[0]), 'a cover-chain label on Room Attendant naming Lobby is recognized as a real change to reconcile');
+    t.eq(SCH21rev.days[ds21[0]].lobby[0][1], '1', "her literal Lobby row becomes a plain '1' — she really is on Lobby today, covering Marroquin");
+
+    // Same reverse fix for Sandra S's pair.
+    const SCH21rev2 = { days: { [ds21[0]]: { gra: [['Sandra S', 'LOBBY']], lobby: [['Sandra S', 'ROOMS']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21rev2, ds21[0]);
+    t.eq(SCH21rev2.days[ds21[0]].lobby[0][1], '1', "Sandra S's Lobby row is likewise corrected to '1' while she's covering");
+
+    // A real absence on the Lobby side (R-OFF/OFF/etc.) is never
+    // overwritten by the cover-label reverse fix — only a plain
+    // Working-but-mislabeled cell is corrected.
+    const SCH21rev3 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', 'LOBBY']], lobby: [['Gabriela', 'R-OFF']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21rev3, ds21[0]);
+    t.eq(SCH21rev3.days[ds21[0]].lobby[0][1], 'R-OFF', "a real R-OFF on the Lobby side is left alone — she can't be resting there while also covering it");
+
+    // Already correct — no redundant write.
+    const SCH21rev4 = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', 'LOBBY']], lobby: [['Gabriela', '1']] } } };
+    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21rev4, ds21[0]), 'no change reported once the Lobby row already says 1');
+
+    // End-to-end through the real edit path: schedSetCell on Sandra S's
+    // own Room Attendant cell, exactly what Carlos does by hand.
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH21ssLive = { days: {} };
+    ds21.forEach((ds) => { SCH21ssLive.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', lobby: [['Marroquin', 'OFF'], ['Sandra S', 'ROOMS']], gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', 'LOBBY']], laundry: [] }; });
+    win.dlSaveSchedule(SCH21ssLive);
+    win.schedSetCell('gra', 1, 'Sandra S', ds21[0], '1', null);
+    const afterSandraSLive = win.dlLoadSchedule();
+    t.eq(afterSandraSLive.days[ds21[0]].gra[1][1], '1', "Sandra S's Room Attendant cell sticks at '1' through the real edit path — this was the reported bug");
+    t.eq(afterSandraSLive.days[ds21[0]].lobby[1][1], 'ROOMS', "and her Lobby row relabels to ROOMS in the same live edit, no manual retyping needed");
+
     // ── Both new mirrors also react live to a single manual edit
     // (schedSetCell), not just Auto-fill — Carlos's real reports were
     // both about editing by hand. ──
