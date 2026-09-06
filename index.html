@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.54"/>
+<meta name="app-version" content="7.40.55"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.55', date:'2026-09-06',
+    features:['Added a "Refresh OCC from R106" button on the Schedule, next to Auto-fill — Carlos\'s real report: he re-uploaded a corrected R106 for the week of Sept 12 and the schedule\'s OCC/Departures boxes didn\'t pick up the new numbers, since the existing backfill only fills a box the first time it\'s blank and then protects it forever. That permanent rule stays as the default for a week he\'s already built out. This button is the manual override for a week he\'s still actively building: it pulls the latest R106 into every OCC/Departures box in the week on screen, except any box he\'s typed into by hand himself — those stay protected exactly like before, so a hand-typed estimate never gets walked back by a report.']
+  },
   {
     v:'7.40.54', date:'2026-09-05',
     fixes:['Yesenia is permanently excluded from the Turndown Attendant crew now — Carlos\'s ask. Her only real job is PM Houseman; any row she ends up with under Turndown (a leftover data artifact, not a real assignment like Paty\'s legitimate cover row) is now deleted outright the moment the week is opened, on every loaded week, not just removed once by hand. Auto-fill\'s own fairness rotation for that crew is also protected from ever handing her an independent day off there, same guard Jorge Gonzalez and Andrea already have for their own fully-derived crews. A future re-upload that still lists her under Turndown is purged again rather than permanently protected by a one-time removal.']
@@ -21028,16 +21032,60 @@ function schedBackfillOccFromR106(SCH){
        not a real empty hotel, and a literal 0 in the box would read as
        a decision Carlos made. */
     var dayFilled=false;
-    if(occBlank&&rec.net>0){ day.occ=String(rec.net); dayFilled=true; }
-    if(depBlank&&rec.dep>0){ day.dep=String(rec.dep); dayFilled=true; }
+    if(occBlank&&rec.net>0){ day.occ=String(rec.net); day.occAuto=true; dayFilled=true; }
+    if(depBlank&&rec.dep>0){ day.dep=String(rec.dep); day.depAuto=true; dayFilled=true; }
     if(dayFilled)filled++;
   });
   return filled;
+}
+/* "Refresh from R106" button on a week still being built: Carlos re-uploads
+   R106 with corrected numbers and expects THIS week to pick them up, unlike
+   the permanent blank-only backfill above. The difference is his own manual
+   edit — once he's typed a number into OCC/Departures himself, occAuto/depAuto
+   is cleared and this never touches that cell again, same protection the
+   OCC page's "Sched" box already gives a hand-typed figure. Limited to the
+   dates passed in (the week on screen), not every week ever built, since a
+   week he already finished scheduling shouldn't shift under him just because
+   he uploaded a later report. */
+function schedRefreshOccFromR106(dates){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days)return 0;
+  var byMonth={},refreshed=0;
+  dates.forEach(function(ds){
+    var day=SCH.days[ds]; if(!day)return;
+    var mk=ds.slice(0,7);
+    if(byMonth[mk]===undefined){
+      try{ byMonth[mk]=JSON.parse(localStorage.getItem('hk_r106_'+mk)||'{}'); }catch(e){ byMonth[mk]=null; }
+    }
+    var rec=byMonth[mk]&&byMonth[mk][ds];
+    if(!rec||typeof rec!=='object')return;
+    var occEditable=day.occAuto||String(day.occ||'').trim()==='';
+    var depEditable=day.depAuto||String(day.dep||'').trim()==='';
+    var dayChanged=false;
+    if(occEditable&&rec.net>0&&String(rec.net)!==String(day.occ||'')){ day.occ=String(rec.net); day.occAuto=true; dayChanged=true; }
+    if(depEditable&&rec.dep>0&&String(rec.dep)!==String(day.dep||'')){ day.dep=String(rec.dep); day.depAuto=true; dayChanged=true; }
+    if(dayChanged)refreshed++;
+  });
+  if(refreshed){
+    SCH.savedAt=new Date().toISOString();
+    dlSaveSchedule(SCH);
+  }
+  return refreshed;
+}
+function schedRefreshOccFromR106Click(){
+  var n=schedRefreshOccFromR106(schedWeekDates());
+  showToast(n>0?('✓ Refreshed '+n+' day'+(n===1?'':'s')+' from R106'):'No changes — nothing new in R106 for this week');
+  if(n>0)renderSchedule();
 }
 function schedSetNum(ds,field,val){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days||!SCH.days[ds])return;
   SCH.days[ds][field]=String(val==null?'':val).trim();
+  /* A hand-typed OCC/Departures figure is protected from
+     schedRefreshOccFromR106 forever after this, same as the permanent
+     blank-only backfill already protects it — only clearing the box
+     back to blank makes it eligible for auto-fill again. */
+  if(field==='occ'||field==='dep')SCH.days[ds][field+'Auto']=false;
   var prevDs=null;
   if(field==='occ'&&schedDeriveTdOccFromOcc(SCH,ds,SCH.days[ds][field]))prevDs=prevDateStr(ds);
   SCH.savedAt=new Date().toISOString();
@@ -23156,6 +23204,7 @@ function renderSchedule(){
   }
   html+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;">'
     +'<button class="btn btn-navy btn-sm" onclick="schedAutoFill()">Auto-fill this week</button> '
+    +'<button class="btn btn-ghost btn-sm" onclick="schedRefreshOccFromR106Click()" title="Pulls the latest R106 numbers into this week\'s OCC/Departures boxes above &mdash; skips any box you\'ve typed into by hand">Refresh OCC from R106</button> '
     +'<button class="btn btn-ghost btn-sm" onclick="schedExportExcel()">Export Excel</button>'
     +'<div style="font-size:9.5px;color:var(--text3);margin-top:5px;">Fills every crew except Managers from OCC/Departures, including Overnight, Yanira\'s PM shift and the cover chains &mdash; R-OFF is always kept</div>'
     +'</div>';
