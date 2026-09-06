@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.56"/>
+<meta name="app-version" content="7.40.57"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.57', date:'2026-09-06',
+    fixes:['Fixed "Refresh OCC from R106" being a no-op on exactly the boxes it was built to fix — Carlos\'s real report, clicking it on the Sept 12-18 week left Sunday still at 125. Root cause: the button only refreshes a box that isn\'t "protected," and it was checking for that using a marker (occAuto) that only started being recorded the moment this button shipped — every box already auto-filled before that, his whole existing week included, has that marker missing entirely rather than set to false, and missing was being treated the same as protected. Now only a box he has explicitly typed into himself counts as protected; a missing marker refreshes normally.']
+  },
   {
     v:'7.40.56', date:'2026-09-06',
     fixes:['Fixed the Schedule\'s OCC/Departures auto-fill (and the new Refresh button) reading the WRONG night from the R106 report — Carlos\'s real report: Sunday Sept 13 showed 125 rooms to clean when R106 actually carried 144 for that morning. The OCC box for a schedule date always means "rooms occupied the night BEFORE that date," same as everywhere else this figure is used (Labor\'s own Rooms/Departures card), but the fill was reading R106\'s row for the date itself instead of the day before it — one night off, every time. Both the permanent backfill and yesterday\'s new Refresh button now read the correct night. Any week already auto-filled under the old logic should hit Refresh OCC from R106 once to correct it; a box he\'s typed into by hand is never touched either way.']
@@ -21074,8 +21078,14 @@ function schedRefreshOccFromR106(dates){
     }
     var rec=byMonth[mk]&&byMonth[mk][nightDs];
     if(!rec||typeof rec!=='object')return;
-    var occEditable=day.occAuto||String(day.occ||'').trim()==='';
-    var depEditable=day.depAuto||String(day.dep||'').trim()==='';
+    /* occAuto/depAuto only started being recorded once this button shipped —
+       every box auto-filled before that (Carlos's whole Sept 12-18 week, hit
+       by the night-date bug this button exists to correct) has the flag
+       undefined, not true. Only an EXPLICIT false (set by schedSetNum, once
+       he's actually typed into the box himself) counts as protected — that
+       way this button can still fix the exact boxes it was built to fix. */
+    var occEditable=day.occAuto!==false;
+    var depEditable=day.depAuto!==false;
     var dayChanged=false;
     if(occEditable&&rec.net>0&&String(rec.net)!==String(day.occ||'')){ day.occ=String(rec.net); day.occAuto=true; dayChanged=true; }
     if(depEditable&&rec.dep>0&&String(rec.dep)!==String(day.dep||'')){ day.dep=String(rec.dep); day.depAuto=true; dayChanged=true; }

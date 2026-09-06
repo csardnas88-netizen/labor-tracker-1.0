@@ -4,19 +4,24 @@
    blank-only rule in schedule-occ-from-r106.js, which is exactly what he
    wanted for a week he'd already finished. His resolution: a manual
    "Refresh OCC from R106" button, scoped to the week on screen, that pulls
-   in the latest report EXCEPT any box he's typed into by hand himself
-   (occAuto/depAuto is false there) — same protection the permanent
-   backfill already gives a hand-typed estimate, just triggered on demand
-   instead of only once.
+   in the latest report except any box he's typed into by hand himself.
 
    Same NIGHT-date convention as schedBackfillOccFromR106 (fixed alongside
    this test, 2026-09-06): the OCC box for schedule date ds reads R106's
    row for prevDateStr(ds), one calendar day earlier. Every fixture below
-   keys its R106 rows accordingly. */
+   keys its R106 rows accordingly.
+
+   Second real bug, same day: occAuto/depAuto only started being recorded
+   the moment this button shipped — every box already auto-filled before
+   that (including Carlos's whole Sept 12-18 week, which the night-date bug
+   above had filled with the WRONG number) has the flag undefined, not
+   true, so treating "undefined" as protected made the button a no-op on
+   exactly the boxes it exists to fix. Only an EXPLICIT false (set by
+   schedSetNum once he's actually typed into the box) counts as protected. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "schedRefreshOccFromR106: a manual button that re-pulls R106 into THIS week from the NIGHT BEFORE each date, but never overwrites a box Carlos typed by hand (2026-09-06 ask, night-date fix)",
+  name: "schedRefreshOccFromR106: re-pulls R106 from the NIGHT BEFORE each date, refreshing legacy auto-filled boxes (occAuto undefined) too, but never one Carlos explicitly typed by hand (occAuto===false)",
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
     await new Promise((r) => setTimeout(r, 60));
@@ -29,12 +34,15 @@ module.exports = {
 
     const SCH = {
       days: {
-        // Auto-filled yesterday from an earlier R106 upload.
+        // Auto-filled under the new (flagged) code — the ordinary case.
         '2026-09-12': { sheet: 't', occ: '290', occAuto: true, dep: '80', depAuto: true, tdOcc: '' },
-        // Carlos typed this OCC number in by hand — must survive the refresh.
-        '2026-09-13': { sheet: 't', occ: '265', dep: '', tdOcc: '' },
-        // Still blank — a plain first-time fill, same as the backfill above.
-        '2026-09-14': { sheet: 't', occ: '', dep: '', tdOcc: '' },
+        // Auto-filled BEFORE this button existed — no occAuto flag at all,
+        // same as every box in Carlos's real Sept 12-18 week. Must still
+        // refresh: this is the exact case his real report hit.
+        '2026-09-13': { sheet: 't', occ: '125', dep: '', tdOcc: '' },
+        // Genuinely typed by hand (schedSetNum sets occAuto explicitly
+        // false) — must survive the refresh untouched.
+        '2026-09-14': { sheet: 't', occ: '400', occAuto: false, dep: '', tdOcc: '' },
       },
       count: 3,
       savedAt: new Date().toISOString(),
@@ -43,17 +51,18 @@ module.exports = {
 
     const dates = ['2026-09-12', '2026-09-13', '2026-09-14'];
     const refreshed = win.schedRefreshOccFromR106(dates);
-    t.eq(refreshed, 3, 'reports how many days actually changed, for the button\'s toast (09-12 updates, 09-13 fills its blank Departures, 09-14 fills fresh)');
+    t.eq(refreshed, 3, 'reports how many days actually changed (09-12 OCC, 09-13 OCC+Departures fill, 09-14 Departures fills)');
 
     const after = win.dlLoadSchedule();
-    t.eq(after.days['2026-09-12'].occ, '315', "an auto-filled box updates to the NIGHT BEFORE's corrected report figure (09-11's report, for 09-12)");
+    t.eq(after.days['2026-09-12'].occ, '315', "a flagged auto-filled box updates to the NIGHT BEFORE's corrected report figure (09-11's report, for 09-12)");
     t.eq(after.days['2026-09-12'].dep, '88', 'same for its auto-filled Departures box');
 
-    t.eq(after.days['2026-09-13'].occ, '265', "Carlos's own hand-typed OCC survives the refresh untouched");
-    t.eq(after.days['2026-09-13'].dep, '61', 'but the still-blank Departures box next to it does fill, from the night before (09-12)');
+    t.eq(after.days['2026-09-13'].occ, '248', "a legacy box with no occAuto flag at all still refreshes — Carlos's real bug, the button must be able to fix it (09-12's night)");
+    t.eq(after.days['2026-09-13'].dep, '61', 'and its blank Departures box fills the same way');
+    t.eq(after.days['2026-09-13'].occAuto, true, 'now explicitly marked auto, so it stops being ambiguous going forward');
 
-    t.eq(after.days['2026-09-14'].occ, '228', "a plain blank box fills the same way the permanent backfill already does, from the night before (09-13)");
-    t.eq(after.days['2026-09-14'].occAuto, true, 'and is marked auto so a LATER refresh can still update it again');
+    t.eq(after.days['2026-09-14'].occ, '400', "Carlos's explicitly hand-typed OCC (occAuto===false) survives the refresh untouched");
+    t.eq(after.days['2026-09-14'].dep, '47', "but its blank Departures box still fills, from the night before (09-13's night) — only OCC was hand-typed on this day");
 
     // Once refreshed, editing that box by hand must protect it going forward.
     win.schedSetNum('2026-09-12', 'occ', '300');
