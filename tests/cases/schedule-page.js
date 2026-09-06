@@ -1549,6 +1549,23 @@ module.exports = {
     t.assert(!win.schedApplyLinkedPeopleForDate({ days: { [ds21[0]]: { gra: [['Sandra', 'OFF']] } } }, ds21[0]),
       'no Laundry row at all that week reports changed:false too');
 
+    // ── Carlos's real report, 2026-09-06: Sandra S (Room Attendant /
+    // Lobby, spelled the same on both crews per Carlos) was stuck exactly
+    // the way Gabriela Cuevas used to be — couldn't move her off Lobby
+    // onto Room Attendant. Same shape as Gabriela's pair: edited-side-wins,
+    // and her Lobby row reads ROOMS (not a plain '1') on a day she's
+    // really on Room Attendant. ──
+    const SCH21ss = { days: { [ds21[0]]: { gra: [['Sandra S', '1']], lobby: [['Sandra S', 'R-OFF']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21ss, ds21[0], { crew: 'gra', name: 'Sandra S' });
+    t.eq(SCH21ss.days[ds21[0]].gra[0][1], '1', "the cell Carlos just set to working stays working, same fix as Gabriela Cuevas's");
+    t.eq(SCH21ss.days[ds21[0]].lobby[0][1], 'ROOMS', "her stale Lobby R-OFF is released as ROOMS, not a plain '1' — she's working Rooms, not Lobby");
+
+    // Moving her genuinely onto Lobby is clearing the ROOM ATTENDANT cell,
+    // same consequence as Gabriela Cuevas's pair.
+    const SCH21ss2 = { days: { [ds21[0]]: { gra: [['Sandra S', '']], lobby: [['Sandra S', '1']] } } };
+    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21ss2, ds21[0]), 'with Room Attendant blank there is nothing to reconcile');
+    t.eq(SCH21ss2.days[ds21[0]].lobby[0][1], '1', 'clearing the Room Attendant cell is how she genuinely goes on Lobby');
+
     // ── Both new mirrors also react live to a single manual edit
     // (schedSetCell), not just Auto-fill — Carlos's real reports were
     // both about editing by hand. ──
