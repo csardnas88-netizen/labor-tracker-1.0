@@ -1554,17 +1554,18 @@ module.exports = {
     // her off Lobby onto Room Attendant. Same shape as Gabriela's pair:
     // edited-side-wins, and her Lobby row reads ROOMS (not a plain '1')
     // on a day she's really on Room Attendant. Her Lobby-side name is
-    // "Sandra Silva", NOT "Sandra S" — Carlos's first answer said the
-    // name was the same both places, but checking the live week showed
-    // otherwise, same asymmetry as Gabriela Cuevas/Gabriela. ──
-    const SCH21ss = { days: { [ds21[0]]: { gra: [['Sandra S', '1']], lobby: [['Sandra Silva', 'R-OFF']] } } };
+    // "Sandra S." — WITH a trailing period — confirmed from a real
+    // screenshot after two earlier text answers ("Sandra S both places,"
+    // then "Sandra Silva") both turned out wrong; dlNorm doesn't strip
+    // punctuation, so the period alone broke the match. ──
+    const SCH21ss = { days: { [ds21[0]]: { gra: [['Sandra S', '1']], lobby: [['Sandra S.', 'R-OFF']] } } };
     win.schedApplyLinkedPeopleForDate(SCH21ss, ds21[0], { crew: 'gra', name: 'Sandra S' });
     t.eq(SCH21ss.days[ds21[0]].gra[0][1], '1', "the cell Carlos just set to working stays working, same fix as Gabriela Cuevas's");
     t.eq(SCH21ss.days[ds21[0]].lobby[0][1], 'ROOMS', "her stale Lobby R-OFF is released as ROOMS, not a plain '1' — she's working Rooms, not Lobby");
 
     // Moving her genuinely onto Lobby is clearing the ROOM ATTENDANT cell,
     // same consequence as Gabriela Cuevas's pair.
-    const SCH21ss2 = { days: { [ds21[0]]: { gra: [['Sandra S', '']], lobby: [['Sandra Silva', '1']] } } };
+    const SCH21ss2 = { days: { [ds21[0]]: { gra: [['Sandra S', '']], lobby: [['Sandra S.', '1']] } } };
     t.assert(!win.schedApplyLinkedPeopleForDate(SCH21ss2, ds21[0]), 'with Room Attendant blank there is nothing to reconcile');
     t.eq(SCH21ss2.days[ds21[0]].lobby[0][1], '1', 'clearing the Room Attendant cell is how she genuinely goes on Lobby');
 
@@ -1601,8 +1602,8 @@ module.exports = {
     t.assert(win.schedApplyLinkedPeopleForDate(SCH21rev, ds21[0]), 'a cover-chain label on Room Attendant naming Lobby is recognized as a real change to reconcile');
     t.eq(SCH21rev.days[ds21[0]].lobby[0][1], '1', "her literal Lobby row becomes a plain '1' — she really is on Lobby today, covering Marroquin");
 
-    // Same reverse fix for Sandra S's pair (her Lobby row is "Sandra Silva").
-    const SCH21rev2 = { days: { [ds21[0]]: { gra: [['Sandra S', 'LOBBY']], lobby: [['Sandra Silva', 'ROOMS']] } } };
+    // Same reverse fix for Sandra S's pair (her Lobby row is "Sandra S.").
+    const SCH21rev2 = { days: { [ds21[0]]: { gra: [['Sandra S', 'LOBBY']], lobby: [['Sandra S.', 'ROOMS']] } } };
     win.schedApplyLinkedPeopleForDate(SCH21rev2, ds21[0]);
     t.eq(SCH21rev2.days[ds21[0]].lobby[0][1], '1', "Sandra S's Lobby row is likewise corrected to '1' while she's covering");
 
@@ -1621,7 +1622,7 @@ module.exports = {
     // own Room Attendant cell, exactly what Carlos does by hand.
     win.localStorage.removeItem('hk_dl_schedule');
     const SCH21ssLive = { days: {} };
-    ds21.forEach((ds) => { SCH21ssLive.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', lobby: [['Marroquin', 'OFF'], ['Sandra Silva', 'ROOMS']], gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', 'LOBBY']], laundry: [] }; });
+    ds21.forEach((ds) => { SCH21ssLive.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', lobby: [['Marroquin', 'OFF'], ['Sandra S.', 'ROOMS']], gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', 'LOBBY']], laundry: [] }; });
     win.dlSaveSchedule(SCH21ssLive);
     win.schedSetCell('gra', 1, 'Sandra S', ds21[0], '1', null);
     const afterSandraSLive = win.dlLoadSchedule();
