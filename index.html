@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.65"/>
+<meta name="app-version" content="7.40.66"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.66', date:'2026-09-07',
+    features:['Generalized Gabriela Cuevas/Sandra S\'s Room Attendant-Lobby reconciliation to EVERY employee added to more than one crew — Carlos\'s ask, so this works for anyone without him telling Claude to add a new hardcoded pair each time. Marking someone working on one crew now relabels every OTHER crew she\'s also added to with that crew\'s own name (ROOMS, LOBBY, LAUNDRY, TURNDOWN, HOUSEMAN, etc.) instead of leaving a plain \'1\' that reads as double-booked; a real day off still carries across to every crew she\'s in exactly like before. Doesn\'t touch anyone already handled by a more specific mechanism (Gabriela Cuevas, Sandra S, Sandra, the Victoriano Ch/Jorge Gonzalez and Sarahi/Andrea cover pairs), or a row added via "Add someone to this crew" (borrowing someone in is deliberately independent, not a transfer).']
+  },
   {
     v:'7.40.65', date:'2026-09-06',
     fixes:['Fixed Sandra S\'s Room Attendant/Lobby pair for real this time — a screenshot showed her Lobby row is "Sandra S." with a trailing period, not "Sandra Silva." dlNorm lowercases, trims, and strips accents, but never strips punctuation, so that one period alone kept the pair from ever matching a row to link against.']
@@ -21025,9 +21029,13 @@ function schedSetCell(bk,idx,name,ds,val,el){
     return (pair.a.crew===bk&&dlNorm(pair.a.name)===dlNorm(name))||(pair.b.crew===bk&&dlNorm(pair.b.name)===dlNorm(name));
   });
   if(linkedMember)schedApplyLinkedPeopleForDate(SCH,ds,{crew:bk,name:name});
+  /* Carlos's ask: the same reconciliation Gabriela Cuevas/Sandra S get,
+     generalized to anyone added to more than one crew — live, the
+     moment either cell is edited, not just on the next full render. */
+  var crossCrewSynced=schedApplyCrossCrewSyncForDate(SCH,ds,{crew:bk,name:name});
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
-  if(chainMember||isVictorianoLaundryEdit||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||linkedMember||patyFromYesSynced||patyPmhmSynced){
+  if(chainMember||isVictorianoLaundryEdit||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||linkedMember||patyFromYesSynced||patyPmhmSynced||crossCrewSynced){
     /* The chain/mirror reaction can change a DIFFERENT cell (or crew
        card) on this same day — that needs the full grid repainted so
        it actually shows, unlike the single-cell case below. */
@@ -22393,6 +22401,118 @@ function schedApplyLinkedPeople(SCH,dates){
   dates.forEach(function(ds){ if(schedApplyLinkedPeopleForDate(SCH,ds))changed=true; });
   return changed;
 }
+/* Carlos's ask, 2026-09-07: generalizes the Gabriela Cuevas/Sandra S kind
+   of pairing (SCHED_LINKED_PEOPLE, a fixed list he'd otherwise have to
+   grow one person at a time) to EVERY employee who's added to more than
+   one crew. Anyone with a row in 2+ crews for a given date is auto-
+   synced: whichever crew shows her actually working is authoritative,
+   and every OTHER crew she has a row in shows THAT crew's own label
+   (SCHED_CREW_AWAY_LABEL — 'ROOMS' for Room Attendant, 'LOBBY' for
+   Lobby, etc., same word already used for Gabriela Cuevas) instead of a
+   plain '1', so she never reads as double-booked. A real absence (OFF/
+   R-OFF/TAILOR/CALL-OFF) still mirrors its exact text to every other
+   crew she's in, same as SCHED_LINKED_PEOPLE.
+
+   Deliberately EXCLUDES anyone already covered by a more specific,
+   already-tuned mechanism, so this can never fight one of those over the
+   same cell: every SCHED_LINKED_PEOPLE pair, and everyone in a
+   SCHED_COVER_CHAINS chain (titular or backup). Those already have their
+   own edited-side-wins/escalation logic worked out through several real
+   bug reports; this generic pass is the catch-all for everyone else. */
+var SCHED_CREW_AWAY_LABEL={
+  gra:'ROOMS', lobby:'LOBBY', laundry:'LAUNDRY', td:'TURNDOWN',
+  pmhm:'HOUSEMAN', hp:'HOUSEMAN', sup:'SUPERVISOR', mgr:'MANAGER', night:'OVERNIGHT'
+};
+/* Victoriano Ch/Jorge Gonzalez are already excluded via SCHED_COVER_CHAINS
+   above. Sarahi/Andrea run their own direct-row mirror (schedApplyLobbyMirror)
+   entirely outside both config arrays — see its header comment for why it
+   was pulled out of the generic chain mechanism in the first place. Both
+   named here explicitly so this generic pass can't fight that tuned
+   behavior over the same Lobby/Turndown cells. */
+var SCHED_CROSS_CREW_EXTRA_EXCLUDED=['Sarahi','Andrea'];
+function _schedCrossCrewExcluded(name){
+  var nk=dlNorm(name);
+  if(SCHED_LINKED_PEOPLE.some(function(p){ return dlNorm(p.a.name)===nk||dlNorm(p.b.name)===nk; }))return true;
+  if(SCHED_COVER_CHAINS.some(function(cc){ return cc.chain.some(function(c){ return dlNorm(c.name)===nk; }); }))return true;
+  if(SCHED_CROSS_CREW_EXTRA_EXCLUDED.some(function(n){ return dlNorm(n)===nk; }))return true;
+  return false;
+}
+function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
+  var day=SCH.days&&SCH.days[ds]; if(!day)return false;
+  var byName={};
+  SCHED_BLOCKS.forEach(function(b){
+    if(!SCHED_CREW_AWAY_LABEL[b.key])return;
+    (day[b.key]||[]).forEach(function(row){
+      var nm=String(row[0]||'').trim(); if(!nm)return;
+      /* A row tagged 'added' (schedAddPerson) is a deliberate BORROW,
+         not the same-person-one-location situation this whole mechanism
+         exists for — "borrowing is not a transfer," she can genuinely
+         work both crews the same day. Excluded entirely, not just as a
+         source, so her real crew's own cell is never relabeled off of
+         it either. */
+      if(row[2]==='added')return;
+      if(_schedCrossCrewExcluded(nm))return;
+      var nk=dlNorm(nm);
+      if(!byName[nk])byName[nk]=[];
+      byName[nk].push({crew:b.key,row:row});
+    });
+  });
+  var changed=false;
+  Object.keys(byName).forEach(function(nk){
+    var entries=byName[nk];
+    if(entries.length<2)return;
+    /* Pick the authoritative entry: the one just edited, else whichever
+       already reads a real absence (the safe default with no edit
+       behind it — the same "absence wins" rule SCHED_LINKED_PEOPLE
+       uses), else — for a day already sitting in the file with every
+       crew still showing a plain '1', nothing having been reconciled
+       yet — the first one in SCHED_BLOCKS order, so the self-heal is
+       deterministic and settles after one pass. */
+    var source=null;
+    if(edited&&dlNorm(edited.name)===nk){
+      entries.forEach(function(e){ if(!source&&e.crew===edited.crew)source=e; });
+    }
+    if(!source){
+      entries.forEach(function(e){ if(!source&&_schedIsUnavailable(String(e.row[1]||'').trim()))source=e; });
+    }
+    if(!source){
+      entries.forEach(function(e){ if(!source&&String(e.row[1]||'').trim()==='1')source=e; });
+    }
+    if(!source)return;
+    /* If the chosen source's OWN cell is itself another entry's
+       away-label (e.g. her home crew reads 'LAUNDRY' because she's
+       covering Laundry that day — exactly how schedSyncLaundryCoverRow
+       marks it), the crew she's REALLY on is that other entry, not the
+       one just edited. Redirect to it before computing what everyone
+       else should show — same reverse-direction fix
+       schedApplyLinkedPeopleForDate already needed for cover-chain
+       labels, generalized here so this can't fight that mechanism over
+       the same cell. */
+    var srcCellRaw=String(source.row[1]||'').trim();
+    entries.forEach(function(e){ if(e!==source&&SCHED_CREW_AWAY_LABEL[e.crew]===srcCellRaw)source=e; });
+    var srcCell=String(source.row[1]||'').trim();
+    var srcOff=_schedIsUnavailable(srcCell);
+    var want=srcOff?srcCell:(SCHED_CREW_AWAY_LABEL[source.crew]||'1');
+    entries.forEach(function(e){
+      if(e.crew===source.crew)return;
+      var cur=String(e.row[1]||'').trim();
+      if(cur===want)return;
+      /* An absence overwrites whatever was there, same as
+         SCHED_LINKED_PEOPLE — she can't be resting on one crew and
+         PM/covering on another. A working relabel only replaces a
+         plain '1' (untouched, ambiguous); a PM shift or a cover label
+         she or another mechanism already set is left exactly as is. */
+      if(!srcOff&&cur!=='1')return;
+      e.row[1]=want; changed=true;
+    });
+  });
+  return changed;
+}
+function schedApplyCrossCrewSync(SCH,dates){
+  var changed=false;
+  dates.forEach(function(ds){ if(schedApplyCrossCrewSyncForDate(SCH,ds))changed=true; });
+  return changed;
+}
 /* Whether (bk,name) is anywhere in a cover chain — titular or backup.
    schedSetCell uses this to decide whether an edit needs the heavier
    full-grid repaint (a chain reaction can change a DIFFERENT cell on the
@@ -22598,6 +22718,7 @@ function schedAutoFill(){
   schedApplyLaundryMirror(SCH,dates);
   schedApplyLobbyMirror(SCH,dates);
   schedApplyLinkedPeople(SCH,dates);
+  schedApplyCrossCrewSync(SCH,dates);
   schedApplyHpOverflow(SCH,dates);
 
   SCH.savedAt=new Date().toISOString();
@@ -23219,6 +23340,11 @@ function renderSchedule(){
      otherwise — Carlos's real report about Sandra's Room Attendant OFF
      not carrying over to Laundry. */
   if(SCH&&SCH.days&&schedApplyLinkedPeople(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
+  /* Same self-healing idea, generalized to every employee via
+     schedApplyCrossCrewSync — Carlos's 2026-09-07 ask, so a week already
+     saved (Fill Week, Excel upload, another device) repairs itself on
+     open too, not just on a live edit. */
+  if(SCH&&SCH.days&&schedApplyCrossCrewSync(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   /* Same self-healing idea, for Paty's literal pmhm row — Carlos's real
      report, week of Sept 12: it had drifted independent of her real
      Turndown status (an OFF day picked by Auto-fill's own rotation
