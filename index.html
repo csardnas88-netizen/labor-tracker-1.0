@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.63"/>
+<meta name="app-version" content="7.40.64"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.64', date:'2026-09-06',
+    fixes:['Fixed Sandra S\'s Room Attendant/Lobby pair silently doing nothing at all — it was linked under "Sandra S" on both crews, but her real Lobby row is named "Sandra Silva," the same kind of per-crew name mismatch Gabriela Cuevas/Gabriela already had. With no matching row to link against, every edit on either side went completely unreflected on the other, which is what Carlos saw in the Sept 5-12 week. Corrected to the real name.']
+  },
   {
     v:'7.40.63', date:'2026-09-06',
     fixes:['Fixed the real reason Sandra S still couldn\'t be moved off Lobby onto Room Attendant, and a second bug Carlos spotted in the same report: Gabriela Cuevas showing LOBBY on Room Attendant (she\'s covering Marroquin) while her own Lobby row still read a stale ROOMS. Root cause of the first: the Marroquin -> Gabriela Cuevas -> Sandra S cover chain re-derives from scratch on every edit ANY of the three make, and a fresh \'1\' Carlos just typed into Sandra S\'s own cell looked identical to the untouched status quo, so she was immediately re-nominated for Lobby cover in the same click. Her own edit now wins instead. Root cause of the second: a cover-chain label like LOBBY on someone\'s home crew is just as real a fact as a plain \'1\' is — it means she\'s genuinely on the OTHER crew that day — but nothing corrected her literal row there to say so; it now relabels to a plain \'1\', same self-healing treatment the ROOMS relabel already gets.']
@@ -22268,8 +22272,13 @@ var SCHED_LINKED_PEOPLE=[
      and her Lobby row reads ROOMS (not a plain '1') on a day she's really
      on Room Attendant, so Lobby's own headcount doesn't silently count her
      twice. Distinct from the 'Sandra'/laundry pair above — a different
-     person, spelled with the S both places per Carlos. */
-  {a:{crew:'gra',name:'Sandra S'}, b:{crew:'lobby',name:'Sandra S',awayLabel:'ROOMS'}}
+     person. Spelled differently per crew, same asymmetry as Gabriela
+     Cuevas/Gabriela: "Sandra S" on Room Attendant, "Sandra Silva" on
+     Lobby — Carlos's first answer ("Sandra S both places") turned out
+     wrong once he actually checked the live week; the pair silently did
+     nothing at all until this correction, since schedCellFor found no
+     Lobby row under "Sandra S" to link against. */
+  {a:{crew:'gra',name:'Sandra S'}, b:{crew:'lobby',name:'Sandra Silva',awayLabel:'ROOMS'}}
 ];
 function _schedIsUnavailable(v){ return schedIsOff(v)||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); }
 /* Returns whether anything actually changed, so a caller doing a
