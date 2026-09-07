@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.67"/>
+<meta name="app-version" content="7.40.68"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.68', date:'2026-09-07',
+    fixes:['Fixed Sandra S.\'s real Lobby cover assignment getting silently destroyed — Carlos\'s real report, "no me deja cambiar el horario de Laundry." With her now in two pairs sharing the same Room Attendant cell, a real "LOBBY" cover-chain label there was being read by the Room Attendant/Laundry pair as merely "not off," and when Laundry happened to be a genuine day off the same day, that pair forced Room Attendant back to a plain OFF too — wiping out the Lobby assignment. A cover-chain label naming a crew outside a given pair now means a DIFFERENT relationship already explains her, and that pair skips the day entirely instead of treating the label as ambiguous.']
+  },
   {
     v:'7.40.67', date:'2026-09-07',
     fixes:['Sandra S. is also independently on Laundry (near-full weeks of real work there, not just occasional cover) — a third crew, one more than the generic cross-crew sync can hand her since she\'s excluded from it (already covered by her own Room Attendant/Lobby pair and a Lobby cover-chain role). Added a second explicit pair for Room Attendant/Laundry, same shape as the existing plain Sandra pair: her real day OFF now carries across all three crews instead of just two.']
@@ -22335,6 +22339,19 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
     var aCell=schedCellFor(SCH,ds,pair.a.crew,pair.a.name);
     var bCell=schedCellFor(SCH,ds,pair.b.crew,pair.b.name);
     if(aCell===''||bCell==='')return;
+    /* Carlos's real report, 2026-09-07: with Sandra S. now in TWO pairs
+       (Room Attendant/Lobby AND Room Attendant/Laundry, both sharing the
+       same 'a' side), her Room Attendant cell reading 'LOBBY' — a real
+       cover-chain assignment from the FIRST pair — was being read by the
+       SECOND pair as "not really off," and when Laundry happened to be a
+       genuine OFF that same day, the second pair forced Room Attendant
+       back to OFF too, destroying the Lobby cover assignment entirely.
+       A cover-chain label naming a crew OUTSIDE this specific pair (here,
+       'LOBBY' is not this pair's own crew, 'laundry') means a DIFFERENT
+       relationship already explains where she is — this pair has nothing
+       to reconcile until she's genuinely back on her own crew or off in a
+       way that's actually about THIS pair, so it skips the day entirely. */
+    if(aCell!==pair.b.crew.toUpperCase()&&Object.keys(SCHED_CREW_AWAY_LABEL).some(function(ck){ return ck!==pair.b.crew&&SCHED_CREW_AWAY_LABEL[ck]===aCell; }))return;
     var aOff=_schedIsUnavailable(aCell), bOff=_schedIsUnavailable(bCell);
     var editedIsA=!!edited&&edited.crew===pair.a.crew&&dlNorm(edited.name)===dlNorm(pair.a.name);
     var editedIsB=!!edited&&edited.crew===pair.b.crew&&dlNorm(edited.name)===dlNorm(pair.b.name);

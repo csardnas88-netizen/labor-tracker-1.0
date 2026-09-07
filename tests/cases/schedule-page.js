@@ -1653,6 +1653,20 @@ module.exports = {
     win.schedApplyLinkedPeopleForDate(SCH21ssL3, ds21[0]);
     t.eq(SCH21ssL3.days[ds21[0]].laundry[0][1], '1', "covering Lobby that day doesn't touch her separately-scheduled Laundry day");
 
+    // ── Carlos's real report, 2026-09-07: Room Attendant read LOBBY (a
+    // real cover-chain assignment) while Laundry happened to be a
+    // genuine OFF the same day — the gra/laundry pair (no awayLabel) read
+    // LOBBY as "not really off" and, disagreeing with Laundry's real OFF,
+    // forced Room Attendant back to OFF too, destroying the Lobby cover
+    // assignment entirely. A cover-chain label naming a crew OUTSIDE this
+    // pair (LOBBY isn't this pair's own crew, Laundry) means a DIFFERENT
+    // relationship already explains her — this pair must skip the day
+    // entirely rather than treat LOBBY as ambiguous "not off." ──
+    const SCH21ssL4 = { days: { [ds21[0]]: { gra: [['Sandra S', 'LOBBY']], lobby: [['Sandra S.', '1']], laundry: [['Sandra S.', 'OFF']] } } };
+    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21ssL4, ds21[0]), 'the gra/laundry pair reports no change — LOBBY belongs to a different pair entirely');
+    t.eq(SCH21ssL4.days[ds21[0]].gra[0][1], 'LOBBY', "her real Lobby cover assignment survives — this was the reported bug, it was getting stomped to OFF");
+    t.eq(SCH21ssL4.days[ds21[0]].laundry[0][1], 'OFF', 'and her independently genuine Laundry OFF is untouched too');
+
     // ── Both new mirrors also react live to a single manual edit
     // (schedSetCell), not just Auto-fill — Carlos's real reports were
     // both about editing by hand. ──
