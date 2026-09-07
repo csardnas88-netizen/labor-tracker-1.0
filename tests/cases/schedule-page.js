@@ -1402,6 +1402,25 @@ module.exports = {
     t.eq(SCH21rl3b.days[ds21[0]].laundry[0][1], '1', "Rubia's blank Laundry row is synced to '1' — this is the forward-sync bug fix, not a release");
     t.eq(SCH21rl3b.days[ds21[0]].gra[0][1], 'LAUNDRY', 'so her Room Attendant cell correctly stays LAUNDRY, not released');
 
+    // ── Carlos's real report, 2026-09-07: Sandra S. already had a real
+    // Laundry row (added by hand, spelled "Sandra S." with a trailing
+    // period). Marking her Room Attendant cell (spelled "Sandra S", no
+    // period) LAUNDRY on Saturday created a SECOND, duplicate Laundry
+    // row spelled "Sandra S" instead of finding and reusing her existing
+    // one — dlNorm alone doesn't bridge a punctuation difference.
+    // dlNormAlias closes that specific gap. ──
+    const SCH21ssDup = { days: { [ds21[0]]: { gra: [['Sandra S', 'LAUNDRY']], laundry: [['Sandra S.', '', 'added']] } } };
+    const ssDupChanged = win.schedSyncLaundryCoverRow(SCH21ssDup, ds21[0], 'gra', 'Sandra S', 'LAUNDRY');
+    t.assert(ssDupChanged, 'reports a real change — her existing blank Laundry row gets filled in');
+    t.eq(SCH21ssDup.days[ds21[0]].laundry.length, 1, "her existing 'Sandra S.' row is reused, not duplicated with a second 'Sandra S' row — this was the reported bug");
+    t.eq(SCH21ssDup.days[ds21[0]].laundry[0][0], 'Sandra S.', "the row keeps its real spelling, with the period, untouched");
+    t.eq(SCH21ssDup.days[ds21[0]].laundry[0][1], '1', 'and its value is filled in to 1');
+
+    // The reverse release direction bridges the same alias.
+    const SCH21ssRel = { days: { [ds21[0]]: { gra: [['Sandra S', 'LAUNDRY']], laundry: [['Sandra S.', 'OFF', 'added']] } } };
+    t.assert(win.schedReleaseStaleLaundryLabels(SCH21ssRel, ds21[0]), 'reports a real change');
+    t.eq(SCH21ssRel.days[ds21[0]].gra[0][1], '1', "her Room Attendant LAUNDRY label releases correctly, recognizing 'Sandra S.' as the same person");
+
     // ── The reverse direction also reacts LIVE to a single manual edit
     // on Laundry's own crew card, not just Auto-fill or a render. ──
     win.localStorage.removeItem('hk_dl_schedule');
