@@ -1629,6 +1629,30 @@ module.exports = {
     t.eq(afterSandraSLive.days[ds21[0]].gra[1][1], '1', "Sandra S's Room Attendant cell sticks at '1' through the real edit path — this was the reported bug");
     t.eq(afterSandraSLive.days[ds21[0]].lobby[1][1], 'ROOMS', "and her Lobby row relabels to ROOMS in the same live edit, no manual retyping needed");
 
+    // ── Carlos's follow-up, same day: Sandra S. is ALSO independently on
+    // Laundry (near-full weeks of real work, not just occasional cover),
+    // same "Sandra S." spelling as Lobby. A second explicit pair, no
+    // awayLabel — same shape as plain Sandra's gra/laundry pair, since
+    // working Room Attendant and Laundry on different days is legitimate
+    // for her, not a double-booking to relabel away. ──
+    const SCH21ssL = { days: { [ds21[0]]: { gra: [['Sandra S', 'OFF']], laundry: [['Sandra S.', '1']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21ssL, ds21[0]);
+    t.eq(SCH21ssL.days[ds21[0]].laundry[0][1], 'OFF', "her Laundry row follows her Room Attendant OFF — she can't be resting on one and working the other");
+
+    // Both crews genuinely working the same day is a legitimate state —
+    // nothing relabeled, no awayLabel defined for this pair.
+    const SCH21ssL2 = { days: { [ds21[0]]: { gra: [['Sandra S', '1']], laundry: [['Sandra S.', '1']] } } };
+    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21ssL2, ds21[0], { crew: 'gra', name: 'Sandra S' }),
+      'a linked pair with no away-label defined is left alone when both sides are working — same as plain Sandra');
+    t.eq(SCH21ssL2.days[ds21[0]].laundry[0][1], '1', "her Laundry row keeps its plain '1'");
+
+    // Covering Lobby via the cover chain (gra reads 'LOBBY') doesn't
+    // disturb an independently-scheduled Laundry day either — the
+    // gra/lobby pair's own reverse-fix only ever touches the Lobby row.
+    const SCH21ssL3 = { days: { [ds21[0]]: { gra: [['Sandra S', 'LOBBY']], lobby: [['Sandra S.', '1']], laundry: [['Sandra S.', '1']] } } };
+    win.schedApplyLinkedPeopleForDate(SCH21ssL3, ds21[0]);
+    t.eq(SCH21ssL3.days[ds21[0]].laundry[0][1], '1', "covering Lobby that day doesn't touch her separately-scheduled Laundry day");
+
     // ── Both new mirrors also react live to a single manual edit
     // (schedSetCell), not just Auto-fill — Carlos's real reports were
     // both about editing by hand. ──

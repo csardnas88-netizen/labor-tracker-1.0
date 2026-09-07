@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.66"/>
+<meta name="app-version" content="7.40.67"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.67', date:'2026-09-07',
+    fixes:['Sandra S. is also independently on Laundry (near-full weeks of real work there, not just occasional cover) — a third crew, one more than the generic cross-crew sync can hand her since she\'s excluded from it (already covered by her own Room Attendant/Lobby pair and a Lobby cover-chain role). Added a second explicit pair for Room Attendant/Laundry, same shape as the existing plain Sandra pair: her real day OFF now carries across all three crews instead of just two.']
+  },
   {
     v:'7.40.66', date:'2026-09-07',
     features:['Generalized Gabriela Cuevas/Sandra S\'s Room Attendant-Lobby reconciliation to EVERY employee added to more than one crew — Carlos\'s ask, so this works for anyone without him telling Claude to add a new hardcoded pair each time. Marking someone working on one crew now relabels every OTHER crew she\'s also added to with that crew\'s own name (ROOMS, LOBBY, LAUNDRY, TURNDOWN, HOUSEMAN, etc.) instead of leaving a plain \'1\' that reads as double-booked; a real day off still carries across to every crew she\'s in exactly like before. Doesn\'t touch anyone already handled by a more specific mechanism (Gabriela Cuevas, Sandra S, Sandra, the Victoriano Ch/Jorge Gonzalez and Sarahi/Andrea cover pairs), or a row added via "Add someone to this crew" (borrowing someone in is deliberately independent, not a transfer).']
@@ -22292,7 +22296,20 @@ var SCHED_LINKED_PEOPLE=[
      accents but does not strip punctuation, so the period alone was
      enough for schedCellFor to find no Lobby row and leave the pair
      silently doing nothing. */
-  {a:{crew:'gra',name:'Sandra S'}, b:{crew:'lobby',name:'Sandra S.',awayLabel:'ROOMS'}}
+  {a:{crew:'gra',name:'Sandra S'}, b:{crew:'lobby',name:'Sandra S.',awayLabel:'ROOMS'}},
+  /* Carlos's follow-up, 2026-09-07: she's ALSO independently on Laundry
+     ("Sandra S." there too, same trailing period as Lobby) — near-full
+     weeks of real Laundry work, not just an occasional cover. A THIRD
+     crew is one more than the generic cross-crew mechanism's exclusion
+     list can hand her (she's excluded from it because she's already in
+     this array and in SCHED_COVER_CHAINS as a Lobby backup), so this is
+     a second explicit pair instead: same shape as the plain 'Sandra'
+     gra/laundry pair above — NO awayLabel, since working Room Attendant
+     and Laundry on different days is a legitimate, independent state for
+     her (confirmed by Carlos, same as plain Sandra), not a
+     double-booking to relabel away. Only her actual day OFF needs to
+     carry across crews, same as plain Sandra's pair. */
+  {a:{crew:'gra',name:'Sandra S'}, b:{crew:'laundry',name:'Sandra S.'}}
 ];
 function _schedIsUnavailable(v){ return schedIsOff(v)||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); }
 /* Returns whether anything actually changed, so a caller doing a
