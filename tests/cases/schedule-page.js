@@ -1228,10 +1228,33 @@ module.exports = {
     // "1" says nothing useful for a shift-based crew — while every other
     // crew keeps the full housekeeping list unchanged. Renamed from
     // Open/Close/Mid to AM/PM/MID at his ask.
-    t.eq(win.schedValuesFor('mgr').join(','), ',AM,PM,MID,OFF,R-OFF,VAC,FLEX',
-      "Managers' own dropdown offers exactly AM/PM/MID/Off/R-Off/Vac/Flex, no LOBBY/HOUSEMAN/TAILOR/LAUNDRY/'1'");
+    // OPEN added 2026-09-08 at Carlos's ask, listed in day order.
+    t.eq(win.schedValuesFor('mgr').join(','), ',OPEN,AM,MID,PM,OFF,R-OFF,VAC,FLEX',
+      "Managers' own dropdown offers Open/AM/Mid/PM plus the absences, in day order, and no LOBBY/HOUSEMAN/TAILOR/LAUNDRY/'1'");
     t.eq(win.schedValuesFor('gra').join(','), win.SCHED_VALUES.join(','),
       'every other crew still gets the full shared housekeeping vocabulary, unchanged');
+
+    // OPEN still lands on the Daily Lineup's AM Coordinator line — it was
+    // already accepted there from the old Open/Close vocabulary, so old
+    // saved weeks and this new picker option agree.
+    t.assert(win._schedMgrIs('OPEN', win.SCHED_MGR_AM), 'OPEN goes on the AM Coordinator line');
+    t.assert(!win._schedMgrIs('OPEN', win.SCHED_MGR_PM), 'and never on the PM line');
+
+    // ── Carlos's ask, 2026-09-08: each manager shift gets its own color,
+    // so he can see WHICH shift someone is on at a glance instead of just
+    // that they're working. Scoped to the mgr crew — 'PM' also means the
+    // PM Supervisor on the sup crew, which stays gold as it always was. ──
+    const mgrColor = (v) => (win._schedCellCss(v, 'mgr').match(/;color:([^;]+);/) || [])[1];
+    const shifts = ['OPEN', 'AM', 'MID', 'PM'];
+    const seen = shifts.map(mgrColor);
+    shifts.forEach((s, i) => t.assert(!!seen[i], s + ' has a color of its own'));
+    t.eq(new Set(seen).size, 4, 'all four manager shifts are visually distinct from each other');
+    t.assert(mgrColor('PM') !== mgrColor('VAC'),
+      "PM does not reuse VAC's purple — they share this one dropdown, and a PM manager reading like a manager on vacation is the exact confusion this feature removes");
+    t.eq((win._schedCellCss('PM', 'sup').match(/;color:([^;]+);/) || [])[1], 'var(--gd)',
+      "but the PM Supervisor over on the sup crew is untouched — still gold, exactly as before");
+    t.eq(win._schedCellCss('OFF', 'mgr'), win._schedCellCss('OFF', 'gra'),
+      'a real day off looks the same on Managers as everywhere else — only the shift names are recolored');
 
     // Managers' total stays blank, exactly as it was under Open/Close/Mid.
     // Counting only the PM ones (the one shift name schedDayTotal treats
@@ -1415,6 +1438,28 @@ module.exports = {
     t.eq(SCH21ssDup.days[ds21[0]].laundry.length, 1, "her existing 'Sandra S.' row is reused, not duplicated with a second 'Sandra S' row — this was the reported bug");
     t.eq(SCH21ssDup.days[ds21[0]].laundry[0][0], 'Sandra S.', "the row keeps its real spelling, with the period, untouched");
     t.eq(SCH21ssDup.days[ds21[0]].laundry[0][1], '1', 'and its value is filled in to 1');
+
+    // ── Carlos's real report, 2026-09-08: on a day her Laundry row
+    // doesn't exist yet, the NEW row was being created under the Room
+    // Attendant spelling ("Sandra S", no period) instead of the spelling
+    // Laundry itself already uses on other days ("Sandra S."). That read
+    // as a second person in the crew list, and — the bug he actually hit
+    // — matched the retirement left behind when he deleted the earlier
+    // duplicate row, so every generated row was filtered straight back
+    // out of the crew card again and Laundry looked permanently empty. ──
+    const SCH21ssSpell = {
+      days: {
+        [ds21[0]]: { gra: [['Sandra S', '1']], laundry: [['Sandra S.', '1', 'added']] },
+        [ds21[1]]: { gra: [['Sandra S', 'LAUNDRY']], laundry: [] },
+      },
+      retired: { 'laundry|sandra s': true },
+    };
+    t.assert(win.schedSyncLaundryCoverRow(SCH21ssSpell, ds21[1], 'gra', 'Sandra S', 'LAUNDRY'), 'reports a real change — a brand new cover row is created');
+    t.eq(SCH21ssSpell.days[ds21[1]].laundry[0][0], 'Sandra S.', "the new row uses the spelling LAUNDRY itself already uses on another day, not Room Attendant's");
+    t.assert(!win.schedIsRetired(SCH21ssSpell, 'laundry', SCH21ssSpell.days[ds21[1]].laundry[0][0]),
+      "so it isn't caught by the stale retirement on the other spelling — this is what made Laundry look empty");
+    t.eq(win.schedRosterForDates(SCH21ssSpell, [ds21[0], ds21[1]]).laundry.length, 1,
+      'and the crew card shows exactly one Sandra row, not two under different spellings');
 
     // The reverse release direction bridges the same alias.
     const SCH21ssRel = { days: { [ds21[0]]: { gra: [['Sandra S', 'LAUNDRY']], laundry: [['Sandra S.', 'OFF', 'added']] } } };

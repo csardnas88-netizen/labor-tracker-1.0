@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.74"/>
+<meta name="app-version" content="7.40.76"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,15 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.76', date:'2026-09-08',
+    features:['Managers can now be marked OPEN alongside AM, MID and PM, and each of those four shifts has its own color on the grid — Carlos\'s ask, so which shift someone is on reads at a glance instead of every working manager looking alike. Ordered through the day: Open teal, AM blue, Mid gold, PM rose. Only the Managers crew is recolored; the PM Supervisor over on Supervisors keeps the gold it has always had. An OPEN manager lands on the Daily Lineup\'s AM Coordinator line, the same line the old Open/Close vocabulary already used.'],
+    fixes:['Fixed an edit to a crew row not sticking when the same person is spelled slightly differently on another crew ("Sandra S." with a period vs "Sandra S" without) — the edit wasn\'t recognized as hers, so a day off sitting on one of her other crews cascaded straight back over what had just been set. This was the last remaining "no me deja cambiar" case for anyone whose name drifts between crews.']
+  },
+  {
+    v:'7.40.75', date:'2026-09-08',
+    fixes:['Fixed Laundry showing Sandra S. as blank on every day she\'s marked LAUNDRY elsewhere — Carlos\'s real report. Root cause: a row created automatically for a crew took its spelling from the crew that triggered it ("Sandra S" from Room Attendant) instead of the spelling Laundry itself already uses ("Sandra S." with a period). That read as a second, separate person AND matched the leftover "removed from crew" mark from when he deleted the earlier duplicate row — so every row the app generated was silently filtered right back out again, leaving the crew card empty. Generated rows now always adopt the spelling that crew already uses for the person.']
+  },
   {
     v:'7.40.74', date:'2026-09-08',
     fixes:['Fixed Sandra S. still looking double-booked on Saturday (plain \'1\' on both Room Attendant and Laundry) even after yesterday\'s migration — Carlos\'s real report, "eso no debería pasar." Her merged Laundry row carried an \'added\' tag (from when Carlos originally added her to that crew by hand) — the same tag a genuine temporary borrow like Karla Varela\'s uses, which the cross-crew sync deliberately skips. But for Sandra S it\'s a real second home crew, not a borrow, so she\'s now the one explicit exception: her Laundry row participates in the sync regardless of that tag.']
@@ -20843,7 +20852,13 @@ var SCHED_VALUES=['','1','OFF','R-OFF','CALL-OFF','FLEX','VAC','PM','LOBBY','ROO
    holding Open/Close are read too, so re-opening one doesn't blank the
    lineup; a value not on this list is still offered as an extra option
    on its own cell, so nothing Carlos typed is ever thrown away. */
-var SCHED_VALUES_MGR=['','AM','PM','MID','OFF','R-OFF','VAC','FLEX'];
+/* OPEN added at Carlos's ask, 2026-09-08 — the opening shift, alongside
+   AM/MID/PM. It was already accepted on the Daily Lineup's AM Coordinator
+   line (SCHED_MGR_AM below has always listed 'Open', from the old
+   Open/Close vocabulary), so old saved weeks and this new option land on
+   the same line; this just puts it back in the picker as a real choice
+   instead of something he had to type by hand. */
+var SCHED_VALUES_MGR=['','OPEN','AM','MID','PM','OFF','R-OFF','VAC','FLEX'];
 /* Which manager cell values put someone on each coordinator line.
    MID goes on the AM line at Carlos's call — a mid shift covers the
    morning, and leaving it off both lines meant a manager marked MID
@@ -21091,7 +21106,7 @@ function schedSetCell(bk,idx,name,ds,val,el){
   /* Repaint only what changed. A full re-render would throw away the
      scroll position of a grid that is deliberately wider than the
      screen — losing your place on every single cell you touch. */
-  if(el)el.style.cssText=_schedCellCss(String(val||'').trim());
+  if(el)el.style.cssText=_schedCellCss(String(val||'').trim(),bk);
   _schedRefreshTotals(SCH,bk);
 }
 /* Carlos walked through exactly how he built Turndown Rooms by hand in
@@ -22226,6 +22241,25 @@ function schedApplyLobbyMirror(SCH,dates){
    direction) is what's supposed to resolve that disagreement, by
    releasing the home cell instead — not this function overwriting what
    he just set. */
+/* The spelling a given crew already uses for this person on ANY day of
+   the loaded record, falling back to the name as given. Carlos's real
+   report, 2026-09-08: her Laundry row is "Sandra S." (with a period) but
+   her Room Attendant row is "Sandra S" (without), so a cover row created
+   here from the Room Attendant side landed under the WRONG spelling.
+   That mattered twice over — it read as a second, separate person in the
+   crew list, and (the actual bug he hit) it matched the retirement he'd
+   set when he deleted the earlier duplicate row, so every generated row
+   was silently filtered straight back out of the crew card again. */
+function _schedCrewSpellingFor(SCH,bk,name){
+  var want=dlNormAlias(name),found=null;
+  Object.keys((SCH&&SCH.days)||{}).forEach(function(ds){
+    if(found)return;
+    ((SCH.days[ds]||{})[bk]||[]).forEach(function(p){
+      if(!found&&dlNormAlias(p[0])===want)found=String(p[0]||'').trim();
+    });
+  });
+  return found||name;
+}
 function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
   if(bk==='laundry')return false;
   var day=SCH.days[ds]; if(!day)return false;
@@ -22233,7 +22267,7 @@ function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
   var idx=-1;
   for(var i=0;i<day.laundry.length;i++) if(dlNormAlias(day.laundry[i][0])===dlNormAlias(name)){idx=i;break;}
   if(schedStatusIs(val,'LAUNDRY')){
-    if(idx===-1){ day.laundry.push([name,'1','cover']); return true; }
+    if(idx===-1){ day.laundry.push([_schedCrewSpellingFor(SCH,'laundry',name),'1','cover']); return true; }
     if(String(day.laundry[idx][1]||'').trim()===''){ day.laundry[idx][1]='1'; return true; }
     return false;
   }
@@ -22583,7 +22617,13 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
        yet — the first one in SCHED_BLOCKS order, so the self-heal is
        deterministic and settles after one pass. */
     var source=null;
-    if(edited&&dlNorm(edited.name)===nk){
+    /* dlNormAlias, matching how nk itself was built — Carlos's real
+       report: with dlNorm here, editing her row under the OTHER spelling
+       ("Sandra S." on Laundry vs "Sandra S" on Room Attendant) never
+       matched, so his fresh edit wasn't recognized as authoritative and
+       an absence sitting on another crew cascaded straight back over it.
+       That is the "no me deja cambiar" symptom, one spelling deep. */
+    if(edited&&dlNormAlias(edited.name)===nk){
       entries.forEach(function(e){ if(!source&&e.crew===edited.crew)source=e; });
     }
     /* A redirect signal — one entry's cell literally naming ANOTHER
@@ -23516,9 +23556,32 @@ function _schedUfCellHTML(SCH,ufPos,bk,ds){
     +'<div style="font-size:10.5px;font-weight:800;color:'+c.fg+';">'+std+'</div>'
     +'<div style="font-size:6.5px;font-weight:700;color:'+c.fg+';text-transform:uppercase;letter-spacing:.2px;">'+stateLabel+'</div></div>';
 }
-function _schedCellCss(v){
+/* Managers' four shift names get their own colors — Carlos's ask,
+   2026-09-08: at a glance he needs to see WHICH shift each manager is on,
+   not just that they're working. Ordered through the day so the palette
+   reads like a timeline: OPEN teal, AM blue, MID gold, PM purple.
+   Scoped to the mgr crew only (bk), because 'PM' also means the PM
+   Supervisor over on the sup crew, where it has always been gold and
+   Carlos didn't ask for that to change. */
+var SCHED_MGR_SHIFT_CSS={
+  'OPEN':'border:1px solid #0F766E;background:#E0F2F1;color:#0F766E;',
+  /* Deep, saturated blue — FLEX is also blue (#2E6DA4) and sits in this
+     same dropdown, so AM is pushed darker to stay tellable apart. */
+  'AM'  :'border:1px solid #0D47A1;background:#DCE9F9;color:#0D47A1;',
+  'MID' :'border:1px solid var(--gold);background:var(--gt);color:var(--gd);',
+  /* Deep rose, deliberately NOT var(--purple) — VAC already owns purple
+     in this very same dropdown, and a PM manager reading the same color
+     as a manager on vacation is exactly the confusion this feature is
+     meant to remove. */
+  'PM'  :'border:1px solid #A21B57;background:#FCE7F0;color:#A21B57;'
+};
+function _schedCellCss(v,bk){
   var base='width:100%;min-width:0;padding:3px 2px;font-size:10.5px;font-weight:700;text-align:center;'
     +'border-radius:5px;font-family:inherit;-webkit-appearance:none;appearance:none;box-sizing:border-box;';
+  if(bk==='mgr'){
+    var mv=String(v||'').trim().toUpperCase();
+    if(SCHED_MGR_SHIFT_CSS[mv])return base+SCHED_MGR_SHIFT_CSS[mv];
+  }
   if(v==='1')      return base+'border:1px solid var(--green-border);background:var(--green-bg);color:var(--green);';
   if(v==='OFF'||v==='off') return base+'border:1px solid var(--border);background:var(--s3);color:var(--text3);';
   if(v==='R-OFF')  return base+'border:1px solid var(--border2);background:var(--s3);color:var(--text2);';
@@ -23941,7 +24004,7 @@ function renderSchedule(){
         var v=String(cell[1]||'').trim();
         var opts=schedValuesFor(b.key).slice();
         if(v&&opts.indexOf(v)===-1)opts.push(v);
-        html+='<select onchange="schedSetCell(\''+b.key+'\','+idx+',\''+nmJs+'\',\''+ds+'\',this.value,this)" style="'+_schedCellCss(v)+'">'
+        html+='<select onchange="schedSetCell(\''+b.key+'\','+idx+',\''+nmJs+'\',\''+ds+'\',this.value,this)" style="'+_schedCellCss(v,b.key)+'">'
           +opts.map(function(o){
             return '<option value="'+escHtml(o)+'"'+(o===v?' selected':'')+'>'+(o===''?'&mdash;':escHtml(o))+'</option>';
           }).join('')
