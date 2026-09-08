@@ -1568,25 +1568,62 @@ module.exports = {
     t.assert(!win.schedApplyLinkedPeopleForDate({ days: { [ds21[0]]: { gra: [['Sandra', 'OFF']] } } }, ds21[0]),
       'no Laundry row at all that week reports changed:false too');
 
-    // ── Carlos's real report, 2026-09-06: Sandra S (Room Attendant) was
-    // stuck exactly the way Gabriela Cuevas used to be — couldn't move
-    // her off Lobby onto Room Attendant. Same shape as Gabriela's pair:
-    // edited-side-wins, and her Lobby row reads ROOMS (not a plain '1')
-    // on a day she's really on Room Attendant. Her Lobby-side name is
-    // "Sandra S." — WITH a trailing period — confirmed from a real
-    // screenshot after two earlier text answers ("Sandra S both places,"
-    // then "Sandra Silva") both turned out wrong; dlNorm doesn't strip
-    // punctuation, so the period alone broke the match. ──
+    // ── Carlos's real report, 2026-09-06/07/08: Sandra S was stuck the
+    // same way Gabriela Cuevas used to be, then a genuinely three-crew
+    // problem once Laundry joined the picture (Room Attendant/Lobby/
+    // Laundry). Two separate SCHED_LINKED_PEOPLE pairs couldn't
+    // represent a real three-way relationship — whenever Room Attendant
+    // read a label belonging to the OTHER pair, each pair only knew
+    // about its own two crews and either skipped the day or (worse)
+    // let an unrelated absence stomp a real cover-chain label. Removed
+    // 2026-09-08 in favor of letting her participate in the generic
+    // cross-crew sync (schedApplyCrossCrewSyncForDate), which already
+    // reconciles any number of crews for a person at once — the exact
+    // shape this relationship actually needs. Her Lobby/Laundry-side
+    // name is "Sandra S." — WITH a trailing period — confirmed from a
+    // real screenshot after two earlier text answers ("Sandra S both
+    // places," then "Sandra Silva") both turned out wrong; bridged via
+    // SCHED_NAME_ALIASES + dlNormAlias, the same fix her old pairs used. ──
     const SCH21ss = { days: { [ds21[0]]: { gra: [['Sandra S', '1']], lobby: [['Sandra S.', 'R-OFF']] } } };
-    win.schedApplyLinkedPeopleForDate(SCH21ss, ds21[0], { crew: 'gra', name: 'Sandra S' });
+    win.schedApplyCrossCrewSyncForDate(SCH21ss, ds21[0], { crew: 'gra', name: 'Sandra S' });
     t.eq(SCH21ss.days[ds21[0]].gra[0][1], '1', "the cell Carlos just set to working stays working, same fix as Gabriela Cuevas's");
     t.eq(SCH21ss.days[ds21[0]].lobby[0][1], 'ROOMS', "her stale Lobby R-OFF is released as ROOMS, not a plain '1' — she's working Rooms, not Lobby");
 
-    // Moving her genuinely onto Lobby is clearing the ROOM ATTENDANT cell,
-    // same consequence as Gabriela Cuevas's pair.
+    // Moving her genuinely onto Lobby is clearing the ROOM ATTENDANT cell.
     const SCH21ss2 = { days: { [ds21[0]]: { gra: [['Sandra S', '']], lobby: [['Sandra S.', '1']] } } };
-    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21ss2, ds21[0]), 'with Room Attendant blank there is nothing to reconcile');
+    t.assert(!win.schedApplyCrossCrewSyncForDate(SCH21ss2, ds21[0]), 'with Room Attendant blank there is nothing to reconcile');
     t.eq(SCH21ss2.days[ds21[0]].lobby[0][1], '1', 'clearing the Room Attendant cell is how she genuinely goes on Lobby');
+
+    // Real, near-full-time Laundry work is now just a third entry in the
+    // same reconciliation — her OFF carries to every crew she's in, and
+    // whichever crew he just edited routes and relabels the other two.
+    const SCH21ss3 = { days: { [ds21[0]]: { gra: [['Sandra S', 'OFF']], lobby: [['Sandra S.', '1']], laundry: [['Sandra S.', '1']] } } };
+    win.schedApplyCrossCrewSyncForDate(SCH21ss3, ds21[0], { crew: 'gra', name: 'Sandra S' });
+    t.eq(SCH21ss3.days[ds21[0]].lobby[0][1], 'OFF', "her Lobby row follows her Room Attendant OFF");
+    t.eq(SCH21ss3.days[ds21[0]].laundry[0][1], 'OFF', "and so does her Laundry row — a real absence carries to EVERY crew she's in, not just one");
+
+    // Selecting LAUNDRY from Room Attendant routes a real '1' onto
+    // Laundry — Carlos's exact ask #2.
+    const SCH21ssA = { days: { [ds21[0]]: { gra: [['Sandra S', 'LAUNDRY']], laundry: [['Sandra S.', 'PM']] } } };
+    t.assert(win.schedApplyCrossCrewSyncForDate(SCH21ssA, ds21[0]), 'reports a real change — Laundry picks up the redirect');
+    t.eq(SCH21ssA.days[ds21[0]].laundry[0][1], '1', "selecting LAUNDRY from Room Attendant puts a real '1' on Laundry");
+
+    // Selecting ROOMS from Laundry routes a real '1' onto Room Attendant
+    // — Carlos's exact ask #1, the direction that never worked before.
+    const SCH21ssB = { days: { [ds21[0]]: { gra: [['Sandra S', 'PM']], laundry: [['Sandra S.', 'ROOMS']] } } };
+    t.assert(win.schedApplyCrossCrewSyncForDate(SCH21ssB, ds21[0]), 'reports a real change — Room Attendant picks up the redirect');
+    t.eq(SCH21ssB.days[ds21[0]].gra[0][1], '1', "selecting ROOMS from Laundry puts a real '1' on Room Attendant");
+
+    // ── Carlos's real report, 2026-09-08, the actual live bug: Room
+    // Attendant reading 'LAUNDRY' (she's really working Laundry) with a
+    // genuine OFF sitting on an unrelated day for a DIFFERENT crew must
+    // never destroy the LAUNDRY label — the redirect-before-absence fix
+    // (see schedApplyCrossCrewSyncForDate's own header) is what makes
+    // this safe now that all three crews reconcile together. ──
+    const SCH21ssC = { days: { [ds21[0]]: { gra: [['Sandra S', 'LAUNDRY']], laundry: [['Sandra S.', '1']], lobby: [['Sandra S.', 'ROOMS']] } } };
+    win.schedApplyCrossCrewSyncForDate(SCH21ssC, ds21[0]);
+    t.eq(SCH21ssC.days[ds21[0]].gra[0][1], 'LAUNDRY', "her real Laundry assignment on Room Attendant survives a render pass");
+    t.eq(SCH21ssC.days[ds21[0]].lobby[0][1], 'LAUNDRY', "and her stale Lobby ROOMS corrects to LAUNDRY too — she's on Laundry today, not Rooms, and now Lobby knows it (this used to freeze forever, the reported bug)");
 
     // ── Carlos's follow-up, same day, 2026-09-06: setting Sandra S to '1'
     // on Room Attendant STILL wouldn't stick on Thursday — a second,
@@ -1621,11 +1658,6 @@ module.exports = {
     t.assert(win.schedApplyLinkedPeopleForDate(SCH21rev, ds21[0]), 'a cover-chain label on Room Attendant naming Lobby is recognized as a real change to reconcile');
     t.eq(SCH21rev.days[ds21[0]].lobby[0][1], '1', "her literal Lobby row becomes a plain '1' — she really is on Lobby today, covering Marroquin");
 
-    // Same reverse fix for Sandra S's pair (her Lobby row is "Sandra S.").
-    const SCH21rev2 = { days: { [ds21[0]]: { gra: [['Sandra S', 'LOBBY']], lobby: [['Sandra S.', 'ROOMS']] } } };
-    win.schedApplyLinkedPeopleForDate(SCH21rev2, ds21[0]);
-    t.eq(SCH21rev2.days[ds21[0]].lobby[0][1], '1', "Sandra S's Lobby row is likewise corrected to '1' while she's covering");
-
     // A real absence on the Lobby side (R-OFF/OFF/etc.) is never
     // overwritten by the cover-label reverse fix — only a plain
     // Working-but-mislabeled cell is corrected.
@@ -1638,90 +1670,17 @@ module.exports = {
     t.assert(!win.schedApplyLinkedPeopleForDate(SCH21rev4, ds21[0]), 'no change reported once the Lobby row already says 1');
 
     // End-to-end through the real edit path: schedSetCell on Sandra S's
-    // own Room Attendant cell, exactly what Carlos does by hand.
+    // own Room Attendant cell, exactly what Carlos does by hand — across
+    // all three real crews now, through the generic mechanism.
     win.localStorage.removeItem('hk_dl_schedule');
     const SCH21ssLive = { days: {} };
-    ds21.forEach((ds) => { SCH21ssLive.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', lobby: [['Marroquin', 'OFF'], ['Sandra S.', 'ROOMS']], gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', 'LOBBY']], laundry: [] }; });
+    ds21.forEach((ds) => { SCH21ssLive.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', lobby: [['Marroquin', 'OFF'], ['Sandra S.', 'ROOMS']], gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', 'LOBBY']], laundry: [['Sandra S.', 'ROOMS']] }; });
     win.dlSaveSchedule(SCH21ssLive);
     win.schedSetCell('gra', 1, 'Sandra S', ds21[0], '1', null);
     const afterSandraSLive = win.dlLoadSchedule();
     t.eq(afterSandraSLive.days[ds21[0]].gra[1][1], '1', "Sandra S's Room Attendant cell sticks at '1' through the real edit path — this was the reported bug");
-    t.eq(afterSandraSLive.days[ds21[0]].lobby[1][1], 'ROOMS', "and her Lobby row relabels to ROOMS in the same live edit, no manual retyping needed");
-
-    // ── Carlos's follow-up, same day: Sandra S. is ALSO independently on
-    // Laundry (near-full weeks of real work, not just occasional cover),
-    // same "Sandra S." spelling as Lobby. A second explicit pair. ──
-    const SCH21ssL = { days: { [ds21[0]]: { gra: [['Sandra S', 'OFF']], laundry: [['Sandra S.', '1']] } } };
-    win.schedApplyLinkedPeopleForDate(SCH21ssL, ds21[0]);
-    t.eq(SCH21ssL.days[ds21[0]].laundry[0][1], 'OFF', "her Laundry row follows her Room Attendant OFF — she can't be resting on one and working the other");
-
-    // ── Carlos's real ask, 2026-09-07: unlike plain Sandra's pair, this
-    // one is symmetric:true — she genuinely works EITHER crew as her
-    // real job, so "both plain 1" is NOT a legitimate double-booked
-    // state here the way it is for plain Sandra. Whichever side he just
-    // edited relabels the OTHER with wherever she's really working. ──
-    const SCH21ssL2 = { days: { [ds21[0]]: { gra: [['Sandra S', '1']], laundry: [['Sandra S.', '1']] } } };
-    t.assert(win.schedApplyLinkedPeopleForDate(SCH21ssL2, ds21[0], { crew: 'gra', name: 'Sandra S' }),
-      'unlike plain Sandra, this symmetric pair DOES relabel — reports a real change');
-    t.eq(SCH21ssL2.days[ds21[0]].laundry[0][1], 'ROOMS', "her Laundry row relabels to ROOMS — she's really on Room Attendant, the crew he just edited");
-
-    // The reverse direction: editing LAUNDRY to working relabels ROOM
-    // ATTENDANT with LAUNDRY instead — this direction never existed
-    // before (only gra could relabel laundry, never the other way).
-    const SCH21ssL2b = { days: { [ds21[0]]: { gra: [['Sandra S', '1']], laundry: [['Sandra S.', '1']] } } };
-    win.schedApplyLinkedPeopleForDate(SCH21ssL2b, ds21[0], { crew: 'laundry', name: 'Sandra S.' });
-    t.eq(SCH21ssL2b.days[ds21[0]].gra[0][1], 'LAUNDRY', "editing Laundry now relabels Room Attendant to LAUNDRY — the reverse direction Carlos asked for");
-
-    // ── Carlos's exact ask #1: from Laundry, select ROOMS for her —
-    // Room Attendant should get a real '1'. This redirect direction
-    // (b holding a's own away-label) never existed before this ask. A
-    // leftover 'PM' on Room Attendant from before he switched her over
-    // is exactly the kind of stale value this corrects, same tolerance
-    // the original gra->lobby redirect already had (only a real OFF
-    // blocks it — a genuine day off is a decision, not a stale value). ──
-    const SCH21ssRedirB = { days: { [ds21[0]]: { gra: [['Sandra S', 'PM']], laundry: [['Sandra S.', 'ROOMS']] } } };
-    t.assert(win.schedApplyLinkedPeopleForDate(SCH21ssRedirB, ds21[0]), 'reports a real change — Room Attendant picks up the redirect');
-    t.eq(SCH21ssRedirB.days[ds21[0]].gra[0][1], '1', "selecting ROOMS from Laundry puts a real '1' on Room Attendant — Carlos's ask #1");
-
-    // A genuine OFF on Room Attendant is never overridden by this
-    // redirect — only a contradicted working state is corrected.
-    const SCH21ssRedirBOff = { days: { [ds21[0]]: { gra: [['Sandra S', 'OFF']], laundry: [['Sandra S.', 'ROOMS']] } } };
-    win.schedApplyLinkedPeopleForDate(SCH21ssRedirBOff, ds21[0]);
-    t.eq(SCH21ssRedirBOff.days[ds21[0]].gra[0][1], 'OFF', 'a real day off on Room Attendant is left alone even if Laundry says ROOMS');
-
-    // ── Carlos's exact ask #2: from Room Attendant, select LAUNDRY for
-    // her — Laundry should get a real '1'. This direction already
-    // existed via the ordinary redirect, confirmed still works here. ──
-    const SCH21ssRedirA = { days: { [ds21[0]]: { gra: [['Sandra S', 'LAUNDRY']], laundry: [['Sandra S.', 'PM']] } } };
-    t.assert(win.schedApplyLinkedPeopleForDate(SCH21ssRedirA, ds21[0]), 'reports a real change — Laundry picks up the redirect');
-    t.eq(SCH21ssRedirA.days[ds21[0]].laundry[0][1], '1', "selecting LAUNDRY from Room Attendant puts a real '1' on Laundry — Carlos's ask #2");
-
-    // And a real day off on Laundry is never overridden by this
-    // redirect either — same protection, opposite direction.
-    const SCH21ssRedirAOff = { days: { [ds21[0]]: { gra: [['Sandra S', 'LAUNDRY']], laundry: [['Sandra S.', 'OFF']] } } };
-    win.schedApplyLinkedPeopleForDate(SCH21ssRedirAOff, ds21[0]);
-    t.eq(SCH21ssRedirAOff.days[ds21[0]].laundry[0][1], 'OFF', 'a real day off on Laundry is left alone even if Room Attendant says LAUNDRY');
-
-    // Covering Lobby via the cover chain (gra reads 'LOBBY') doesn't
-    // disturb an independently-scheduled Laundry day either — the
-    // gra/lobby pair's own reverse-fix only ever touches the Lobby row.
-    const SCH21ssL3 = { days: { [ds21[0]]: { gra: [['Sandra S', 'LOBBY']], lobby: [['Sandra S.', '1']], laundry: [['Sandra S.', '1']] } } };
-    win.schedApplyLinkedPeopleForDate(SCH21ssL3, ds21[0]);
-    t.eq(SCH21ssL3.days[ds21[0]].laundry[0][1], '1', "covering Lobby that day doesn't touch her separately-scheduled Laundry day");
-
-    // ── Carlos's real report, 2026-09-07: Room Attendant read LOBBY (a
-    // real cover-chain assignment) while Laundry happened to be a
-    // genuine OFF the same day — the gra/laundry pair (no awayLabel) read
-    // LOBBY as "not really off" and, disagreeing with Laundry's real OFF,
-    // forced Room Attendant back to OFF too, destroying the Lobby cover
-    // assignment entirely. A cover-chain label naming a crew OUTSIDE this
-    // pair (LOBBY isn't this pair's own crew, Laundry) means a DIFFERENT
-    // relationship already explains her — this pair must skip the day
-    // entirely rather than treat LOBBY as ambiguous "not off." ──
-    const SCH21ssL4 = { days: { [ds21[0]]: { gra: [['Sandra S', 'LOBBY']], lobby: [['Sandra S.', '1']], laundry: [['Sandra S.', 'OFF']] } } };
-    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21ssL4, ds21[0]), 'the gra/laundry pair reports no change — LOBBY belongs to a different pair entirely');
-    t.eq(SCH21ssL4.days[ds21[0]].gra[0][1], 'LOBBY', "her real Lobby cover assignment survives — this was the reported bug, it was getting stomped to OFF");
-    t.eq(SCH21ssL4.days[ds21[0]].laundry[0][1], 'OFF', 'and her independently genuine Laundry OFF is untouched too');
+    t.eq(afterSandraSLive.days[ds21[0]].lobby[1][1], 'ROOMS', "her Lobby row relabels to ROOMS in the same live edit, no manual retyping needed");
+    t.eq(afterSandraSLive.days[ds21[0]].laundry[0][1], 'ROOMS', "and her Laundry row relabels to ROOMS too, live — this is the reported bug (Laundry used to freeze on a stale value forever once Room Attendant read a label from the OTHER pair)");
 
     // ── Both new mirrors also react live to a single manual edit
     // (schedSetCell), not just Auto-fill — Carlos's real reports were

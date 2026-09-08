@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.72"/>
+<meta name="app-version" content="7.40.73"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.73', date:'2026-09-08',
+    fixes:['Fixed Sandra S.\'s Lobby row freezing on a stale value (ROOMS) forever once Room Attendant switched to Laundry — Carlos\'s real report. Root cause: her two separate Room Attendant/Lobby and Room Attendant/Laundry pairs didn\'t know about each other, so whenever Room Attendant read the OTHER pair\'s label, the Lobby pair skipped the day entirely and left Lobby stuck. Migrated her fully onto the generic cross-crew sync — the mechanism already built for reconciling any number of crews for one person at once — which now also releases a stale away-label (not just a plain \'1\' or an old absence) once she\'s confirmed working somewhere else, without disturbing a crew\'s own genuinely correct value that happens to share the same word (Houseman is shared by two crews).']
+  },
   {
     v:'7.40.72', date:'2026-09-07',
     fixes:['Hardened the generic cross-crew sync (the one that already covers every employee on 2+ crews, not just Sandra S/Gabriela Cuevas) against the same bug class just fixed for Sandra S: on 3+ crews at once, an unrelated genuine day off on one crew could outrank a real cover-chain label on another and wipe it out — now a label naming another crew always wins over an unrelated absence, for everyone. Also switched its name-matching to the same alias table used for Sandra S, so a future employee with a similar spelling mismatch bridges automatically instead of needing a new special case.']
@@ -22316,39 +22320,22 @@ function schedReleaseStaleLaundryLabels(SCH,ds){
 var SCHED_LINKED_PEOPLE=[
   {a:{crew:'gra',name:'Gabriela Cuevas'}, b:{crew:'lobby',name:'Gabriela',awayLabel:'ROOMS'}},
   {a:{crew:'gra',name:'Sandra'}, b:{crew:'laundry',name:'Sandra'}},
-  /* Carlos's ask, 2026-09-06: Sandra S was stuck the same way Gabriela
-     Cuevas was before this whole mechanism existed — couldn't move her
-     off Lobby onto Room Attendant. Same fix, same shape: edited-side-wins,
-     and her Lobby row reads ROOMS (not a plain '1') on a day she's really
-     on Room Attendant, so Lobby's own headcount doesn't silently count her
-     twice. Distinct from the 'Sandra'/laundry pair above — a different
-     person. Spelled differently per crew, same asymmetry as Gabriela
-     Cuevas/Gabriela: "Sandra S" on Room Attendant, "Sandra S." — WITH a
-     trailing period — on Lobby. Confirmed from a real screenshot after
-     two earlier text-only answers both turned out wrong (first "Sandra S
-     both places," then "Sandra Silva"); dlNorm lowercases/trims/strips
-     accents but does not strip punctuation, so the period alone was
-     enough for schedCellFor to find no Lobby row and leave the pair
-     silently doing nothing. */
-  {a:{crew:'gra',name:'Sandra S'}, b:{crew:'lobby',name:'Sandra S.',awayLabel:'ROOMS'}},
-  /* Carlos's follow-up, 2026-09-07: she's ALSO independently on Laundry
-     ("Sandra S." there too, same trailing period as Lobby) — near-full
-     weeks of real Laundry work, not just an occasional cover. A THIRD
-     crew is one more than the generic cross-crew mechanism's exclusion
-     list can hand her (she's excluded from it because she's already in
-     this array and in SCHED_COVER_CHAINS as a Lobby backup), so this is
-     a second explicit pair instead.
-     symmetric:true — Carlos's explicit ask, unlike the plain 'Sandra'
-     pair above: he wants BOTH directions to route and relabel, not just
-     gra->laundry. Selecting LAUNDRY from her Room Attendant cell puts a
-     real '1' on Laundry (already worked via the ordinary redirect below);
-     selecting ROOMS from her LAUNDRY cell now ALSO puts a real '1' back
-     on Room Attendant — the reverse never existed before. And a stale
-     plain '1' left on either side while she's genuinely working the
-     OTHER one now relabels with wherever she really is (ROOMS or
-     LAUNDRY), instead of only ever working in the gra->laundry
-     direction. See schedApplyLinkedPeopleForDate's pair.symmetric branch. */
-  {a:{crew:'gra',name:'Sandra S'}, b:{crew:'laundry',name:'Sandra S.'}, symmetric:true}
+  /* Sandra S USED to live here as two separate pairs (gra/lobby,
+     gra/laundry) — removed 2026-09-08. Carlos's real report: with a
+     THIRD crew in play, the two pairs didn't know about each other, so
+     whenever Room Attendant read 'LAUNDRY' (this pair's own foreign-label
+     guard, working as designed), the gra/lobby pair skipped the day
+     entirely and left Lobby frozen on a stale value forever, no matter
+     what actually happened on Laundry. Two isolated pairs can't
+     represent a real three-way "where is she today" relationship — the
+     generic mechanism (schedApplyCrossCrewSyncForDate) was built for
+     exactly this and already reconciles any number of crews for a
+     person at once. She's no longer excluded from it (see
+     _schedCrossCrewExcluded) — SCHED_NAME_ALIASES bridges "Sandra S" vs
+     "Sandra S." there the same way it did here, and she still keeps her
+     SCHED_COVER_CHAINS Lobby-backup role untouched; that only ever
+     writes to her own Room Attendant cell, which the generic mechanism's
+     redirect-priority fix (2026-09-07) already reads correctly. */
 ];
 function _schedIsUnavailable(v){ return schedIsOff(v)||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); }
 /* Returns whether anything actually changed, so a caller doing a
@@ -22534,6 +22521,14 @@ var SCHED_CREW_AWAY_LABEL={
 var SCHED_CROSS_CREW_EXTRA_EXCLUDED=['Sarahi','Andrea'];
 function _schedCrossCrewExcluded(name){
   var nk=dlNorm(name);
+  /* Sandra S is a deliberate exception, 2026-09-08: she's still in
+     SCHED_COVER_CHAINS as a Lobby backup (that role is untouched and
+     legitimate — it only ever writes to her own Room Attendant cell),
+     but she now participates in the generic sync below for her real
+     Room Attendant/Lobby/Laundry reconciliation instead of the two
+     separate SCHED_LINKED_PEOPLE pairs she used to have — see the
+     removal note where those pairs used to be. */
+  if(dlNormAlias(name)==='sandra s')return false;
   if(SCHED_LINKED_PEOPLE.some(function(p){ return dlNorm(p.a.name)===nk||dlNorm(p.b.name)===nk; }))return true;
   if(SCHED_COVER_CHAINS.some(function(cc){ return cc.chain.some(function(c){ return dlNorm(c.name)===nk; }); }))return true;
   if(SCHED_CROSS_CREW_EXTRA_EXCLUDED.some(function(n){ return dlNorm(n)===nk; }))return true;
@@ -22590,11 +22585,12 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
        "authoritative" absence first, and an absence always overwrites
        unconditionally. Scanning for the redirect FIRST means the crew
        she's actually named in always wins over an unrelated absence. */
+    var wasRedirected=false;
     if(!source){
       entries.forEach(function(labelHolder){
         if(source)return;
         var cell=String(labelHolder.row[1]||'').trim();
-        entries.forEach(function(target){ if(!source&&target!==labelHolder&&SCHED_CREW_AWAY_LABEL[target.crew]===cell)source=target; });
+        entries.forEach(function(target){ if(!source&&target!==labelHolder&&SCHED_CREW_AWAY_LABEL[target.crew]===cell){source=target;wasRedirected=true;} });
       });
     }
     if(!source){
@@ -22615,7 +22611,20 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
        the same cell. Also catches the case where the redirect scan
        above picked source via the edited entry's own label. */
     var srcCellRaw=String(source.row[1]||'').trim();
-    entries.forEach(function(e){ if(e!==source&&SCHED_CREW_AWAY_LABEL[e.crew]===srcCellRaw)source=e; });
+    entries.forEach(function(e){ if(e!==source&&SCHED_CREW_AWAY_LABEL[e.crew]===srcCellRaw){source=e;wasRedirected=true;} });
+    /* A redirect only decides WHICH entry is authoritative — it doesn't
+       confirm that entry's own cell. Carlos's real ask: selecting a
+       crew's own label from elsewhere (e.g. picking ROOMS on Laundry)
+       must put a real '1' on the crew actually named, even if that cell
+       was blank or held some other stale value (a leftover 'PM', say).
+       Scoped to ONLY the redirect case (wasRedirected) — a plain edit
+       Carlos just typed himself (a deliberate 'PM' shift, say) is never
+       forced to '1' just because it happened to become source; only a
+       genuine absence there is ever left alone regardless. */
+    var srcCellNow=String(source.row[1]||'').trim();
+    if(wasRedirected&&srcCellNow!=='1'&&!_schedIsUnavailable(srcCellNow)){
+      source.row[1]='1'; changed=true;
+    }
     var srcCell=String(source.row[1]||'').trim();
     var srcOff=_schedIsUnavailable(srcCell);
     var want=srcOff?srcCell:(SCHED_CREW_AWAY_LABEL[source.crew]||'1');
@@ -22625,10 +22634,24 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
       if(cur===want)return;
       /* An absence overwrites whatever was there, same as
          SCHED_LINKED_PEOPLE — she can't be resting on one crew and
-         PM/covering on another. A working relabel only replaces a
-         plain '1' (untouched, ambiguous); a PM shift or a cover label
-         she or another mechanism already set is left exactly as is. */
-      if(!srcOff&&cur!=='1')return;
+         PM/covering on another. Coming the other way (source is
+         genuinely working), a working relabel releases: a plain '1'
+         (untouched, ambiguous); a now-stale absence (Carlos's real
+         report: a granted R-OFF sitting on Lobby from before she was
+         confirmed working Room Attendant has to let go once that's
+         settled); or a stale FOREIGN away-label — this crew's cell
+         naming some OTHER crew entirely (Carlos's real report: Lobby
+         frozen on 'ROOMS' forever once Room Attendant switched to
+         LAUNDRY). "Foreign" specifically excludes a label that matches
+         THIS crew's own identity (e.g. 'HOUSEMAN' sitting on the
+         Houseman crew's own cell) — HOUSEMAN is shared by two crews
+         (pmhm/hp), so a plain "is this cur a known label" check would
+         wrongly treat a crew's OWN correct value as foreign just
+         because a different crew happens to share the same word. Only
+         a genuinely different deliberate value (PM, or her own crew's
+         legitimate label) is left exactly as is. */
+      var curIsForeignAwayLabel=cur!==SCHED_CREW_AWAY_LABEL[e.crew]&&Object.keys(SCHED_CREW_AWAY_LABEL).some(function(ck){ return SCHED_CREW_AWAY_LABEL[ck]===cur; });
+      if(!srcOff&&cur!=='1'&&!_schedIsUnavailable(cur)&&!curIsForeignAwayLabel)return;
       e.row[1]=want; changed=true;
     });
   });
