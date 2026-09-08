@@ -72,6 +72,19 @@ module.exports = {
     t.eq(SCH6.days[ds].gra[0][1], '1', 'her real Room Attendant day is untouched');
     t.eq(SCH6.days[ds].laundry[0][1], '1', 'and her borrowed Laundry day is untouched too');
 
+    // ── Sandra S is the deliberate exception, 2026-09-08: Carlos's real
+    // report, Saturday still showed a plain '1' on both Room Attendant
+    // and Laundry after this whole migration ("eso no debería pasar").
+    // Root cause: her merged Laundry row (schedPurgeDuplicateAliasRows
+    // keeps whichever tag survives) carried the same 'added' tag Karla
+    // Varela's genuine borrow has, from when Carlos originally added her
+    // to Laundry by hand — but for Sandra S that's a real second home
+    // crew, not a temporary borrow, and she must still fully participate. ──
+    const SCH6b = { days: { [ds]: { gra: [['Sandra S', '1']], lobby: [['Sandra S.', 'ROOMS']], laundry: [['Sandra S.', '1', 'added']] } } };
+    t.assert(win.schedApplyCrossCrewSyncForDate(SCH6b, ds), 'reports a real change — her added-tagged Laundry row still participates');
+    t.eq(SCH6b.days[ds].laundry[0][1], 'ROOMS', "her Laundry row relabels to ROOMS despite the 'added' tag — this was the reported bug, it looked permanently double-booked");
+    t.eq(SCH6b.days[ds].laundry[0][2], 'added', "the tag itself is untouched — only the value changes, she's still a real permanent Laundry crew member");
+
     // ── Anyone already in SCHED_LINKED_PEOPLE, SCHED_COVER_CHAINS, or the
     // Sarahi/Andrea direct mirror is excluded entirely, so this generic
     // pass can never fight those already-tuned mechanisms. ──

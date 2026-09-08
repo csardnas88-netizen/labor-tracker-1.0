@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.73"/>
+<meta name="app-version" content="7.40.74"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.74', date:'2026-09-08',
+    fixes:['Fixed Sandra S. still looking double-booked on Saturday (plain \'1\' on both Room Attendant and Laundry) even after yesterday\'s migration — Carlos\'s real report, "eso no debería pasar." Her merged Laundry row carried an \'added\' tag (from when Carlos originally added her to that crew by hand) — the same tag a genuine temporary borrow like Karla Varela\'s uses, which the cross-crew sync deliberately skips. But for Sandra S it\'s a real second home crew, not a borrow, so she\'s now the one explicit exception: her Laundry row participates in the sync regardless of that tag.']
+  },
   {
     v:'7.40.73', date:'2026-09-08',
     fixes:['Fixed Sandra S.\'s Lobby row freezing on a stale value (ROOMS) forever once Room Attendant switched to Laundry — Carlos\'s real report. Root cause: her two separate Room Attendant/Lobby and Room Attendant/Laundry pairs didn\'t know about each other, so whenever Room Attendant read the OTHER pair\'s label, the Lobby pair skipped the day entirely and left Lobby stuck. Migrated her fully onto the generic cross-crew sync — the mechanism already built for reconciling any number of crews for one person at once — which now also releases a stale away-label (not just a plain \'1\' or an old absence) once she\'s confirmed working somewhere else, without disturbing a crew\'s own genuinely correct value that happens to share the same word (Houseman is shared by two crews).']
@@ -22541,13 +22545,21 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
     if(!SCHED_CREW_AWAY_LABEL[b.key])return;
     (day[b.key]||[]).forEach(function(row){
       var nm=String(row[0]||'').trim(); if(!nm)return;
-      /* A row tagged 'added' (schedAddPerson) is a deliberate BORROW,
-         not the same-person-one-location situation this whole mechanism
-         exists for — "borrowing is not a transfer," she can genuinely
-         work both crews the same day. Excluded entirely, not just as a
-         source, so her real crew's own cell is never relabeled off of
-         it either. */
-      if(row[2]==='added')return;
+      /* A row tagged 'added' (schedAddPerson) is USUALLY a deliberate
+         BORROW, not the same-person-one-location situation this whole
+         mechanism exists for — "borrowing is not a transfer," she can
+         genuinely work both crews the same day (Karla Varela's real
+         case). Excluded entirely, not just as a source, so her real
+         crew's own cell is never relabeled off of it either.
+         Sandra S is the deliberate exception, 2026-09-08: Carlos added
+         her to Laundry by hand once, same 'added' tag Karla Varela has,
+         but for her it's a genuine SECOND home crew he wants fully
+         synced, not a temporary borrow — exactly the case that migrated
+         her here off her old dedicated pairs in the first place. Without
+         this, her merged Laundry row (schedPurgeDuplicateAliasRows keeps
+         whichever tag survives the merge) stayed permanently excluded
+         and looked "double-booked" forever, the reported bug. */
+      if(row[2]==='added'&&dlNormAlias(nm)!=='sandra s')return;
       if(_schedCrossCrewExcluded(nm))return;
       /* dlNormAlias, not dlNorm — bridges known per-employee spelling
          drift between crews (Carlos's real report: "Sandra S" vs
