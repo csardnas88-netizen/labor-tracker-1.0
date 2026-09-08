@@ -118,5 +118,19 @@ module.exports = {
     const afterLive2 = win.dlLoadSchedule();
     t.eq(afterLive2.days[dates[1]].laundry[0][1], '1', 'Laundry stays 1, the crew she just edited');
     t.eq(afterLive2.days[dates[1]].gra[0][1], 'LAUNDRY', "Room Attendant relabels to LAUNDRY live, the same moment, no Auto-fill run needed");
+
+    // ── Carlos's real report, 2026-09-07 (the Sandra S bug, generalized
+    // to any employee): on THREE crews at once, an unrelated genuine
+    // absence on one crew must never outrank a real cover-chain label on
+    // another. Before this fix, absence-priority picked Laundry's OFF
+    // first (order-earlier in SCHED_BLOCKS) and cascaded it onto Room
+    // Attendant, destroying a real 'LOBBY' cover assignment. The redirect
+    // scan now runs BEFORE the absence fallback, so the crew she's
+    // actually named in always wins. ──
+    const SCH8 = { days: { [ds]: { gra: [['Otra Persona', 'LOBBY']], lobby: [['Otra Persona', '1']], laundry: [['Otra Persona', 'OFF']] } } };
+    t.assert(!win.schedApplyCrossCrewSyncForDate(SCH8, ds), 'no change reported — everything is already internally consistent');
+    t.eq(SCH8.days[ds].gra[0][1], 'LOBBY', "her real Lobby cover assignment on Room Attendant survives — this was the reported bug, it was getting stomped by Laundry's unrelated OFF");
+    t.eq(SCH8.days[ds].lobby[0][1], '1', 'her real Lobby row stays a plain 1');
+    t.eq(SCH8.days[ds].laundry[0][1], 'OFF', "her separately genuine Laundry OFF is left exactly as is — a deliberate value, not overwritten");
   },
 };

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.70"/>
+<meta name="app-version" content="7.40.72"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.72', date:'2026-09-07',
+    fixes:['Hardened the generic cross-crew sync (the one that already covers every employee on 2+ crews, not just Sandra S/Gabriela Cuevas) against the same bug class just fixed for Sandra S: on 3+ crews at once, an unrelated genuine day off on one crew could outrank a real cover-chain label on another and wipe it out — now a label naming another crew always wins over an unrelated absence, for everyone. Also switched its name-matching to the same alias table used for Sandra S, so a future employee with a similar spelling mismatch bridges automatically instead of needing a new special case.']
+  },
+  {
+    v:'7.40.71', date:'2026-09-07',
+    features:['Sandra S\'s Room Attendant/Laundry sync is now fully two-way, not just one — Carlos\'s ask. Selecting ROOMS from her Laundry cell now puts a real \'1\' on Room Attendant (this direction never worked before); selecting LAUNDRY from Room Attendant still puts a real \'1\' on Laundry as before. And a stale plain \'1\' left on either side while she\'s genuinely working the other now relabels with wherever she really is, in both directions — not just Room Attendant relabeling Laundry, but Laundry relabeling Room Attendant too. A real day off is still never overridden by any of this.']
+  },
   {
     v:'7.40.70', date:'2026-09-07',
     fixes:['The duplicate "Sandra S"/"Sandra S." Laundry row from yesterday\'s bug now cleans itself up automatically, on every open — Carlos\'s real report, the "Remove from crew" button wasn\'t clearing it from the week he was looking at. Any day/crew with two rows that are really the same person (same fix as the duplicate-creation bug) now self-heals the moment the schedule renders, keeping the real spelling and never losing a real value, on any device, no button needed.']
@@ -22329,13 +22337,18 @@ var SCHED_LINKED_PEOPLE=[
      crew is one more than the generic cross-crew mechanism's exclusion
      list can hand her (she's excluded from it because she's already in
      this array and in SCHED_COVER_CHAINS as a Lobby backup), so this is
-     a second explicit pair instead: same shape as the plain 'Sandra'
-     gra/laundry pair above — NO awayLabel, since working Room Attendant
-     and Laundry on different days is a legitimate, independent state for
-     her (confirmed by Carlos, same as plain Sandra), not a
-     double-booking to relabel away. Only her actual day OFF needs to
-     carry across crews, same as plain Sandra's pair. */
-  {a:{crew:'gra',name:'Sandra S'}, b:{crew:'laundry',name:'Sandra S.'}}
+     a second explicit pair instead.
+     symmetric:true — Carlos's explicit ask, unlike the plain 'Sandra'
+     pair above: he wants BOTH directions to route and relabel, not just
+     gra->laundry. Selecting LAUNDRY from her Room Attendant cell puts a
+     real '1' on Laundry (already worked via the ordinary redirect below);
+     selecting ROOMS from her LAUNDRY cell now ALSO puts a real '1' back
+     on Room Attendant — the reverse never existed before. And a stale
+     plain '1' left on either side while she's genuinely working the
+     OTHER one now relabels with wherever she really is (ROOMS or
+     LAUNDRY), instead of only ever working in the gra->laundry
+     direction. See schedApplyLinkedPeopleForDate's pair.symmetric branch. */
+  {a:{crew:'gra',name:'Sandra S'}, b:{crew:'laundry',name:'Sandra S.'}, symmetric:true}
 ];
 function _schedIsUnavailable(v){ return schedIsOff(v)||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); }
 /* Returns whether anything actually changed, so a caller doing a
@@ -22373,7 +22386,12 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
        relationship already explains where she is — this pair has nothing
        to reconcile until she's genuinely back on her own crew or off in a
        way that's actually about THIS pair, so it skips the day entirely. */
-    if(aCell!==pair.b.crew.toUpperCase()&&Object.keys(SCHED_CREW_AWAY_LABEL).some(function(ck){ return ck!==pair.b.crew&&SCHED_CREW_AWAY_LABEL[ck]===aCell; }))return;
+    if(pair.symmetric){
+      /* Same idea, both directions: a label naming some THIRD crew,
+         outside this pair entirely, on either side means a different
+         relationship already explains her — skip until that resolves. */
+      if(Object.keys(SCHED_CREW_AWAY_LABEL).some(function(ck){ return ck!==pair.a.crew&&ck!==pair.b.crew&&(SCHED_CREW_AWAY_LABEL[ck]===aCell||SCHED_CREW_AWAY_LABEL[ck]===bCell); }))return;
+    } else if(aCell!==pair.b.crew.toUpperCase()&&Object.keys(SCHED_CREW_AWAY_LABEL).some(function(ck){ return ck!==pair.b.crew&&SCHED_CREW_AWAY_LABEL[ck]===aCell; }))return;
     var aOff=_schedIsUnavailable(aCell), bOff=_schedIsUnavailable(bCell);
     var editedIsA=!!edited&&edited.crew===pair.a.crew&&dlNorm(edited.name)===dlNorm(pair.a.name);
     var editedIsB=!!edited&&edited.crew===pair.b.crew&&dlNorm(edited.name)===dlNorm(pair.b.name);
@@ -22395,7 +22413,28 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
        crew (a), a cover label means she's on the OTHER crew (b). Each
        gets its own relabel, and they're mutually exclusive: only one of
        these two blocks can ever fire for a given aCell. */
-    if(aCell===pair.b.crew.toUpperCase()){
+    /* Carlos's ask, 2026-09-07: Sandra S's Room Attendant/Laundry pair is
+       genuinely symmetric — she legitimately works EITHER crew as her
+       real job on a given day (unlike Gabriela Cuevas, whose home crew
+       is always Room Attendant and Lobby is always the "away" side).
+       He wants the same reconciliation Gabriela already gets, but
+       working in BOTH directions: selecting the other crew's own label
+       from either side routes a real '1' onto that crew, and a stale
+       plain '1' left on the other side gets relabeled with wherever
+       she's really working — not just gra->lobby, but laundry->gra too.
+       pair.symmetric opts a pair into this two-way version; every
+       existing pair (Gabriela Cuevas, plain Sandra, Sandra S's own
+       gra/lobby pair) keeps the original one-way behavior below
+       untouched, so none of their already-tuned behavior changes. */
+    if(pair.symmetric){
+      if(aCell===SCHED_CREW_AWAY_LABEL[pair.b.crew]&&bCell!=='1'&&!_schedIsUnavailable(bCell)){
+        var bRowSym=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
+        if(bRowSym){ bRowSym[1]='1'; bCell='1'; changed=true; }
+      } else if(bCell===SCHED_CREW_AWAY_LABEL[pair.a.crew]&&aCell!=='1'&&!_schedIsUnavailable(aCell)){
+        var aRowSym=schedRawCell(SCH,ds,pair.a.crew,pair.a.name);
+        if(aRowSym){ aRowSym[1]='1'; aCell='1'; changed=true; }
+      }
+    } else if(aCell===pair.b.crew.toUpperCase()){
       /* The reverse of the rule below — Carlos's real report: Gabriela
          Cuevas showed LOBBY on Room Attendant but her own literal Lobby
          row still read the stale ROOMS from an earlier day she was
@@ -22439,7 +22478,14 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
        LAUNDRY...) — the other crew goes to its awayLabel if it has one,
        otherwise to a plain working day. */
     var srcOff=_schedIsUnavailable(srcCell);
-    var want=srcOff?srcCell:(dst.awayLabel||'1');
+    /* Symmetric pairs relabel with wherever the SOURCE side really is
+       (SCHED_CREW_AWAY_LABEL[src.crew]) regardless of which side that
+       turns out to be — the whole point of Carlos's ask. One-way pairs
+       keep the original static dst.awayLabel, which only pair.b ever
+       carries, so dst=pair.a there always just falls back to a plain '1'
+       exactly as before. */
+    var dstAwayLabel=pair.symmetric?SCHED_CREW_AWAY_LABEL[src.crew]:dst.awayLabel;
+    var want=srcOff?srcCell:(dstAwayLabel||'1');
     var cur=String(dstRow[1]||'').trim();
     if(cur===want)return;
     /* Both sides already agree on working-vs-resting, so the ONLY thing
@@ -22447,7 +22493,7 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
        on this crew, and the other crew still reads a plain '1' as if
        she were there too. Anything else he deliberately put in that
        cell (PM, a cover label) is left exactly as it is. */
-    if(bothSame&&!(!srcOff&&dst.awayLabel&&cur==='1'))return;
+    if(bothSame&&!(!srcOff&&dstAwayLabel&&cur==='1'))return;
     dstRow[1]=want; changed=true;
   });
   return changed;
@@ -22508,7 +22554,12 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
          it either. */
       if(row[2]==='added')return;
       if(_schedCrossCrewExcluded(nm))return;
-      var nk=dlNorm(nm);
+      /* dlNormAlias, not dlNorm — bridges known per-employee spelling
+         drift between crews (Carlos's real report: "Sandra S" vs
+         "Sandra S." kept several mechanisms from recognizing her as one
+         person). Any future employee hitting the same class of bug only
+         needs an entry added to SCHED_NAME_ALIASES, not a new pair. */
+      var nk=dlNormAlias(nm);
       if(!byName[nk])byName[nk]=[];
       byName[nk].push({crew:b.key,row:row});
     });
@@ -22528,6 +22579,24 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
     if(edited&&dlNorm(edited.name)===nk){
       entries.forEach(function(e){ if(!source&&e.crew===edited.crew)source=e; });
     }
+    /* A redirect signal — one entry's cell literally naming ANOTHER
+       entry's crew (e.g. Room Attendant reading 'LAUNDRY', or a
+       cover-chain label like 'LOBBY') — is a direct assertion of where
+       she really is, and outranks an unrelated absence sitting on some
+       OTHER crew entirely. Checked before the absence fallback below:
+       Carlos's real report, a genuine Lobby cover-chain assignment on
+       Room Attendant was getting destroyed because an unrelated OFF on
+       Laundry (alphabetically/order-earlier) was picked as the
+       "authoritative" absence first, and an absence always overwrites
+       unconditionally. Scanning for the redirect FIRST means the crew
+       she's actually named in always wins over an unrelated absence. */
+    if(!source){
+      entries.forEach(function(labelHolder){
+        if(source)return;
+        var cell=String(labelHolder.row[1]||'').trim();
+        entries.forEach(function(target){ if(!source&&target!==labelHolder&&SCHED_CREW_AWAY_LABEL[target.crew]===cell)source=target; });
+      });
+    }
     if(!source){
       entries.forEach(function(e){ if(!source&&_schedIsUnavailable(String(e.row[1]||'').trim()))source=e; });
     }
@@ -22543,7 +22612,8 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
        else should show — same reverse-direction fix
        schedApplyLinkedPeopleForDate already needed for cover-chain
        labels, generalized here so this can't fight that mechanism over
-       the same cell. */
+       the same cell. Also catches the case where the redirect scan
+       above picked source via the edited entry's own label. */
     var srcCellRaw=String(source.row[1]||'').trim();
     entries.forEach(function(e){ if(e!==source&&SCHED_CREW_AWAY_LABEL[e.crew]===srcCellRaw)source=e; });
     var srcCell=String(source.row[1]||'').trim();
