@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.69"/>
+<meta name="app-version" content="7.40.70"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.70', date:'2026-09-07',
+    fixes:['The duplicate "Sandra S"/"Sandra S." Laundry row from yesterday\'s bug now cleans itself up automatically, on every open — Carlos\'s real report, the "Remove from crew" button wasn\'t clearing it from the week he was looking at. Any day/crew with two rows that are really the same person (same fix as the duplicate-creation bug) now self-heals the moment the schedule renders, keeping the real spelling and never losing a real value, on any device, no button needed.']
+  },
   {
     v:'7.40.69', date:'2026-09-07',
     fixes:['Fixed marking someone LAUNDRY on their home crew creating a DUPLICATE Laundry row instead of reusing their real one, when the two spellings differ by punctuation — Carlos\'s real report: Sandra S. already had a hand-added Laundry row, and typing LAUNDRY into her Room Attendant cell (spelled "Sandra S", no period) created a second "Sandra S" row there instead of finding her real "Sandra S." one. Added a small name-alias table so known spelling drift like this bridges cleanly; the same fix protects the reverse direction (releasing a stale LAUNDRY label) too. Doesn\'t retroactively merge the duplicate row already sitting in his live data — that still needs deleting by hand once.']
@@ -22670,6 +22674,51 @@ function schedSyncCallOffMarks(SCH,dates){
    older or future week self-heals the moment it's opened too, and a
    future re-upload that still lists her there is purged again rather
    than permanently protected by a one-time "Remove" click. */
+/* Carlos's real report, 2026-09-07: a duplicate Laundry row for Sandra S.
+   ("Sandra S", no period, vs "Sandra S.", with one) already existed
+   before the dlNormAlias fix (schedSyncLaundryCoverRow) shipped, and the
+   "Remove from crew" button wasn't clearing it from the week he was
+   actually looking at. Rather than depend on that click working right,
+   self-heals any day/crew where two rows alias to the same person
+   (dlNormAlias) — keeping whichever row is NOT an auto-generated 'cover'
+   row (those are always disposable), carrying its value across first if
+   the row being kept was blank. Runs on every render, every loaded week,
+   so a duplicate created before this shipped can't survive being opened
+   once, and the same class of bug for a future alias can't linger either. */
+function schedPurgeDuplicateAliasRows(SCH){
+  if(!SCH||!SCH.days)return false;
+  var changed=false;
+  Object.keys(SCH.days).forEach(function(ds){
+    var day=SCH.days[ds];
+    SCHED_BLOCKS.forEach(function(b){
+      var arr=day[b.key];
+      if(!arr||arr.length<2)return;
+      /* Always physically removes index i (the later one) — i is always
+         >= j here, so splicing it never shifts an index this loop still
+         needs to visit. Which row's VALUE/tag survives is decided
+         separately from which slot gets removed, so a 'cover' row that
+         happens to sit earlier in the array still loses to a real row
+         that comes after it, without needing to touch a lower index. */
+      for(var i=arr.length-1;i>=0;i--){
+        for(var j=0;j<i;j++){
+          if(dlNormAlias(arr[i][0])!==dlNormAlias(arr[j][0]))continue;
+          /* Identity/tag: prefer whichever row is NOT an auto-generated
+             'cover' row. Value: prefer whichever ISN'T blank, favoring
+             the surviving row's own value first — neither a real value
+             nor the correct spelling is ever silently dropped. */
+          var preferJ=!(arr[j][2]==='cover'&&arr[i][2]!=='cover');
+          var jVal=String(arr[j][1]||'').trim(), iVal=String(arr[i][1]||'').trim();
+          var keepVal=preferJ?(jVal!==''?jVal:iVal):(iVal!==''?iVal:jVal);
+          arr[j]=[preferJ?arr[j][0]:arr[i][0], keepVal, preferJ?arr[j][2]:arr[i][2]];
+          arr.splice(i,1);
+          changed=true;
+          break;
+        }
+      }
+    });
+  });
+  return changed;
+}
 function schedPurgeYeseniaFromTd(SCH){
   if(!SCH||!SCH.days)return false;
   var changed=false;
@@ -23425,6 +23474,13 @@ function renderSchedule(){
      stay gone everywhere, not just on whichever device happened to
      open the page first. */
   if(SCH&&SCH.days&&schedPurgeYeseniaFromTd(SCH)){
+    SCH.savedAt=new Date().toISOString();
+    try{ dlSaveSchedule(SCH); }catch(e){}
+  }
+  /* Same reach and same reason: a duplicate row from a name-punctuation
+     mismatch (Sandra S./Sandra S — Carlos's real report) should self-heal
+     the moment any device opens the week, not depend on a UI button. */
+  if(SCH&&SCH.days&&schedPurgeDuplicateAliasRows(SCH)){
     SCH.savedAt=new Date().toISOString();
     try{ dlSaveSchedule(SCH); }catch(e){}
   }

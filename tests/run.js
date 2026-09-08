@@ -82,6 +82,7 @@ const cases = [
   require('./cases/schedule-refresh-occ-from-r106'),
   require('./cases/late-departures-dnd'),
   require('./cases/schedule-cross-crew-sync'),
+  require('./cases/schedule-purge-duplicate-alias-rows'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
