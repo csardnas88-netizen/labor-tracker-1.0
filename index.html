@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.76"/>
+<meta name="app-version" content="7.40.77"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,12 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.77', date:'2026-09-08',
+    fixes:['Fixed a crew card counting someone its rows never showed — Carlos\'s real report, with a screenshot: Laundry\'s Sunday total read 5 while only four rows on screen carried a "1". Root cause: a crew\'s list of people was taken from ONE reference day (the first day of the week with anything in it), so anyone who joins the crew later in the week — a row the app generates for a LAUNDRY mark, a borrow, another device\'s edit — had no row for the rest of the week to paint into. The total could see her; the card could not, and there was nowhere to click to change her. The list is now everyone on the crew on ANY day of the week, so the totals and the rows can no longer disagree.',
+           'Fixed the same person under two slightly different spellings ("Sandra S" vs "Sandra S.") splitting into two half-empty rows, or showing a name whose every cell was a dot. Both spellings are now treated as one person everywhere on the Schedule page — the cells, the Days count, Fill Week, Copy Last Week, Remove From Crew, and next week\'s crew list.',
+           'Fixed a leftover "removed from crew" mark quietly dropping someone out of every week built afterwards. It now clears the moment Carlos edits any of that person\'s cells on that crew, or the app itself puts her back on it — under every spelling of her name, not just the one it happened to be set under. Opening a past week she really did work still never undoes a removal made going forward.']
+  },
   {
     v:'7.40.76', date:'2026-09-08',
     features:['Managers can now be marked OPEN alongside AM, MID and PM, and each of those four shifts has its own color on the grid — Carlos\'s ask, so which shift someone is on reads at a glance instead of every working manager looking alike. Ordered through the day: Open teal, AM blue, Mid gold, PM rose. Only the Managers crew is recolored; the PM Supervisor over on Supervisors keeps the gold it has always had. An OPEN manager lands on the Daily Lineup\'s AM Coordinator line, the same line the old Open/Close vocabulary already used.'],
@@ -21023,8 +21029,8 @@ function _schedRow(SCH,ds,bk,idx,name){
   var arr=SCH.days&&SCH.days[ds]&&SCH.days[ds][bk];
   if(!arr)return null;
   var at=arr[idx];
-  if(at&&(name==null||dlNorm(at[0])===dlNorm(name)))return at;
-  for(var i=0;i<arr.length;i++) if(dlNorm(arr[i][0])===dlNorm(name))return arr[i];
+  if(at&&(name==null||dlNormAlias(at[0])===dlNormAlias(name)))return at;
+  for(var i=0;i<arr.length;i++) if(dlNormAlias(arr[i][0])===dlNormAlias(name))return arr[i];
   return null;
 }
 function schedSetCell(bk,idx,name,ds,val,el){
@@ -21032,6 +21038,12 @@ function schedSetCell(bk,idx,name,ds,val,el){
   var row=_schedRow(SCH,ds,bk,idx,name);
   if(!row)return;
   row[1]=String(val==null?'':val).trim();
+  /* Editing someone's cell on a crew is Carlos saying she works there —
+     so any retirement still on file for that person+crew is stale by
+     definition and goes, every spelling of it. Deliberately here and
+     not at render time: opening a PAST week she really did work must
+     never undo a removal he made for the weeks going forward. */
+  schedSetRetired(SCH,bk,String(row[0]||name),false);
   /* Marking Victoriano TAILOR (or back to '1') is itself the trigger for
      Jorge's Laundry cover, same relationship Auto-fill already knows —
      Carlos sets this by hand every week, not through Auto-fill, so it
@@ -21349,7 +21361,9 @@ function schedRosterForDates(SCH,dates){
       var day=SCH.days&&SCH.days[ds]; if(!day)return;
       (day[b.key]||[]).forEach(function(p){
         var n=String(p[0]||'').trim(); if(!n)return;
-        var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n);
+        /* Alias-aware so a crew carrying the same person under two
+           spellings copies forward as ONE row next week, not two. */
+        var k=dlNormAlias(n); if(seen[k])return; seen[k]=1; names.push(n);
       });
     });
     out[b.key]=names;
@@ -21424,7 +21438,19 @@ function schedIsRetired(SCH,bk,name){ return !!(SCH&&SCH.retired&&SCH.retired[bk
 function schedSetRetired(SCH,bk,name,val){
   if(!SCH.retired)SCH.retired={};
   var k=bk+'|'+dlNorm(name);
-  if(val)SCH.retired[k]=true; else delete SCH.retired[k];
+  if(val){ SCH.retired[k]=true; return; }
+  /* Clearing has to be alias-aware, and the setting of it deliberately
+     is not: a flag set under one spelling ("sandra s") would otherwise
+     survive being cleared under another ("sandra s.") and go on quietly
+     dropping her out of every week built afterwards — Carlos's real
+     2026-09-08 Laundry bug. Un-retiring is always him (or the app)
+     saying she belongs on this crew, so every spelling of her goes. */
+  delete SCH.retired[k];
+  var want=dlNormAlias(name),pre=bk+'|';
+  Object.keys(SCH.retired).forEach(function(key){
+    if(key.slice(0,pre.length)!==pre)return;
+    if(dlNormAlias(key.slice(pre.length))===want)delete SCH.retired[key];
+  });
 }
 function schedCarryRetired(oldSch,newSch){
   if(oldSch&&oldSch.retired)newSch.retired=Object.assign({},oldSch.retired);
@@ -21506,19 +21532,39 @@ function schedIsOff(v){ v=String(v||'').trim().toUpperCase(); return v==='OFF'||
    CALL-OFF are all "not a work day". Used for the per-person weekly
    work-day count Carlos asked for. */
 function schedIsWorkDay(v){ v=String(v||'').trim(); return v!==''&&v.toUpperCase()!=='CALL-OFF'&&!schedIsOff(v); }
-/* The crew's current people list, same "first loaded date with a
-   non-empty array" rule the main Schedule render uses to find who's on
-   a crew — kept in sync here so the per-person work-day count can be
-   repainted in place without a full re-render. */
-function _schedCrewRef(SCH,bk){
-  var dates=schedWeekDates(), ref=null;
-  for(var i=0;i<dates.length;i++){
-    var day=SCH.days[dates[i]];
-    if(!day||!day[bk])continue;
-    if(day[bk].length){ ref=day[bk]; break; }
-    if(!ref)ref=day[bk];
-  }
-  return ref||[];
+/* The crew's people list for the week — everyone who appears on ANY day
+   of it, in the order they first show up. Shared by the main Schedule
+   render and the in-place work-day repaint below, so the two can never
+   disagree about who has a row.
+
+   Carlos's real report, 2026-09-08: Laundry's Sunday total read 5 while
+   only four rows on screen showed a "1". Sandra's row existed that day
+   and counted toward the total, but this list used to be taken from ONE
+   reference day (the first with anything in it — Saturday), and she
+   wasn't on the crew that day, so there was no row for her Sunday cell
+   to paint into: a body the total could see and he could not, on a card
+   he had no way to edit her from. Every row that arrives mid-week hits
+   the same wall — a generated cover row, a borrow, another device's
+   edit — so the fix is the union, not a better choice of reference day.
+
+   Deduped alias-aware (dlNormAlias) so the same person under a drifted
+   spelling — "Sandra S" on one day, "Sandra S." on another — stays a
+   single row instead of splitting into two half-empty ones. */
+function _schedCrewRef(SCH,bk,dates){
+  dates=dates||schedWeekDates();
+  var out=[],seen={};
+  dates.forEach(function(ds){
+    var day=SCH.days&&SCH.days[ds];
+    if(!day||!day[bk])return;
+    day[bk].forEach(function(p){
+      var nm=String(p[0]||'').trim(); if(!nm)return;
+      var k=dlNormAlias(nm);
+      if(seen[k])return;
+      seen[k]=1;
+      out.push(p);
+    });
+  });
+  return out;
 }
 /* How many days this person (by idx within the crew's own list, falling
    back to a name match for a cell that moved slots) actually worked
@@ -21528,9 +21574,9 @@ function _schedWorkDaysFor(SCH,dates,bk,idx,nm){
   dates.forEach(function(ds){
     var day=SCH.days[ds];
     if(!day||!day[bk])return;
-    var cell=(day[bk][idx]&&dlNorm(day[bk][idx][0])===dlNorm(nm))
+    var cell=(day[bk][idx]&&dlNormAlias(day[bk][idx][0])===dlNormAlias(nm))
       ? day[bk][idx]
-      : day[bk].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0];
+      : day[bk].filter(function(q){return dlNormAlias(q[0])===dlNormAlias(nm);})[0];
     if(cell&&schedIsWorkDay(cell[1]))n++;
   });
   return n;
@@ -21558,7 +21604,7 @@ function _schedDaysCellHtml(n){
 }
 function schedCellFor(SCH,ds,bk,name){
   var day=SCH.days&&SCH.days[ds]; if(!day)return '';
-  var row=(day[bk]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
+  var row=(day[bk]||[]).filter(function(p){return dlNormAlias(p[0])===dlNormAlias(name);})[0];
   return row?String(row[1]||'').trim():'';
 }
 /* Case-insensitive compare against a fixed status code — same real bug
@@ -22267,7 +22313,18 @@ function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
   var idx=-1;
   for(var i=0;i<day.laundry.length;i++) if(dlNormAlias(day.laundry[i][0])===dlNormAlias(name)){idx=i;break;}
   if(schedStatusIs(val,'LAUNDRY')){
-    if(idx===-1){ day.laundry.push([_schedCrewSpellingFor(SCH,'laundry',name),'1','cover']); return true; }
+    if(idx===-1){
+      var spelling=_schedCrewSpellingFor(SCH,'laundry',name);
+      /* The app itself is putting her on this crew, off a LAUNDRY mark
+         Carlos typed — so any retirement left over from an earlier
+         "Remove from crew" is stale by definition and has to go, under
+         both spellings. Left behind, it silently dropped her out of the
+         crew list of every week built after this one. */
+      schedSetRetired(SCH,'laundry',name,false);
+      schedSetRetired(SCH,'laundry',spelling,false);
+      day.laundry.push([spelling,'1','cover']);
+      return true;
+    }
     if(String(day.laundry[idx][1]||'').trim()===''){ day.laundry[idx][1]='1'; return true; }
     return false;
   }
@@ -23299,7 +23356,7 @@ function schedFillWeek(bk,name){
   var findRow=function(ds){
     var arr=SCH.days[ds]&&SCH.days[ds][bk];
     if(!arr)return null;
-    for(var i=0;i<arr.length;i++) if(dlNorm(arr[i][0])===dlNorm(name))return arr[i];
+    for(var i=0;i<arr.length;i++) if(dlNormAlias(arr[i][0])===dlNormAlias(name))return arr[i];
     return null;
   };
   var src=null;
@@ -23375,7 +23432,7 @@ function schedCopyLastWeek(bk,name){
   var findRow=function(ds){
     var arr=SCH.days[ds]&&SCH.days[ds][bk];
     if(!arr)return null;
-    for(var i=0;i<arr.length;i++) if(dlNorm(arr[i][0])===dlNorm(name))return arr[i];
+    for(var i=0;i<arr.length;i++) if(dlNormAlias(arr[i][0])===dlNormAlias(name))return arr[i];
     return null;
   };
   var pattern=lwDates.map(function(ds){ var row=findRow(ds); return row?String(row[1]||'').trim():''; });
@@ -23403,7 +23460,7 @@ function schedAddPerson(bk,name){
   var dates=schedWeekDates(),loaded=dates.filter(function(ds){return !!SCH.days[ds];});
   if(!loaded.length){ showToast('&#9888; This week is not in the loaded file'); return; }
   var already=loaded.some(function(ds){
-    return (SCH.days[ds][bk]||[]).some(function(p){ return dlNorm(p[0])===dlNorm(name); });
+    return (SCH.days[ds][bk]||[]).some(function(p){ return dlNormAlias(p[0])===dlNormAlias(name); });
   });
   if(already){ showToast('&#9888; '+name+' is already on that crew'); return; }
   /* Appended to every day of the week at once, so the seven columns stay
@@ -23453,7 +23510,7 @@ function schedRemovePerson(bk,name){
   Object.keys(SCH.days).forEach(function(ds){
     if(parseLocalDate(ds)<cutoff)return;
     var arr=SCH.days[ds][bk]; if(!arr)return;
-    for(var i=arr.length-1;i>=0;i--) if(dlNorm(arr[i][0])===dlNorm(name))arr.splice(i,1);
+    for(var i=arr.length-1;i>=0;i--) if(dlNormAlias(arr[i][0])===dlNormAlias(name))arr.splice(i,1);
   });
   schedSetRetired(SCH,bk,name,true);
   SCH.savedAt=new Date().toISOString();
@@ -23882,17 +23939,14 @@ function renderSchedule(){
   /* ── one card per crew ── */
   var crewRoster=schedPeopleByCrew(SCH);
   SCHED_BLOCKS.forEach(function(b){
-    var ref=null,present=false;
-    for(var i=0;i<loaded.length;i++){
-      var a=SCH.days[loaded[i]][b.key];
-      if(!a)continue;
-      present=true;
-      if(a.length){ ref=a; break; }
-    }
+    var present=false;
+    for(var i=0;i<loaded.length&&!present;i++) if(SCH.days[loaded[i]][b.key])present=true;
     /* A crew that exists on the sheet but has nobody in it still gets a
        card — that is exactly when someone needs borrowing into it. */
     if(!present)return;
-    ref=ref||[];
+    /* Everyone on the crew on ANY day of the week, not just the first
+       day that has rows — see _schedCrewRef for the bug that fixes. */
+    var ref=_schedCrewRef(SCH,b.key,dates);
 
     html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
     html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(b.label)+'</div>';
@@ -23942,7 +23996,7 @@ function renderSchedule(){
       var fillSrc=null;
       for(var fi=0;fi<dates.length&&fillSrc==null;fi++){
         var fday=SCH.days[dates[fi]];
-        var fcell=fday&&fday[b.key]&&fday[b.key].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0];
+        var fcell=fday&&fday[b.key]&&fday[b.key].filter(function(q){return dlNormAlias(q[0])===dlNormAlias(nm);})[0];
         if(fcell&&String(fcell[1]||'').trim()!=='')fillSrc=String(fcell[1]).trim();
       }
       /* Whether LAST week has anything for this person on this crew —
@@ -23954,7 +24008,7 @@ function renderSchedule(){
       var lwDates=lastWeekDates,hasLastWeek=false;
       for(var li=0;li<lwDates.length&&!hasLastWeek;li++){
         var lday=SCH.days[lwDates[li]];
-        var lcell=lday&&lday[b.key]&&lday[b.key].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0];
+        var lcell=lday&&lday[b.key]&&lday[b.key].filter(function(q){return dlNormAlias(q[0])===dlNormAlias(nm);})[0];
         if(lcell&&String(lcell[1]||'').trim()!=='')hasLastWeek=true;
       }
       /* Carlos's ask: a quick read on how many days this person actually
@@ -23997,9 +24051,9 @@ function renderSchedule(){
       }
       dates.forEach(function(ds,di){
         var day=SCH.days[ds];
-        var cell=day&&day[b.key]&&(day[b.key][idx]&&dlNorm(day[b.key][idx][0])===dlNorm(nm)
+        var cell=day&&day[b.key]&&(day[b.key][idx]&&dlNormAlias(day[b.key][idx][0])===dlNormAlias(nm)
                  ? day[b.key][idx]
-                 : day[b.key].filter(function(q){return dlNorm(q[0])===dlNorm(nm);})[0]);
+                 : day[b.key].filter(function(q){return dlNormAlias(q[0])===dlNormAlias(nm);})[0]);
         if(!cell){ html+='<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>'; return; }
         var v=String(cell[1]||'').trim();
         var opts=schedValuesFor(b.key).slice();
