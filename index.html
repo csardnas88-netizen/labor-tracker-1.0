@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.78"/>
+<meta name="app-version" content="7.40.79"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.79', date:'2026-09-10',
+    fixes:['Fixed "Remove from crew, this week onward" silently doing nothing — Carlos\'s real report: he confirmed the dialog and Karla Varela never left Laundry. Root cause: her own Room Attendant cell still read "LAUNDRY" (an accidental mark on her home crew, not a proper borrow), and the very re-render the removal itself triggers scans for exactly that label and recreates the Laundry row from it — undoing the removal on the same screen, before it was ever visible. Removing someone now also releases that crew\'s own label (LAUNDRY, ROOMS, LOBBY, etc.) off every other crew\'s cell for her at the same time, so there\'s nothing left for the self-heal to rebuild the row from.']
+  },
   {
     v:'7.40.78', date:'2026-09-10',
     features:['A newly hired associate can now be picked from "+ Add someone to this crew" instead of typed in from memory — Carlos\'s ask. The picker used to list only people already ON the schedule, which by definition never included a new hire, so the only way in was the free-text "Someone else…" box; that is exactly how a name drifts and turns into two half-empty rows for the same person. A new group at the bottom, "Not on the schedule yet", lists everyone the labor reports already know who isn\'t on the schedule this week, with their position alongside the name. The roster carries full legal names while the schedule runs on the short working names Carlos writes, so picking one asks how she should appear, pre-filled with her first name — he sets the spelling once, looking at the real name, rather than typing it blind. Someone whose row he HID in the workbook is never offered back: hiding a row is how he takes a person off the team, and one click undoing that would defeat the point.']
@@ -23576,10 +23580,32 @@ function schedRemovePerson(bk,name){
   if(!SCH||!SCH.days)return;
   if(!confirm('Remove '+name+' from this crew for good, starting this week?\n\nShe won\'t be carried into any new week built after this, or come back if you re-upload a workbook that still lists her — add her again from "+ Add someone to this crew" any time you need her back. Past weeks keep their own history.'))return;
   var cutoff=_schedWeekStart();
+  /* This crew's own away-label ('LAUNDRY' for Laundry, 'ROOMS' for Room
+     Attendant, etc.) — Carlos's real report, 2026-09-10: removing Karla
+     from Laundry didn't stick because her HOME crew's cell (Room
+     Attendant) still read "LAUNDRY", so the very next render's
+     self-heal (schedSyncAllLaundryCoverRows) recreated her Laundry row
+     from that label — on the SAME render this function itself
+     triggers, so she never visibly left. That self-heal has to
+     un-retire when it creates a row (that's the fix for a DIFFERENT
+     real bug — a stale retirement blocking a legitimate new cover row),
+     so the only way to make a removal actually stick is to clear the
+     label that would drive the recreation, not fight the un-retire. */
+  var label=SCHED_CREW_AWAY_LABEL[bk];
   Object.keys(SCH.days).forEach(function(ds){
     if(parseLocalDate(ds)<cutoff)return;
-    var arr=SCH.days[ds][bk]; if(!arr)return;
-    for(var i=arr.length-1;i>=0;i--) if(dlNormAlias(arr[i][0])===dlNormAlias(name))arr.splice(i,1);
+    var day=SCH.days[ds];
+    var arr=day[bk]; if(arr){
+      for(var i=arr.length-1;i>=0;i--) if(dlNormAlias(arr[i][0])===dlNormAlias(name))arr.splice(i,1);
+    }
+    if(label){
+      SCHED_BLOCKS.forEach(function(b2){
+        if(b2.key===bk)return;
+        (day[b2.key]||[]).forEach(function(p){
+          if(dlNormAlias(p[0])===dlNormAlias(name)&&schedStatusIs(p[1],label))p[1]='1';
+        });
+      });
+    }
   });
   schedSetRetired(SCH,bk,name,true);
   SCH.savedAt=new Date().toISOString();

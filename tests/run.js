@@ -85,6 +85,7 @@ const cases = [
   require('./cases/schedule-purge-duplicate-alias-rows'),
   require('./cases/schedule-crew-row-union'),
   require('./cases/schedule-new-hire-picker'),
+  require('./cases/schedule-remove-person-mirror-revival'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
