@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.77"/>
+<meta name="app-version" content="7.40.78"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.78', date:'2026-09-10',
+    features:['A newly hired associate can now be picked from "+ Add someone to this crew" instead of typed in from memory — Carlos\'s ask. The picker used to list only people already ON the schedule, which by definition never included a new hire, so the only way in was the free-text "Someone else…" box; that is exactly how a name drifts and turns into two half-empty rows for the same person. A new group at the bottom, "Not on the schedule yet", lists everyone the labor reports already know who isn\'t on the schedule this week, with their position alongside the name. The roster carries full legal names while the schedule runs on the short working names Carlos writes, so picking one asks how she should appear, pre-filled with her first name — he sets the spelling once, looking at the real name, rather than typing it blind. Someone whose row he HID in the workbook is never offered back: hiding a row is how he takes a person off the team, and one click undoing that would defeat the point.']
+  },
   {
     v:'7.40.77', date:'2026-09-08',
     fixes:['Fixed a crew card counting someone its rows never showed — Carlos\'s real report, with a screenshot: Laundry\'s Sunday total read 5 while only four rows on screen carried a "1". Root cause: a crew\'s list of people was taken from ONE reference day (the first day of the week with anything in it), so anyone who joins the crew later in the week — a row the app generates for a LAUNDRY mark, a borrow, another device\'s edit — had no row for the rest of the week to paint into. The total could see her; the card could not, and there was nowhere to click to change her. The list is now everyone on the crew on ANY day of the week, so the totals and the rows can no longer disagree.',
@@ -20366,6 +20370,13 @@ function dlParseSchedule(wb,todayRef){
   var lo=new Date(today); lo.setDate(lo.getDate()-DL_WINDOW_BACK);
   var hi=new Date(today); hi.setDate(hi.getDate()+DL_WINDOW_FWD);
   var out={},days=0;
+  /* Who Carlos deliberately hid. The rows themselves are dropped below
+     (a hidden row is not on the schedule), but the NAMES are worth
+     keeping: without them the "+ Add someone to this crew" picker's
+     new-hire list — which offers anyone the labor roster knows who
+     isn't on the schedule — would cheerfully offer back the exact
+     person he hid to take off the team. Names only, never a shift. */
+  var hiddenPeople={};
   wb.SheetNames.forEach(function(sn){
     var ws=wb.Sheets[sn];
     if(!ws)return;
@@ -20404,7 +20415,7 @@ function dlParseSchedule(wb,todayRef){
       for(var r4=s+1;r4<e;r4++){
         var nm=A(r4);
         if(!nm)continue;
-        if(isHidden(r4))continue;
+        if(isHidden(r4)){ hiddenPeople[dlNorm(nm)]=nm; continue; }
         if(skip&&skip.indexOf(nm)!==-1)continue;
         if(/^(IDEAL|ACTUAL|OCC|Room att|Departures|Total)/.test(nm))continue;
         res.push(r4);
@@ -20451,7 +20462,7 @@ function dlParseSchedule(wb,todayRef){
       out[dateStr(d)]=rec; days++;
     }
   });
-  var parsed={days:out,count:days,savedAt:new Date().toISOString()};
+  var parsed={days:out,count:days,hiddenPeople:hiddenPeople,savedAt:new Date().toISOString()};
   schedNormalizePmHm(parsed);
   return parsed;
 }
@@ -21340,6 +21351,64 @@ function schedPeopleByCrew(SCH){
     if(names.length)out.push({label:b.label,names:names});
     names.forEach(function(n){ seen[dlNorm(n)]=1; });
   });
+  return out;
+}
+
+/* ── a newly hired associate, who isn't on the schedule yet ──
+   Carlos's ask, 2026-09-10: the "+ Add someone to this crew" picker
+   lists only people already ON the schedule, so a new hire can't be
+   picked at all — she has to be typed into "Someone else…" from
+   memory, which is exactly how a spelling drifts. This offers everyone
+   the labor reports already know about who isn't on the schedule this
+   week at all.
+
+   The two name worlds genuinely differ, and that is not a bug to
+   paper over: the roster carries full legal names ("Sandy Baran
+   Canil") while the schedule runs on the short working names Carlos
+   writes by hand ("Sandy"). So a name matches an existing row when
+   every word of the row's name appears in the roster name — "Paty"
+   is Yohana Paty Cano, "Heidy Ajsoc" is herself — and only the people
+   left over are offered. Deliberately conservative: a real new hire
+   who shares a first name with someone already on the schedule is
+   left out of this list rather than risk offering a duplicate of
+   someone who is already there under a shorter name. "Someone else…"
+   still covers her. */
+function schedNewHireOptions(SCH){
+  var opts=[];
+  try{ opts=(typeof getProjectEmployeeOptions==='function'?getProjectEmployeeOptions():[])||[]; }catch(e){ return []; }
+  if(!opts.length)return [];
+  var onSched=[];
+  schedWeekDates().forEach(function(ds){
+    var day=SCH&&SCH.days&&SCH.days[ds]; if(!day)return;
+    SCHED_BLOCKS.forEach(function(b){
+      (day[b.key]||[]).forEach(function(p){
+        var toks=dlNormAlias(p[0]).split(' ').filter(Boolean);
+        if(toks.length)onSched.push(toks);
+      });
+    });
+  });
+  /* Anyone whose row Carlos HID in the workbook counts as "already
+     dealt with", not as a new hire. Hiding a row is how he takes
+     someone off the team without losing their history — offering her
+     straight back here would undo that with one click, which is
+     exactly what the Jecelyn regression test caught. */
+  Object.keys((SCH&&SCH.hiddenPeople)||{}).forEach(function(k){
+    var toks=k.split(' ').filter(Boolean);
+    if(toks.length)onSched.push(toks);
+  });
+  var out=[],seen={};
+  opts.forEach(function(e){
+    var full=String(e.name||'').trim(); if(!full)return;
+    var k=dlNorm(full); if(!k||seen[k])return;
+    var toks=k.split(' ').filter(Boolean);
+    var already=onSched.some(function(st){
+      return st.every(function(t){ return toks.indexOf(t)!==-1; });
+    });
+    if(already)return;
+    seen[k]=1;
+    out.push({name:full,pos:e.pos||''});
+  });
+  out.sort(function(a,b){ return a.name.localeCompare(b.name); });
   return out;
 }
 
@@ -23521,6 +23590,20 @@ function schedRemovePerson(bk,name){
 function schedPickPerson(bk,sel){
   var v=sel.value; sel.selectedIndex=0;
   if(!v)return;
+  if(v.slice(0,8)==='__new__|'){
+    /* A new hire off the labor roster (schedNewHireOptions). The roster
+       name is the full legal one; the grid runs on short working names
+       and its columns are a few characters wide, so pre-fill the first
+       name and let Carlos confirm rather than dropping "Sandy Baran
+       Canil" into a cell. Whatever he confirms becomes her spelling on
+       the schedule from then on — which is the point: he sets it once,
+       from a real name in front of him, instead of typing it blind. */
+    var full=v.slice(8);
+    var suggested=full.split(/\s+/)[0];
+    var nn=prompt('Add '+full+' to this crew as:\n\nThe schedule uses short names — this is how she\'ll appear on every crew card.',suggested);
+    if(nn&&nn.trim())schedAddPerson(bk,nn.trim());
+    return;
+  }
   if(v==='__other__'){
     var n=prompt('Name of the person to add to this crew:');
     if(n)schedAddPerson(bk,n);
@@ -23938,6 +24021,9 @@ function renderSchedule(){
 
   /* ── one card per crew ── */
   var crewRoster=schedPeopleByCrew(SCH);
+  /* Computed once for the whole page — the list of people not on the
+     schedule is the same for every crew card. */
+  var newHires=schedNewHireOptions(SCH);
   SCHED_BLOCKS.forEach(function(b){
     var present=false;
     for(var i=0;i<loaded.length&&!present;i++) if(SCH.days[loaded[i]][b.key])present=true;
@@ -24143,6 +24229,16 @@ function renderSchedule(){
       +'border:1px dashed var(--gold);border-radius:7px;background:var(--gt);font-family:inherit;cursor:pointer;">';
     html+='<option value="">+ Add someone to this crew</option>';
     html+=groups;
+    /* New hires the labor reports know about but the schedule doesn't —
+       last, under their own heading, so borrowing a familiar face from
+       another crew stays the quick default it has always been. */
+    if(newHires.length){
+      html+='<optgroup label="Not on the schedule yet">'
+        +newHires.map(function(n){
+          return '<option value="__new__|'+escHtml(n.name)+'">'+escHtml(n.name)+(n.pos?' &mdash; '+escHtml(n.pos):'')+'</option>';
+        }).join('')
+        +'</optgroup>';
+    }
     html+='<option value="__other__">Someone else&hellip;</option>';
     html+='</select></div>';
     html+='</div>';

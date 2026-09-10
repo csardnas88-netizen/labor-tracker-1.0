@@ -84,6 +84,7 @@ const cases = [
   require('./cases/schedule-cross-crew-sync'),
   require('./cases/schedule-purge-duplicate-alias-rows'),
   require('./cases/schedule-crew-row-union'),
+  require('./cases/schedule-new-hire-picker'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
