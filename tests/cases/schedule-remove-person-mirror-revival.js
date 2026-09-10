@@ -78,7 +78,8 @@ module.exports = {
     // The crew card itself reflects it too — the actual thing Carlos is
     // looking at, not just the underlying data.
     const html = win.document.getElementById('scheduleContent').innerHTML;
-    const laundryCardStart = html.indexOf('LAUNDRY</div>');
+    const laundryCardStart = html.indexOf('>Laundry</div>');
+    t.assert(laundryCardStart !== -1, 'the Laundry crew card renders at all');
     const laundryCardHtml = html.slice(laundryCardStart, laundryCardStart + 3000);
     t.assert(!/Karla Varela/.test(laundryCardHtml), 'the rendered Laundry card no longer shows her row at all');
 
