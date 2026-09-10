@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.79"/>
+<meta name="app-version" content="7.40.80"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.80', date:'2026-09-10',
+    fixes:['Fixed the REAL reason "Remove from crew" wasn\'t sticking for Karla Varela — yesterday\'s fix addressed a real bug (a stale away-label resurrecting a row) but wasn\'t what was actually happening to her; Carlos confirmed her Room Attendant cell had no such label. The actual cause: syncing the schedule to the cloud silently dropped the retired-person list on every single save — it was never in the set of fields the sync merge carries over, so a removal survived only until the automatic sync ran a moment later and wiped it back off, worse with more than one device open (Carlos runs the Schedule on several). Fixed at the source: the retired list now syncs like every other per-person mark, and — since a second device open on an older copy can still win a given day\'s content in the merge — a retired person\'s row is stripped back out as a final step no matter which side\'s copy of that day wins.']
+  },
   {
     v:'7.40.79', date:'2026-09-10',
     fixes:['Fixed "Remove from crew, this week onward" silently doing nothing — Carlos\'s real report: he confirmed the dialog and Karla Varela never left Laundry. Root cause: her own Room Attendant cell still read "LAUNDRY" (an accidental mark on her home crew, not a proper borrow), and the very re-render the removal itself triggers scans for exactly that label and recreates the Laundry row from it — undoing the removal on the same screen, before it was ever visible. Removing someone now also releases that crew\'s own label (LAUNDRY, ROOMS, LOBBY, etc.) off every other crew\'s cell for her at the same time, so there\'s nothing left for the self-heal to rebuild the row from.']
@@ -20261,7 +20265,15 @@ function _schedMergeRecord(local,remote){
     if(lAt||rAt){ if(rAt>lAt)merged.days[ds]=r; return; }
     if(remoteNewer)merged.days[ds]=r;
   });
-  ['checkExempt','weekendPref','dayOffPref'].forEach(function(f){
+  /* Carlos's real report, 2026-09-10: "Remove from crew" on Karla Varela
+     didn't stick across his devices. Root cause found here — 'retired'
+     (and 'hiddenPeople') were missing from the fields merged below, so
+     EVERY save silently dropped them: schedRemovePerson's own retired
+     flag survived only until this exact merge ran a moment later,
+     wiping it back off before it ever reached another device, or even
+     his own next render. Added to the same union-merge every other
+     person-level mark already gets. */
+  ['checkExempt','weekendPref','dayOffPref','retired','hiddenPeople'].forEach(function(f){
     var mf=Object.assign({},local[f]||{});
     var rf=remote[f]||{};
     Object.keys(rf).forEach(function(k){
@@ -20269,6 +20281,25 @@ function _schedMergeRecord(local,remote){
     });
     if(Object.keys(mf).length)merged[f]=mf;
   });
+  /* Belt and suspenders for the same bug: the per-day comparison above
+     can still pick a STALE device's day array (a device open on an
+     older copy, from before the removal, pushing after — Carlos
+     confirmed he runs the Schedule on more than one device/tab at
+     once), bringing a retired person's row back even with the flag
+     itself now correctly merged. Retiring is meant to be permanent and
+     forward-looking, so it's applied as a final filter over whichever
+     day arrays won above — the same schedIsRetired check
+     dlUploadSchedule and schedCreateWeek already use, just reached from
+     one more path. */
+  if(merged.retired){
+    Object.keys(merged.days).forEach(function(ds){
+      var day=merged.days[ds]; if(!day)return;
+      SCHED_BLOCKS.forEach(function(b){
+        if(!day[b.key])return;
+        day[b.key]=day[b.key].filter(function(p){ return !schedIsRetired(merged,b.key,p[0]); });
+      });
+    });
+  }
   merged.count=Object.keys(merged.days).length;
   merged.savedAt=remoteNewer?remote.savedAt:local.savedAt;
   return {rec:merged,changed:JSON.stringify(merged)!==JSON.stringify(local)};
