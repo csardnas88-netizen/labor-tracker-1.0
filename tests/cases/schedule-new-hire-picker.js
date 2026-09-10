@@ -99,6 +99,39 @@ module.exports = {
     t.assert(!afterHidden.includes('Jecelyn Ramos'), 'the hidden person is never offered back as a new hire');
     t.assert(afterHidden.includes('Otra Persona Nueva'), 'but a genuine new hire alongside her still is');
 
+    // ── Carlos's real report, 2026-09-10: a bare first name on the
+    // schedule ("David", houseman crew) silently swallowed a BRAND NEW
+    // employee, also named David, hired and added to the roster that
+    // same day — the schedule can't tell which real person "David"
+    // refers to, so a match must be unique to count. Two plausible
+    // Davids means neither is excluded; the new hire is finally
+    // visible, at the minor cost of the existing David showing up too. ──
+    const days2 = {};
+    WEEK.forEach((ds) => { days2[ds] = { sheet: 'test', occ: '', dep: '', tdOcc: '', hp: [['David', '1']] }; });
+    win.localStorage.setItem('hk_dl_schedule', JSON.stringify({ days: days2, count: WEEK.length }));
+    win.getProjectEmployeeOptions = () => [
+      { id: '8', name: 'David Melendez', pos: 'Houseman' },   // the one already on the schedule
+      { id: '9', name: 'David Ramirez', pos: 'Laundry Attendant' }, // hired today, the real bug
+      { id: '10', name: 'Rosa Martinez', pos: 'Room Attendant' },   // unrelated, unambiguous new hire
+    ];
+    const ambiguous = win.schedNewHireOptions(win.dlLoadSchedule()).map((n) => n.name);
+    t.assert(ambiguous.includes('David Ramirez'),
+      'the actual new hire is no longer invisible just because another David is already on the schedule');
+    t.assert(ambiguous.includes('David Melendez'),
+      'an ambiguous short name excludes NEITHER candidate — better an extra name in the list than a hidden new hire');
+    t.assert(ambiguous.includes('Rosa Martinez'), 'an unrelated, unambiguous new hire is unaffected');
+
+    // A single, unambiguous David (only one roster person could be the
+    // schedule's bare "David") still correctly counts as already present.
+    win.getProjectEmployeeOptions = () => [
+      { id: '8', name: 'David Melendez', pos: 'Houseman' },
+      { id: '10', name: 'Rosa Martinez', pos: 'Room Attendant' },
+    ];
+    const unambiguous = win.schedNewHireOptions(win.dlLoadSchedule()).map((n) => n.name);
+    t.assert(!unambiguous.includes('David Melendez'), 'with only one possible David, the match is unambiguous and he is correctly excluded');
+
+    win.localStorage.removeItem('hk_dl_schedule');
+
     // No roster data at all is a quiet no-op, not a crash.
     win.getProjectEmployeeOptions = () => { throw new Error('no roster'); };
     t.eq(win.schedNewHireOptions(win.dlLoadSchedule()).length, 0, 'a roster that throws leaves the picker exactly as it was');

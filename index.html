@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.80"/>
+<meta name="app-version" content="7.40.81"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.81', date:'2026-09-10',
+    fixes:['Fixed a brand-new employee ("David", hired and added to the roster today) not showing up in "+ Add someone to this crew" at all — Carlos\'s real report. A Houseman already on the schedule was also just plainly named "David," and the new-hire matching only checked whether ANY on-schedule entry matched, not whether that entry might just as well be someone else. Now a short on-schedule name only counts as "already present" when it points to exactly ONE possible person in the labor roster; an ambiguous one (two real Davids, in this case) excludes neither, so worst case Carlos sees an extra name to glance past instead of a new hire he can\'t find anywhere.']
+  },
   {
     v:'7.40.80', date:'2026-09-10',
     fixes:['Fixed the REAL reason "Remove from crew" wasn\'t sticking for Karla Varela — yesterday\'s fix addressed a real bug (a stale away-label resurrecting a row) but wasn\'t what was actually happening to her; Carlos confirmed her Room Attendant cell had no such label. The actual cause: syncing the schedule to the cloud silently dropped the retired-person list on every single save — it was never in the set of fields the sync merge carries over, so a removal survived only until the automatic sync ran a moment later and wiped it back off, worse with more than one device open (Carlos runs the Schedule on several). Fixed at the source: the retired list now syncs like every other per-person mark, and — since a second device open on an older copy can still win a given day\'s content in the merge — a retired person\'s row is stripped back out as a final step no matter which side\'s copy of that day wins.']
@@ -21403,11 +21407,20 @@ function schedPeopleByCrew(SCH){
    writes by hand ("Sandy"). So a name matches an existing row when
    every word of the row's name appears in the roster name — "Paty"
    is Yohana Paty Cano, "Heidy Ajsoc" is herself — and only the people
-   left over are offered. Deliberately conservative: a real new hire
-   who shares a first name with someone already on the schedule is
-   left out of this list rather than risk offering a duplicate of
-   someone who is already there under a shorter name. "Someone else…"
-   still covers her. */
+   left over are offered.
+
+   Carlos's real report, 2026-09-10: a Houseman already on the
+   schedule under the bare name "David" silently ate a BRAND NEW
+   "David [lastname]" hired that same day — the first version of this
+   matching only asked "does at least one on-schedule entry match",
+   never whether that entry might just as easily be someone else. Who
+   a short first name like "David" actually refers to is often
+   genuinely ambiguous, and the schedule's own data can't resolve it —
+   so a match only counts as "already on the schedule" when it points
+   to exactly ONE possible roster person. An ambiguous short name (zero
+   matches, or two-plus real people who could be it) excludes nobody;
+   worst case is an extra name Carlos has to glance past, never an
+   invisible new hire. */
 function schedNewHireOptions(SCH){
   var opts=[];
   try{ opts=(typeof getProjectEmployeeOptions==='function'?getProjectEmployeeOptions():[])||[]; }catch(e){ return []; }
@@ -21431,18 +21444,22 @@ function schedNewHireOptions(SCH){
     var toks=k.split(' ').filter(Boolean);
     if(toks.length)onSched.push(toks);
   });
-  var out=[],seen={};
+  var candidates=[],seen={};
   opts.forEach(function(e){
     var full=String(e.name||'').trim(); if(!full)return;
     var k=dlNorm(full); if(!k||seen[k])return;
-    var toks=k.split(' ').filter(Boolean);
-    var already=onSched.some(function(st){
-      return st.every(function(t){ return toks.indexOf(t)!==-1; });
-    });
-    if(already)return;
     seen[k]=1;
-    out.push({name:full,pos:e.pos||''});
+    candidates.push({name:full,pos:e.pos||'',key:k,toks:k.split(' ').filter(Boolean)});
   });
+  var exclude={};
+  onSched.forEach(function(st){
+    var matches=candidates.filter(function(c){
+      return st.every(function(t){ return c.toks.indexOf(t)!==-1; });
+    });
+    if(matches.length===1)exclude[matches[0].key]=1;
+  });
+  var out=candidates.filter(function(c){ return !exclude[c.key]; })
+    .map(function(c){ return {name:c.name,pos:c.pos}; });
   out.sort(function(a,b){ return a.name.localeCompare(b.name); });
   return out;
 }
