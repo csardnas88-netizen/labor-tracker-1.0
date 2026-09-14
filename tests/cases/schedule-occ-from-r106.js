@@ -11,33 +11,41 @@
    That rule needs no source tracking to be safe: "is it blank" is the
    whole test.
 
-   R106 is stored by NIGHT date (same convention as Labor's own Rooms/
-   Departures card): the schedule's OCC box for date ds means "rooms
-   occupied the night BEFORE ds", so it reads R106's row for
+   OCC is stored by NIGHT date: the schedule's OCC box for date ds means
+   "rooms occupied the night BEFORE ds", so it reads R106's row for
    prevDateStr(ds), one calendar day earlier — not ds itself. This was a
    real bug (fixed 2026-09-06, Carlos's real report: Sunday Sept 13 showed
    125 instead of the 144 R106 actually carried for that morning), so
-   every fixture below keys its R106 rows one day BEFORE the schedule date
-   it fills, on purpose.
+   every fixture below keys its R106 OCC figures one day BEFORE the
+   schedule date they fill, on purpose.
 
-   Second real bug, same day: the box must take rec.occ (Total Occ), not
-   rec.net (Total Occ minus Comp rooms) — Carlos's real report, Sept 14
-   read 192 on the R106 but the box filled 186. Labor's own budget math
-   wants net (comp rooms earn no revenue), but a Comp room still gets
-   cleaned like any other, so the Schedule's "how many rooms to clean" box
-   must keep it in the count. Every fixture below sets comp>0 on at least
-   one row specifically so occ !== net, and asserts against occ. */
+   Departures are the OPPOSITE: SAME-day, exactly like getDeparturesForDay's
+   own convention — a checkout on ds creates cleaning work on ds itself.
+   The box wrongly copied OCC's night-before read for Departures too, until
+   Carlos's real report on 2026-09-14: building the 9/19-9/25 week, he saw
+   Friday 9/18's departures showing up as Saturday 9/19's. Every fixture
+   below therefore has its own row for each schedule date, distinct from
+   the night-before row that date's OCC reads.
+
+   Third real bug, same day as the OCC fix: the box must take rec.occ
+   (Total Occ), not rec.net (Total Occ minus Comp rooms) — Carlos's real
+   report, Sept 14 read 192 on the R106 but the box filled 186. Labor's own
+   budget math wants net (comp rooms earn no revenue), but a Comp room
+   still gets cleaned like any other, so the Schedule's "how many rooms to
+   clean" box must keep it in the count. Every fixture below sets comp>0 on
+   at least one row specifically so occ !== net, and asserts against occ. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "The OCC/R106 upload fills the Schedule's blank OCC/Departures boxes from the NIGHT BEFORE each date using Total Occ (comp rooms included), and never touches one that already has a number (Carlos's 2026-09-05 ask, night-date + comp-rooms fixes 2026-09-06)",
+  name: "The OCC/R106 upload fills the Schedule's blank OCC box from the NIGHT BEFORE and its blank Departures box from the SAME day, using Total Occ (comp rooms included), and never touches a box that already has a number (Carlos's 2026-09-05 ask, night-date + comp-rooms fixes 2026-09-06, departures same-day fix 2026-09-14)",
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
     await new Promise((r) => setTimeout(r, 60));
 
-    // A real OCC report, forward-dated the way Carlos uploads it. Each row
-    // is the NIGHT before the schedule date it's meant to fill. Comp>0 on
-    // several rows so occ !== net — the box must take occ.
+    // A real OCC report, forward-dated the way Carlos uploads it. Each row's
+    // .occ feeds the NEXT day's OCC box (night-before); each row's .dep
+    // feeds that SAME date's Departures box. Comp>0 on several rows so
+    // occ !== net — the box must take occ.
     win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
       '2026-09-04': { occ: 320, comp: 5, net: 315, dep: 88 },
       '2026-09-05': { occ: 250, comp: 2, net: 248, dep: 61 },
@@ -65,11 +73,11 @@ module.exports = {
     t.eq(filled, 3, 'reports the number of schedule days it actually filled, for the upload toast');
 
     t.eq(SCH.days['2026-09-05'].occ, '320', "a blank OCC box takes the NIGHT BEFORE's Total Occ — 09-04's report (320), for 09-05, comp rooms included");
-    t.eq(SCH.days['2026-09-05'].dep, '88', "and the blank Departures box takes that same night's Dep. Rooms");
+    t.eq(SCH.days['2026-09-05'].dep, '61', "and the blank Departures box takes 09-05's OWN Dep. Rooms — the same day, not the night before");
 
     // The whole point of the blank-only rule.
     t.eq(SCH.days['2026-09-06'].occ, '265', "Carlos's own estimate is never overwritten, even though the report says 250");
-    t.eq(SCH.days['2026-09-06'].dep, '61', 'but the still-blank Departures box on that same day does fill');
+    t.eq(SCH.days['2026-09-06'].dep, '47', "but the still-blank Departures box fills from 09-06's own row, not 09-05's");
 
     t.eq(SCH.days['2026-09-07'].occ, '230', 'a blank OCC fills next to a Departures figure he entered himself');
     t.eq(SCH.days['2026-09-07'].dep, '50', 'and that hand-entered Departures figure stays exactly as he left it');
@@ -93,7 +101,7 @@ module.exports = {
     }));
     t.eq(win.schedBackfillOccFromR106(SCH), 0, 'a corrected re-upload fills nothing — those boxes are no longer blank');
     t.eq(SCH.days['2026-09-05'].occ, '320', 'the number already on the grid survives a corrected report, by design');
-    t.eq(SCH.days['2026-09-05'].dep, '88', 'departures likewise');
+    t.eq(SCH.days['2026-09-05'].dep, '61', 'departures likewise');
 
     // But a NEW week, created later, still picks the report up — this is
     // what makes uploading days ahead actually pay off.
