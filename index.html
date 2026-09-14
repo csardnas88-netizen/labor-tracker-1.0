@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.83"/>
+<meta name="app-version" content="7.40.84"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.40.84', date:'2026-09-12',
+    improvements:['Removed a dead pre-v4.1 dashboard/export layer (Month Dashboard, its "duplicate pages" sync for Breaks/Overtime/Position/Roster, the day-detail popup, the weekly-trend and labor-donut charts, and the old Excel month export) that had been writing to screen elements no longer in the app since the v4.1 redesign — every call was a silent no-op on every PDF upload and page load. No visible change; ~550 lines removed.']
+  },
+  {
     v:'7.40.83', date:'2026-09-10',
     fixes:['Moved yesterday\'s "had the full weekend off last week" blue dot from next to the "Last week" number (the far right edge, past nine columns of day cells) to right before the person\'s name on the left — Carlos\'s follow-up ask, so it\'s the first thing he sees scanning down names instead of a mark he has to go looking for.']
   },
@@ -8327,7 +8331,7 @@ function _syncFromSheetsPull(){
     try{ if(_mergeReqNotebookFromRemote(all))updated=true; }catch(e){console.warn('[sync] req notebook merge',e);}
     setSyncStatus("synced");
     if(updated){
-      try{renderLaborDash();}catch(e){try{renderMonthDashboard();}catch(e2){}}
+      try{renderLaborDash();}catch(e){}
       try{renderDashHub();}catch(e){}
       if(typeof currentPage!=='undefined'&&currentPage==='occupancy'){try{renderOccupancy();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='projects'){try{renderProjects();}catch(e){}}
@@ -10358,7 +10362,6 @@ function saveDayToMonth(pdfDate){
 
   /* Switch view to the month of the uploaded PDF */
   viewMonth=new Date(d.getFullYear(),d.getMonth(),1);
-  renderMonthDashboard();
 
   /* Show confirmation with both report date and labor date */
   var dayName=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
@@ -10368,12 +10371,10 @@ function saveDayToMonth(pdfDate){
 /* ── Navigation ── */
 function changeMonth(dir){
   viewMonth.setMonth(viewMonth.getMonth()+dir);
-  renderMonthDashboard();
 }
 function clearMonth(){
   if(!confirm("Clear all data for "+MONTH_NAMES[viewMonth.getMonth()]+" "+viewMonth.getFullYear()+"?"))return;
   try{localStorage.removeItem("hk_month_"+monthKey());}catch(e){}
-  renderMonthDashboard();
   showToast("Month data cleared");
 }
 
@@ -10385,7 +10386,6 @@ function resetOccupancy(){
   mData.roomsSource={};
   saveMonthData(mData,mk); /* keeps mData.days intact, also syncs to Sheets */
   try{localStorage.removeItem("hk_r106_"+mk);}catch(e){}
-  renderMonthDashboard();
   renderLaborDash();
   if(currentPage==='occupancy')renderOccupancy();
   showToast("✓ Occupancy reset — now re-upload the OCC");
@@ -10500,7 +10500,6 @@ function confirmCleanupDuplicates(){
   showToast('✓ Cleanup applied — '+_dupScanReport.length+' day(s) fixed');
   _dupScanReport=null;
   document.getElementById('dupScanResults').innerHTML='';
-  renderMonthDashboard();
   renderLaborDash();
   if(currentPage==='breaks')renderBreaksPage();
   if(currentPage==='recap')renderRecap();
@@ -10519,7 +10518,6 @@ function saveRoomsForDate(ds,val){
   mData.roomsUpdatedAt=mData.roomsUpdatedAt||{};
   mData.roomsUpdatedAt[ds]=new Date().toISOString();
   saveMonthData(mData,mk); /* also syncs to Sheets */
-  renderMonthDashboard();
 }
 
 /* ── Backfill empty room counts from R106 ─────────────────────────
@@ -10571,354 +10569,6 @@ function toggleWeek(id){
   if(arrow)arrow.classList.toggle("open",!isOpen);
 }
 
-/* ── MAIN RENDER ── */
-function renderMonthDashboard(){
-  var yr=viewMonth.getFullYear(),mo=viewMonth.getMonth();
-  var mk=monthKey();/* current view */
-  var mData=loadMonthData(monthKey(viewMonth));
-  var days=mData.days||{},rooms=mData.rooms||{};
-
-  /* Month label */
-  var ml=document.getElementById("monthLabel");
-  if(ml)ml.textContent=MONTH_NAMES[mo]+" "+yr;
-
-  var today=new Date();today.setHours(0,0,0,0);
-  var yesterday=new Date(today);yesterday.setDate(today.getDate()-1);
-  var todayStr=dateStr(today);
-  var yesterdayStr=dateStr(yesterday);
-
-  /* ── Month KPI summary — calendar month only (1st to last day) ── */
-  var mPaid=0,mBudget=0,mOT=0,mNB=0,mSB=0,mMM=0,mDays=0;
-  Object.keys(days).forEach(function(ds){
-    var s=days[ds];
-    /* Only include days within the calendar month (P&L month) */
-    var d=parseLocalDate(ds);
-    if(d.getMonth()!==mo||d.getFullYear()!==yr)return;
-    var prevDs=prevDateStr(ds);
-    var r=getRoomsForDay(ds);
-    mPaid+=s.totalPaid;mOT+=s.totalOT;mNB+=s.noBreak;mSB+=s.shortBreak;mMM+=s.mismatch;mDays++;
-    mBudget+=dayBudget(r);
-  });
-  var mVar=mPaid-mBudget,mPct=mBudget>0?Math.round((mPaid/mBudget)*100):0;
-  var kpis=[
-    {v:mPaid.toFixed(2),l:"Total Paid Hrs",c:""},
-    {v:mBudget>0?mBudget.toFixed(2)+" h":"—",l:"Total Budget Hours",c:""},
-    {v:mBudget>0?(mVar>0?"+":"")+mVar.toFixed(2):"—",l:"Variance",c:mBudget>0?(mVar>0?"color:var(--red)":"color:var(--green)"):""},
-    {v:mBudget>0?mPct+"%":"—",l:"% vs Budget",c:mBudget>0?(mPct>105?"color:var(--red)":mPct>98?"color:var(--amber)":"color:var(--green)"):""},
-    {v:mOT.toFixed(2),l:"OT Hours",c:mOT>0?"color:var(--amber)":""},
-    {v:mNB,l:"No Break",c:mNB>0?"color:var(--red)":"color:var(--green)"},
-    {v:mSB,l:"Short Break",c:mSB>0?"color:var(--amber)":"color:var(--green)"},
-    {v:mDays,l:"Days Loaded",c:""}
-  ];
-  var kEl=document.getElementById("monthKpis");
-  if(kEl)kEl.innerHTML=kpis.map(function(k){
-    return'<div class="month-kpi"><div class="mkval" style="'+k.c+'">'+k.v+'</div><div class="mklbl">'+k.l+'</div></div>';
-  }).join("");
-
-  /* ── Month alerts ── */
-  var ae=document.getElementById("monthAlerts");
-  if(ae){
-    var al=[];
-    if(mBudget>0&&mVar>20)al.push("&#128308; Over budget "+mVar.toFixed(2)+"h this month (calendar month)");
-    if(mBudget>0&&mVar<-20)al.push("&#128994; Under budget "+Math.abs(mVar).toFixed(2)+"h this month (calendar month)");
-    if(mNB>10)al.push("&#128683; "+mNB+" missing breaks this month");
-    ae.innerHTML=al.map(function(a){return'<div class="week-alert-bar">'+a+'</div>';}).join("");
-  }
-
-  /* ── Build hotel weeks ── */
-  var weeks=getHotelWeeksForMonth(yr,mo);
-  var wEl=document.getElementById("monthWeeks");
-  if(!wEl)return;
-  var wHtml="";
-
-  weeks.forEach(function(wk,wi){
-    /* Build 7 days Sat→Fri */
-    var wkDays=[];
-    for(var d=0;d<7;d++){
-      var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
-      wkDays.push(dd);
-    }
-
-    /* Week totals */
-    var wPaid=0,wBud=0,wOT=0,wNB=0,wSB=0,wLoaded=0;
-    wkDays.forEach(function(dd){
-      var ds2=dateStr(dd);
-      var prevDs2=prevDateStr(ds2);
-      var s=days[ds2];var r=getRoomsForDay(ds2);
-      if(s){wPaid+=s.totalPaid;wOT+=s.totalOT;wNB+=s.noBreak;wSB+=s.shortBreak;wLoaded++;wBud+=dayBudget(r);}
-    });
-    var wVar=wPaid-wBud;
-
-    /* Week date range label */
-    var wkLabel="Week "+(wi+1)+": "
-      +wk.start.toLocaleDateString("en-US",{month:"short",day:"numeric"})
-      +" – "+wk.end.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
-
-    /* Auto-open current week */
-    var isCurrentWeek=wkDays.some(function(dd){return dateStr(dd)===todayStr||dateStr(dd)===yesterdayStr;});
-
-    wHtml+='<div class="week-block">'
-      +'<div class="week-block-hdr" onclick="toggleWeek(\''+wi+'\')"> '
-      +'<h3>Week '+(wi+1)+'<span class="wk-dates">'+wk.start.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" – "+wk.end.toLocaleDateString("en-US",{month:"short",day:"numeric"})+'</span></h3>'
-      +'<div style="display:flex;align-items:center;gap:16px;">'
-      +'<div class="week-kpis">'
-      +'<div class="week-kpi"><div class="wkval">'+wPaid.toFixed(2)+'</div><div class="wklbl">Paid</div></div>'
-      +(wBud>0?'<div class="week-kpi"><div class="wkval '+(wVar>2?"variance-neg":wVar<-2?"variance-pos":"")+'">'+(wVar>0?"+":"")+wVar.toFixed(2)+'</div><div class="wklbl">Var</div></div>':"")
-      +'<div class="week-kpi"><div class="wkval '+(wNB>0?"b-alert":"")+'">'+wNB+'</div><div class="wklbl">No Brk</div></div>'
-      +'<div class="week-kpi"><div class="wkval">'+wLoaded+'/7</div><div class="wklbl">Days</div></div>'
-      +'</div>'
-      +'<span class="wk-toggle'+(isCurrentWeek?" open":"")+'" id="wt_'+wi+'">&#9660;</span>'
-      +'</div>'
-      +'</div>'
-
-      +'<div class="week-block-body'+(isCurrentWeek?" open":"")+'" id="wb_'+wi+'">'
-
-      /* Day header labels */
-      +'<div class="day-hdr">'
-      +wkDays.map(function(dd){
-        return'<div class="day-hdr-cell">'+DAY_NAMES[dd.getDay()]+'</div>';
-      }).join("")
-      +'</div>'
-
-      /* Day cards */
-      +'<div class="day-row">'
-      +wkDays.map(function(dd){
-        var ds3=dateStr(dd);
-        var s=days[ds3];
-        /* Rooms from previous night drive today's labor budget */
-        var prevDs3=prevDateStr(ds3);
-        var r=getRoomsForDay(ds3);
-        var bud=r>0?dayBudget(r):0;
-        var inMonth=dd.getMonth()===mo;
-        var ddM=new Date(dd);ddM.setHours(0,0,0,0);var isFuture=ddM>today;
-        var isYesterday=ds3===yesterdayStr;
-        var isToday2=ds3===todayStr;
-
-        var cls="day-card";
-        if(isYesterday)cls+=" evaluating";
-        else if(isToday2)cls+=" today-card";
-        else if(isFuture)cls+=" future";
-        else if(!inMonth)cls+=" other-month";
-        if(s)cls+=" loaded";
-
-        var inner='<div class="dc-weekday">'+DAY_NAMES[dd.getDay()]+'</div>'
-          +'<div class="dc-date">'+dd.getDate()+'</div>';
-
-        if(s){
-          inner+='<div class="dc-dot"></div>';
-          inner+='<div class="dc-paid">'+s.totalPaid.toFixed(2)+'</div>';
-          if(bud>0){
-            var pct3=Math.round((s.totalPaid/bud)*100);
-            var barColor=pct3>105?"var(--red)":pct3>98?"var(--gold2)":"var(--green)";
-            inner+='<div class="dc-budget">/ '+bud.toFixed(2)+'</div>'
-              +'<div style="width:42px;height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin-top:3px;">'
-              +'<div style="width:'+Math.min(100,pct3)+'%;height:100%;background:'+barColor+';border-radius:99px;"></div>'
-              +'</div>';
-          }
-          if(isYesterday)inner+='<div class="dc-eval">&#11088; Evaluating</div>';
-        }else if(isYesterday){
-          inner+='<div class="dc-eval">Evaluate</div>';
-        }else if(isToday2){
-          inner+='<div style="font-size:10px;color:var(--blue2);">Today</div>';
-        }
-
-        return'<div class="'+cls+'">'+inner+'</div>';
-      }).join("")
-      +'</div>'
-
-      /* Rooms input row */
-      +'<div style="margin-bottom:12px;">'
-      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:6px;">&#127968; Rooms Occupied — Enter the PREVIOUS night <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(e.g. budget for Sat May 9 = rooms entered under Fri May 8)</span></div>'
-      +'<div class="rooms-row">'
-      +wkDays.map(function(dd){
-        var ds4=dateStr(dd);
-        /* Night key = previous day (night of May 8 drives budget for May 9) */
-        var prevDs4=prevDateStr(ds4);
-        var r4=getRoomsForDay(ds4)||"";
-        var ddMid=new Date(dd);ddMid.setHours(0,0,0,0);var isFut=ddMid>today;
-        var inMo=dd.getMonth()===mo;
-        var hasR=getRoomsForDay(ds4)>0;
-        var hasD=!!days[ds4];
-        return'<div class="rooms-cell">'
-          +'<label style="font-size:9px;line-height:1.3;text-align:center;">Night of<br>'+(function(){var prev=new Date(dd);prev.setDate(dd.getDate()-1);return prev.toLocaleDateString("en-US",{month:"short",day:"numeric"});})()+'</label>'
-          +'<input type="number" min="0" max="999" placeholder="—" value="'+r4+'"'
-          +' class="'+(hasR?"has-rooms":"")+(isFut||!inMo?" locked":"")+'"'
-          +(isFut||!inMo?' readonly':'')
-          +' onchange="saveRoomsForDate(\''+prevDs4+'\',this.value)"'
-          +' oninput="saveRoomsForDate(\''+prevDs4+'\',this.value)"/>'
-          +'</div>';
-      }).join("")
-      +'</div>'
-      +'<div style="font-size:10px;color:var(--text3);margin-top:4px;">&#8505; Enter rooms occupied each night — these numbers calculate the budget for the <b>following day</b></div>'
-      +'</div>'
-
-      /* Position table */
-      +'<div style="overflow-x:auto;">'
-      +'<table class="pos-week-table">'
-      +'<thead><tr>'
-      +'<th style="text-align:left;min-width:140px;">Position</th>'
-      +wkDays.map(function(dd){
-        var ds5=dateStr(dd);
-        var isYd=ds5===yesterdayStr;
-        return'<th class="'+(isYd?"yd-col":"")+'" style="min-width:68px;">'+DAY_NAMES[dd.getDay()]+'<br><span style="font-weight:400;opacity:.8;font-size:9px;">'+dd.toLocaleDateString("en-US",{month:"short",day:"numeric"})+'</span></th>';
-      }).join("")
-      +'<th style="min-width:72px;">Actual</th>'
-      +'<th style="min-width:72px;">Budget<br><span style="font-weight:400;font-size:9px;opacity:.8;">Std Hrs</span></th>'
-      +'<th style="min-width:68px;">Var</th>'
-      +'<th style="min-width:50px;">OT</th>'
-      +'<th style="min-width:50px;">Breaks</th>'
-      +'</tr></thead>'
-      +'<tbody>'
-      +HK_POS_LIST.map(function(pos){
-        var std=LABOR_STD[pos];
-        var stdLbl=std?(std.type==="fixed"?std.daily+"h/d fixed":Math.round(std.factor*100)+"% POR"):"";
-        var wA=0,wB=0,wO=0,wBr=0;
-        var cells=wkDays.map(function(dd){
-          var ds6=dateStr(dd);
-          var s=days[ds6];var p=s&&s.byPosition?s.byPosition[pos]:null;
-          /* Rooms from previous night → budget for this day */
-          var prevDs6=prevDateStr(ds6);
-          var r6=getRoomsForDay(ds6);
-          var bud6=posBudget(pos,r6);
-          var isYd=ds6===yesterdayStr;
-          var cellCls=isYd?"yd-col":"";
-          if(p&&p.paid>0){
-            wA+=p.paid;wO+=p.ot1;wBr+=p.breakEx;
-            if(bud6>0){
-              wB+=bud6;
-              var pct4=Math.round((p.paid/bud6)*100);
-              var bc=pct4>105?"var(--red)":pct4>98?"var(--gold2)":"var(--green)";
-              return'<td class="'+cellCls+'" style="text-align:center;">'
-                +'<span class="day-cell-val" style="color:'+bc+';">'+p.paid.toFixed(2)+'</span>'
-                +'<span class="day-cell-bud">/ '+bud6.toFixed(2)+'</span>'
-                +'</td>';
-            }else{
-              return'<td class="'+cellCls+'" style="text-align:center;"><span class="day-cell-val">'+p.paid.toFixed(2)+'</span></td>';
-            }
-          }else if(s){
-            if(bud6>0){wB+=bud6;return'<td class="'+cellCls+'" style="text-align:center;"><span style="color:var(--border2);">—</span><span class="day-cell-bud">/ '+bud6.toFixed(2)+'</span></td>';}
-            return'<td class="'+cellCls+'" style="text-align:center;color:var(--border2);">—</td>';
-          }else{
-            return'<td class="'+cellCls+'" style="text-align:center;color:var(--border);">·</td>';
-          }
-        }).join("");
-        var vr=wA-wB;
-        var vrStr=wB>0?'<span class="'+(vr>0?"variance-neg":"variance-pos")+'">'+(vr>0?"+":"")+vr.toFixed(2)+'</span>':'<span style="color:var(--text3)">—</span>';
-        return'<tr>'
-          +'<td><b>'+pos+'</b><br><span style="font-size:10px;color:var(--text3);">'+stdLbl+'</span></td>'
-          +cells
-          +'<td style="text-align:center;"><span class="day-cell-val">'+wA.toFixed(2)+'</span></td>'
-          +'<td style="text-align:center;color:var(--text2);">'+(wB>0?wB.toFixed(2):"—")+'</td>'
-          +'<td style="text-align:center;">'+vrStr+'</td>'
-          +'<td style="text-align:center;font-weight:700;color:'+(wO>0?"var(--amber)":"var(--text3)")+';">'+wO.toFixed(2)+'</td>'
-          +'<td style="text-align:center;font-weight:700;color:'+(wBr>0?"var(--red)":"var(--green)")+';">'+wBr+'</td>'
-          +'</tr>';
-      }).join("")
-      +'</tbody></table></div>'
-      +'</div>'/* /week-block-body */
-      +'</div>'/* /week-block */;
-  });
-
-  wEl.innerHTML=wHtml||'<div class="empty">No data for this month yet — upload daily PDFs</div>';
-}
-
-/* ── Export Month Excel ── */
-function exportMonthExcel(){
-  var mData=loadMonthData(monthKey(viewMonth));
-  var days2=mData.days||{},rooms2=mData.rooms||{};
-  var wb3=XLSX.utils.book_new();
-  var yr=viewMonth.getFullYear(),mo=viewMonth.getMonth();
-  var weeks2=getHotelWeeksForMonth(yr,mo);
-
-  /* ── Sheet 1: Daily Summary ── */
-  var ds2=[["Date","Week","Weekday","Rooms (prev night)","Total Paid Hrs","Std Budget Hrs","Variance","Variance %","OT Hrs","Employees","No Break","Short Break","Mismatches"]];
-  weeks2.forEach(function(wk,wi){
-    for(var d=0;d<7;d++){
-      var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
-      /* P&L export: only calendar month days */
-      if(dd.getMonth()!==mo||dd.getFullYear()!==yr)continue;
-      var ds3=dateStr(dd);
-      var s=days2[ds3];if(!s)continue;
-      var prevDs=prevDateStr(ds3);
-      var r=getRoomsForDay(ds3);
-      var bud=r>0?+dayBudget(r).toFixed(2):0;
-      var variance=bud>0?+(s.totalPaid-bud).toFixed(2):"";
-      var variancePct=bud>0?Math.round((s.totalPaid/bud)*100)+"%":"";
-      ds2.push([
-        ds3,"Week "+(wi+1),DAY_NAMES[dd.getDay()],
-        r||"",
-        +s.totalPaid.toFixed(2),
-        bud||"",variance,variancePct,
-        +s.totalOT.toFixed(2),s.totalEmps,
-        s.noBreak,s.shortBreak,s.mismatch
-      ]);
-    }
-  });
-  XLSX.utils.book_append_sheet(wb3,XLSX.utils.aoa_to_sheet(ds2),"Daily Summary");
-
-  /* ── Sheet 2: By Position (daily) ── */
-  var sorted2=Object.keys(days2).sort();
-  var posHdr=["Position","Standard"].concat(sorted2.map(function(ds){
-    var d=parseLocalDate(ds);
-    return DAY_NAMES[d.getDay()]+" "+d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
-  })).concat(["Month Total Actual","Month Budget","Variance","Variance %"]);
-  var posRows=[posHdr];
-  HK_POS_LIST.forEach(function(pos){
-    var std=LABOR_STD[pos];
-    var stdLbl=std?(std.type==="fixed"?std.daily+"h/day fixed":Math.round(std.factor*100)+"% POR"):"";
-    var row=[pos,stdLbl];
-    var wA=0,wB=0;
-    sorted2.forEach(function(ds3){
-      /* P&L: only calendar month days */
-      var d3=parseLocalDate(ds3);
-      if(d3.getMonth()!==mo||d3.getFullYear()!==yr)return;
-      var s=days2[ds3];var p=s&&s.byPosition?s.byPosition[pos]:null;
-      var prevDs=prevDateStr(ds3);
-      var r=getRoomsForDay(ds3);
-      var bud=posBudget(pos,r);
-      row.push(p&&p.paid>0?+p.paid.toFixed(2):"");
-      if(p)wA+=p.paid;
-      if(s&&bud>0)wB+=bud;
-    });
-    var variance=wB>0?+(wA-wB).toFixed(2):"";
-    var variancePct=wB>0?Math.round((wA/wB)*100)+"%":"";
-    row.push(+wA.toFixed(2),wB>0?+wB.toFixed(2):"",variance,variancePct);
-    posRows.push(row);
-  });
-  XLSX.utils.book_append_sheet(wb3,XLSX.utils.aoa_to_sheet(posRows),"By Position");
-
-  /* ── Sheet 3: Weekly Summary ── */
-  var wkSum=[["Week","Date Range","Days Loaded","Total Paid Hrs","Std Budget Hrs","Variance","OT Hrs","No Break","Short Break"]];
-  weeks2.forEach(function(wk,wi){
-    var wPaid=0,wBud=0,wOT=0,wNB=0,wSB=0,wLoaded=0;
-    for(var d=0;d<7;d++){
-      var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
-      var ds3=dateStr(dd);
-      var s=days2[ds3];if(!s)continue;
-      var prevDs=prevDateStr(ds3);
-      var r=getRoomsForDay(ds3);
-      wPaid+=s.totalPaid;wOT+=s.totalOT;wNB+=s.noBreak;wSB+=s.shortBreak;wLoaded++;
-      wBud+=dayBudget(r);
-    }
-    var wkRange=wk.start.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" - "+wk.end.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
-    /* Note: first/last week of month may be partial (hotel week = Sat-Fri) */
-    wkSum.push(["Week "+(wi+1),wkRange,wLoaded,+wPaid.toFixed(2),wBud>0?+wBud.toFixed(2):"",wBud>0?+(wPaid-wBud).toFixed(2):"",+wOT.toFixed(2),wNB,wSB]);
-  });
-  XLSX.utils.book_append_sheet(wb3,XLSX.utils.aoa_to_sheet(wkSum),"Weekly Summary");
-
-  /* ── Sheet 4: Rooms Occupied Log ── */
-  var roomsLog=[["Date","Weekday","Rooms Occupied (night)","Drives Budget For"]];
-  Object.keys(rooms2).sort().forEach(function(ds3){
-    var d=parseLocalDate(ds3);
-    var nextDs=dateStr(new Date(d.getFullYear(),d.getMonth(),d.getDate()+1));
-    roomsLog.push([ds3,DAY_NAMES[d.getDay()],rooms2[ds3],nextDs]);
-  });
-  XLSX.utils.book_append_sheet(wb3,XLSX.utils.aoa_to_sheet(roomsLog),"Rooms Log");
-
-  var filename="HK_Monthly_"+MONTH_NAMES[mo]+"_"+yr+".xlsx";
-  XLSX.writeFile(wb3,filename);
-  showToast("✓ Exported: "+filename);
-}
 
 /* ══════════════════════════════════════════════════════
    PROFESSIONAL P&L EXCEL EXPORT  (SpreadsheetML / .xls)
@@ -11270,200 +10920,12 @@ function migrateRoomsData(){
 /* Greeting based on time */
 
 
-/* Render duplicate pages */
-function renderBreaks2(){
-  var el=document.getElementById("breaksContent2");
-  if(el)el.innerHTML=document.getElementById("breaksContent").innerHTML;
-}
-function renderOvertime2(){
-  var el=document.getElementById("overtimeContent2");
-  if(el)el.innerHTML=document.getElementById("overtimeContent").innerHTML;
-}
-function renderPosition2(){
-  var tb=document.querySelector("#tPosition2 tbody");
-  var src=document.querySelector("#tPosition tbody");
-  if(tb&&src)tb.innerHTML=src.innerHTML;
-}
-function renderRoster2(){
-  var g=document.getElementById("rosterGrid2");
-  var src=document.getElementById("rosterGrid");
-  if(g&&src)g.innerHTML=src.innerHTML;
-  var s=document.getElementById("rosterStats2");
-  var ssrc=document.getElementById("rosterStats");
-  if(s&&ssrc)s.innerHTML=ssrc.innerHTML;
-}
-
-/* Dashboard KPI update */
-
-
-/* Day detail panel */
-function openDayDetail(ds){
-  var mData=loadMonthData(monthKey(viewMonth));
-  var snap=mData.days&&mData.days[ds];
-  if(!snap){showToast("No data for this day");return;}
-  var d=parseLocalDate(ds);
-  var dayName=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
-  document.getElementById("dayDetailTitle").textContent=dayName+", "+d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
-  var rooms=getRoomsForDay(ds);
-  var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:18px;">';
-  html+='<div class="kpi-card" style="padding:12px;"><div class="kpi-label">Total Paid</div><div class="kpi-value" style="font-size:22px;">'+snap.totalPaid.toFixed(2)+'</div></div>';
-  html+='<div class="kpi-card" style="padding:12px;"><div class="kpi-label">Employees</div><div class="kpi-value" style="font-size:22px;">'+snap.totalEmps+'</div></div>';
-  html+='<div class="kpi-card" style="padding:12px;"><div class="kpi-label">No Break</div><div class="kpi-value" style="font-size:22px;color:'+(snap.noBreak>0?"var(--red)":"var(--green)")+'">'+snap.noBreak+'</div></div>';
-  html+='<div class="kpi-card" style="padding:12px;"><div class="kpi-label">Short Break</div><div class="kpi-value" style="font-size:22px;color:'+(snap.shortBreak>0?"var(--amber)":"var(--green)")+'">'+snap.shortBreak+'</div></div>';
-  html+='</div>';
-  if(snap.byPosition){
-    html+='<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px;">By Position</div>';
-    html+='<div class="tbl-wrap"><table><thead><tr><th>Position</th><th>Paid Hrs</th><th>Budget</th><th>Variance</th><th>OT</th><th>Break Exc.</th></tr></thead><tbody>';
-    HK_POS_LIST.forEach(function(pos){
-      var p=snap.byPosition[pos];if(!p)return;
-      var std=LABOR_STD[pos];
-      var bud=std?(std.type==="fixed"?std.daily:(rooms>0?rooms*std.factor:0)):0;
-      var vr=bud>0?(p.paid-bud):null;
-      html+='<tr><td><b>'+pos+'</b></td>'
-        +'<td>'+p.paid.toFixed(2)+'</td>'
-        +'<td>'+(bud>0?bud.toFixed(2):"—")+'</td>'
-        +'<td>'+(vr!==null?'<span style="color:'+(vr>0?"var(--red)":"var(--green))")+';font-weight:700;">'+(vr>0?"+":"")+vr.toFixed(2)+'</span>':"—")+'</td>'
-        +'<td>'+(p.ot1>0?'<span class="badge b-amber">'+p.ot1.toFixed(2)+'h</span>':p.ot1.toFixed(2))+'</td>'
-        +'<td>'+(p.breakEx>0?'<span class="badge b-red">'+p.breakEx+'</span>':'<span class="badge b-green">0</span>')+'</td>'
-        +'</tr>';
-    });
-    html+='</tbody></table></div>';
-  }
-  document.getElementById("dayDetailContent").innerHTML=html;
-  document.getElementById("dayDetail").style.display="flex";
-}
-function closeDayDetail(){document.getElementById("dayDetail").style.display="none";}
-
-/* ── CHARTS ── */
-var weeklyTrendChartObj=null;
-var laborDonutChartObj=null;
-
-var POSITION_COLORS={
-  "Room Attendant":"var(--navy)",
-  "House Attendant":"var(--navy)",
-  "Laundry Attendant":"var(--navy2)",
-  "Turndown Attendant":"var(--navy2)",
-  "Housekeeping Supervisor":"var(--gl)",
-  "Public Area Attendant":"var(--green)"
-};
-
-function renderCharts(){
-  var mData=loadMonthData(monthKey(viewMonth));
-  var days=mData.days||{},rooms=mData.rooms||{};
-  var yr=viewMonth.getFullYear(),mo=viewMonth.getMonth();
-  var weeks=getHotelWeeksForMonth(yr,mo);
-
-  /* ── Weekly Trend Chart ── */
-  var wkLabels=[],wkPaid=[],wkBudget=[];
-  weeks.forEach(function(wk,wi){
-    var wP=0,wB=0,hasData=false;
-    for(var d=0;d<7;d++){
-      var dd=new Date(wk.start);dd.setDate(wk.start.getDate()+d);
-      var ds=dateStr(dd);
-      var s=days[ds];
-      if(!s)continue;
-      var r=getRoomsForDay(ds);
-      wP+=s.totalPaid;wB+=dayBudget(r);hasData=true;
-    }
-    if(hasData){
-      wkLabels.push("Wk "+(wi+1)+": "+wk.start.toLocaleDateString("en-US",{month:"short",day:"numeric"}));
-      wkPaid.push(+wP.toFixed(2));
-      wkBudget.push(wB>0?+wB.toFixed(2):null);
-    }
-  });
-
-  var tCtx=document.getElementById("weeklyTrendChart");
-  if(!tCtx)return;
-  if(weeklyTrendChartObj)weeklyTrendChartObj.destroy();
-  weeklyTrendChartObj=new Chart(tCtx,{
-    type:"line",
-    data:{
-      labels:wkLabels,
-      datasets:[
-        {label:"Paid Hours",data:wkPaid,borderColor:"var(--navy)",backgroundColor:"rgba(15,37,68,.08)",borderWidth:2.5,pointRadius:5,pointBackgroundColor:"var(--navy)",tension:.3,fill:true},
-        {label:"Budget Hours",data:wkBudget,borderColor:"var(--gl)",backgroundColor:"transparent",borderWidth:2,borderDash:[6,4],pointRadius:4,pointBackgroundColor:"var(--gl)",tension:.3}
-      ]
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:"top",labels:{font:{size:12},usePointStyle:true}},tooltip:{callbacks:{label:function(c){return c.dataset.label+": "+c.parsed.y.toFixed(2)+"h";}}}},
-      scales:{
-        x:{grid:{color:"rgba(0,0,0,.04)"},ticks:{font:{size:11}}},
-        y:{grid:{color:"rgba(0,0,0,.04)"},ticks:{font:{size:11},callback:function(v){return v+"h";}}}
-      }
-    }
-  });
-
-  /* ── Labor Donut Chart ── */
-  var posLabels=[],posData=[],posColors=[];
-  var totalPaid=0;
-  HK_POS_LIST.forEach(function(pos){
-    var sum=0;
-    Object.keys(days).forEach(function(ds){
-      var d2=parseLocalDate(ds);
-      if(d2.getMonth()!==mo||d2.getFullYear()!==yr)return;
-      var p=days[ds].byPosition&&days[ds].byPosition[pos];
-      if(p)sum+=p.paid;
-    });
-    if(sum>0){posLabels.push(pos);posData.push(+sum.toFixed(2));posColors.push(POSITION_COLORS[pos]||"var(--text3)");}
-    totalPaid+=sum;
-  });
-
-  var dCtx=document.getElementById("laborDonutChart");
-  if(!dCtx)return;
-  if(laborDonutChartObj)laborDonutChartObj.destroy();
-  laborDonutChartObj=new Chart(dCtx,{
-    type:"doughnut",
-    data:{labels:posLabels,datasets:[{data:posData,backgroundColor:posColors,borderWidth:2,borderColor:"#fff",hoverOffset:6}]},
-    options:{
-      responsive:true,cutout:"70%",
-      plugins:{
-        legend:{display:false},
-        tooltip:{callbacks:{label:function(c){var pct=totalPaid>0?Math.round((c.parsed/totalPaid)*100):0;return c.label+": "+c.parsed.toFixed(2)+"h ("+pct+"%)";}}}
-      }
-    }
-  });
-
-  /* Legend */
-  var leg=document.getElementById("donutLegend");
-  if(leg){
-    leg.innerHTML=posLabels.map(function(pos,i){
-      var pct=totalPaid>0?Math.round((posData[i]/totalPaid)*100):0;
-      var shortName=pos.replace(" Attendant","").replace("Housekeeping ","Sup.");
-      return'<div style="display:flex;align-items:center;gap:8px;">'+
-        '<div style="width:10px;height:10px;border-radius:3px;background:'+posColors[i]+';flex-shrink:0;"></div>'+
-        '<div><div style="font-weight:700;color:var(--navy);font-size:12px;">'+shortName+'</div>'+
-        '<div style="color:var(--text3);font-size:11px;">'+posData[i].toFixed(2)+'h · '+pct+'%</div></div>'+
-        '</div>';
-    }).join("");
-  }
-}
-
-/* Override renderMonthDashboard to update KPIs too */
-var _origRenderMonth=renderMonthDashboard;
-renderMonthDashboard=function(){
-  _origRenderMonth();
-  updateDashboardKPIs();
-  renderCharts();
-  /* Make day pills clickable */
-  setTimeout(function(){
-    document.querySelectorAll(".day-pill.loaded").forEach(function(el){
-      var ds=el.dataset.ds;
-      if(ds)el.addEventListener("click",function(){openDayDetail(ds);});
-    });
-  },100);
-};
 
 /* Override render() to update daily page */
 var _origRender2=render;
 render=function(){
   _origRender2();
   renderLaborSummary();
-  /* Sync to duplicate pages */
-  renderBreaks2();renderOvertime2();renderPosition2();
-  /* Show daily tab card */
-  var dc=document.getElementById("dailyTabsCard");
-  if(dc)dc.style.display="block";
   updateDashboardKPIs();
   showToast("Report loaded successfully");
 };
@@ -11475,8 +10937,6 @@ saveDayToMonth=function(d){
   updateDashboardKPIs();
 };
 
-/* Make day pills have data-ds for click */
-var _origRenderWeeks=renderMonthDashboard;
 
 
 /* ═══════════════════════════════════════════════════
@@ -15340,7 +14800,6 @@ function saveRoomsFromModal(){
     if(prevDs)saveRoomsForDate(prevDs,val||'0');
   });
   closeRoomsModal();
-  renderMonthDashboard();
   renderLaborDash();
   showToast('Rooms saved - budget updated');
 }
@@ -19784,7 +19243,6 @@ window.addEventListener('load',function(){
   }catch(e){}
   try{migrateRoomsData();}catch(ex){console.warn('migrate:',ex);}
   try{renderRoster();}catch(ex){console.warn('roster:',ex);}
-  try{renderMonthDashboard();}catch(ex){console.warn('monthDash:',ex);}
   updateGreeting();
   try{var fv2=document.getElementById('footerVersion');if(fv2&&window.APP_VERSION)fv2.textContent='v'+window.APP_VERSION;}catch(e){}
   updateDashboardKPIs();
