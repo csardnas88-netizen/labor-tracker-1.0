@@ -507,6 +507,21 @@ module.exports = {
       t.assert(win._schedDaysCellHtml(6).indexOf('OT') !== -1, '6 worked days shows an explicit "OT" tag next to the number');
       t.assert(win._schedDaysCellHtml(7).indexOf('OT') !== -1, '7 worked days shows it too');
 
+      // Carlos's ask, 2026-09-14: Turndown's own shift is short enough
+      // (5-6h/day) that 6+ days there almost never means real overtime —
+      // "no consideres 6 días como overtime" for that crew specifically.
+      // Every OTHER crew (sup, used above) keeps the purple/OT treatment
+      // unchanged; this is Turndown's own exception, not a global one.
+      [5, 6, 7].forEach(function (n) {
+        t.assert(win._schedDaysCellCss(n, 'td').indexOf('var(--green)') !== -1,
+          'Turndown at ' + n + ' worked days still highlights green, not purple');
+        t.eq(win._schedDaysCellHtml(n, 'td'), String(n), 'and Turndown at ' + n + ' shows no "OT" tag');
+      });
+      t.assert(win._schedDaysCellCss(4, 'td').indexOf('var(--red)') !== -1,
+        'Turndown below a full week (4) is unaffected — the exception only raises the ceiling, not the floor');
+      t.assert(win._schedDaysCellCss(6).indexOf('var(--purple)') !== -1,
+        'a crew with no bk passed (e.g. sup, above) is unaffected by Turndown\'s own exception');
+
       // And it actually paints live on the cell Carlos is looking at,
       // not just in the helper — moving Rolando from 0 to 4 to 5 days.
       win.schedSetCell('sup', rolandoIdx2, 'Rolando', sat, '1', null);
@@ -1176,6 +1191,16 @@ module.exports = {
     t.eq(win.schedShiftTimeText('gra', ds21[0]), '9:00 AM - 5:30 PM', 'Room Attendant weekend');
     t.eq(win.schedShiftTimeText('gra', ds21[3]), '8:15 AM - 4:45 PM', 'Room Attendant weekday');
     t.eq(win.schedShiftTimeText('td', ds21[0]), '5:00 PM - 11:00 PM', 'Turndown/GRA is the same every day of the week');
+
+    // Paty's real clock-in/out (4:00 PM - 11:00 PM) is her own exception on
+    // BOTH crews she can print under — neither department's own default
+    // time is what she actually works. Carlos's ask, 2026-09-14.
+    t.eq(win.schedShiftTimeText('td', ds21[0], 'Paty'), '4:00 PM - 11:00 PM', "Paty on Turndown, not Turndown's usual 5 PM");
+    t.eq(win.schedShiftTimeText('td', ds21[3], 'Paty'), '4:00 PM - 11:00 PM', 'and every day of the week, not just weekends');
+    t.eq(win.schedShiftTimeText('pmhm', ds21[0], 'Paty'), '4:00 PM - 11:00 PM', "and covering PM Houseman, not that crew's usual 2:30 PM");
+    t.eq(win.schedShiftTimeText('td', ds21[0], 'Yorlin A'), '5:00 PM - 11:00 PM',
+      "a different Turndown attendant is unaffected — this is Paty's own exception, not the whole crew's");
+
     // Carlos's ask: the crew card just reads "PM Turndown" now, not
     // "PM Turndown / GRA" — the "GRA" suffix was never anything a manager
     // needed to see on screen.
@@ -2171,6 +2196,72 @@ module.exports = {
     const reparsed23b = { days: { [thisDates20[0]]: { sheet: 'reuploaded', occ: '', dep: '', tdOcc: '', sup: [['Cora', '1']] } }, count: 1 };
     const carried23b = win.schedCarryDayOffPref(before23b, reparsed23b);
     t.eq(carried23b.dayOffPref[win.dlNorm('Cora')].join(','), '4', 'schedCarryDayOffPref keeps the mark across a fresh workbook parse ("Wed" = index 4)');
+
+    // ── 23c) "Prefer dates split" — Carlos's ask, 2026-09-14: some
+    // associates specifically want their 2 days off NOT to land
+    // back-to-back. Auto-fill's adjacency tiebreak normally leans toward
+    // consecutive days off; this preference inverts that lean, person by
+    // person, without changing anyone else's. ──
+    win.localStorage.removeItem('hk_dl_schedule');
+    const SCH23c = { days: {} };
+    thisDates20.forEach((ds, i) => {
+      SCH23c.days[ds] = { sheet: 't', occ: '100', dep: '80', tdOcc: '', sup: [['Elena', i === 3 ? 'R-OFF' : '1'], ['Fara', i === 3 ? 'R-OFF' : '1']] };
+    });
+    win.dlSaveSchedule(SCH23c);
+    win.schedViewWeekStart = wk20(0);
+
+    t.eq(win.schedSplitDaysPrefFor(win.dlLoadSchedule(), 'Elena'), false, 'nobody has the split preference before it is set');
+    win.schedToggleSplitDaysPref('Elena');
+    t.eq(win.schedSplitDaysPrefFor(win.dlLoadSchedule(), 'Elena'), true, 'toggling once marks Elena as preferring split days off');
+    win.renderSchedule();
+    win.schedTogglePersonMenu('sup', 'Elena');
+    t.assert(/Prefers dates split/.test(html()), "the mark shows in Elena's open menu once set");
+    win.schedTogglePersonMenu('sup', 'Elena');
+
+    // Neutralize the weekend-fairness rotation (weekendGrant would
+    // otherwise bias one of these two toward a Sat/Sun pick) so the
+    // adjacency tiebreak is actually what's being exercised here.
+    win.schedToggleWeekendPref('Elena');
+    win.schedToggleWeekendPref('Fara');
+
+    const confirmed23c = win.confirm; win.confirm = () => true;
+    win.schedAutoFill();
+    win.confirm = confirmed23c;
+    const afterAuto23c = win.dlLoadSchedule();
+    const offDaysOf23c = (name) => thisDates20
+      .map((ds, i) => ({ i, v: afterAuto23c.days[ds].sup.filter((p) => p[0] === name)[0][1] }))
+      .filter((x) => x.v === 'OFF' || x.v === 'R-OFF')
+      .map((x) => x.i);
+    const elenaOff = offDaysOf23c('Elena');
+    const faraOff = offDaysOf23c('Fara');
+    t.eq(elenaOff.length, 2, 'Elena still gets exactly 2 days off total (her R-OFF plus one discretionary)');
+    t.eq(faraOff.length, 2, 'so does Fara, for the same reason — this preference never changes HOW MANY days off, only which ones');
+    t.assert(Math.abs(elenaOff[0] - elenaOff[1]) !== 1,
+      "Elena (split preference) gets her discretionary day away from her R-OFF (Tuesday, index 3), not next to it");
+    t.assert(Math.abs(faraOff[0] - faraOff[1]) === 1,
+      "Fara (no preference) keeps today's default: the discretionary day lands right next to her R-OFF");
+
+    // Toggling off restores the default lean toward consecutive days off.
+    win.schedToggleSplitDaysPref('Elena');
+    t.eq(win.schedSplitDaysPrefFor(win.dlLoadSchedule(), 'Elena'), false, 'toggling again clears it — a switch, not a one-way mark');
+
+    // Survives a re-upload, same as the other person-level marks.
+    win.schedToggleSplitDaysPref('Elena');
+    const before23c = win.dlLoadSchedule();
+    const reparsed23c = { days: { [thisDates20[0]]: { sheet: 'reuploaded', occ: '', dep: '', tdOcc: '', sup: [['Elena', '1']] } }, count: 1 };
+    const carried23c = win.schedCarrySplitDaysPref(before23c, reparsed23c);
+    t.eq(carried23c.splitDaysPref[win.dlNorm('Elena')], true, 'schedCarrySplitDaysPref keeps the mark across a fresh workbook parse');
+
+    // The cloud sync merge must not silently drop it either — same bug
+    // class as the retired/hiddenPeople fix (Karla Varela, 2026-09-10):
+    // a field left out of _schedMergeRecord's merged-field list gets
+    // wiped on the very next sync.
+    const mergedSplit = win._schedMergeRecord(
+      { days: { [thisDates20[0]]: { sheet: 't' } }, splitDaysPref: { [win.dlNorm('Elena')]: true } },
+      { days: { [thisDates20[0]]: { sheet: 't', _at: 1 } } }
+    );
+    t.eq((mergedSplit.rec.splitDaysPref || {})[win.dlNorm('Elena')], true,
+      '_schedMergeRecord carries splitDaysPref through a sync merge instead of dropping it');
 
     // ── FLEX and VAC (Request Off write-through) are fixed for Auto-fill,
     // exactly like R-OFF — Carlos's ask: those three all represent a
