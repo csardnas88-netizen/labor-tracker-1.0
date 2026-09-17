@@ -88,6 +88,7 @@ const cases = [
   require('./cases/schedule-remove-person-mirror-revival'),
   require('./cases/schedule-merge-preserves-retired'),
   require('./cases/schedule-last-weekend-indicator'),
+  require('./cases/schedule-undo'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

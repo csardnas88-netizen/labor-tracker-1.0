@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.91"/>
+<meta name="app-version" content="7.40.92"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.92', date:'2026-09-17',
+    features:['Added "Undo" to the Schedule Draft — Carlos\'s ask: a number typed into the wrong day or the wrong week needs a way back without hand-retyping every box. Reverts the specific day(s) your last action touched (a single OCC/Departures box, a single cell, or a whole Auto-fill/Refresh OCC run) back to how they were right before it — nothing else on the schedule is touched, even if another device saved something unrelated in the meantime. One level, so a second Undo with nothing pending says so plainly rather than reaching further back.'],
+    improvements:['The week\'s date range (e.g. "Sep 12 – Sep 18, 2026") is noticeably bigger at the top of the Schedule Draft — Carlos\'s ask, so which week he\'s on is obvious at a glance.']
+  },
   {
     v:'7.40.91', date:'2026-09-14',
     features:['Request Off\'s Trends tab is now grouped by position (Laundry, Supervisors, Lobby, PM Turndown, AM Room Attendant, etc.) instead of one long mixed list — Carlos\'s ask, so he can see who in a given department is asking for the most specific days without everyone else in between. Ranked the same way within each section as before. Someone who genuinely works two crews (e.g. Andrea: Lobby and PM Turndown) shows up under both — that\'s her real assignment, not a duplicate.']
@@ -20568,10 +20573,68 @@ function _schedRow(SCH,ds,bk,idx,name){
   for(var i=0;i<arr.length;i++) if(dlNormAlias(arr[i][0])===dlNormAlias(name))return arr[i];
   return null;
 }
+/* ── Undo, single level ── Carlos's ask, 2026-09-17: a fat-finger — a
+   number typed into the wrong day or the wrong week — needs a way back
+   without hand-retyping every box. Deliberately scoped to the SPECIFIC
+   day(s) an action actually touches, not a snapshot of the whole
+   schedule: dlSaveSchedule merges with whatever's on the server at
+   push time (see its own comment), so restoring a whole-blob snapshot
+   would also silently roll back any OTHER day another device legitimately
+   edited in between — the exact cross-device clobber this app has already
+   been bitten by more than once. Restoring just the touched day(s)
+   sidesteps that: dlSaveSchedule's own per-day _at stamping treats it as
+   a fresh, ordinary edit to those days only, same as retyping them by
+   hand, and every other day is never touched. One level only, matching
+   what he actually asked for ("el contenido anterior") — a second undo
+   with nothing pending says so rather than reaching further back. */
+var _schedUndoStash=null; // {label, days:{ds: dayRecordSnapshot}}
+/* Pure snapshot, no side effect — lets a caller check whether its own
+   action actually changed anything before deciding to commit it as the
+   undo target (see schedRefreshOccFromR106Click: clicking it when there's
+   nothing new to pull must not eat the undo slot for whatever real edit
+   came before it). */
+function _schedSnapshotDays(dates){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days)return null;
+  var days={};
+  (dates||[]).forEach(function(ds){
+    if(SCH.days[ds])days[ds]=JSON.parse(JSON.stringify(SCH.days[ds]));
+  });
+  return Object.keys(days).length?days:null;
+}
+function _schedCommitUndoStash(label,days){
+  if(!days)return;
+  _schedUndoStash={label:label||'the last change',days:days};
+  _schedSyncUndoBtn();
+}
+function _schedStashForUndo(label,dates){
+  _schedCommitUndoStash(label,_schedSnapshotDays(dates));
+}
+function _schedSyncUndoBtn(){
+  var btn=document.getElementById('schedUndoBtn');
+  if(!btn)return;
+  btn.disabled=!_schedUndoStash;
+  btn.title=_schedUndoStash?('Undo: '+_schedUndoStash.label):'Nothing to undo yet';
+}
+function schedUndo(){
+  if(!_schedUndoStash){ showToast('Nothing to undo'); return; }
+  var stash=_schedUndoStash;
+  var n=Object.keys(stash.days).length;
+  if(!confirm('Undo '+stash.label+'?\n\nThis restores '+n+' day'+(n===1?'':'s')+' to exactly how '+(n===1?'it was':'they were')+' right before that change. Nothing else on the schedule is touched.'))return;
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days){ showToast('Nothing to restore into'); return; }
+  Object.keys(stash.days).forEach(function(ds){ SCH.days[ds]=stash.days[ds]; });
+  _schedUndoStash=null;
+  SCH.savedAt=new Date().toISOString();
+  dlSaveSchedule(SCH);
+  showToast('&#10003; Undone');
+  renderSchedule();
+}
 function schedSetCell(bk,idx,name,ds,val,el){
   var SCH=dlLoadSchedule();
   var row=_schedRow(SCH,ds,bk,idx,name);
   if(!row)return;
+  _schedStashForUndo('the cell edit for '+name+' on '+ds,[ds]);
   row[1]=String(val==null?'':val).trim();
   /* Editing someone's cell on a crew is Carlos saying she works there —
      so any retirement still on file for that person+crew is stale by
@@ -20827,13 +20890,20 @@ function schedRefreshOccFromR106(dates){
   return refreshed;
 }
 function schedRefreshOccFromR106Click(){
+  /* Snapshot first, but only claim the undo slot if this actually
+     changes something — clicking it out of habit when there's nothing
+     new in R106 must not silently eat the undo for whatever real edit
+     came before it. */
+  var pre=_schedSnapshotDays(schedWeekDates());
   var n=schedRefreshOccFromR106(schedWeekDates());
+  if(n>0)_schedCommitUndoStash('the Refresh OCC from R106 you just ran',pre);
   showToast(n>0?('✓ Refreshed '+n+' day'+(n===1?'':'s')+' from R106'):'No changes — nothing new in R106 for this week');
   if(n>0)renderSchedule();
 }
 function schedSetNum(ds,field,val){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days||!SCH.days[ds])return;
+  _schedStashForUndo('the '+field+' edit on '+ds,field==='occ'?[ds,prevDateStr(ds)]:[ds]);
   SCH.days[ds][field]=String(val==null?'':val).trim();
   /* A hand-typed OCC/Departures figure is protected from
      schedRefreshOccFromR106 forever after this, same as the permanent
@@ -22637,6 +22707,7 @@ function schedAutoFill(){
   if(!hasOcc){ showToast('&#9888; Enter OCC for at least one day first.'); return; }
   if(!confirm('Auto-fill this week?\n\nAny R-OFF already on the grid is kept. Laundry, Supervisors, Lobby, PM Turndown/GRA, AM Room Attendant, Houseman and PM Houseman are filled or replaced, plus Overnight\'s fixed pattern, Yanira\'s PM shift, the Lobby/Laundry cover chains, Jorge mirroring Victoriano and Andrea mirroring Sarahi when they\'re a direct Laundry/Lobby row, and the Houseman overflow backups. Managers is left untouched.'))return;
 
+  _schedStashForUndo('the Auto-fill you just ran',loaded);
   var wk=schedWeekIndexOf(dates[0]);
   Object.keys(SCHED_AUTO_OFFCOUNT).forEach(function(bk){
     var names=[],seen={};
@@ -23363,7 +23434,7 @@ function renderSchedule(){
   html+='<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">';
   html+='<button onclick="changeSchedWeek(-1)" title="Previous week" style="padding:6px 13px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:14px;cursor:pointer;color:var(--text1);">&larr;</button>';
   html+='<div style="text-align:center;min-width:0;">';
-  html+='<div style="font-size:14px;font-weight:800;color:var(--text1);">'
+  html+='<div style="font-size:22px;font-weight:800;color:var(--text1);">'
     +start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' &ndash; '
     +end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'</div>';
   html+='<div style="font-size:10px;color:var(--text3);margin-top:2px;">'
@@ -23470,7 +23541,8 @@ function renderSchedule(){
   html+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;">'
     +'<button class="btn btn-navy btn-sm" onclick="schedAutoFill()">Auto-fill this week</button> '
     +'<button class="btn btn-ghost btn-sm" onclick="schedRefreshOccFromR106Click()" title="Pulls the latest R106 numbers into this week\'s OCC/Departures boxes above &mdash; skips any box you\'ve typed into by hand">Refresh OCC from R106</button> '
-    +'<button class="btn btn-ghost btn-sm" onclick="schedExportExcel()">Export Excel</button>'
+    +'<button class="btn btn-ghost btn-sm" onclick="schedExportExcel()">Export Excel</button> '
+    +'<button id="schedUndoBtn" class="btn btn-ghost btn-sm" onclick="schedUndo()"'+(_schedUndoStash?'':' disabled')+' title="'+(_schedUndoStash?('Undo: '+escHtml(_schedUndoStash.label)):'Nothing to undo yet')+'" style="'+(_schedUndoStash?'':'opacity:.45;cursor:default;')+'">&#8630; Undo</button>'
     +'<div style="font-size:9.5px;color:var(--text3);margin-top:5px;">Fills every crew except Managers from OCC/Departures, including Overnight, Yanira\'s PM shift and the cover chains &mdash; R-OFF is always kept</div>'
     +'</div>';
   html+='</div></div>';
