@@ -93,6 +93,30 @@ module.exports = {
     const andreaData = win.rnTrendsData();
     t.eq(andreaData.Andrea.total, 1, 'three notebook entries for the SAME date count as one day, not three');
     t.eq(andreaData.Andrea.dow[0], 1, 'her one Saturday (Sep 19) is counted once, even though it came from two crews plus a duplicate');
+
+    // ── Carlos's ask, same day: group the table by position/crew so he
+    // can compare people within the same department, not everyone mixed
+    // together ("así puedo saber quién en cada sección pide más días en
+    // específico"). Andrea (genuinely on two crews) should appear under
+    // BOTH of her real sections, not just one. ──
+    win.renderReqNotebook();
+    const groupedHtml = win.document.getElementById('reqNotebookContent').innerHTML;
+    const lobbyHdrIdx = groupedHtml.indexOf('>Lobby<');
+    const tdHdrIdx = groupedHtml.indexOf('>PM Turndown<');
+    const graHdrIdx = groupedHtml.indexOf('>AM Room Attendant<');
+    t.assert(lobbyHdrIdx !== -1 && tdHdrIdx !== -1 && graHdrIdx !== -1,
+      'each crew Andrea/Susan/Maria actually touch gets its own section header');
+    t.assert(lobbyHdrIdx < tdHdrIdx && tdHdrIdx < graHdrIdx,
+      "sections follow the app's own crew order (Lobby, then PM Turndown, then AM Room Attendant), not alphabetical or insertion order");
+    const lobbySection = groupedHtml.slice(lobbyHdrIdx, tdHdrIdx);
+    const tdSection = groupedHtml.slice(tdHdrIdx, graHdrIdx);
+    const graSection = groupedHtml.slice(graHdrIdx);
+    t.assert(/>Andrea</.test(lobbySection), 'Andrea appears in the Lobby section, one of her two real crews');
+    t.assert(/>Andrea</.test(tdSection), 'and in the PM Turndown section too — she genuinely works both, this is not a duplicate row');
+    t.assert(/>Susan</.test(graSection) && />Maria</.test(graSection),
+      "Susan and Maria, who only ever appear on 'gra', are grouped under AM Room Attendant");
+    t.assert(!/>Andrea</.test(graSection), "Andrea, who has no 'gra' entries, does not show up in a section she isn't part of");
+
     win.rnToggleTrendsName('Andrea');
     const andreaOpenHtml = win.document.getElementById('reqNotebookContent').innerHTML;
     t.assert(/1 weekend/.test(andreaOpenHtml), "Andrea's month tally reads 1 weekend, matching the single distinct Saturday, not 3");

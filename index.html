@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.90"/>
+<meta name="app-version" content="7.40.91"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.91', date:'2026-09-14',
+    features:['Request Off\'s Trends tab is now grouped by position (Laundry, Supervisors, Lobby, PM Turndown, AM Room Attendant, etc.) instead of one long mixed list — Carlos\'s ask, so he can see who in a given department is asking for the most specific days without everyone else in between. Ranked the same way within each section as before. Someone who genuinely works two crews (e.g. Andrea: Lobby and PM Turndown) shows up under both — that\'s her real assignment, not a duplicate.']
+  },
   {
     v:'7.40.90', date:'2026-09-14',
     fixes:['Fixed Request Off\'s Trends tab counting the same day twice for anyone who sits on two crews — Carlos\'s real report: Andrea\'s Saturday count read 5 but the calendar underneath only showed 3 distinct dates. She\'s on both Lobby and PM Turndown, so a day off gets its own notebook entry per crew (needed, so both cells actually get R-OFF written) — Trends was counting each entry, the calendar was counting each date, and the two disagreed. Also found and removed one genuine accidental duplicate entry in the live data while tracking this down (two identical PM Turndown Sep 19 entries for Andrea). The same calendar date now counts once per person no matter how many entries produced it, so the number always matches what\'s highlighted below.']
@@ -23996,33 +24000,33 @@ function rnTrendsMonthCalendarHtml(mk,entries){
   html+='</div></div>';
   return html;
 }
-function rnTrendsHtml(){
+/* Which crew(s) each name has an entry under, for the active type filter
+   — used to section the table below by position (Carlos's ask, 2026-09-14:
+   "así puedo saber quién en cada sección pide más días en específico").
+   Keyed by crewKey, not crewLabel: old entries carry whatever label was
+   current when captured ("AM Lobby" before 2026-09-02, "Lobby" since),
+   and grouping by the stored label would silently split one crew into
+   two sections. Someone on two crews (Andrea: Lobby + PM Turndown) lists
+   under both — each is a real section she's part of, not a duplicate. */
+function rnTrendsCrewsForNames(){
   var type=rnTrendsType();
-  var data=rnTrendsData();
-  var names=Object.keys(data);
-  names.sort(function(a,b){
-    var wa=data[a].dow[0]+data[a].dow[1], wb=data[b].dow[0]+data[b].dow[1];
-    if(wb!==wa)return wb-wa;
-    return data[b].total-data[a].total;
+  var out={};
+  loadReqNotebook().forEach(function(r){
+    if(type!=='all'&&r.type!==type)return;
+    var nm=String(r.name||'').trim(); if(!nm)return;
+    if(!out[nm])out[nm]={};
+    out[nm][r.crewKey||'']=1;
   });
-  var html='<div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5;">See which day of the week each person actually gets logged for, so a claim like &quot;she always gets the weekend and I never do&quot; can be checked against the real record — including whether the person raising it has had just as many herself.</div>';
-  html+='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">';
-  [['roff','R-OFF'],['flex','Flex'],['vac','Vacation'],['all','All types']].forEach(function(t){
-    var active=(type===t[0]);
-    html+='<button onclick="rnSetTrendsType(\''+t[0]+'\')" style="border:1px solid '+(active?'var(--navy)':'var(--border)')+';background:'+(active?'var(--navy)':'transparent')+';color:'+(active?'#fff':'var(--text1)')+';font-weight:700;font-size:11px;padding:5px 11px;border-radius:99px;cursor:pointer;">'+t[1]+'</button>';
-  });
-  html+='</div>';
-  if(!names.length){
-    html+='<div style="font-size:12px;color:var(--text3);padding:24px 0;text-align:center;">No '+(type==='all'?'requests':rnTypeLabel(type)+' requests')+' logged yet — nothing to compare.</div>';
-    return html;
-  }
+  return out;
+}
+function rnTrendsTableHtml(names,data){
   /* Header cells sit on the app's global navy thead background (see
      "thead tr{background:var(--navy)}"), which swallowed var(--navy)
      text entirely on the Sat/Sun/Weekend headers — Carlos's report:
      they simply weren't visible. Light-on-navy throughout instead,
      gold for the weekend emphasis, matching the rest of the app's
      navy-header tables. */
-  html+='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:560px;">';
+  var html='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:560px;">';
   html+='<thead><tr>'
     +'<th style="text-align:left;padding:6px 8px;color:rgba(255,255,255,.85);font-size:9px;text-transform:uppercase;letter-spacing:.3px;">Employee</th>';
   SCHED_DOW_ABBR.forEach(function(ab,i){
@@ -24055,6 +24059,46 @@ function rnTrendsHtml(){
     }
   });
   html+='</tbody></table></div>';
+  return html;
+}
+function rnTrendsHtml(){
+  var type=rnTrendsType();
+  var data=rnTrendsData();
+  var names=Object.keys(data);
+  var html='<div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5;">See which day of the week each person actually gets logged for, so a claim like &quot;she always gets the weekend and I never do&quot; can be checked against the real record — including whether the person raising it has had just as many herself.</div>';
+  html+='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">';
+  [['roff','R-OFF'],['flex','Flex'],['vac','Vacation'],['all','All types']].forEach(function(t){
+    var active=(type===t[0]);
+    html+='<button onclick="rnSetTrendsType(\''+t[0]+'\')" style="border:1px solid '+(active?'var(--navy)':'var(--border)')+';background:'+(active?'var(--navy)':'transparent')+';color:'+(active?'#fff':'var(--text1)')+';font-weight:700;font-size:11px;padding:5px 11px;border-radius:99px;cursor:pointer;">'+t[1]+'</button>';
+  });
+  html+='</div>';
+  if(!names.length){
+    html+='<div style="font-size:12px;color:var(--text3);padding:24px 0;text-align:center;">No '+(type==='all'?'requests':rnTypeLabel(type)+' requests')+' logged yet — nothing to compare.</div>';
+    return html;
+  }
+  var crewsForNames=rnTrendsCrewsForNames();
+  var groups={}; // crewKey -> [names]
+  names.forEach(function(nm){
+    var keys=Object.keys(crewsForNames[nm]||{});
+    if(!keys.length)keys=[''];
+    keys.forEach(function(k){ (groups[k]=groups[k]||[]).push(nm); });
+  });
+  var order=SCHED_BLOCKS.map(function(b){return b.key;});
+  Object.keys(groups).forEach(function(k){ if(order.indexOf(k)===-1)order.push(k); });
+  var first=true;
+  order.forEach(function(key){
+    var list=groups[key]; if(!list||!list.length)return;
+    list.sort(function(a,b){
+      var wa=data[a].dow[0]+data[a].dow[1], wb=data[b].dow[0]+data[b].dow[1];
+      if(wb!==wa)return wb-wa;
+      return data[b].total-data[a].total;
+    });
+    var blk=SCHED_BLOCKS.filter(function(b){return b.key===key;})[0];
+    var label=blk?blk.label:(key||'Other');
+    html+='<div style="font-size:11px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin:'+(first?'0':'20px')+' 0 8px;">'+escHtml(label)+'</div>';
+    html+=rnTrendsTableHtml(list,data);
+    first=false;
+  });
   return html;
 }
 /* ── HK Week board — one column per day of the operational week (Sat
