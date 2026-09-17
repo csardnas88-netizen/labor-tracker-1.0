@@ -536,63 +536,14 @@ module.exports = {
         'and his Days cell repaints green at 5, replacing the red');
     }
 
-    // ── 14) "Fill week" — Carlos's own workflow from Unifocus ──
-    // Type one day, then replicate it across the rest of that person's
-    // week in one click instead of opening seven dropdowns for the same
-    // value. Copies the first day that already has something in it.
+    // ── 14) Rolando, borrowed onto Room Attendant — kept as a fixture
+    // steps 16 (new week clones the crew list) and 17 (last-week
+    // work-day count) below both depend on him already being on this
+    // crew. ("Fill rest of week with…" and its own tests that used to
+    // live here were removed along with the feature, 2026-09-14 —
+    // Carlos wasn't using it.) ──
     win.confirm = () => true;
-    const mayraBefore = win.dlLoadSchedule().days[sat].gra.filter((p) => p[0] === 'Mayra')[0];
-    t.eq(mayraBefore[1], '1', "Mayra's Saturday is the fixture's own value — the thing to copy");
-    t.eq(win.dlLoadSchedule().days['2026-08-17'].gra.filter((p) => p[0] === 'Mayra')[0][1], '',
-      "Monday starts blank — nothing typed for her yet that day");
-
-    win.schedFillWeek('gra', 'Mayra');
-    const afterFill = win.dlLoadSchedule();
-    win.schedWeekDates().forEach((ds) => {
-      const row = afterFill.days[ds] && afterFill.days[ds].gra.filter((p) => p[0] === 'Mayra')[0];
-      if (row) t.eq(row[1], '1', ds + " is filled with Saturday's value, the whole week in one click");
-    });
-
-    // It is a real copy-paste, not a "fill blanks only" — a day already
-    // set to something ELSE gets overwritten too, same as Excel/Unifocus.
-    win.schedSetCell('gra', kIdx2, 'Karla Varela', '2026-08-18', 'OFF', null);
-    win.schedFillWeek('gra', 'Karla Varela');
-    t.eq(win.dlLoadSchedule().days['2026-08-18'].gra.filter((p) => p[0] === 'Karla Varela')[0][1], '1',
-      "a day deliberately set to OFF is overwritten by the fill too — real copy-paste, not a smart merge");
-
-    // Carlos's real report: a granted Request Off day (R-OFF/FLEX/VAC)
-    // got wiped out by this exact button on a week where several
-    // requests had already written through. A GRANTED absence someone
-    // is already counting on is different from a plain schedule value —
-    // same protection Auto-fill already gives R-OFF — so it survives
-    // the fill even though a plain OFF (tested above) still doesn't.
-    win.schedSetCell('gra', kIdx2, 'Karla Varela', '2026-08-19', 'R-OFF', null);
-    win.schedFillWeek('gra', 'Karla Varela');
-    t.eq(win.dlLoadSchedule().days['2026-08-19'].gra.filter((p) => p[0] === 'Karla Varela')[0][1], 'R-OFF',
-      "a granted R-OFF day survives Fill Week even though a plain OFF does not");
-
-    // Someone with nothing typed anywhere has nothing to copy, and the
-    // week must not be silently touched.
     win.schedAddPerson('gra', 'Rolando');
-    const beforeEmpty = JSON.stringify(win.dlLoadSchedule().days[sat].gra);
-    win.schedFillWeek('gra', 'Rolando');
-    t.eq(JSON.stringify(win.dlLoadSchedule().days[sat].gra), beforeEmpty,
-      'a blank row is left alone — there is nothing to copy from');
-    t.assert(/Nothing to copy/.test(win.document.getElementById('toastMsg').textContent),
-      'and he is told why, rather than the button silently doing nothing');
-
-    // Rendered: the fill action lives in the "⋮" menu now, and only
-    // shows up once that person's menu is opened, and only for a row
-    // that actually has something to copy.
-    win.renderSchedule();
-    win.schedTogglePersonMenu('gra', 'Mayra');
-    win.schedTogglePersonMenu('gra', 'Rolando');
-    const fillHtml = html();
-    t.assert(/schedFillWeek\('gra','Mayra'\)/.test(fillHtml), "Mayra's open menu offers the fill action");
-    t.assert(!/schedFillWeek\('gra','Rolando'\)/.test(fillHtml),
-      "Rolando's open menu does not — an all-blank row has nothing worth offering to copy");
-    win.schedTogglePersonMenu('gra', 'Mayra');
-    win.schedTogglePersonMenu('gra', 'Rolando');
 
     // ── 15) A row that came from the workbook is removable too ──
     // Carlos's stated goal: the app should REPLACE Excel, not defer to
@@ -664,10 +615,13 @@ module.exports = {
     t.assert(/already has data/.test(win.document.getElementById('toastMsg').textContent),
       'and he is told why, rather than nothing visibly happening');
 
-    // ── 17) "Copy last week" — day-for-day, not one value repeated ──
-    // Carlos's own words: not just multiplying the first Saturday or
-    // Friday shift. A real week alternates; last week's actual pattern
-    // for this person is the best guess for this week's.
+    // ── 17) Last-week work-day count — its own "Last week" column ──
+    // A real week alternates; fabricate a distinct, alternating pattern
+    // for Rolando so the column reflects actual worked days, not a
+    // uniform value. ("Copy last week" and its own tests that used to
+    // live here were removed along with the feature, 2026-09-14 —
+    // Carlos wasn't using it; this fixture setup still feeds the
+    // unrelated Last-week column tested right below.)
     const thisWeekDates = win.schedWeekDates(); // Sep 5-11, built blank in step 16
     const lwStart = new Date(2026, 7, 29); // the week immediately before it, Aug 29-Sep 4
     const lwDatesForTest = [];
@@ -712,36 +666,6 @@ module.exports = {
       const debRowSegment = html().substring(debMenuIdx, debNextRowIdx === -1 ? html().length : debNextRowIdx);
       t.assert(!/title="Worked \d/.test(debRowSegment), 'Debora, with no last week on file at all, gets a blank Last-week cell, never a false zero');
     }
-
-    win.schedTogglePersonMenu('gra', 'Rolando');
-    const copyHtml = html();
-    t.assert(/schedCopyLastWeek\('gra','Rolando'\)/.test(copyHtml),
-      "the copy-last-week action appears in Rolando's open menu now that last week has something to copy");
-    win.schedTogglePersonMenu('gra', 'Rolando');
-
-    win.schedCopyLastWeek('gra', 'Rolando');
-    const afterCopy = win.dlLoadSchedule();
-    thisWeekDates.forEach((ds, i) => {
-      const row = afterCopy.days[ds].gra.filter((p) => p[0] === 'Rolando')[0];
-      t.eq(row[1], lwPattern[i], ds + " gets last week's SAME day of week (" + lwDatesForTest[i] + "'s value), not a single value repeated");
-    });
-
-    // A day last week has NOTHING for is left untouched, not blanked —
-    // there's nothing to copy FROM. Pin this with an eighth day: clear
-    // last week's Wednesday and confirm this week's Wednesday survives
-    // whatever it already had rather than being wiped to blank.
-    win.schedSetCell('gra', 0, 'Rolando', thisWeekDates[3], 'PM', null);
-    const clearedLw = win.dlLoadSchedule();
-    clearedLw.days[lwDatesForTest[3]].gra[0][1] = '';
-    win.dlSaveSchedule(clearedLw);
-    win.schedCopyLastWeek('gra', 'Rolando');
-    t.eq(win.dlLoadSchedule().days[thisWeekDates[3]].gra.filter((p) => p[0] === 'Rolando')[0][1], 'PM',
-      "a day with nothing to copy from last week is left as-is this week, not overwritten to blank");
-
-    // Nobody with a fully blank last week gets the button at all.
-    t.assert(!win.dlLoadSchedule().days[thisWeekDates[0]].gra.some((p) => p[0] === 'Debora')
-      || !/schedCopyLastWeek\('gra','Debora'\)/.test(html()),
-      'someone with nothing in last week (never loaded for these dates) offers no copy-last-week button');
 
     // With no reference week at all, there is nothing to copy the crew
     // list from, and that has to be said plainly rather than building

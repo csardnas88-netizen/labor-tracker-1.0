@@ -75,6 +75,29 @@ module.exports = {
     t.assert(/1 weekend/.test(mariaOpenHtml), "Maria's month tally reads 1 weekend, matching her single Sunday");
     win.rnToggleTrendsName('Maria'); // close before leaving the test
 
+    // ── Carlos's real report, 2026-09-14: Andrea sits on two crews
+    // (Lobby, PM Turndown), so a day she's off gets its own notebook
+    // entry per crew — real and needed, so each crew's cell actually
+    // gets R-OFF written. Trends used to count every entry, so her
+    // Saturday tally read higher than the number of distinct Saturdays
+    // the calendar below actually showed (plus, in her real case, an
+    // outright accidental duplicate on top of that). The same calendar
+    // date must count once per person no matter how many entries (crew
+    // or duplicate) produced it. ──
+    win.saveReqNotebook(entries.concat([
+      { id: 5, name: 'Andrea', crewKey: 'lobby', crewLabel: 'Lobby', type: 'roff', dates: ['2026-09-19'], capturedBy: '', capturedAt: '2026-09-14T00:00:00.000Z' },
+      { id: 6, name: 'Andrea', crewKey: 'td', crewLabel: 'PM Turndown', type: 'roff', dates: ['2026-09-19'], capturedBy: '', capturedAt: '2026-09-14T00:01:00.000Z' },
+      // An outright duplicate on top — same crew, same date, logged twice.
+      { id: 7, name: 'Andrea', crewKey: 'td', crewLabel: 'PM Turndown', type: 'roff', dates: ['2026-09-19'], capturedBy: '', capturedAt: '2026-09-08T00:00:00.000Z' },
+    ]));
+    const andreaData = win.rnTrendsData();
+    t.eq(andreaData.Andrea.total, 1, 'three notebook entries for the SAME date count as one day, not three');
+    t.eq(andreaData.Andrea.dow[0], 1, 'her one Saturday (Sep 19) is counted once, even though it came from two crews plus a duplicate');
+    win.rnToggleTrendsName('Andrea');
+    const andreaOpenHtml = win.document.getElementById('reqNotebookContent').innerHTML;
+    t.assert(/1 weekend/.test(andreaOpenHtml), "Andrea's month tally reads 1 weekend, matching the single distinct Saturday, not 3");
+    win.rnToggleTrendsName('Andrea'); // close before leaving the test
+
     // ── Type filter: switching to Vacation only counts Susan's one vac day, not either R-OFF entry ──
     win.rnSetTrendsType('vac');
     const vacData = win.rnTrendsData();
