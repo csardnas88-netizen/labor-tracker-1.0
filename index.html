@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.94"/>
+<meta name="app-version" content="7.40.96"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.96', date:'2026-09-19',
+    improvements:['Second round of print-compacting on the Schedule\'s "Export Excel" — Carlos noticed the position bands (MANAGERS, SUPERVISORS, etc.) were still taller than they needed to be. Their row height is down from 40 to 26 (matching the already-compact height the repeated Room Attendant sub-header uses), the top date header is down from 40/32 to 30/24, and the Employee Name column is down from 22 to 18. Row height is what actually stacks up into extra printed pages — column width alone doesn\'t, since the sheet is already locked to print 1 page wide regardless.']
+  },
+  {
+    v:'7.40.95', date:'2026-09-19',
+    improvements:['Schedule Draft\'s "Export Excel" prints tighter now — Carlos\'s ask, marked up a printout showing exactly where: the blank row between the date header and the first position band, and the blank row after every position\'s last person before the next band, are both gone now, so a printed page holds more without those gaps. Also narrowed each day column from 19 to 16 so more fits per page. If a shift-time string like "8:15 AM - 4:45 PM" ever looks clipped on his work computer again (the exact reason those columns were widened to 19 in the first place), that\'s the first thing to widen back — for now the text still wraps to two lines cleanly inside the same tall row.']
+  },
   {
     v:'7.40.94', date:'2026-09-19',
     fixes:['Fixed Jorge González not mirroring correctly between Laundry and Houseman — Carlos\'s real report: moving him to work Houseman never showed on his Laundry row, only editing Victoriano Ch\'s cell did. Jorge now behaves like any other associate who works two positions (his own Julia/laundry-and-rooms example): whichever of his two cells you edit, the other updates on its own, both directions. Trade-off Carlos confirmed after seeing it explained: the old automatic rule ("Victoriano OFF/Taylor → Jorge covers Laundry, no typing needed") is gone — both of them are now set by hand each week, same as any other two-position associate.']
@@ -22856,13 +22864,17 @@ async function schedExportExcel(){
     margins:{left:0.25,right:0.25,top:0.4,bottom:0.4,header:0.2,footer:0.2},
     horizontalCentered:true
   };
-  /* Day columns widened from 13 to 19 — a shift-time string like
-     "8:15 AM - 4:45 PM" (18 chars) was wrapping onto two lines at the
-     old width, which on some Excel builds (Carlos's work computer,
-     confirmed a different result than his laptop) rendered as clipped
-     or "incomplete" instead of wrapping cleanly. Wide enough now to
-     sit on one line at size 12. */
-  ws.columns=[{width:3},{width:22},{width:19},{width:19},{width:19},{width:19},{width:19},{width:19},{width:19}];
+  /* Day columns were widened from 13 to 19 at one point — a shift-time
+     string like "8:15 AM - 4:45 PM" (18 chars) wrapped to two lines at
+     13, which on some Excel builds (Carlos's work computer, confirmed a
+     different result than his laptop) rendered as clipped or
+     "incomplete" instead of wrapping cleanly. Pulled back to 16 now,
+     Carlos's own ask to fit more on fewer printed pages — wrapText
+     (below) plus the still-generous 54pt row height means two-line text
+     still displays in full, just not on one line; if the old clipping
+     bug resurfaces on that same work computer specifically, that's the
+     first thing to widen back. */
+  ws.columns=[{width:3},{width:18},{width:16},{width:16},{width:16},{width:16},{width:16},{width:16},{width:16}];
 
   /* Carlos's ask: black borders on every cell of the actual schedule
      grid, so a printed page is easy to read at a glance — the data
@@ -22874,7 +22886,6 @@ async function schedExportExcel(){
 
   ws.addRow(['','','','','Weekly Schedule']).getCell(5).font={bold:true,size:16};
   ws.addRow(['','','','','Housekeeping']).getCell(5).font={bold:true,size:12};
-  ws.addRow([]);
 
   var start=parseLocalDate(dates[0]),end=parseLocalDate(dates[6]);
   var fmt=function(d){return (d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();};
@@ -22882,7 +22893,7 @@ async function schedExportExcel(){
 
   var headerRow=ws.addRow(['','Employee Name'].concat(dates.map(function(ds,i){return SCHED_DAYNAMES[i].slice(0,3);})));
   var dateRow=ws.addRow(['',''].concat(dates.map(function(ds){var d=parseLocalDate(ds);return (d.getMonth()+1)+'/'+d.getDate();})));
-  headerRow.height=40; dateRow.height=32;
+  headerRow.height=30; dateRow.height=24; /* trimmed alongside deptRow, same print-compacting round */
   [headerRow,dateRow].forEach(function(row){
     for(var c=2;c<=9;c++){
       var cell=row.getCell(c);
@@ -22892,7 +22903,6 @@ async function schedExportExcel(){
       cell.border=cellBorder;
     }
   });
-  ws.addRow([]);
 
   /* Carlos's ask: match the order his old (pre-app) printed schedule
      used, not whatever order the crew cards happen to sit in on the
@@ -22926,7 +22936,14 @@ async function schedExportExcel(){
     }
 
     var deptRow=ws.addRow(['',b.label.toUpperCase()]);
-    deptRow.height=40;
+    /* Carlos's follow-up ask, same print-compacting round: the position
+       band itself ("SUPERVISORS", etc.) was taller than it needed to be
+       — every band on the sheet stacks up vertically and each one adds
+       to the printed page count, unlike column width (already capped to
+       1 page wide by pageSetup's fitToWidth, so narrowing columns further
+       wouldn't actually save a page). Matches the already-compact 26 the
+       repeated Room Attendant sub-header below already uses. */
+    deptRow.height=26;
     for(var c=2;c<=9;c++){
       var cell=deptRow.getCell(c);
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2C4270'}};
@@ -22998,7 +23015,6 @@ async function schedExportExcel(){
         }
       });
     });
-    ws.addRow([]);
   });
 
   var buffer=await wb.xlsx.writeBuffer();
