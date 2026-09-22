@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.92"/>
+<meta name="app-version" content="7.40.93"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.93', date:'2026-09-19',
+    fixes:['Fixed Request Off entries silently failing to write onto the Schedule Draft when the name didn\'t match letter-for-letter — Carlos\'s real report: Elmer\'s Saturday+Sunday request never showed on the crew card, because his Request Off entry was under "Elmer Galindo" while the Schedule cell only ever had "Elmer" (his original Excel wasn\'t built with the roster\'s exact names). Now uses the same loose name-matching Call-Offs already relies on — every word of the shorter name has to match the start of a word in the fuller one — so "Elmer Galindo" finds "Elmer"\'s row correctly. Still refuses to guess when a name could mean two different people on the same crew; that stays reported as "not written" rather than risking the wrong person\'s cell.']
+  },
   {
     v:'7.40.92', date:'2026-09-17',
     features:['Added "Undo" to the Schedule Draft — Carlos\'s ask: a number typed into the wrong day or the wrong week needs a way back without hand-retyping every box. Reverts the specific day(s) your last action touched (a single OCC/Departures box, a single cell, or a whole Auto-fill/Refresh OCC run) back to how they were right before it — nothing else on the schedule is touched, even if another device saved something unrelated in the meantime. One level, so a second Undo with nothing pending says so plainly rather than reaching further back.'],
@@ -23874,6 +23878,27 @@ function reqEmpOptions(){
    write through (Carlos's ask — Flex/Vacation used to only log to the
    notebook, with no cell value for either). */
 var RN_TYPE_CELL={roff:'R-OFF',flex:'FLEX',vac:'VAC'};
+/* Same name-matching gap Call-Offs already hit and fixed (schedApplyCallOff,
+   schedNameLooselyMatches, below): the Request Off picker offers whatever
+   name is on THIS crew's roster (reqEmpOptions), but an entry captured
+   before the Schedule caught up to it — or typed in by hand — can carry
+   Carlos's fuller Excel/roster name (e.g. "Elmer Galindo") while the grid
+   cell only ever had the short one ("Elmer"). A strict match silently
+   treated that as "day not in a built week yet" — Carlos's real report,
+   2026-09-17: Elmer's own Saturday+Sunday request never showed on the
+   crew card he was actually building from, because the lookup below
+   never found his row at all, even though it was right there under a
+   shorter spelling. Exact match still wins when there is one (keeps the
+   Sandra S./Sandra S. alias case correct); loose match only kicks in when
+   it resolves to exactly ONE row on that crew, so it can never write to
+   the wrong person's cell. */
+function _reqScheduleRow(day,crewKey,name){
+  var arr=(day&&day[crewKey])||[];
+  var exact=arr.filter(function(p){return dlNormAlias(p[0])===dlNormAlias(name);});
+  if(exact.length)return exact[0];
+  var loose=arr.filter(function(p){return schedNameLooselyMatches(p[0],name);});
+  return loose.length===1?loose[0]:null;
+}
 /* Writes the request's cell value onto this person's cell for every
    date that's actually part of a built/loaded week. A date the
    Schedule hasn't reached yet (a future week not built, or a past one
@@ -23888,7 +23913,7 @@ function reqWriteToSchedule(name,crewKey,dates,type){
   var written=[],missing=[];
   dates.forEach(function(ds){
     var day=SCH.days[ds];
-    var row=day&&(day[crewKey]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
+    var row=_reqScheduleRow(day,crewKey,name);
     if(!row){ missing.push(ds); return; }
     row[1]=val;
     written.push(ds);
@@ -23907,7 +23932,7 @@ function reqClearFromSchedule(name,crewKey,dates,type){
   var touched=false;
   dates.forEach(function(ds){
     var day=SCH.days[ds];
-    var row=day&&(day[crewKey]||[]).filter(function(p){return dlNorm(p[0])===dlNorm(name);})[0];
+    var row=_reqScheduleRow(day,crewKey,name);
     if(row&&row[1]===val){ row[1]=''; touched=true; }
   });
   if(touched){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
