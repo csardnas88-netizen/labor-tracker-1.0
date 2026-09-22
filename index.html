@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.97"/>
+<meta name="app-version" content="7.40.98"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.98', date:'2026-09-22',
+    features:['Added a "Lavadores" group at the top of the Laundry crew card — Carlos\'s ask: Victoriano Ch, Jorge Gonzalez and David P actually run the washing machines, but sat scattered through the same flat list as everyone else doing other Laundry work, making washer coverage hard to check at a glance. They now render together first under "Lavadores", everyone else under "Regulares" below — purely how this one card displays people, nothing about headcounts, totals, or who\'s actually on the crew changes.'],
+    fixes:['Fixed the Supervisors crew card\'s own "Total" number looking inconsistent with the "departures each" row right below it — Carlos noticed Total said 3 on a day Yanira worked her PM shift, while each person\'s own departures were clearly split as if only 2 people were there (which is correct — Yanira runs her own separate PM shift, not splitting the AM crew\'s departures). The visible Total now shows that same AM-only count. Confirmed explicitly with Carlos: the real headcount (Unifocus\'s own standard comparison, Recap, Overtime, the Excel export) is untouched everywhere it actually matters — only this one on-screen number changed.']
+  },
   {
     v:'7.40.97', date:'2026-09-19',
     improvements:['Third round of print-compacting on Export Excel: each employee\'s own row is down from 54 to 40 — Carlos\'s ask, confirmed knowing it\'s close to the original 36 he once found too cramped to read. Worth checking on a real printed page: a 2-line wrapped shift-time string ("8:15 AM - 4:45 PM") could come out tight at this height on some Excel builds, the same class of thing that happened with column width once before — if so, this is the first number to raise back.']
@@ -20579,6 +20584,22 @@ function schedRatioCount(SCH,ds,bk){
   });
   return t;
 }
+/* Carlos's ask, 2026-09-22: the Supervisors crew card's own "Total" row
+   was showing schedDayTotal's full body count (Yanira's PM shift
+   included, same as everywhere else) sitting right above the
+   "departures each" ratio, which already excludes her (schedRatioCount,
+   just above) — side by side the two read as if the app disagreed with
+   itself about how many people were there. Scoped to ONLY this crew
+   card's own visible Total number, and only for Supervisors: the real
+   body count (schedDayTotal) is untouched everywhere it's actually
+   relied on — the Unifocus actual-vs-standard comparison right below
+   this same card, Recap, Overtime, the Excel export — so Yanira's PM
+   coverage still correctly counts there, exactly as v7.5.1 confirmed it
+   should. Carlos confirmed explicitly: Unifocus Std stays exactly as
+   is, only this Total display changes. */
+function schedDisplayTotal(SCH,ds,bk){
+  return bk==='sup'?schedRatioCount(SCH,ds,bk):schedDayTotal(SCH,ds,bk);
+}
 /* Embedding a name in an inline handler: escape it for JS first, then
    the whole attribute gets HTML-escaped on the way out. Names here are
    typed by hand and this app already carries an "O'Brien" class of
@@ -21747,6 +21768,32 @@ var SCHED_COVER_CHAINS=[
    Houseman is still short after its own min-days-off + repair pass —
    same last-resort role Schedule Builder's applyHpOverflow gives them. */
 var SCHED_HP_OVERFLOW_BACKUPS=['Rubia','Julia'];
+/* Carlos's ask, 2026-09-22: within the Laundry crew card, these three
+   specifically run the washing machines ("Lavadores") — everyone else on
+   the crew does other Laundry work. Scattered through the same flat list
+   as everyone else, he couldn't tell washer coverage apart at a glance.
+   Purely a display grouping (schedLaundryWasherGroups below) — doesn't
+   change who's on the crew, headcounts, or any of the cover mechanics
+   above; just reorders how this one card's rows are presented, washers
+   first. Verified against his real current Schedule Draft, not guessed:
+   Victoriano Ch and Jorge Gonzalez are the established Laundry/Houseman
+   cover pair; David P is the new hire from the 2026-09-10 report. */
+var SCHED_LAUNDRY_WASHERS=['Victoriano Ch','Jorge Gonzalez','David P'];
+/* Splits a crew's rendered row list into {washers, others} for the
+   Laundry card's "LAVADORES" grouping — washers first, in
+   SCHED_LAUNDRY_WASHERS' own order, then everyone else in whatever order
+   they already were. Matches by dlNormAlias, same bridge every other
+   name-matching mechanism in this file uses for a spelling drift. */
+function schedLaundryWasherGroups(ref){
+  var byName={}; ref.forEach(function(p){ byName[dlNormAlias(p[0])]=p; });
+  var washers=[],seen={};
+  SCHED_LAUNDRY_WASHERS.forEach(function(nm){
+    var k=dlNormAlias(nm),p=byName[k];
+    if(p&&!seen[k]){ washers.push(p); seen[k]=1; }
+  });
+  var others=ref.filter(function(p){ return !seen[dlNormAlias(p[0])]; });
+  return {washers:washers,others:others};
+}
 
 function schedApplyOvernight(SCH,dates){
   var names=[],seen={};
@@ -23256,7 +23303,7 @@ function _schedRefreshTotals(SCH,onlyBk){
     if(onlyBk&&b.key!==onlyBk&&!b.ratios)return;
     var ufPos=_schedUfForCrew(b.key);
     dates.forEach(function(ds,di){
-      var tot=schedDayTotal(SCH,ds,b.key);
+      var tot=schedDisplayTotal(SCH,ds,b.key);
       var tEl=document.getElementById('sct_'+b.key+'_'+di);
       if(tEl)tEl.textContent=tot?schedFmtTotal(tot):'';
       var ratioCount=schedRatioCount(SCH,ds,b.key);
@@ -23582,6 +23629,19 @@ function renderSchedule(){
     /* Everyone on the crew on ANY day of the week, not just the first
        day that has rows — see _schedCrewRef for the bug that fixes. */
     var ref=_schedCrewRef(SCH,b.key,dates);
+    /* Carlos's ask: Laundry's washers (Victoriano Ch/Jorge Gonzalez/
+       David P) grouped and labeled first, everyone else after — see
+       SCHED_LAUNDRY_WASHERS above. washersEnd marks where the "LAVADORES"
+       group stops and "REGULARES" begins, for the divider labels below;
+       null on every other crew (no grouping there at all). */
+    var washersEnd=null;
+    if(b.key==='laundry'){
+      var _wg=schedLaundryWasherGroups(ref);
+      if(_wg.washers.length&&_wg.others.length){
+        ref=_wg.washers.concat(_wg.others);
+        washersEnd=_wg.washers.length;
+      }
+    }
 
     html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
     html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(b.label)+'</div>';
@@ -23613,6 +23673,9 @@ function renderSchedule(){
       return '<button onclick="'+onclick+'" style="text-align:left;border:none;background:transparent;color:'+(active?'var(--gd)':'var(--text1)')+';font-weight:'+(active?'700':'600')+';font-size:11px;padding:4px 6px;cursor:pointer;border-radius:4px;">'+label+'</button>';
     }
     ref.forEach(function(p,idx){
+      if(washersEnd!=null&&(idx===0||idx===washersEnd)){
+        html+='<div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--gd);margin:'+(idx===0?'0':'8px')+' 0 4px;padding-top:'+(idx===0?'0':'6px')+';'+(idx===0?'':'border-top:1px solid var(--border);')+'">'+(idx===0?'Lavadores':'Regulares')+'</div>';
+      }
       var nm=p[0], nmJs=escHtml(schedJs(nm)), borrowed=(p[2]==='added');
       var minOff=SCHED_MIN_OFF[b.key], exempt=schedIsCheckExempt(SCH,nm);
       var prefersWork=schedWeekendPrefFor(SCH,nm)==='preferWork';
@@ -23723,7 +23786,7 @@ function renderSchedule(){
     html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">';
     html+='<div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);">Total</div>';
     dates.forEach(function(ds,di){
-      var tot=SCH.days[ds]?schedDayTotal(SCH,ds,b.key):0;
+      var tot=SCH.days[ds]?schedDisplayTotal(SCH,ds,b.key):0;
       html+='<div id="sct_'+b.key+'_'+di+'" style="text-align:center;font-size:11.5px;font-weight:800;color:var(--navy);">'+(tot?schedFmtTotal(tot):'')+'</div>';
     });
     html+='</div>';

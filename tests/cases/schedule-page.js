@@ -385,13 +385,24 @@ module.exports = {
     const rolandoIdx = win.dlLoadSchedule().days[sat].sup.findIndex((p) => p[0] === 'Rolando');
     win.schedSetCell('sup', rolandoIdx, 'Rolando', sat, 'PM', null);
     t.eq(win.schedDayTotal(win.dlLoadSchedule(), sat, 'sup'), 3,
-      'Rolando on "PM" counts as a third supervisor, not zero');
-    t.eq(win.document.getElementById('sct_sup_0').textContent, '3', 'and the on-screen Total repaints to match');
+      'Rolando on "PM" counts as a third supervisor, not zero — the real body count Unifocus and everywhere else relies on');
 
-    // The inline standard row under the Supervisors card has to move with
-    // it — it reads Rolando's PM day through the very same total.
+    // Carlos's ask, 2026-09-22: the crew card's own visible Total number
+    // should match what "departures each" right below it already implies
+    // (schedRatioCount, which excludes PM) — Total said 3 while each
+    // person's own departures were clearly split as if there were only 2,
+    // reading as if the app disagreed with itself. Scoped to ONLY this
+    // on-screen number (schedDisplayTotal) for Supervisors specifically;
+    // schedDayTotal itself, checked just above, is untouched everywhere
+    // it actually matters.
+    t.eq(win.document.getElementById('sct_sup_0').textContent, '2',
+      "the on-screen Total shows 2 (AM only) — Rolando's PM body still counts for real everywhere else, just not in this display");
+
+    // The inline standard row is UNCHANGED by this — Carlos confirmed
+    // explicitly it should keep reading the real schedDayTotal (3),
+    // never the display-only total above.
     t.assert(/3 scheduled vs\. 3 standard/.test(win.document.getElementById('scu_sup_0').innerHTML),
-      'the inline standard cell counts him too, since it reads the same total');
+      'the inline Unifocus standard cell still counts Rolando\'s PM body, deliberately independent of the display Total above');
 
     // "PM" must NOT be miscounted as a crew-redirect. Only LOBBY / HOUSEMAN
     // / TAILOR / LAUNDRY mean "covering somewhere else today" and stay
