@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.40.93"/>
+<meta name="app-version" content="7.40.94"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.40.94', date:'2026-09-19',
+    fixes:['Fixed Jorge González not mirroring correctly between Laundry and Houseman — Carlos\'s real report: moving him to work Houseman never showed on his Laundry row, only editing Victoriano Ch\'s cell did. Jorge now behaves like any other associate who works two positions (his own Julia/laundry-and-rooms example): whichever of his two cells you edit, the other updates on its own, both directions. Trade-off Carlos confirmed after seeing it explained: the old automatic rule ("Victoriano OFF/Taylor → Jorge covers Laundry, no typing needed") is gone — both of them are now set by hand each week, same as any other two-position associate.']
+  },
   {
     v:'7.40.93', date:'2026-09-19',
     fixes:['Fixed Request Off entries silently failing to write onto the Schedule Draft when the name didn\'t match letter-for-letter — Carlos\'s real report: Elmer\'s Saturday+Sunday request never showed on the crew card, because his Request Off entry was under "Elmer Galindo" while the Schedule cell only ever had "Elmer" (his original Excel wasn\'t built with the roster\'s exact names). Now uses the same loose name-matching Call-Offs already relies on — every word of the shorter name has to match the start of a word in the fuller one — so "Elmer Galindo" finds "Elmer"\'s row correctly. Still refuses to guess when a name could mean two different people on the same crew; that stays reported as "not written" rather than risking the wrong person\'s cell.']
@@ -20499,14 +20503,19 @@ function schedDayTotal(SCH,ds,bk){
   });
   return t+_schedCoverInflow(SCH,ds,bk);
 }
-/* The label a cover chain uses for THIS crew, if any (laundry ->
-   "LAUNDRY", lobby -> "LOBBY") — same source SCHED_COVER_CHAINS already
-   defines, so this can never disagree with what the chain itself marks
-   a cover with. */
+/* The label meaning "here, doing this crew's own work" for THIS crew, if
+   any (laundry -> "LAUNDRY", lobby -> "LOBBY"). Reads SCHED_CREW_AWAY_LABEL
+   (the generic cross-crew sync's own label table) rather than
+   SCHED_COVER_CHAINS — used to source from the chains array, but that
+   breaks for anyone migrated off a dedicated chain onto the generic
+   mechanism (Jorge Gonzalez, 2026-09-19): with no chain entry left for
+   'laundry', this returned null and his own literal "LAUNDRY"-labeled row
+   silently stopped counting toward Laundry's total. SCHED_CREW_AWAY_LABEL
+   already carries the same value for every crew that's ever had a chain
+   entry (laundry/lobby both do), so this is a strict superset, not a
+   behavior change for anyone still on a chain. */
 function _schedCrewLabel(bk){
-  var lbl=null;
-  SCHED_COVER_CHAINS.forEach(function(cc){ if(cc.crew===bk)lbl=cc.label; });
-  return lbl;
+  return SCHED_CREW_AWAY_LABEL[bk]||null;
 }
 /* Carlos's ask: a cover chain backup (Jorge Gonzalez marked "LAUNDRY" on
    his own Houseman row while covering Victoriano) is a real body doing
@@ -20653,16 +20662,12 @@ function schedSetCell(bk,idx,name,ds,val,el){
      Auto-fill run. */
   var chainMember=schedIsChainMember(bk,name);
   if(chainMember)schedApplyCoverChainsForDate(SCH,ds,{crew:bk,name:name});
-  /* Carlos's ask: he builds Laundry by hand, Victoriano first, not
-     through Auto-fill — Jorge's direct Laundry row (see
-     schedApplyLaundryMirror) has to react live to each of Victoriano's
-     own edits too, the same way the Houseman-based chain above already
-     does, rather than only updating on the next full Auto-fill run.
-     Scoped to editing VICTORIANO's own cell specifically — editing
-     Jorge's cell directly must never immediately overwrite what was
-     just typed. */
-  var isVictorianoLaundryEdit=(bk==='laundry'&&dlNorm(name)===dlNorm('Victoriano Ch'));
-  if(isVictorianoLaundryEdit)schedApplyLaundryMirror(SCH,[ds]);
+  /* Victoriano Ch/Jorge Gonzalez used to need their own live-trigger here
+     (schedApplyLaundryMirror, one-directional off Victoriano's edit only)
+     — removed 2026-09-19. Jorge is no longer excluded from the generic
+     cross-crew sync below, which already reacts to EITHER side's edit,
+     so editing Jorge's own cell now reflects on his other one too, same
+     as everyone else. */
   /* Same shape, Sarahi/Andrea: editing SARAHI's own Lobby cell reacts
      live and drives Andrea's mirror (schedApplyLobbyMirror) right here.
      Scoped to Sarahi specifically — editing Andrea's own Turndown cell
@@ -20710,7 +20715,7 @@ function schedSetCell(bk,idx,name,ds,val,el){
   var crossCrewSynced=schedApplyCrossCrewSyncForDate(SCH,ds,{crew:bk,name:name});
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
-  if(chainMember||isVictorianoLaundryEdit||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||linkedMember||patyFromYesSynced||patyPmhmSynced||crossCrewSynced){
+  if(chainMember||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||linkedMember||patyFromYesSynced||patyPmhmSynced||crossCrewSynced){
     /* The chain/mirror reaction can change a DIFFERENT cell (or crew
        card) on this same day — that needs the full grid repainted so
        it actually shows, unlike the single-cell case below. */
@@ -21696,9 +21701,25 @@ var SCHED_PM_SUPERVISOR='Yanira';
    Attendant has two different "Sandra"s — confirmed with Carlos that
    Sandra Silva is "Sandra S", not the other one. */
 var SCHED_COVER_CHAINS=[
-  {crew:'lobby',   label:'LOBBY',   chain:[{name:'Marroquin',homeCrew:'lobby'},{name:'Gabriela Cuevas',homeCrew:'gra'},{name:'Sandra S',homeCrew:'gra'}]},
-  {crew:'laundry', label:'LAUNDRY', chain:[{name:'Victoriano Ch',homeCrew:'laundry'},{name:'Jorge Gonzalez',homeCrew:'hp'}]}
+  {crew:'lobby',   label:'LOBBY',   chain:[{name:'Marroquin',homeCrew:'lobby'},{name:'Gabriela Cuevas',homeCrew:'gra'},{name:'Sandra S',homeCrew:'gra'}]}
 ];
+/* Victoriano Ch/Jorge Gonzalez USED to live here — removed 2026-09-19,
+   same migration Sandra S already went through off her old dedicated
+   pairs. Carlos's real report: editing JORGE's own cell directly (moving
+   him to work Houseman) never reflected on his Laundry row, only editing
+   VICTORIANO's did — schedApplyLaundryMirror (removed, see its old spot
+   below schedApplyCoverChains) was deliberately one-directional, reacting
+   only to Victoriano's edit. He confirmed he wants this pair to behave
+   like any other two-crew employee instead: whichever of Jorge's own two
+   cells he touches, the other follows — exactly what
+   schedApplyCrossCrewSyncForDate already does for everyone not
+   specifically excluded from it. No longer excluded (see
+   _schedCrossCrewExcluded, which reads chain membership straight off
+   this array), so he's covered automatically, no new pair needed.
+   Auto-fill's Laundry fairness rotation no longer excludes him either —
+   he now gets a normal independent turn there, same as Sandra S does on
+   her own crews, reconciled same-day by the generic sync afterward if it
+   disagrees with his Houseman side. */
 /* Sarahi/Andrea used to live here too (Andrea's ONLY presence being her
    Turndown cell flipping to "LOBBY"). Carlos's real report: that meant
    every manual edit to Andrea's own Turndown cell — schedIsChainMember
@@ -21912,58 +21933,10 @@ function schedApplyCoverChainsForDate(SCH,ds,edited){
 function schedApplyCoverChains(SCH,dates){
   dates.forEach(function(ds){ schedApplyCoverChainsForDate(SCH,ds); });
 }
-/* Jorge Gonzalez mirrors Victoriano Ch directly, day for day: working
-   Laundry exactly when Victoriano is unavailable for it (OFF, R-OFF,
-   TAILOR, or CALL-OFF), and off whenever Victoriano is actually working
-   it. Carlos's rule — never both idle, never both in Laundry the same
-   day — and Carlos's real report: with Jorge sitting as an ordinary
-   member of Laundry's own crew list, Auto-fill's usual fairness
-   rotation gave him his own independent days off, unrelated to
-   Victoriano's, which is why schedAutoFill excludes him from that
-   rotation and calls this afterward instead, once Victoriano's own
-   days (and his manually-set TAILOR marks, always protected) are
-   settled. Jorge's own granted absence (R-OFF/FLEX/VAC/CALL-OFF, e.g.
-   from Request Off) is never overwritten — a real day off he's owed
-   still wins over the mirror.
-
-   Also drives Jorge's HOUSEMAN cell the same way, straight off of
-   Victoriano's status — Carlos's ask: he shouldn't have to first type
-   in Jorge's whole normal Houseman pattern before the app will show
-   "LAUNDRY" there on a covering day; the Laundry mirror above already
-   knows with certainty which days those are. Unlike the older
-   Houseman-based SCHED_COVER_CHAINS entry for this same pair (left in
-   place, harmless — it only ever fires when Jorge's Houseman cell
-   already happens to read '1'), this doesn't require his Houseman
-   cell to already say anything: blank counts too. A day Jorge is NOT
-   covering leaves his Houseman cell exactly as Carlos set it — this
-   never invents his regular Houseman schedule, only ever writes
-   "LAUNDRY" on a covering day and releases it back on a non-covering
-   one if that's what it still says. */
-function schedApplyLaundryMirror(SCH,dates){
-  dates.forEach(function(ds){
-    var vCell=schedCellFor(SCH,ds,'laundry','Victoriano Ch');
-    if(vCell==='')return; // Victoriano not on this week's roster — nothing to mirror
-    var vUnavailable=(schedStatusIs(vCell,'OFF')||schedStatusIs(vCell,'R-OFF')||schedStatusIs(vCell,'TAILOR')||schedStatusIs(vCell,'CALL-OFF'));
-    var jRow=schedRawCell(SCH,ds,'laundry','Jorge Gonzalez');
-    if(jRow){
-      var jCell=String(jRow[1]||'').trim();
-      if(!(schedStatusIs(jCell,'R-OFF')||schedStatusIs(jCell,'FLEX')||schedStatusIs(jCell,'VAC')||schedStatusIs(jCell,'CALL-OFF'))){
-        jRow[1]=vUnavailable?'1':'';
-      }
-    }
-    var jHpRow=schedRawCell(SCH,ds,'hp','Jorge Gonzalez');
-    if(jHpRow){
-      var jHpCell=String(jHpRow[1]||'').trim();
-      if(schedStatusIs(jHpCell,'R-OFF')||schedStatusIs(jHpCell,'FLEX')||schedStatusIs(jHpCell,'VAC')||schedStatusIs(jHpCell,'CALL-OFF')){
-        // a real granted absence on his Houseman row wins, same as Laundry above
-      } else if(vUnavailable){
-        jHpRow[1]='LAUNDRY';
-      } else if(schedStatusIs(jHpCell,'LAUNDRY')){
-        jHpRow[1]='1'; // release back once Victoriano resumes Laundry himself
-      }
-    }
-  });
-}
+/* schedApplyLaundryMirror (Jorge Gonzalez <- Victoriano Ch, one-directional)
+   used to live here — removed 2026-09-19, migrated to the generic
+   schedApplyCrossCrewSyncForDate. See the removal note above
+   SCHED_COVER_CHAINS for why. */
 /* Andrea mirrors Sarahi directly, same shape as Jorge Gonzalez/Victoriano
    Ch above: a literal row on Lobby (Carlos adds her there by hand, same
    as he did with Jorge on Laundry) reading '1' exactly when Sarahi is
@@ -22709,7 +22682,7 @@ function schedAutoFill(){
   if(!loaded.length){ showToast('&#9888; Build or upload this week first.'); return; }
   var hasOcc=loaded.some(function(ds){ return (parseInt(SCH.days[ds].occ,10)||0)>0; });
   if(!hasOcc){ showToast('&#9888; Enter OCC for at least one day first.'); return; }
-  if(!confirm('Auto-fill this week?\n\nAny R-OFF already on the grid is kept. Laundry, Supervisors, Lobby, PM Turndown/GRA, AM Room Attendant, Houseman and PM Houseman are filled or replaced, plus Overnight\'s fixed pattern, Yanira\'s PM shift, the Lobby/Laundry cover chains, Jorge mirroring Victoriano and Andrea mirroring Sarahi when they\'re a direct Laundry/Lobby row, and the Houseman overflow backups. Managers is left untouched.'))return;
+  if(!confirm('Auto-fill this week?\n\nAny R-OFF already on the grid is kept. Laundry, Supervisors, Lobby, PM Turndown/GRA, AM Room Attendant, Houseman and PM Houseman are filled or replaced, plus Overnight\'s fixed pattern, Yanira\'s PM shift, the Lobby cover chain, Andrea mirroring Sarahi when she\'s a direct Lobby row, and the Houseman overflow backups. Managers is left untouched.'))return;
 
   _schedStashForUndo('the Auto-fill you just ran',loaded);
   var wk=schedWeekIndexOf(dates[0]);
@@ -22722,18 +22695,16 @@ function schedAutoFill(){
         var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n);
       });
     });
-    /* Jorge Gonzalez isn't a real independent Laundry rotation slot — his
-       whole role is covering Victoriano's own days off/Tailor days, never
-       both of them idle or both working at once. Giving him his own turn
-       in the fairness rotation was handing him days unrelated to
-       Victoriano's, which is the exact mismatch Carlos reported. Excluded
-       here; schedApplyLaundryMirror below sets his cell directly off of
-       Victoriano's resolved one, once Victoriano's own days are decided. */
-    if(bk==='laundry')names=names.filter(function(n){ return dlNorm(n)!==dlNorm('Jorge Gonzalez'); });
-    /* Same reasoning as Jorge above: Andrea's Lobby days are fully
-       derived from Sarahi's own days off (schedApplyLobbyMirror), not
-       an independent fairness slot — giving her one here would hand
-       her days unrelated to Sarahi's. */
+    /* Jorge Gonzalez used to be excluded from Laundry's own fairness
+       rotation here (his old one-directional mirror off Victoriano Ch set
+       his day directly instead) — removed 2026-09-19, migrated to the
+       generic cross-crew sync same as Sandra S. He now gets a normal
+       independent turn in Laundry's rotation like anyone else; the
+       generic sync (schedApplyCrossCrewSync, below) reconciles his
+       Laundry/Houseman rows same-day afterward if they disagree. */
+    /* Andrea's Lobby days are fully derived from Sarahi's own days off
+       (schedApplyLobbyMirror), not an independent fairness slot — giving
+       her one here would hand her days unrelated to Sarahi's. */
     if(bk==='lobby')names=names.filter(function(n){ return dlNorm(n)!==dlNorm('Andrea'); });
     /* Yesenia isn't a real Turndown employee — Carlos's ask, 2026-09-05.
        Her home crew is PM Houseman; any row she has under 'td' is a
@@ -22751,15 +22722,15 @@ function schedAutoFill(){
   /* Special roles, in dependency order: Yesenia/Paty needs Turndown
      already filled; the PM-supervisor relabel and cover chains need
      Supervisors/Lobby/Laundry/Room Attendant/Houseman already filled;
-     the Laundry mirror needs Victoriano's own Laundry days already
-     decided; the Houseman overflow backfill reacts to Houseman's state
-     AFTER a cover chain may have pulled someone out of it, so it runs
-     last, same order Schedule Builder's own autoFill uses. */
+     the Houseman overflow backfill reacts to Houseman's state AFTER a
+     cover chain may have pulled someone out of it, so it runs last, same
+     order Schedule Builder's own autoFill uses. Victoriano Ch/Jorge
+     Gonzalez no longer need a dedicated step here — schedApplyCrossCrewSync
+     below reconciles them same as everyone else now. */
   schedApplyYesenia(SCH,dates,wk);
   schedApplyOvernight(SCH,dates);
   schedApplyPmSupervisor(SCH,dates);
   schedApplyCoverChains(SCH,dates);
-  schedApplyLaundryMirror(SCH,dates);
   schedApplyLobbyMirror(SCH,dates);
   schedApplyLinkedPeople(SCH,dates);
   schedApplyCrossCrewSync(SCH,dates);

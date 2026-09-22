@@ -980,10 +980,12 @@ module.exports = {
 
     // Cover chains: two-tier escalation (Marroquin -> Gabriela Cuevas ->
     // Sandra S), no-cover-needed, and no-one-available-to-cover. Sarahi's
-    // chain (-> Andrea) and Victoriano Ch's (-> Jorge Gonzalez) moved to
-    // their own direct-row mirrors (schedApplyLobbyMirror /
-    // schedApplyLaundryMirror, tested separately below) — see the header
-    // comment on SCHED_COVER_CHAINS in index.html. Names here are spelled
+    // chain (-> Andrea) moved to its own direct-row mirror
+    // (schedApplyLobbyMirror, tested separately below); Victoriano Ch's
+    // (-> Jorge Gonzalez) migrated further still, onto the generic
+    // cross-crew sync (tested in schedule-cross-crew-sync.js and further
+    // below) — see the header comment on SCHED_COVER_CHAINS in
+    // index.html. Names here are spelled
     // exactly as they appear in Carlos's real Schedule Draft, confirmed
     // 2026-08-16.
     const SCH21c = {
@@ -1051,15 +1053,6 @@ module.exports = {
     t.eq(win.schedIsChainMember('td', 'Andrea'), false, "Andrea is no longer a SCHED_COVER_CHAINS member — she's a direct-row mirror now, not a chain backup");
     t.eq(win.schedIsChainMember('lobby', 'Sarahi'), false, 'same for Sarahi — the old Lobby-PM chain entry is gone');
 
-    // Carlos's ask: Jorge marked LAUNDRY on his own Houseman row is a real
-    // body doing Laundry that day ("sería el lavador") — the Laundry
-    // crew's own headcount has to count him, not just show it in his cell.
-    const SCH21jl = { days: { [ds21[0]]: { laundry: [['Victoriano Ch', 'OFF']], hp: [['Jorge Gonzalez', 'LAUNDRY']] } } };
-    win.schedApplyCoverChains(SCH21jl, ds21);
-    t.eq(SCH21jl.days[ds21[0]].hp[0][1], 'LAUNDRY', "Jorge Gonzalez still covers Laundry on Victoriano Ch's day off via the (unchanged) Houseman-based chain");
-    t.eq(win.schedDayTotal(SCH21jl, ds21[0], 'laundry'), 1,
-      "Laundry's headcount counts Jorge Gonzalez (LAUNDRY) even though Victoriano Ch (OFF) is the only literal row in the laundry array");
-
     // Carlos's real file, screenshot in hand: Jorge Gonzalez isn't
     // arriving via the hp->laundry cross-crew chain at all this week —
     // he's a LITERAL row inside Laundry's own list, and Carlos marks his
@@ -1075,11 +1068,12 @@ module.exports = {
       'Jorge Gonzalez marked LAUNDRY on his own literal Laundry row counts as a body, same as Olga A on "1" — Victoriano Ch (OFF) still does not');
 
     // ── Carlos's real report, v7.40.31: Laundry showed "6, OVER" with
-    // only 5 literal rows summing to 5. Root cause — Jorge Gonzalez now
-    // has BOTH a literal Laundry row (schedApplyLaundryMirror) AND the
-    // older Houseman-based SCHED_COVER_CHAINS entry still crediting him
-    // a second time off his 'hp' cell, whenever both happen to be true
-    // the same day (Victoriano unavailable drives both at once). ──
+    // only 5 literal rows summing to 5. Root cause (at the time): Jorge
+    // Gonzalez had BOTH a literal Laundry row AND the older Houseman-based
+    // SCHED_COVER_CHAINS entry still crediting him a second time off his
+    // 'hp' cell. That chain entry is gone now (migrated to the generic
+    // cross-crew sync, 2026-09-19) — a literal row is never double-counted,
+    // structurally, since there's no second credit source left to fire. ──
     const SCH21dbl = {
       days: {
         [ds21[0]]: {
@@ -1091,12 +1085,15 @@ module.exports = {
     t.eq(win.schedDayTotal(SCH21dbl, ds21[0], 'laundry'), 5,
       "Jorge Gonzalez's literal row counts once, even though his Houseman cell ALSO reads LAUNDRY that same day — this is the actual double-count bug fix");
 
-    // The old Houseman-based chain still credits him normally on a week
-    // where he has NO literal Laundry row at all (the legacy case this
-    // chain was originally kept alive for).
+    // With no literal Laundry row for him at all, his Houseman cell alone
+    // no longer credits Laundry — the old chain-based legacy credit is
+    // gone along with the chain entry itself. Not a real-world regression:
+    // his actual current data already always carries a literal row (the
+    // exact case above), and the generic sync only reconciles rows that
+    // already exist for him on both crews, never invents a missing one.
     const SCH21dbl2 = { days: { [ds21[0]]: { laundry: [['Isabel D', '1']], hp: [['Jorge Gonzalez', 'LAUNDRY']] } } };
-    t.eq(win.schedDayTotal(SCH21dbl2, ds21[0], 'laundry'), 2,
-      'with no literal Laundry row for him this week, the Houseman-cell credit still applies — nothing lost for the legacy case');
+    t.eq(win.schedDayTotal(SCH21dbl2, ds21[0], 'laundry'), 1,
+      'with no literal Laundry row for him this week, Laundry counts only Isabel D — the legacy Houseman-cell credit no longer applies');
 
     // A DIFFERENT crew's cell reading "LAUNDRY" still means "gone,
     // covering elsewhere" and must stay excluded from ITS OWN crew — the
@@ -1201,30 +1198,18 @@ module.exports = {
     win.schedApplyCoverChains(SCH21d, ds21);
     t.eq(SCH21d.days[ds21[0]].gra[0][1], '1', "no Marroquin row this week at all — Gabriela Cuevas is left alone rather than assumed covering");
 
-    // Carlos's report: there must always be exactly one launderer between
-    // Victoriano and Jorge, never both, never neither. Victoriano is
-    // Taylor 2 days a week by hand — TAILOR has to trigger Jorge's cover
-    // exactly like OFF/R-OFF does, and going back to '1' has to release
-    // Jorge back to his own Houseman crew, not leave him stuck in LAUNDRY.
-    const SCH21j = {
-      days: {
-        [ds21[0]]: { laundry: [['Victoriano Ch', 'TAILOR']], hp: [['Jorge Gonzalez', '1']] },
-      },
-    };
-    win.schedApplyCoverChains(SCH21j, ds21);
-    t.eq(SCH21j.days[ds21[0]].hp[0][1], 'LAUNDRY', 'Jorge Gonzalez covers Laundry on a day Victoriano Ch works as Taylor instead');
-
-    SCH21j.days[ds21[0]].laundry[0][1] = '1'; // Victoriano back to Laundry
-    win.schedApplyCoverChains(SCH21j, ds21);
-    t.eq(SCH21j.days[ds21[0]].hp[0][1], '1', "Jorge Gonzalez is released back to Houseman once Victoriano Ch resumes Laundry himself");
-
-    // schedIsChainMember + schedSetCell: a manual edit to Victoriano Ch's
-    // own cell (the real path Carlos uses every week, not the bulk
-    // Auto-fill button) has to react live — this is what actually fires
-    // the chain day-to-day, per his answer that he sets TAILOR by hand.
-    t.eq(win.schedIsChainMember('laundry', 'Victoriano Ch'), true, 'Victoriano Ch (titular) is recognized as a chain member');
-    t.eq(win.schedIsChainMember('hp', 'Jorge Gonzalez'), true, 'Jorge Gonzalez (backup) is recognized as a chain member');
-    t.eq(win.schedIsChainMember('laundry', 'Karla Varela'), false, 'an unrelated Laundry attendant is not a chain member');
+    // Victoriano Ch/Jorge Gonzalez migrated off SCHED_COVER_CHAINS,
+    // 2026-09-19 (see the removal note in index.html) — the automatic
+    // "Victoriano off/Taylor -> Jorge covers Laundry" inference is gone
+    // along with it. Carlos confirmed this trade explicitly: he now sets
+    // both of them by hand each week, same as any other two-crew
+    // employee, in exchange for Jorge's OWN two cells finally syncing
+    // with each other when he edits either one directly (tested in
+    // schedule-cross-crew-sync.js). schedIsChainMember no longer
+    // recognizes either of them.
+    t.eq(win.schedIsChainMember('laundry', 'Victoriano Ch'), false, 'Victoriano Ch is no longer a SCHED_COVER_CHAINS member');
+    t.eq(win.schedIsChainMember('hp', 'Jorge Gonzalez'), false, 'neither is Jorge Gonzalez — both migrated to the generic cross-crew sync');
+    t.eq(win.schedIsChainMember('laundry', 'Karla Varela'), false, 'an unrelated Laundry attendant was never a chain member either');
 
     // ── Carlos's ask: marking ANY crew member's own cell LAUNDRY (any
     // position, not just a designated cover) should put her on
@@ -1652,79 +1637,32 @@ module.exports = {
     t.eq(afterLiveGabriela.days[ds21[0]].gra.filter((p) => p[0] === 'Gabriela Cuevas')[0][1], 'OFF',
       "a single live edit setting Gabriela's Lobby cell OFF immediately mirrors onto her Room Attendant cell too");
 
-    // ── Carlos's real report: he moved Jorge onto Laundry's own crew
-    // list directly (a second real setup, alongside the Houseman-chain
-    // above — both exist for him). Auto-fill's usual fairness rotation
-    // gave Jorge his own independent days off there, unrelated to
-    // Victoriano's — schedApplyLaundryMirror fixes that direct row by
-    // mirroring Victoriano's resolved cell instead. ──
-    const SCH21jm = {
-      days: {
-        [ds21[0]]: { laundry: [['Victoriano Ch', 'TAILOR'], ['Jorge Gonzalez', 'OFF']] },
-        [ds21[1]]: { laundry: [['Victoriano Ch', '1'], ['Jorge Gonzalez', '1']] },
-        [ds21[2]]: { laundry: [['Victoriano Ch', 'OFF'], ['Jorge Gonzalez', '']] },
-      },
-    };
-    win.schedApplyLaundryMirror(SCH21jm, [ds21[0], ds21[1], ds21[2]]);
-    t.eq(SCH21jm.days[ds21[0]].laundry[1][1], '1', "Jorge's direct Laundry row works on a day Victoriano is TAILOR — mirrored, not independently rotated");
-    t.eq(SCH21jm.days[ds21[1]].laundry[1][1], '', "Jorge is off the day Victoriano actually works Laundry himself — never both at once");
-    t.eq(SCH21jm.days[ds21[2]].laundry[1][1], '1', "Jorge works the day Victoriano is a plain OFF too, same as TAILOR");
-
-    // Jorge's own granted absence (Request Off) still wins over the mirror.
-    const SCH21jm2 = { days: { [ds21[0]]: { laundry: [['Victoriano Ch', 'OFF'], ['Jorge Gonzalez', 'R-OFF']] } } };
-    win.schedApplyLaundryMirror(SCH21jm2, [ds21[0]]);
-    t.eq(SCH21jm2.days[ds21[0]].laundry[1][1], 'R-OFF', "Jorge's own R-OFF is never overwritten by the mirror, even though Victoriano is OFF that day too");
-
-    // ── Carlos's ask: he builds Laundry by hand, Victoriano first, not
-    // through Auto-fill — the mirror has to react LIVE to a single
-    // manual edit on Victoriano's own cell (schedSetCell), the same way
-    // the Houseman-based chain already does, not just on the next full
-    // Auto-fill run. ──
+    // ── Carlos's real report that triggered this migration, 2026-09-19:
+    // he moved Jorge onto Laundry's own crew list directly, alongside his
+    // real Houseman row, and expected the two to stay in sync — but under
+    // the OLD one-directional schedApplyLaundryMirror (removed), editing
+    // Jorge's own Houseman cell never reflected on his Laundry row; only
+    // editing VICTORIANO's cell did. Carlos confirmed, after the trade-off
+    // was explained plainly, that losing the automatic Victoriano-driven
+    // inference (TAILOR/OFF used to hand Jorge the cover automatically) is
+    // fine, in exchange for Jorge's own two cells behaving like any other
+    // two-crew employee's — true bidirectional, unlike Sarahi/Andrea below
+    // (which stays deliberately one-directional by design, a different
+    // real bug with a different fix). Live, end-to-end through the real
+    // edit path (schedSetCell), both directions. ──
     win.localStorage.removeItem('hk_dl_schedule');
-    const SCH21jm3 = { days: {} };
-    ds21.forEach((ds) => { SCH21jm3.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', laundry: [['Victoriano Ch', '1'], ['Jorge Gonzalez', '']] }; });
-    win.dlSaveSchedule(SCH21jm3);
-    win.schedSetCell('laundry', 0, 'Victoriano Ch', ds21[0], 'TAILOR', null);
-    const afterLive = win.dlLoadSchedule();
-    t.eq(afterLive.days[ds21[0]].laundry[1][1], '1',
-      "a single manual edit setting Victoriano to TAILOR immediately mirrors Jorge to '1', with no Auto-fill run needed");
+    const SCH21jm = { days: {} };
+    ds21.forEach((ds) => { SCH21jm.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', laundry: [['Jorge Gonzalez', '1']], hp: [['Jorge Gonzalez', '1']] }; });
+    win.dlSaveSchedule(SCH21jm);
+    win.schedSetCell('hp', 0, 'Jorge Gonzalez', ds21[0], '1', null);
+    const afterJorgeHp = win.dlLoadSchedule();
+    t.eq(afterJorgeHp.days[ds21[0]].laundry[0][1], 'HOUSEMAN',
+      "editing Jorge's own Houseman cell live now relabels his Laundry row — this used to require editing Victoriano's cell instead");
 
-    win.schedSetCell('laundry', 0, 'Victoriano Ch', ds21[0], '1', null);
-    const afterLiveBack = win.dlLoadSchedule();
-    t.eq(afterLiveBack.days[ds21[0]].laundry[1][1], '',
-      'setting Victoriano back to working releases Jorge back to blank, live, same as the TAILOR edit');
-
-    // Editing JORGE's own cell directly must never immediately overwrite
-    // what was just typed — only an edit to Victoriano's cell triggers
-    // the mirror.
-    win.schedSetCell('laundry', 1, 'Jorge Gonzalez', ds21[1], '1', null);
-    const afterJorgeEdit = win.dlLoadSchedule();
-    t.eq(afterJorgeEdit.days[ds21[1]].laundry[1][1], '1',
-      "editing Jorge's own cell directly sticks — the mirror only fires off of Victoriano's edits, not Jorge's");
-
-    // ── Carlos's real follow-up: he re-added Jorge to Houseman under
-    // his full name (matching the old cover chain's expected name), but
-    // that fresh row starts BLANK (schedAddPerson never guesses a
-    // schedule) — the old chain requires the Houseman cell to already
-    // read '1' before it'll swap to LAUNDRY, so nothing happened until
-    // he filled in Jorge's whole normal pattern first. Carlos's ask:
-    // it should just work off of what Laundry already knows. The
-    // extended mirror now drives Jorge's Houseman cell directly,
-    // blank or not. ──
-    const SCH21jm4 = {
-      days: {
-        [ds21[0]]: { laundry: [['Victoriano Ch', 'TAILOR'], ['Jorge Gonzalez', '']], hp: [['Jorge Gonzalez', '']] },
-        [ds21[1]]: { laundry: [['Victoriano Ch', '1'], ['Jorge Gonzalez', '']], hp: [['Jorge Gonzalez', 'LAUNDRY']] },
-        [ds21[2]]: { laundry: [['Victoriano Ch', 'OFF'], ['Jorge Gonzalez', '']], hp: [['Jorge Gonzalez', 'R-OFF']] },
-      },
-    };
-    win.schedApplyLaundryMirror(SCH21jm4, [ds21[0], ds21[1], ds21[2]]);
-    t.eq(SCH21jm4.days[ds21[0]].hp[0][1], 'LAUNDRY',
-      "Jorge's Houseman cell reads LAUNDRY on a day Victoriano is TAILOR, even though it started completely blank");
-    t.eq(SCH21jm4.days[ds21[1]].hp[0][1], '1',
-      'a day Victoriano actually works Laundry himself releases a leftover LAUNDRY label on Houseman back to 1');
-    t.eq(SCH21jm4.days[ds21[2]].hp[0][1], 'R-OFF',
-      "Jorge's own granted R-OFF on his Houseman row wins over the mirror there too, same protection Laundry gets");
+    win.schedSetCell('laundry', 0, 'Jorge Gonzalez', ds21[1], 'OFF', null);
+    const afterJorgeLaundryOff = win.dlLoadSchedule();
+    t.eq(afterJorgeLaundryOff.days[ds21[1]].hp[0][1], 'OFF',
+      'and the reverse direction too — a real day off set directly on either of his own cells carries across to the other');
 
     // ── Carlos's real bug report, v7.40.26: "no me deja mover el
     // horario de Lobby de Andrea en la seccion de Turndown" — under the
@@ -1986,12 +1924,18 @@ module.exports = {
       'schedApplyCallOff finds the one matching row and reports what it overwrote');
     let afterCO = win.dlLoadSchedule();
     t.eq(afterCO.days[ds21[0]].laundry[0][1], 'CALL-OFF', "Victoriano's own cell is marked CALL-OFF");
-    t.eq(afterCO.days[ds21[0]].hp[0][1], 'LAUNDRY', 'and the same cover chain as TAILOR/OFF fires — Jorge Gonzalez covers Laundry');
+    // Victoriano Ch/Jorge Gonzalez migrated off SCHED_COVER_CHAINS,
+    // 2026-09-19 — schedApplyCallOff still calls schedApplyCoverChainsForDate
+    // (the remaining Lobby chain still needs it), but there's no chain
+    // entry left for this pair, so it no longer fires Jorge's cover
+    // automatically. Same confirmed trade-off as everywhere else this
+    // pair used to auto-react: Carlos now marks Jorge by hand.
+    t.eq(afterCO.days[ds21[0]].hp[0][1], '1', "Jorge Gonzalez's Houseman cell is untouched — no more automatic cover from a Call-Off either");
 
     win.schedRevertCallOff(ds21[0], applied.crew, applied.name, applied.prevVal);
     afterCO = win.dlLoadSchedule();
     t.eq(afterCO.days[ds21[0]].laundry[0][1], '1', 'deleting the call-off puts Victoriano back exactly as he was');
-    t.eq(afterCO.days[ds21[0]].hp[0][1], '1', 'and releases Jorge back to Houseman, same release path as TAILOR');
+    t.eq(afterCO.days[ds21[0]].hp[0][1], '1', 'Jorge was never touched to begin with, so this is still just 1');
 
     // A position/name that cannot be pinned to exactly one row is left
     // alone entirely — never guess and risk marking the wrong person.

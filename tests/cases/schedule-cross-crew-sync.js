@@ -91,10 +91,21 @@ module.exports = {
     t.assert(!win.schedApplyCrossCrewSyncForDate(
       { days: { [ds]: { gra: [['Gabriela Cuevas', '1']], sup: [['Gabriela Cuevas', '1']] } } }, ds, { crew: 'gra', name: 'Gabriela Cuevas' }),
       'Gabriela Cuevas is skipped — her Room Attendant/Lobby pairing is already handled by SCHED_LINKED_PEOPLE');
+    // ── Victoriano Ch/Jorge Gonzalez migrated OFF the SCHED_COVER_CHAINS
+    // exclusion, 2026-09-19 — Carlos's real report: editing Jorge's own
+    // cell directly (moving him to work Houseman) never reflected on his
+    // Laundry row, only editing Victoriano's did, because the old
+    // schedApplyLaundryMirror only reacted to Victoriano's edit. He asked
+    // for Jorge to behave like any other two-crew employee instead —
+    // confirmed with a plain "sí" to that exact description. He now
+    // participates here same as Elsa above: editing his own Houseman
+    // cell to a real working value relabels his Laundry row. ──
+    const SCHJorge = { days: { [ds]: { laundry: [['Jorge Gonzalez', '1']], hp: [['Jorge Gonzalez', '1']] } } };
+    win.schedApplyCrossCrewSyncForDate(SCHJorge, ds, { crew: 'hp', name: 'Jorge Gonzalez' });
+    t.eq(SCHJorge.days[ds].laundry[0][1], 'HOUSEMAN',
+      "editing Jorge's own Houseman cell to a real working '1' now relabels his Laundry row — it used to need Victoriano's cell touched instead");
     t.assert(!win.schedApplyCrossCrewSyncForDate(
-      { days: { [ds]: { laundry: [['Jorge Gonzalez', '1']], sup: [['Jorge Gonzalez', '1']] } } }, ds, { crew: 'laundry', name: 'Jorge Gonzalez' }),
-      'Jorge Gonzalez is skipped — already in the SCHED_COVER_CHAINS laundry chain');
-    t.assert(!win.schedApplyCrossCrewSyncForDate(
+
       { days: { [ds]: { lobby: [['Andrea', '1']], sup: [['Andrea', '1']] } } }, ds, { crew: 'lobby', name: 'Andrea' }),
       "Andrea is skipped — her Turndown/Lobby cover already has its own dedicated mirror (schedApplyLobbyMirror)");
 
