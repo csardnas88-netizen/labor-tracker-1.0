@@ -15,8 +15,8 @@
    to survive even one sync either way.
 
    Two-part fix: 'retired'/'hiddenPeople' join the union-merge every
-   other person-level mark (checkExempt, weekendPref, dayOffPref)
-   already gets, AND — since a stale device's day array can still win
+   other person-level mark (weekendPref, dayOffPref) already gets,
+   AND — since a stale device's day array can still win
    the per-day comparison on its own — the merged retired map is applied
    as a final filter over every day, the same schedIsRetired check
    dlUploadSchedule and schedCreateWeek already use elsewhere. */
@@ -86,13 +86,13 @@ module.exports = {
     const m4 = win._schedMergeRecord(local4, remote4);
     t.assert(m4.rec.hiddenPeople && m4.rec.hiddenPeople['jecelyn ramos'], 'hiddenPeople survives the merge too');
 
-    // ── 5) checkExempt/weekendPref/dayOffPref — the marks that were
-    // already correctly merged before this fix — must still work
-    // exactly as before; this change only ADDS fields to the list. ──
-    const local5 = { days: {}, checkExempt: { 'paty': true }, savedAt: '2026-09-10T12:00:00.000Z' };
+    // ── 5) weekendPref/dayOffPref — the marks that were already
+    // correctly merged before this fix — must still work exactly as
+    // before; this change only ADDS fields to the list. ──
+    const local5 = { days: {}, dayOffPref: { 'paty': [0, 1] }, savedAt: '2026-09-10T12:00:00.000Z' };
     const remote5 = { days: {}, weekendPref: { 'jorge gonzalez': 'preferWork' }, savedAt: '2026-09-10T11:00:00.000Z' };
     const m5 = win._schedMergeRecord(local5, remote5);
-    t.assert(m5.rec.checkExempt && m5.rec.checkExempt['paty'], 'checkExempt still merges correctly');
+    t.assert(m5.rec.dayOffPref && m5.rec.dayOffPref['paty'], 'dayOffPref still merges correctly');
     t.assert(m5.rec.weekendPref && m5.rec.weekendPref['jorge gonzalez'] === 'preferWork', 'weekendPref still merges correctly');
   },
 };

@@ -91,6 +91,7 @@ const cases = [
   require('./cases/schedule-undo'),
   require('./cases/schedule-req-notebook-name-match'),
   require('./cases/schedule-laundry-washers-grouping'),
+  require('./cases/schedule-last-week-off-strip'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

@@ -782,41 +782,12 @@ module.exports = {
     t.assert(!checks.some((c) => c.type === 'weekend'),
       'with no prior weeks on file at all, there is nothing to judge "overdue" against, so nobody is flagged');
 
-    // ── 19) Exempting a person — real people (mutual cover pairs, low-
-    // season aliases in Schedule Builder's own ALIAS_PEOPLE/exclusion
-    // lists) never fit the plain rule by design, and this app has no way
-    // to know that on its own. Carlos marks them once; the mark is a
-    // property of the PERSON, holds on every crew, and survives a
-    // re-upload the same way a borrowed row does. ──
-    win.localStorage.removeItem('hk_dl_schedule');
-    const SCH19 = { days: {} };
-    thisDates.forEach((ds, i) => { SCH19.days[ds] = { sheet: 't', occ: '', dep: '', tdOcc: '', sup: [['Jorge Gonzalez', '1']] }; });
-    win.dlSaveSchedule(SCH19);
-    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
-    t.assert(checks.some((c) => /Jorge Gonzalez/.test(c.text)),
-      'before exempting, Jorge (0 real off days here) is flagged like anyone else');
-
-    win.schedToggleCheckExempt('Jorge Gonzalez');
-    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
-    t.assert(!checks.some((c) => /Jorge Gonzalez/.test(c.text)),
-      'once marked exempt, he drops out of Schedule Checks entirely — days-off AND weekend both');
-    win.renderSchedule();
-    t.assert(!/Jorge Gonzalez has\b/.test(html()) && !/Jorge Gonzalez hasn't\b/.test(html()),
-      'and the rendered page agrees — his plain name can still appear in the crew card, just not in a Schedule Checks line');
-
-    win.schedToggleCheckExempt('Jorge Gonzalez');
-    checks = win.schedScheduleChecks(win.dlLoadSchedule(), win.schedWeekDates());
-    t.assert(checks.some((c) => /Jorge Gonzalez/.test(c.text)),
-      'toggling again un-exempts him — this is a switch, not a one-way mark');
-
-    // Survives a re-upload, same idea as a borrowed row surviving one.
-    win.schedToggleCheckExempt('Jorge Gonzalez'); // exempt again before the "upload"
-    const before19 = win.dlLoadSchedule();
-    t.assert(before19.checkExempt && before19.checkExempt[win.dlNorm('Jorge Gonzalez')], 'exempt flag is set going into the reload');
-    const reparsed = { days: { [thisDates[0]]: { sheet: 'reuploaded', occ: '', dep: '', tdOcc: '', sup: [['Jorge Gonzalez', '1']] } }, count: 1 };
-    const carried = win.schedCarryCheckExempt(before19, reparsed);
-    t.assert(!!(carried.checkExempt && carried.checkExempt[win.dlNorm('Jorge Gonzalez')]),
-      "schedCarryCheckExempt keeps the mark across a fresh workbook parse, which otherwise starts with no top-level properties at all");
+    // ── 19) "Mark as irregular (exempt from Schedule Checks)" — removed
+    // entirely, Carlos's 2026-09-23 ask, right after shipping the tap-
+    // to-see-last-week-off strip. It was never actually used in his
+    // live data (checkExempt was null in production), so removing it
+    // dropped no real exemption; schedIsCheckExempt/schedToggleCheckExempt/
+    // schedCarryCheckExempt no longer exist. ──
 
     // ── 20) Auto-fill — generating a week without Schedule Builder or
     // Excel, ported from Schedule Builder's own scheduleDept/
