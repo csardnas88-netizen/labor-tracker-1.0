@@ -1001,6 +1001,61 @@ module.exports = {
     t.eq(win.schedDayTotal(SCH21c, ds21[3], 'lobby'), 1,
       "an ordinary day with no cover in play (Marroquin working) counts exactly the literal row, nothing added twice");
 
+    // ── Carlos's real report, 2026-09-24: "Sandra S, el jueves y el
+    // viernes, aparece automáticamente siempre como Lobby" — she'd never
+    // placed her there herself. Root cause: once Gabriela Cuevas gets
+    // nominated, her cell reads 'LOBBY' instead of '1', so the OLD loop
+    // (checking only `cell!=='1'`) treated her as unavailable on the
+    // NEXT run and cascaded straight past her to Sandra S too, stacking
+    // a second, unwanted cover — confirmed against his real live data,
+    // where exactly this shape (both Gabriela Cuevas AND Sandra S
+    // reading 'LOBBY' the same day) was sitting in Supabase. Re-running
+    // the chain on an already-doubled day must collapse back to the
+    // first-in-chain-order cover, not add a third pass of anything. ──
+    const SCH21dbl3 = {
+      days: {
+        [ds21[0]]: {
+          lobby: [['Marroquin', 'OFF']],
+          gra: [['Gabriela Cuevas', 'LOBBY'], ['Sandra S', 'LOBBY']],
+        },
+      },
+    };
+    const changedDbl = win.schedApplyCoverChainsForDate(SCH21dbl3, ds21[0]);
+    t.assert(changedDbl, 'reports something changed when it collapses a stacked double-cover');
+    t.eq(SCH21dbl3.days[ds21[0]].gra[0][1], 'LOBBY', 'Gabriela Cuevas — first in chain order — stays the cover');
+    t.eq(SCH21dbl3.days[ds21[0]].gra[1][1], '1', 'Sandra S, wrongly stacked on top of her, is released back to a plain 1');
+
+    // Running it again on the now-healed day is a true no-op — this
+    // must never oscillate between "heal" and "re-nominate" forever.
+    const changedAgain = win.schedApplyCoverChainsForDate(SCH21dbl3, ds21[0]);
+    t.assert(!changedAgain, 'a second run on the already-healed day reports no change');
+    t.eq(SCH21dbl3.days[ds21[0]].gra[1][1], '1', 'and Sandra S stays released, not re-nominated a moment later');
+
+    // A single-pass nomination (nobody covering yet) must still report
+    // changed — the self-heal check must not swallow the ordinary case.
+    const SCH21single = { days: { [ds21[0]]: { lobby: [['Marroquin', 'OFF']], gra: [['Gabriela Cuevas', '1']] } } };
+    t.assert(win.schedApplyCoverChainsForDate(SCH21single, ds21[0]), 'a fresh, ordinary nomination still reports changed');
+    t.eq(SCH21single.days[ds21[0]].gra[0][1], 'LOBBY', 'and the nomination itself still happens as before');
+
+    // ── schedHealStackedCoverChains: the render-time-only half of the
+    // same fix, deliberately separate from schedApplyCoverChains. It
+    // must NEVER perform a fresh nomination — only collapse an already-
+    // stacked double back down — because renderSchedule() runs right
+    // after schedSetCell's own live edit, with no `edited` context to
+    // protect a backup's cell she just set herself. A bare nomination
+    // pass there would silently undo that protection on every render. ──
+    const SCH21heal1 = { days: { [ds21[0]]: { lobby: [['Marroquin', 'OFF']], gra: [['Gabriela Cuevas', 'LOBBY'], ['Sandra S', 'LOBBY']] } } };
+    t.assert(win.schedHealStackedCoverChains(SCH21heal1, ds21), 'reports a change when it collapses a real stacked double');
+    t.eq(SCH21heal1.days[ds21[0]].gra[0][1], 'LOBBY', 'first-in-chain-order cover is kept');
+    t.eq(SCH21heal1.days[ds21[0]].gra[1][1], '1', 'the stacked extra is released');
+
+    // The exact case that must NOT fire: nobody covering yet at all
+    // (Gabriela's cell is a plain '1', same as right after Carlos's own
+    // fresh edit) — this must stay completely untouched, never nominate.
+    const SCH21heal2 = { days: { [ds21[0]]: { lobby: [['Marroquin', 'OFF']], gra: [['Gabriela Cuevas', 'OFF'], ['Sandra S', '1']] } } };
+    t.assert(!win.schedHealStackedCoverChains(SCH21heal2, ds21), 'no change reported — nothing to heal, and critically nobody gets freshly nominated either');
+    t.eq(SCH21heal2.days[ds21[0]].gra[1][1], '1', "Sandra S's cell — whether it's her own fresh edit or just untouched — is left exactly alone");
+
     // ── schedApplyLobbyMirror: Andrea mirrors Sarahi directly, same
     // shape as Jorge Gonzalez/Victoriano Ch — a literal Lobby row plus
     // her own Turndown cell relabeled, both driven off Sarahi's status,

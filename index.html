@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.41.0"/>
+<meta name="app-version" content="7.41.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.41.1', date:'2026-09-24',
+    fixes:['Fixed Sandra S automatically showing as LOBBY on Lobby cover days she was never placed in — Carlos\'s real report, "el jueves y el viernes... a pesar de que yo no la coloco en esa posición." Root cause: once Gabriela Cuevas gets nominated to cover Marroquin\'s day off, her own cell stops reading a plain \'1\' — so the very next time the cover chain re-ran (any edit that day, or a fresh Auto-fill) it read her as unavailable and cascaded straight past her to Sandra S too, stacking a second, unwanted cover that nothing ever walked back. Confirmed against his real live schedule: both Gabriela Cuevas AND Sandra S were sitting as LOBBY the same day, on Sept 18, 24, 25 and Oct 1. Self-heals on open — every day where this happened collapses back to just Gabriela Cuevas, no button needed.']
+  },
   {
     v:'7.41.0', date:'2026-09-23',
     features:['Tap an employee\'s name in the Schedule Draft to see exactly which days they rested LAST week — Carlos\'s ask, so he doesn\'t have to leave the page to check the rotation before handing out this week\'s days. Shown as a small strip of day pills that opens right under their row (picked over a floating hover card, which doesn\'t work on a phone) — reuses the exact same pill style as "Prefers off" in the ⋮ menu, so nothing new to learn.'],
@@ -21942,6 +21946,7 @@ function schedSyncPatyPmhm(SCH,dates){
    elsewhere) is left alone in both directions — not a clear enough
    signal to assign OR release a cover. */
 function schedApplyCoverChainsForDate(SCH,ds,edited){
+  var changed=false;
   SCHED_COVER_CHAINS.forEach(function(cc){
     var titular=cc.chain[0];
     var titularCell=schedCellFor(SCH,ds,titular.homeCrew,titular.name);
@@ -21950,11 +21955,37 @@ function schedApplyCoverChainsForDate(SCH,ds,edited){
         var c=cc.chain[i];
         if(schedCellFor(SCH,ds,c.homeCrew,c.name)!==cc.label)continue;
         var row=schedRawCell(SCH,ds,c.homeCrew,c.name);
-        if(row)row[1]='1';
+        if(row&&row[1]!=='1'){ row[1]='1'; changed=true; }
       }
       return;
     }
     if(titularCell===''||!(schedStatusIs(titularCell,'OFF')||schedStatusIs(titularCell,'R-OFF')||schedStatusIs(titularCell,'TAILOR')||schedStatusIs(titularCell,'CALL-OFF')))return;
+    /* Carlos's real report, 2026-09-24: Sandra S kept showing up as
+       LOBBY on Thu/Fri without him ever placing her there. Root cause —
+       once Gabriela Cuevas gets nominated below, her cell no longer
+       reads '1' (it reads cc.label), so the very next time this
+       function runs (any edit touching the chain, or a fresh Auto-fill)
+       the old loop treated her as "unavailable" via the `cell!=='1'`
+       check right below and cascaded straight past her to Sandra,
+       nominating a SECOND, redundant cover nobody asked for — and
+       nothing ever walked that back since releasing only happens when
+       the titular (Marroquin) returns to work. Self-heals it here:
+       if more than one backup already carries this chain's label, keep
+       only the first (chain order = priority order) and release every
+       later one back to '1', same as a genuinely no-longer-needed
+       cover already gets released above. */
+    var alreadyCovering=null;
+    for(var i=1;i<cc.chain.length;i++){
+      var c=cc.chain[i];
+      if(schedCellFor(SCH,ds,c.homeCrew,c.name)!==cc.label)continue;
+      if(alreadyCovering){
+        var row=schedRawCell(SCH,ds,c.homeCrew,c.name);
+        if(row){ row[1]='1'; changed=true; }
+        continue;
+      }
+      alreadyCovering=c;
+    }
+    if(alreadyCovering)return; // someone's already covering — don't nominate anyone else
     for(var i=1;i<cc.chain.length;i++){
       var c=cc.chain[i];
       var cell=schedCellFor(SCH,ds,c.homeCrew,c.name);
@@ -21974,13 +22005,47 @@ function schedApplyCoverChainsForDate(SCH,ds,edited){
          overrode. */
       if(edited&&edited.crew===c.homeCrew&&dlNorm(edited.name)===dlNorm(c.name))continue;
       var row=schedRawCell(SCH,ds,c.homeCrew,c.name);
-      if(row)row[1]=cc.label;
+      if(row){ row[1]=cc.label; changed=true; }
       return;
     }
   });
+  return changed;
 }
 function schedApplyCoverChains(SCH,dates){
-  dates.forEach(function(ds){ schedApplyCoverChainsForDate(SCH,ds); });
+  var changed=false;
+  dates.forEach(function(ds){ if(schedApplyCoverChainsForDate(SCH,ds))changed=true; });
+  return changed;
+}
+/* Render-time self-heal for the stacked-double-cover bug ONLY — never
+   performs a fresh nomination. schedApplyCoverChainsForDate's own
+   nomination step deliberately skips a backup's just-edited cell via
+   the `edited` argument (Carlos's real report: his fresh '1' on
+   Sandra S's own cell was immediately re-nominated right back to
+   LOBBY by this SAME function reacting to that very edit). renderSchedule
+   has no such context — schedSetCell itself calls renderSchedule()
+   right after a chain-member edit — so calling the full nominating
+   function here would silently undo that protection on every render.
+   This only collapses an already-existing double cover back to the
+   first-in-chain-order backup; it never assigns a cover that wasn't
+   already sitting there. */
+function schedHealStackedCoverChains(SCH,dates){
+  var changed=false;
+  dates.forEach(function(ds){
+    SCHED_COVER_CHAINS.forEach(function(cc){
+      var seen=false;
+      for(var i=1;i<cc.chain.length;i++){
+        var c=cc.chain[i];
+        if(schedCellFor(SCH,ds,c.homeCrew,c.name)!==cc.label)continue;
+        if(seen){
+          var row=schedRawCell(SCH,ds,c.homeCrew,c.name);
+          if(row&&row[1]!=='1'){ row[1]='1'; changed=true; }
+          continue;
+        }
+        seen=true;
+      }
+    });
+  });
+  return changed;
 }
 /* schedApplyLaundryMirror (Jorge Gonzalez <- Victoriano Ch, one-directional)
    used to live here — removed 2026-09-19, migrated to the generic
@@ -23428,6 +23493,19 @@ function renderSchedule(){
      reaches the other devices instead of each one silently re-fixing
      its own copy forever. */
   if(SCH&&SCH.days&&schedSyncCallOffMarks(SCH,schedWeekDates())){
+    SCH.savedAt=new Date().toISOString();
+    try{ dlSaveSchedule(SCH); }catch(e){}
+  }
+  /* Same idea for a stacked double cover-chain nomination — Carlos's
+     real report, 2026-09-24: Sandra S kept showing as LOBBY on Thu/Fri
+     without him ever placing her there. Pushed through the same way
+     the Call-Off fix above is, so it heals on every device that opens
+     the week, not just whichever one happens to trigger an edit.
+     schedHealStackedCoverChains only, NOT the full nominating
+     schedApplyCoverChains — see that function's own header comment for
+     why a bare nomination pass at render time would undo the
+     just-edited-cell protection schedSetCell relies on. */
+  if(SCH&&SCH.days&&schedHealStackedCoverChains(SCH,schedWeekDates())){
     SCH.savedAt=new Date().toISOString();
     try{ dlSaveSchedule(SCH); }catch(e){}
   }
