@@ -85,10 +85,10 @@ module.exports = {
     // unifocus-room-attendant.js) — its weekly budget sums each day's own
     // rate-based total the same way Public Area sums its banded ones.
     // Per reported day: rooms=120 (night before), departures=80 (same day)
-    // -> stayovers=40; (40*0.85*20 + 80*30)/60 = 51.33h/day x 2 days = 102.67h.
-    t.assert(/102\.67h/.test(raRow), "Room Attendant's weekly Unifocus budget sums its own rate-based total across both reported days (51.33h x 2 = 102.67h)");
-    // actual = 30 + 24 = 54; 54 - 102.67 = -48.67
-    t.assert(/-48\.67h/.test(raRow), "Room Attendant's Unifocus variance is actual (54h) minus its own Unifocus budget (102.67h)");
+    // -> stayovers=40; (40*0.85*25 + 80*35)/60 = 60.83h/day x 2 days = 121.67h.
+    t.assert(/121\.67h/.test(raRow), "Room Attendant's weekly Unifocus budget sums its own rate-based total across both reported days (60.83h x 2 = 121.67h)");
+    // actual = 30 + 24 = 54; 54 - 121.67 = -67.67
+    t.assert(/-67\.67h/.test(raRow), "Room Attendant's Unifocus variance is actual (54h) minus its own Unifocus budget (121.67h)");
     t.assert(!/134\.88h/.test(raRow), "Room Attendant's Current-mode LABOR_STD budget (134.88h) does not leak through by default");
 
     // ── Switch to Current Standard — the SAME card function, re-driven by

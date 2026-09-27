@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.41.1"/>
+<meta name="app-version" content="7.41.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.41.2', date:'2026-09-27',
+    changes:['Room Attendant\'s Unifocus rate formula changed from 20 min/Stayover + 30 min/Departure to 25 min/Stayover + 35 min/Departure — Carlos\'s ask, testing whether these coefficients track Unifocus\'s own reported Standard Hours more closely than the previous ones. The 85% fixed Stayover assumption is unchanged.']
+  },
+  {
     v:'7.41.1', date:'2026-09-24',
     fixes:['Fixed Sandra S automatically showing as LOBBY on Lobby cover days she was never placed in — Carlos\'s real report, "el jueves y el viernes... a pesar de que yo no la coloco en esa posición." Root cause: once Gabriela Cuevas gets nominated to cover Marroquin\'s day off, her own cell stops reading a plain \'1\' — so the very next time the cover chain re-ran (any edit that day, or a fresh Auto-fill) it read her as unavailable and cascaded straight past her to Sandra S too, stacking a second, unwanted cover that nothing ever walked back. Confirmed against his real live schedule: both Gabriela Cuevas AND Sandra S were sitting as LOBBY the same day, on Sept 18, 24, 25 and Oct 1. Self-heals on open — every day where this happened collapses back to just Gabriela Cuevas, no button needed.']
   },
@@ -8840,7 +8844,7 @@ var UNIFOCUS_STANDARDS={
    continuous per-room RATE, not a stepped band lookup like every other
    position, so it doesn't fit that shape and is computed directly by
    unifocusRoomAttendantHours() below instead. Confirmed with Carlos:
-   20 min for 85% of Stayovers + 30 min per Departure. Stayovers = last
+   25 min for 85% of Stayovers + 35 min per Departure. Stayovers = last
    night's rooms minus today's departures (the same night-before/same-day
    conventions already used elsewhere). The 85% is a FIXED assumption in
    the budget math, not driven by the day's actual DND count — that's
@@ -8850,8 +8854,8 @@ var UNIFOCUS_STANDARDS={
    calculation. A DND room gets 0 minutes (it's excluded from the 85% that
    gets cleaned), consistent with the fixed-15%-are-DNDs assumption. */
 var RA_STAYOVER_PCT=0.85;
-var RA_STAYOVER_MIN=20;
-var RA_DEPARTURE_MIN=30;
+var RA_STAYOVER_MIN=25;
+var RA_DEPARTURE_MIN=35;
 /* Core formula, split out so the Schedule page can run the same standard
    against its own forecasted OCC/Departures — entered weeks ahead, before
    any R106 report exists for those dates — instead of the actual-report
@@ -15637,8 +15641,8 @@ function _occfcRefreshWeek(weekKey){
 }
 
 /* ══ Departures forecast ══ (Carlos's ask, 2026-08-18: departures drive
-   as much of the Room Attendant standard as rooms do — 30 min each vs.
-   ~17 min per stayover — so they deserve the same Forecast/Scheduled/
+   as much of the Room Attendant standard as rooms do — 35 min each vs.
+   ~21 min per stayover — so they deserve the same Forecast/Scheduled/
    Opera tracking as rooms already get above, not just a bare number
    typed into the Schedule with nothing to check it against. Same
    hk_occfc_<week> record, same days[ds] object, just the depSched/depUf

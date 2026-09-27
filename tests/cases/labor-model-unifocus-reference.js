@@ -28,7 +28,7 @@ module.exports = {
       t.assert(html.indexOf('>' + label + '<') !== -1, label + ' appears in the reference');
     });
     t.assert(/Room Attendant/.test(html), 'Room Attendant appears too, even though it has no banded standard');
-    t.assert(/20 min/.test(html) && /30 min/.test(html), "Room Attendant's rate formula is spelled out (20 min / 30 min)");
+    t.assert(/25 min/.test(html) && /35 min/.test(html), "Room Attendant's rate formula is spelled out (25 min / 35 min)");
     t.assert(/85%/.test(html), "and its fixed 85% Stayover assumption is stated, since that's the number that gets challenged");
 
     // ── Rendered FROM the live standard, not a copy. Change a band and the

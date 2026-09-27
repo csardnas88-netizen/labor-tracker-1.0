@@ -1,7 +1,7 @@
 /* Sixth and last position added to the Unifocus Labor Standard: Room
    Attendant. Unlike every other position (a stepped band lookup),
    Carlos's own math for Room Attendant is a continuous per-room RATE:
-   20 min for 85% of Stayovers + 30 min per Departure, where Stayovers =
+   25 min for 85% of Stayovers + 35 min per Departure, where Stayovers =
    last night's rooms minus today's departures (the app's existing
    night-before/same-day conventions). That's why it's computed directly
    by unifocusRoomAttendantHours() rather than living in
@@ -19,7 +19,7 @@
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: "Unifocus Room Attendant standard: 85% of Stayovers at 20min + Departures at 30min, with a separate non-math-affecting DND count",
+  name: "Unifocus Room Attendant standard: 85% of Stayovers at 25min + Departures at 35min, with a separate non-math-affecting DND count",
   async run(t) {
     const seed = Object.assign(fakeSession(), {
       // See [[labor-tracker-tests]] — skips the legacy rooms migration that
@@ -43,11 +43,11 @@ module.exports = {
     const { win } = await loadApp({ seed });
 
     // ── Core formula: Stayovers = 200 rooms - 40 departures = 160.
-    // (160 * 0.85 * 20 + 40 * 30) / 60 = (2720 + 1200) / 60 = 65.33h. ──
+    // (160 * 0.85 * 25 + 40 * 35) / 60 = (3400 + 1400) / 60 = 80h. ──
     t.eq(win.getRoomsForDay('2026-07-15'), 200, 'rooms uses the existing night-before convention, unaffected');
     t.eq(win.getDeparturesForDay('2026-07-15'), 40, 'departures uses the existing same-day convention, unaffected');
     const hours = win.unifocusHoursForPosition('Room Attendant', '2026-07-15');
-    t.assert(Math.abs(hours - 65.3333) < 0.001, 'Stayovers(160) x 85% x 20min + 40 departures x 30min = 65.33h (got ' + hours + ')');
+    t.assert(Math.abs(hours - 80) < 0.001, 'Stayovers(160) x 85% x 25min + 40 departures x 35min = 80h (got ' + hours + ')');
 
     // ── No departures data at all for a date -> null (Stayovers can't be
     // derived), same null-propagation convention as every other position. ──
@@ -57,8 +57,8 @@ module.exports = {
     // ── The 85%/15% split is a FIXED constant, never derived from the
     // day's actual DND count. ──
     t.eq(win.RA_STAYOVER_PCT, 0.85, 'the Stayover percentage is the fixed 85% Carlos confirmed');
-    t.eq(win.RA_STAYOVER_MIN, 20, '20 minutes per Stayover room');
-    t.eq(win.RA_DEPARTURE_MIN, 30, '30 minutes per Departure room');
+    t.eq(win.RA_STAYOVER_MIN, 25, '25 minutes per Stayover room');
+    t.eq(win.RA_DEPARTURE_MIN, 35, '35 minutes per Departure room');
 
     // ── DND rooms: manual entry as a comma-separated room list (Carlos's
     // explicit ask — an audit trail of WHICH rooms, not just a total),
@@ -101,7 +101,7 @@ module.exports = {
     const raIdx = pace.indexOf('>Room Attendant</div>');
     t.assert(raIdx !== -1, 'Room Attendant block found in Weekly Labor Pace');
     const raBlock = pace.slice(raIdx, raIdx + 4000);
-    t.assert(/Standard[\s\S]{0,160}65\.33/.test(raBlock), "Room Attendant's Jul 15 card shows its computed Unifocus Standard (65.33h)");
+    t.assert(/Standard[\s\S]{0,160}80\.00/.test(raBlock), "Room Attendant's Jul 15 card shows its computed Unifocus Standard (80.00h)");
     // Stayovers = 160, DND count = 24 -> 24/160 = 15.0%
     t.assert(/24 DND/.test(raBlock), 'the justification caption shows the real derived DND count');
     t.assert(/15\.0% of 160 stayovers/.test(raBlock), "the caption shows the real percentage (15.0%) against the day's actual Stayovers (160), for comparison against the standard's fixed 85/15 assumption");

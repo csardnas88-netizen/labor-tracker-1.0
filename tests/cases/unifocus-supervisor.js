@@ -62,7 +62,7 @@ module.exports = {
     }
     t.assert(/Standard[\s\S]{0,160}24\.00/.test(blockFor('Supervisor')), "Supervisor's card shows its own Unifocus Standard (24.00h)");
     t.assert(/Standard[\s\S]{0,160}24\.00/.test(blockFor('House Attendant')), "House Attendant's card still shows its own Unifocus Standard too");
-    // Stayovers = 100 rooms - 45 departures = 55; (55*0.85*20 + 45*30) / 60 = 38.08h
-    t.assert(/Standard[\s\S]{0,160}38\.08/.test(blockFor('Room Attendant')), "Room Attendant's card shows its own rate-based Unifocus Standard (38.08h), unaffected by adding Supervisor");
+    // Stayovers = 100 rooms - 45 departures = 55; (55*0.85*25 + 45*35) / 60 = 45.73h
+    t.assert(/Standard[\s\S]{0,160}45\.73/.test(blockFor('Room Attendant')), "Room Attendant's card shows its own rate-based Unifocus Standard (45.73h), unaffected by adding Supervisor");
   }
 };
