@@ -223,14 +223,20 @@ module.exports = {
     t.eq(win.rnRangeAnchor, null);
     win.rnSetType('roff');
 
-    // ── Capture-time cover-chain conflict (Phase 3) — reuses the exact
-    // SCHED_COVER_CHAINS Auto-fill's own cover chains use, so it can never
-    // disagree with what Auto-fill would actually do. ──
+    // ── Capture-time cover-chain conflict (Phase 3) — reads the exact
+    // SCHED_COVER_CHAINS array Auto-fill's own cover chains use, so it can
+    // never disagree with what Auto-fill would actually do. Carlos asked
+    // to empty that array out entirely for Lobby, 2026-09-28 (see
+    // schedule-page.js's own cover-chain tests for the why) — this
+    // mechanism is generic over whatever SCHED_COVER_CHAINS holds, so with
+    // it empty the whole thing is inert now. Confirmed here rather than
+    // deleted outright: a future chain added for some other crew is
+    // automatically covered by this same code path, no new wiring needed. ──
     win.rnPickedDates = [];
     win.renderReqNotebook();
-    // Gabriela Cuevas already has this date logged as her R-OFF — she's the
-    // cover for Marroquin's Lobby AM slot, so logging Marroquin off the same
-    // day is exactly the conflict this alert exists for.
+    // Gabriela Cuevas having this date logged used to be exactly the
+    // conflict this alert existed for (she was Marroquin's Lobby AM
+    // cover) — kept as the fixture to prove the alert no longer fires.
     const gcEntry = { id: 5001, name: 'Gabriela Cuevas', crewKey: 'gra', crewLabel: 'AM Room Attendant', type: 'roff', dates: [dates[0]], writtenDates: [], missingDates: [] };
     win.saveReqNotebook([gcEntry]);
 
@@ -238,33 +244,16 @@ module.exports = {
     win.rnPickedDates = [dates[0]];
     win.rnRefreshAlerts();
     const alertsHtml = win.document.getElementById('rnCaptureAlerts').innerHTML;
-    t.assert(/Coverage conflict/.test(alertsHtml) && /Gabriela Cuevas/.test(alertsHtml),
-      'the live alert box shows the cascade conflict before Save is even clicked');
+    t.assert(!/Coverage conflict/.test(alertsHtml), 'no cascade conflict alert — there is no cover chain left to conflict against');
 
     const conflicts = win.rnCascadeConflicts('Marroquin', [dates[0]]);
-    t.eq(conflicts.length, 1, 'rnCascadeConflicts finds exactly the one hit');
-    t.eq(conflicts[0].otherName, 'Gabriela Cuevas');
+    t.eq(conflicts.length, 0, 'rnCascadeConflicts finds nothing, even though Gabriela Cuevas has the same day logged');
 
-    // Save blocks on a plain confirm() unless it's answered yes — declining leaves nothing saved.
-    let confirmMsg = '';
-    win.confirm = (m) => { confirmMsg = m; return false; };
-    const beforeCount = win.loadReqNotebook().length;
+    // Save goes straight through with no confirm() needed — nothing left to block on.
+    win.confirm = () => { throw new Error('with no chain configured there is nothing to confirm — Save must never pause here'); };
     win.rnAddRequest();
-    t.eq(win.loadReqNotebook().length, beforeCount, 'declining the conflict confirm saves nothing');
-    t.assert(/Gabriela Cuevas/.test(confirmMsg), 'the confirm dialog itself names who the conflict is with');
-
-    // Confirming yes goes ahead and saves — Carlos's call, not a hard block.
-    win.confirm = () => true;
-    win.rnAddRequest();
-    t.assert(win.loadReqNotebook().some((r) => r.name === 'Marroquin'), 'confirming yes saves the request despite the conflict');
+    t.assert(win.loadReqNotebook().some((r) => r.name === 'Marroquin'), 'Save goes straight through — no cascade conflict to block on');
     win.confirm = confirmFn;
-
-    // No conflict at all when the two people covering each other are NOT both off the same day.
-    win.rnPickedDates = [];
-    win.renderReqNotebook();
-    selectRn(win, 'Marroquin', 'lobby', 'AM Lobby');
-    t.eq(win.rnCascadeConflicts('Marroquin', [dates[1]]).length, 0,
-      'a day Gabriela Cuevas has nothing logged for is not flagged at all');
 
     // ── Small-team early warning — informational, never blocks Save ──
     win.saveReqNotebook([
