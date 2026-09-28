@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.41.2"/>
+<meta name="app-version" content="7.42.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.42.0', date:'2026-09-28',
+    features:['The Schedule Draft\'s Lobby crew now shows as two sub-cards — Lobby AM (Marroquin, Gabriela, Vanesa) and Lobby PM (Sarahi, Andrea) — Carlos\'s ask, since the two shifts were sharing one card. Each half has its own "+ Add someone to this crew" picker; anyone added through either one is remembered for next time. Presentation only: the data underneath is still the single Lobby crew everything else reads (cover chains, min-off, Auto-fill, the Excel export/import, Request Off) — none of that changed or needed to know this split exists. The Unifocus standard comparison is one combined figure for the whole position (Public Area Attendant has no AM/PM-specific standard on file), so it shows once, on the Lobby PM card, labeled "combined AM+PM" rather than being duplicated or split inaccurately.']
+  },
   {
     v:'7.41.2', date:'2026-09-27',
     changes:['Room Attendant\'s Unifocus rate formula changed from 20 min/Stayover + 30 min/Departure to 25 min/Stayover + 35 min/Departure — Carlos\'s ask, testing whether these coefficients track Unifocus\'s own reported Standard Hours more closely than the previous ones. The 85% fixed Stayover assumption is unchanged.']
@@ -20320,6 +20324,35 @@ var SCHED_BLOCKS=[
   {key:'gra',    label:'AM Room Attendant', ratios:[{label:'rooms each',num:'occ'},{label:'departures each',num:'dep'}]},
   {key:'hp',     label:'Houseman', ratios:[{label:'departures each',num:'dep'}]}
 ];
+/* ── Lobby AM/PM split, for the Schedule Draft's two sub-cards only ──
+   Carlos's ask, 2026-09-28: Lobby AM is Marroquin/Gabriela/Vanesa, Lobby
+   PM is Sarahi/Andrea. This is deliberately independent of Section
+   Assignments' own Lobby AM/PM list (dlLoadSections().lobby, used by
+   schedIsLobbyPm for the Excel export's shift-time text) — that upload
+   is a separate source Carlos doesn't always keep current, where this
+   is what he told the app directly for the on-screen card split.
+   Anyone added later through either sub-card's own "+ Add someone"
+   picker is remembered here too (schedSetLobbyShift), so she keeps
+   landing on the right side on every future render. A name never
+   assigned either way (an old workbook row, a cover picked up before
+   this existed) defaults to AM rather than a silent third bucket. */
+var SCHED_LOBBY_AM_DEFAULT=['Marroquin','Gabriela','Vanesa'];
+var SCHED_LOBBY_PM_DEFAULT=['Sarahi','Andrea'];
+function schedLobbyShiftMap(){
+  try{ var s=localStorage.getItem('hk_dl_lobby_shift'); return s?JSON.parse(s):{}; }catch(e){ return {}; }
+}
+function schedSetLobbyShift(name,shift){
+  var m=schedLobbyShiftMap();
+  m[dlNorm(name)]=shift;
+  try{ safeSetItem('hk_dl_lobby_shift',JSON.stringify(m)); }catch(e){}
+}
+function schedLobbyShift(name){
+  var m=schedLobbyShiftMap(), n=dlNorm(name);
+  if(m[n])return m[n];
+  if(SCHED_LOBBY_AM_DEFAULT.some(function(x){return dlNorm(x)===n;}))return 'am';
+  if(SCHED_LOBBY_PM_DEFAULT.some(function(x){return dlNorm(x)===n;}))return 'pm';
+  return 'am';
+}
 /* ── Unifocus standard, mapping a position to its crew(s) ──
    Confirmed with Carlos rather than assumed:
    - "Lobby" (labeled "AM Lobby" until 2026-09-02, when Carlos asked for
@@ -20612,6 +20645,31 @@ function schedRatioCount(SCH,ds,bk){
    is, only this Total display changes. */
 function schedDisplayTotal(SCH,ds,bk){
   return bk==='sup'?schedRatioCount(SCH,ds,bk):schedDayTotal(SCH,ds,bk);
+}
+/* Same per-row counting rule as schedDayTotal (a plain "1" or "PM"
+   counts, the crew's own away-label counts, "OFF"/blank don't), scoped
+   to just the names on ONE side of the Lobby AM/PM split — schedDayTotal
+   always sums the WHOLE 'lobby' crew, which is right for everywhere else
+   that reads it (the cover-chain/min-off/Unifocus machinery genuinely
+   doesn't care which half of the shift someone is on) but wrong for this
+   split card's own Total row. includeInflow adds the cover-chain backups
+   _schedCoverInflow credits to 'lobby' (Gabriela Cuevas/Sandra S covering
+   Marroquin) — pass true only for the AM side, since that chain's target
+   (Marroquin) lives there. */
+function _schedSubsetTotal(SCH,ds,bk,names,includeInflow){
+  var day=SCH.days&&SCH.days[ds]; if(!day)return 0;
+  var arr=day[bk]||[];
+  var want={}; names.forEach(function(p){ want[dlNorm(p[0])]=1; });
+  var ownLabel=_schedCrewLabel(bk);
+  var t=0;
+  arr.forEach(function(p){
+    if(!want[dlNorm(p[0])])return;
+    var v=String(p[1]||'').trim();
+    if(v==='PM'){ t+=1; return; }
+    if(ownLabel&&v===ownLabel){ t+=1; return; }
+    var n=parseFloat(v); if(!isNaN(n))t+=n;
+  });
+  return includeInflow?t+_schedCoverInflow(SCH,ds,bk):t;
 }
 /* Embedding a name in an inline handler: escape it for JS first, then
    the whole attribute gets HTML-escaped on the way out. Names here are
@@ -23221,7 +23279,7 @@ function schedResyncRequestOff(){
   renderSchedule();
   showToast('&#10003; Re-applied '+touched+' day'+(touched===1?'':'s')+' across '+Object.keys(names).length+' '+(Object.keys(names).length===1?'person':'people'));
 }
-function schedAddPerson(bk,name){
+function schedAddPerson(bk,name,shift){
   name=String(name==null?'':name).trim();
   if(!name)return;
   var SCH=dlLoadSchedule();
@@ -23239,6 +23297,11 @@ function schedAddPerson(bk,name){
     if(!SCH.days[ds][bk])SCH.days[ds][bk]=[];
     SCH.days[ds][bk].push([name,'','added']);
   });
+  /* Which of Lobby's two sub-cards she was added from (see schedLobbyShift)
+     — the picker at the bottom of Lobby AM/PM passes this through so she
+     lands on the right side on this render and every one after. Every
+     other crew's picker passes nothing, and this is a no-op for them. */
+  if(shift)schedSetLobbyShift(name,shift);
   /* A deliberate re-add always wins over an earlier retirement — Carlos
      picking her from this same picker again is exactly how he brings
      someone back once he needs her, per schedSetRetired's own doc. */
@@ -23309,7 +23372,7 @@ function schedRemovePerson(bk,name){
   renderSchedule();
   showToast('&#10003; '+name+' removed from this week onward');
 }
-function schedPickPerson(bk,sel){
+function schedPickPerson(bk,sel,shift){
   var v=sel.value; sel.selectedIndex=0;
   if(!v)return;
   if(v.slice(0,8)==='__new__|'){
@@ -23323,15 +23386,15 @@ function schedPickPerson(bk,sel){
     var full=v.slice(8);
     var suggested=full.split(/\s+/)[0];
     var nn=prompt('Add '+full+' to this crew as:\n\nThe schedule uses short names — this is how she\'ll appear on every crew card.',suggested);
-    if(nn&&nn.trim())schedAddPerson(bk,nn.trim());
+    if(nn&&nn.trim())schedAddPerson(bk,nn.trim(),shift);
     return;
   }
   if(v==='__other__'){
     var n=prompt('Name of the person to add to this crew:');
-    if(n)schedAddPerson(bk,n);
+    if(n)schedAddPerson(bk,n,shift);
     return;
   }
-  schedAddPerson(bk,v);
+  schedAddPerson(bk,v,shift);
 }
 /* A re-upload replaces the weeks the workbook covers — that is the
    intended direction, Excel is still where a new week gets built. But
@@ -23355,35 +23418,47 @@ function schedCarryAddedRows(oldSch,newSch){
   });
   return newSch;
 }
-/* Totals and the per-person ratios that hang off them. */
+/* Totals and the per-person ratios that hang off them.
+   Lobby's two sub-cards (see the Lobby AM/PM split above renderSchedule)
+   use domKey-suffixed ids ('sct_lobby_am_0', not 'sct_lobby_0') so an AM
+   and a PM row on the same day don't collide on one element — this has
+   to build the exact same sub-card list, in the exact same order, or a
+   live edit would silently patch nothing (or the wrong card). */
 function _schedRefreshTotals(SCH,onlyBk){
   var dates=schedWeekDates();
   SCHED_BLOCKS.forEach(function(b){
     if(onlyBk&&b.key!==onlyBk&&!b.ratios)return;
     var ufPos=_schedUfForCrew(b.key);
-    dates.forEach(function(ds,di){
-      var tot=schedDisplayTotal(SCH,ds,b.key);
-      var tEl=document.getElementById('sct_'+b.key+'_'+di);
-      if(tEl)tEl.textContent=tot?schedFmtTotal(tot):'';
-      var ratioCount=schedRatioCount(SCH,ds,b.key);
-      (b.ratios||[]).forEach(function(rt,ri){
-        var rEl=document.getElementById('scr_'+b.key+'_'+ri+'_'+di);
-        if(!rEl)return;
-        var day=SCH.days&&SCH.days[ds];
-        var num=day?parseFloat(day[rt.num]):NaN;
-        rEl.textContent=(!isNaN(num)&&ratioCount>0)?(num/ratioCount).toFixed(2):'';
+    var cards=(b.key==='lobby')?[
+      {domKey:'lobby_am',shift:'am',ref:_schedCrewRef(SCH,b.key).filter(function(p){return schedLobbyShift(p[0])==='am';})},
+      {domKey:'lobby_pm',shift:'pm',ref:_schedCrewRef(SCH,b.key).filter(function(p){return schedLobbyShift(p[0])==='pm';})}
+    ]:[{domKey:b.key,shift:null,ref:_schedCrewRef(SCH,b.key)}];
+    cards.forEach(function(card,cardIdx){
+      var domKey=card.domKey, showUf=(b.key!=='lobby')||cardIdx===cards.length-1;
+      dates.forEach(function(ds,di){
+        var tot=(b.key==='lobby')?_schedSubsetTotal(SCH,ds,b.key,card.ref,card.shift==='am'):schedDisplayTotal(SCH,ds,b.key);
+        var tEl=document.getElementById('sct_'+domKey+'_'+di);
+        if(tEl)tEl.textContent=tot?schedFmtTotal(tot):'';
+        var ratioCount=schedRatioCount(SCH,ds,b.key);
+        (b.ratios||[]).forEach(function(rt,ri){
+          var rEl=document.getElementById('scr_'+domKey+'_'+ri+'_'+di);
+          if(!rEl)return;
+          var day=SCH.days&&SCH.days[ds];
+          var num=day?parseFloat(day[rt.num]):NaN;
+          rEl.textContent=(!isNaN(num)&&ratioCount>0)?(num/ratioCount).toFixed(2):'';
+        });
+        if(ufPos&&showUf){
+          var uEl=document.getElementById('scu_'+domKey+'_'+di);
+          if(uEl)uEl.innerHTML=_schedUfCellHTML(SCH,ufPos,b.key,ds);
+        }
       });
-      if(ufPos){
-        var uEl=document.getElementById('scu_'+b.key+'_'+di);
-        if(uEl)uEl.innerHTML=_schedUfCellHTML(SCH,ufPos,b.key,ds);
-      }
-    });
-    _schedCrewRef(SCH,b.key).forEach(function(p,idx){
-      var dEl=document.getElementById('scd_'+b.key+'_'+idx);
-      if(!dEl)return;
-      var wd=_schedWorkDaysFor(SCH,dates,b.key,idx,p[0]);
-      dEl.innerHTML=_schedDaysCellHtml(wd,b.key);
-      dEl.style.cssText='text-align:center;font-size:11px;font-weight:800;padding:2px 0;'+_schedDaysCellCss(wd,b.key);
+      card.ref.forEach(function(p,idx){
+        var dEl=document.getElementById('scd_'+domKey+'_'+idx);
+        if(!dEl)return;
+        var wd=_schedWorkDaysFor(SCH,dates,b.key,idx,p[0]);
+        dEl.innerHTML=_schedDaysCellHtml(wd,b.key);
+        dEl.style.cssText='text-align:center;font-size:11px;font-weight:800;padding:2px 0;'+_schedDaysCellCss(wd,b.key);
+      });
     });
   });
 }
@@ -23715,8 +23790,30 @@ function renderSchedule(){
       }
     }
 
+    /* Carlos's ask, 2026-09-28: Lobby covers two different shifts (AM
+       and PM Public Area) sharing one crew card, so it now renders as
+       two sub-cards — Lobby AM and Lobby PM, each with its own "Add
+       someone" picker (schedLobbyShift decides which side a person is
+       on). Presentation only: the data underneath is still the single
+       'lobby' crew everything else (cover chains, min-off, Auto-fill,
+       the Excel export/import, Request Off) reads — none of that
+       needed to change, or even know this split exists. */
+    var lobbySub=(b.key==='lobby')?[
+      {domKey:'lobby_am',label:'Lobby AM',shift:'am'},
+      {domKey:'lobby_pm',label:'Lobby PM',shift:'pm'}
+    ]:null;
+    var cards=lobbySub?lobbySub.map(function(s){
+      return {domKey:s.domKey,label:s.label,shift:s.shift,
+        ref:ref.filter(function(p){return schedLobbyShift(p[0])===s.shift;})};
+    }):[{domKey:b.key,label:b.label,shift:null,ref:ref}];
+
+    cards.forEach(function(card,cardIdx){
+    var cardRef=card.ref, cardLabel=card.label, domKey=card.domKey;
+    var showUf=!lobbySub||cardIdx===cards.length-1;
+    var ufNote=lobbySub?' <span style="font-weight:400;text-transform:none;">(combined AM+PM)</span>':'';
+
     html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
-    html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(b.label)+'</div>';
+    html+='<div style="background:var(--navy);color:#fff;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(cardLabel)+'</div>';
     html+='<div style="padding:10px 14px 12px;overflow-x:auto;"><div style="min-width:520px;">';
     /* Departures (or Rooms, for Turndown/GRA), right above the date
        header — Carlos's ask, for the crews whose "each" figure is
@@ -23744,7 +23841,7 @@ function renderSchedule(){
     function menuBtn(label,onclick,active){
       return '<button onclick="'+onclick+'" style="text-align:left;border:none;background:transparent;color:'+(active?'var(--gd)':'var(--text1)')+';font-weight:'+(active?'700':'600')+';font-size:11px;padding:4px 6px;cursor:pointer;border-radius:4px;">'+label+'</button>';
     }
-    ref.forEach(function(p,idx){
+    cardRef.forEach(function(p,idx){
       if(washersEnd!=null&&(idx===0||idx===washersEnd)){
         html+='<div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--gd);margin:'+(idx===0?'0':'8px')+' 0 4px;padding-top:'+(idx===0?'0':'6px')+';'+(idx===0?'':'border-top:1px solid var(--border);')+'">'+(idx===0?'Lavadores':'Regulares')+'</div>';
       }
@@ -23868,7 +23965,7 @@ function renderSchedule(){
          from a 4-day week without counting by hand. Repainted in place
          by _schedRefreshTotals whenever a cell on this row changes. */
       var thisWkDays=_schedWorkDaysFor(SCH,dates,b.key,idx,nm);
-      html+='<div id="scd_'+b.key+'_'+idx+'" style="text-align:center;font-size:11px;font-weight:800;padding:2px 0;'+_schedDaysCellCss(thisWkDays,b.key)+'">'+_schedDaysCellHtml(thisWkDays,b.key)+'</div>';
+      html+='<div id="scd_'+domKey+'_'+idx+'" style="text-align:center;font-size:11px;font-weight:800;padding:2px 0;'+_schedDaysCellCss(thisWkDays,b.key)+'">'+_schedDaysCellHtml(thisWkDays,b.key)+'</div>';
       /* Last week's work-day count, its own column now (moved out of the
          cramped name badge) — Carlos's ask. Blank, not "0", when last
          week isn't on file for her at all. The full-weekend-off marker
@@ -23883,8 +23980,8 @@ function renderSchedule(){
     html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">';
     html+='<div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);">Total</div>';
     dates.forEach(function(ds,di){
-      var tot=SCH.days[ds]?schedDisplayTotal(SCH,ds,b.key):0;
-      html+='<div id="sct_'+b.key+'_'+di+'" style="text-align:center;font-size:11.5px;font-weight:800;color:var(--navy);">'+(tot?schedFmtTotal(tot):'')+'</div>';
+      var tot=!SCH.days[ds]?0:lobbySub?_schedSubsetTotal(SCH,ds,b.key,cardRef,card.shift==='am'):schedDisplayTotal(SCH,ds,b.key);
+      html+='<div id="sct_'+domKey+'_'+di+'" style="text-align:center;font-size:11.5px;font-weight:800;color:var(--navy);">'+(tot?schedFmtTotal(tot):'')+'</div>';
     });
     html+='</div>';
     (b.ratios||[]).forEach(function(rt,ri){
@@ -23907,7 +24004,7 @@ function renderSchedule(){
        was actually enough. Same colors as that card: green on standard,
        amber over, red short. */
     var ufPos=_schedUfForCrew(b.key);
-    if(ufPos){
+    if(ufPos&&showUf){
       /* House Attendant's two shifts run on different drivers (AM is
          departures, PM is a flat 8h/1 person) — naming which shift this
          is says why the two cards' numbers move independently, without
@@ -23915,9 +24012,9 @@ function renderSchedule(){
       var shiftNote=b.key==='hp'?' <span style="font-weight:400;text-transform:none;">(AM shift)</span>'
         :b.key==='pmhm'?' <span style="font-weight:400;text-transform:none;">(PM shift)</span>':'';
       html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border);">';
-      html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">Unifocus std'+shiftNote+'</div>';
+      html+='<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;">Unifocus std'+shiftNote+ufNote+'</div>';
       dates.forEach(function(ds,di){
-        html+='<div id="scu_'+b.key+'_'+di+'">'+_schedUfCellHTML(SCH,ufPos,b.key,ds)+'</div>';
+        html+='<div id="scu_'+domKey+'_'+di+'">'+_schedUfCellHTML(SCH,ufPos,b.key,ds)+'</div>';
       });
       html+='</div>';
     }
@@ -23939,7 +24036,7 @@ function renderSchedule(){
         +'</optgroup>';
     });
     html+='<div style="padding:0 14px 12px;">';
-    html+='<select onchange="schedPickPerson(\''+b.key+'\',this)"'
+    html+='<select onchange="schedPickPerson(\''+b.key+'\',this'+(card.shift?',\''+card.shift+'\'':'')+')"'
       +' style="width:100%;max-width:320px;padding:5px 8px;font-size:11px;font-weight:700;color:var(--gd);'
       +'border:1px dashed var(--gold);border-radius:7px;background:var(--gt);font-family:inherit;cursor:pointer;">';
     html+='<option value="">+ Add someone to this crew</option>';
@@ -23957,6 +24054,7 @@ function renderSchedule(){
     html+='<option value="__other__">Someone else&hellip;</option>';
     html+='</select></div>';
     html+='</div>';
+    }); // end cards.forEach (Lobby AM/PM split, or the single normal card)
   });
 
   html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--text3);margin-top:2px;">';
