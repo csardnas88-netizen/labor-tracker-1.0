@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.43.1"/>
+<meta name="app-version" content="7.43.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4571,6 +4571,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.43.2', date:'2026-09-28',
+    features:['Weekly Labor Pace: tap a position\'s own name (e.g. "Room Attendant") to see its Unifocus Labor Standard inline, right on that card — bands, shift lengths, the per-room rate formula — without leaving the page for the full reference on Labor Model. Carlos\'s ask, so a manager mid-analysis has it on hand immediately. Reads live off the same UNIFOCUS_STANDARDS data the full Labor Model reference card uses (buildUnifocusStandardHTML now accepts an optional position filter), never a second hand-copied figure that could drift. Each position opens/closes independently and stays collapsed by default.']
+  },
+  {
     v:'7.43.1', date:'2026-09-28',
     features:['Weekly Labor Pace now shows a day\'s logged Call-Offs right on that day+position\'s own card — Carlos\'s ask, so a low Actual number reads as "right, she called off" during his weekly analysis instead of an unexplained gap. Read-only, pulled from the exact same Call-Offs records the Call-Offs page already writes; nothing new to log from here, and nothing about the budget/variance math changes.']
   },
@@ -9033,6 +9037,19 @@ function toggleWPCard(pos,ds){
   wpCardOpen[key]=!isOpen;
   renderLaborDash();
 }
+/* Carlos's ask, 2026-09-28: tap a position's own name on Weekly Labor
+   Pace to see its Unifocus Labor Standard right there — bands, shift
+   lengths, the per-room rate formula for Room Attendant — without
+   leaving the page for the full reference down on Labor Model. Keyed by
+   position only (not position+day, unlike wpCardOpen/wpNoteExpanded)
+   since the standard itself doesn't change day to day — one tap shows
+   it for every day-card under that position at once. Collapsed by
+   default, same as the full reference card. */
+var wpStdOpen={};
+function toggleWPStandard(pos){
+  wpStdOpen[pos]=!wpStdOpen[pos];
+  renderLaborDash();
+}
 /* Daily DND (Do Not Disturb) room list — Room Attendant's Unifocus budget
    assumes a FIXED 85%/15% Stayover/DND split (see unifocusRoomAttendantHours
    above); this is REAL evidence Carlos logs each day to justify that
@@ -11578,10 +11595,17 @@ function _ufBandsHTML(bands,shiftHours,pos){
   });
   return out;
 }
-function buildUnifocusStandardHTML(){
+/* onlyPos (optional): scopes the output to a single position's block —
+   Carlos's ask, 2026-09-28, so Weekly Labor Pace can show just the ONE
+   position he's looking at inline, without leaving the page for the full
+   Labor Model reference below. Still reads straight off UNIFOCUS_STANDARDS,
+   same as the unfiltered call the Labor Model page itself makes — never a
+   second hand-copied source that could drift from it. */
+function buildUnifocusStandardHTML(onlyPos){
   var html='';
   /* Room Attendant first — it's the only rate-based one, and the one whose
      numbers get questioned most in the meeting. */
+  if(!onlyPos||onlyPos==='Room Attendant')
   html+='<div style="border:1px solid var(--gold);border-radius:10px;overflow:hidden;margin-bottom:10px;">'
     +'<div style="background:var(--gt);padding:7px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">'
     +'<span style="font-size:11.5px;font-weight:700;color:var(--gd);">Room Attendant</span>'
@@ -11596,6 +11620,7 @@ function buildUnifocusStandardHTML(){
     +'</div></div>';
 
   LM_ORDER.forEach(function(pos){
+    if(onlyPos&&pos!==onlyPos)return;
     var shifts=UNIFOCUS_STANDARDS[pos];
     if(!shifts)return; /* Room Attendant, handled above */
     var body='';
@@ -13549,7 +13574,19 @@ function buildWeeklyPaceHTML(days,rooms,wk){
 
     html+='<div style="border-top:1px solid var(--border);">';
     html+='<div style="padding:8px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--surface);">';
-    html+='<div><div style="font-size:11.5px;font-weight:700;color:var(--text1);">'+p.label+'</div><div style="font-size:9px;color:var(--text3);">'+p.sub+'</div></div>';
+    var stdOpen=!!wpStdOpen[p.key];
+    /* The onclick/title sit on the OUTER wrapper, and the inner
+       '>'+p.label+'</div>' is left byte-for-byte as it was — several
+       other tests (unifocus-houseperson.js, unifocus-room-attendant.js,
+       labor-standard-toggle.js, ...) locate a position's block by that
+       exact substring, and a chevron tucked inside that same div broke
+       all of them the first time around. The gold "Standard ▾" hint
+       lives in the subtitle line instead, where nothing anchors on an
+       exact close. */
+    html+='<div onclick="toggleWPStandard(\''+p.key+'\')" style="cursor:pointer;" title="Tap to '+(stdOpen?'hide':'show')+' the Unifocus Labor Standard for '+p.label+'">'
+      +'<div style="font-size:11.5px;font-weight:700;color:var(--text1);">'+p.label+'</div>'
+      +'<div style="font-size:9px;color:var(--text3);">'+p.sub+' <span style="color:var(--gd);font-weight:700;">&middot; Standard '+(stdOpen?'&#9652;':'&#9662;')+'</span></div>'
+      +'</div>';
     html+='<div style="text-align:right;">';
     html+='<div style="font-size:8.5px;color:var(--text3);">'+actual.toFixed(2)+'h actual'+(budget!==null?' &middot; '+budget.toFixed(2)+'h budget':'')+'</div>';
     if(variance!==null){
@@ -13561,6 +13598,18 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     }
     html+='</div>';
     html+='</div>';
+
+    /* Carlos's ask: the Unifocus Labor Standard for exactly this
+       position, inline, so a manager mid-analysis never has to leave
+       Weekly Labor Pace to go check it on Labor Model. Same renderer the
+       full reference card down there uses (buildUnifocusStandardHTML),
+       just scoped to this one position — reads live off
+       UNIFOCUS_STANDARDS, never a second hand-copied figure. */
+    if(stdOpen){
+      html+='<div style="padding:10px 14px;background:var(--surface);border-top:1px solid var(--border);">'
+        +buildUnifocusStandardHTML(p.key)
+        +'</div>';
+    }
 
     /* Day-cards default to OPEN, showing the Unifocus-report-style detail
        rows — Actual/Standard/Var (h)/Var (%) — plus the Explanation (the

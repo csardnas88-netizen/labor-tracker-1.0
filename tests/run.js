@@ -93,6 +93,7 @@ const cases = [
   require('./cases/schedule-laundry-washers-grouping'),
   require('./cases/schedule-last-week-off-strip'),
   require('./cases/weekly-pace-calloffs'),
+  require('./cases/weekly-pace-standard-toggle'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
