@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.42.1"/>
+<meta name="app-version" content="7.43.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4570,6 +4570,18 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.43.1', date:'2026-09-28',
+    features:['Weekly Labor Pace now shows a day\'s logged Call-Offs right on that day+position\'s own card — Carlos\'s ask, so a low Actual number reads as "right, she called off" during his weekly analysis instead of an unexplained gap. Read-only, pulled from the exact same Call-Offs records the Call-Offs page already writes; nothing new to log from here, and nothing about the budget/variance math changes.']
+  },
+  {
+    v:'7.43.0', date:'2026-09-28',
+    changes:['Every employee on 2+ crews now syncs both ways by default, no exception list — Carlos\'s explicit ask ("quiero que todos se sincronicen sin excepción") after the Vanesa fix above. A row added via "+ Add someone to this crew" used to be treated as a temporary borrow and excluded outright ("borrowing is not a transfer," Karla Varela\'s original real case); that default is reversed now, so any two-crew case behaves like Sandra S/Vanesa always did — marking her working on either crew relabels the other with that crew\'s own label, and a real day off carries to both. The one real consequence: someone borrowed for a single genuine double-shift can no longer show as working both crews at once — Carlos confirmed he\'d rather have that than keep growing an allowlist. Rubia/Julia are the one deliberate exception left, unrelated to this change: their Laundry coverage runs on the older "mark your own cell LAUNDRY" convention (schedSyncLaundryCoverRow), which already has its own complete two-way sync and would otherwise fight this generic one over the same cell.']
+  },
+  {
+    v:'7.42.2', date:'2026-09-28',
+    fixes:['Vanesa (started on Lobby, added to Laundry by hand) now stays synced between the two crews both ways — Carlos\'s real report: her Laundry edits weren\'t reflecting on Lobby AM. Root cause: a row added via "+ Add someone to this crew" is normally treated as a temporary borrow and deliberately excluded from the generic cross-crew sync ("borrowing is not a transfer" — someone can genuinely work two crews the same day). Vanesa is a genuine second home crew instead, the exact same real case Sandra S already got this same exception for — added to that same short allowlist (SCHED_CROSS_CREW_ADDED_SYNCED). Marking her working on either crew now relabels the other with that crew\'s own label (LOBBY/LAUNDRY) instead of a plain \'1\', and a real day off still carries across to both.']
+  },
   {
     v:'7.42.1', date:'2026-09-28',
     fixes:['Removed the Lobby cover chain entirely (Marroquin -> Gabriela Cuevas -> Sandra S) — Carlos\'s ask. It had been the source of several real bugs over the weeks it was live: a stacked double cover, stale relabels, the chain re-firing on an unrelated edit. Nobody is auto-nominated to cover Marroquin\'s Lobby AM shift anymore — not on a live edit, not by Auto-fill, not by the render-time self-heal — and Lobby\'s own daily total no longer carries the invisible +1 a cover used to add. Coverage is now entirely Carlos\'s call, placed by hand like any other cell. Gabriela Cuevas/Gabriela\'s own Room-Attendant-vs-Lobby sync and Sandra S\'s generic cross-crew sync are both independent of this chain and are unaffected. Any "LOBBY" label already sitting in the file from a past auto-cover is untouched — it\'s just data now, his to correct or clear by hand.']
@@ -13574,6 +13586,8 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       var dayKey=p.key+'|'+ds;
       var note=getVarianceNote(ds,p.key);
       var hasNote=!!note;
+      var dayCallOffs=callOffsForDayPosition(ds,p.key);
+      var hasCallOff=dayCallOffs.length>0;
       var cardOpen=wpCardOpen[dayKey]!==false;
       var noteEditing=!!wpNoteExpanded[dayKey];
       var goldBg=hasNote?'background:var(--gt);':'';
@@ -13591,6 +13605,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
           html+='<div style="font-size:8.5px;color:var(--text3);">—</div>';
         }
         if(hasNote)html+='<div style="margin-top:5px;font-size:8px;font-weight:700;color:var(--gd);">&#128221; Note</div>';
+        if(hasCallOff)html+='<div style="margin-top:3px;font-size:8px;font-weight:700;color:var(--red);">&#128222; '+dayCallOffs.length+' called off</div>';
         html+='</div>';
       }else{
         html+='<div class="wp-day-card wp-expanded" style="padding:9px 10px;'+borderRight+goldBg+'">';
@@ -13643,6 +13658,19 @@ function buildWeeklyPaceHTML(days,rooms,wk){
           html+='<div onclick="toggleWPNote(\''+p.key+'\',\''+ds+'\')" style="font-size:8.5px;color:var(--text3);font-style:italic;cursor:pointer;">+ Note</div>';
         }
         html+='</div>';
+        /* Carlos's ask: logged call-offs for this exact day+position,
+           right where he's already reading the day's Actual/Variance —
+           so a low number reads as "right, she called off" during
+           analysis instead of an unexplained gap. Read-only, pulled from
+           the same calloffs_data the Call-Offs page itself writes. */
+        if(hasCallOff){
+          html+='<div style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--border);">';
+          html+='<div style="font-size:8px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;">&#128222; Called off</div>';
+          dayCallOffs.forEach(function(c){
+            html+='<div style="font-size:9.5px;color:var(--text1);margin-bottom:2px;"><b>'+escHtml(c.empName||'')+'</b>'+(c.reason?' &mdash; '+escHtml(c.reason):'')+'</div>';
+          });
+          html+='</div>';
+        }
         html+='</div>';
       }
     });
@@ -18745,6 +18773,19 @@ function loadCallOffs(){
   try{var s=localStorage.getItem('calloffs_data');if(s)return JSON.parse(s);}catch(e){}
   return [];
 }
+/* Carlos's ask, 2026-09-28: while doing his weekly labor analysis, he
+   wants to SEE a day's logged call-offs right on Weekly Labor Pace's own
+   day-card, in the matching position — so a low Actual number reads as
+   "right, she called off" instead of an unexplained dip. Read-only; this
+   is a second place to READ the same calloffs_data records New Call-Off
+   already writes, not a new store or a way to log one from here. pos
+   matches HK_WEEKLY_POSITIONS' own canonical labels (the same ones every
+   other position-keyed feature — Unifocus, Labor Model — already uses),
+   since that's what the New Call-Off form's employee picker attaches to
+   each record off the roster. */
+function callOffsForDayPosition(ds,posKey){
+  return (loadCallOffs()||[]).filter(function(c){return c.date===ds&&c.pos===posKey;});
+}
 function saveCallOffs(list){
   safeSetItem('calloffs_data',JSON.stringify(list));
   try{supaPut('calloffs_data',list);}catch(e){} /* legacy blob, kept as a rollback safety net */
@@ -22524,8 +22565,17 @@ var SCHED_CREW_AWAY_LABEL={
    entirely outside both config arrays — see its header comment for why it
    was pulled out of the generic chain mechanism in the first place. Both
    named here explicitly so this generic pass can't fight that tuned
-   behavior over the same Lobby/Turndown cells. */
-var SCHED_CROSS_CREW_EXTRA_EXCLUDED=['Sarahi','Andrea'];
+   behavior over the same Lobby/Turndown cells.
+   Rubia/Julia (SCHED_HP_OVERFLOW_BACKUPS) are the Laundry case of the
+   same problem: they're PERMANENT 'added' Laundry members (unlike a
+   plain 'cover' row, which the tag check above already excludes on its
+   own), but still covered via the same "any crew's cell reading LAUNDRY"
+   convention (schedSyncLaundryCoverRow/schedReleaseStaleLaundryLabels).
+   The tag alone can't tell their row apart from Sandra S/Vanesa/Karla
+   Varela's genuine two-home-crew rows, which also carry 'added' and DO
+   need to sync generically now — so they're excluded by name instead,
+   same as Sarahi/Andrea. */
+var SCHED_CROSS_CREW_EXTRA_EXCLUDED=['Sarahi','Andrea','Rubia','Julia'];
 function _schedCrossCrewExcluded(name){
   var nk=dlNorm(name);
   /* Sandra S is a deliberate exception, 2026-09-08: she's still in
@@ -22548,21 +22598,30 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
     if(!SCHED_CREW_AWAY_LABEL[b.key])return;
     (day[b.key]||[]).forEach(function(row){
       var nm=String(row[0]||'').trim(); if(!nm)return;
-      /* A row tagged 'added' (schedAddPerson) is USUALLY a deliberate
-         BORROW, not the same-person-one-location situation this whole
-         mechanism exists for — "borrowing is not a transfer," she can
-         genuinely work both crews the same day (Karla Varela's real
-         case). Excluded entirely, not just as a source, so her real
-         crew's own cell is never relabeled off of it either.
-         Sandra S is the deliberate exception, 2026-09-08: Carlos added
-         her to Laundry by hand once, same 'added' tag Karla Varela has,
-         but for her it's a genuine SECOND home crew he wants fully
-         synced, not a temporary borrow — exactly the case that migrated
-         her here off her old dedicated pairs in the first place. Without
-         this, her merged Laundry row (schedPurgeDuplicateAliasRows keeps
-         whichever tag survives the merge) stayed permanently excluded
-         and looked "double-booked" forever, the reported bug. */
-      if(row[2]==='added'&&dlNormAlias(nm)!=='sandra s')return;
+      /* A row tagged 'added' (schedAddPerson, "+ Add someone to this
+         crew") USED to be excluded outright — "borrowing is not a
+         transfer," Karla Varela's real case, someone genuinely covering
+         a shift on a second crew without it being her real second home.
+         Carlos's ask, 2026-09-28, reversing that default: EVERYONE with
+         a row on 2+ crews syncs now, added or not, no exception list —
+         he'd rather every borrow behave like Sandra S/Vanesa's real
+         second-home case than keep a growing allowlist of who's the
+         exception. The real consequence, worth knowing if it comes up
+         again: someone borrowed onto a second crew for a single day can
+         no longer show as working BOTH at once (a genuine double-shift,
+         Karla Varela's original case) — marking her working on either
+         crew now relabels the other with that crew's own away-label,
+         same as every native two-crew row already did.
+         An ephemeral 'cover' row (schedSyncLaundryCoverRow's own tag,
+         distinct from 'added') is still excluded, tag or no allowlist —
+         it only ever exists BECAUSE some other crew's cell literally
+         reads 'LAUNDRY', a relationship that mechanism already owns
+         completely (creates/updates the row; schedReleaseStaleLaundryLabels
+         releases the label the other way once Laundry itself disagrees —
+         deliberately NOT the same as mirroring a plain absence, which is
+         what this generic pass would otherwise do). Letting this pass
+         also touch it would fight that mechanism over the same cell. */
+      if(row[2]==='cover')return;
       if(_schedCrossCrewExcluded(nm))return;
       /* dlNormAlias, not dlNorm — bridges known per-employee spelling
          drift between crews (Carlos's real report: "Sandra S" vs

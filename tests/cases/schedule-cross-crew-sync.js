@@ -8,12 +8,17 @@
    schedApplyCrossCrewSyncForDate deliberately EXCLUDES anyone already
    covered by a more specific, already-tuned mechanism (SCHED_LINKED_PEOPLE,
    SCHED_COVER_CHAINS, Sarahi/Andrea's direct mirror), so this generic pass
-   can never fight one of those over the same cell — the whole reason two
-   earlier regressions (Karla Varela's borrowed Laundry row, Andrea's
-   Sarahi-driven Turndown relabel) showed up while building this and had
-   to be excluded explicitly. Also excludes any row tagged 'added'
-   (schedAddPerson's deliberate BORROW) entirely — "borrowing is not a
-   transfer," she can genuinely work both crews the same day. */
+   can never fight one of those over the same cell — the whole reason
+   Andrea's Sarahi-driven Turndown relabel showed up while building this
+   and had to be excluded explicitly.
+
+   A row tagged 'added' (schedAddPerson's deliberate BORROW, "+ Add
+   someone to this crew") USED to be excluded entirely too — "borrowing is
+   not a transfer," Karla Varela's real case, someone covering a shift on
+   a second crew without it being a real second home. Carlos's ask,
+   2026-09-28, reversed that default: every borrowed row participates now,
+   no exception list — he'd rather every borrow sync like Sandra S/Vanesa's
+   real second-home case than keep growing an allowlist. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
@@ -61,29 +66,67 @@ module.exports = {
       "no change — Houseman's real '1' is correctly recognized as authoritative once Supervisors reads Houseman's own label");
     t.eq(SCH5.days[ds].hp[0][1], '1', "Houseman's real working '1' survives untouched, not stomped to 'SUPERVISOR'");
 
-    // ── A row tagged 'added' (schedAddPerson's deliberate borrow) is
-    // excluded entirely — she can genuinely work both crews the same day,
-    // "borrowing is not a transfer." Carlos's real regression while
-    // building this: Karla Varela borrowed onto Laundry kept her Room
-    // Attendant day untouched by the Laundry edit. ──
+    // ── A row tagged 'added' (schedAddPerson's deliberate borrow) USED
+    // to be excluded entirely — "borrowing is not a transfer," Karla
+    // Varela's real regression while building this originally (her Room
+    // Attendant day stayed untouched by a Laundry edit). Carlos's ask,
+    // 2026-09-28, reversed that default: every borrowed row participates
+    // now, same as a native two-crew row always did. ──
     const SCH6 = { days: { [ds]: { gra: [['Karla Varela', '1']], laundry: [['Karla Varela', '1', 'added']] } } };
-    t.assert(!win.schedApplyCrossCrewSyncForDate(SCH6, ds, { crew: 'laundry', name: 'Karla Varela' }),
-      'no change at all — a borrowed row never participates in cross-crew reconciliation');
-    t.eq(SCH6.days[ds].gra[0][1], '1', 'her real Room Attendant day is untouched');
-    t.eq(SCH6.days[ds].laundry[0][1], '1', 'and her borrowed Laundry day is untouched too');
+    t.assert(win.schedApplyCrossCrewSyncForDate(SCH6, ds, { crew: 'laundry', name: 'Karla Varela' }),
+      'reports a real change — a borrowed row participates in cross-crew reconciliation now, no exception');
+    t.eq(SCH6.days[ds].gra[0][1], 'LAUNDRY', "her Room Attendant day relabels to LAUNDRY, following the edited Laundry cell");
+    t.eq(SCH6.days[ds].laundry[0][1], '1', 'and her Laundry day keeps the value just edited');
+    t.eq(SCH6.days[ds].laundry[0][2], 'added', "the 'added' tag itself is untouched — only the value on the OTHER crew changes");
 
-    // ── Sandra S is the deliberate exception, 2026-09-08: Carlos's real
-    // report, Saturday still showed a plain '1' on both Room Attendant
-    // and Laundry after this whole migration ("eso no debería pasar").
-    // Root cause: her merged Laundry row (schedPurgeDuplicateAliasRows
-    // keeps whichever tag survives) carried the same 'added' tag Karla
-    // Varela's genuine borrow has, from when Carlos originally added her
-    // to Laundry by hand — but for Sandra S that's a real second home
-    // crew, not a temporary borrow, and she must still fully participate. ──
+    // ── Sandra S and Vanesa are the same real case, just via a row
+    // already showing a real value on both sides (rather than the edited
+    // side winning explicitly) — confirms this isn't limited to the
+    // edited-cell path above. ──
     const SCH6b = { days: { [ds]: { gra: [['Sandra S', '1']], lobby: [['Sandra S.', 'ROOMS']], laundry: [['Sandra S.', '1', 'added']] } } };
-    t.assert(win.schedApplyCrossCrewSyncForDate(SCH6b, ds), 'reports a real change — her added-tagged Laundry row still participates');
-    t.eq(SCH6b.days[ds].laundry[0][1], 'ROOMS', "her Laundry row relabels to ROOMS despite the 'added' tag — this was the reported bug, it looked permanently double-booked");
+    t.assert(win.schedApplyCrossCrewSyncForDate(SCH6b, ds), 'reports a real change — her added-tagged Laundry row participates');
+    t.eq(SCH6b.days[ds].laundry[0][1], 'ROOMS', "her Laundry row relabels to ROOMS despite the 'added' tag");
     t.eq(SCH6b.days[ds].laundry[0][2], 'added', "the tag itself is untouched — only the value changes, she's still a real permanent Laundry crew member");
+
+    const SCH6c = { days: { [ds]: { lobby: [['Vanesa', '1']], laundry: [['Vanesa', '1', 'added']] } } };
+    t.assert(win.schedApplyCrossCrewSyncForDate(SCH6c, ds, { crew: 'lobby', name: 'Vanesa' }),
+      "marking her working on Lobby — her home crew — reports a real change on Laundry's side");
+    t.eq(SCH6c.days[ds].laundry[0][1], 'LOBBY', "her Laundry row relabels to LOBBY, despite the 'added' tag");
+    t.eq(SCH6c.days[ds].laundry[0][2], 'added', 'the tag itself is untouched');
+
+    // And the other direction: both cells reading a plain '1' looks
+    // double-booked; editing her Laundry cell (confirming she's really
+    // working there today) carries back and relabels Lobby.
+    const SCH6d = { days: { [ds]: { lobby: [['Vanesa', '1']], laundry: [['Vanesa', '1', 'added']] } } };
+    win.schedApplyCrossCrewSyncForDate(SCH6d, ds, { crew: 'laundry', name: 'Vanesa' });
+    t.eq(SCH6d.days[ds].lobby[0][1], 'LAUNDRY', "editing her Laundry cell relabels her Lobby row to LAUNDRY, so she no longer reads as double-booked");
+
+    // A real absence still mirrors its exact text across both, same as
+    // Sandra S and every other synced pair.
+    const SCH6e = { days: { [ds]: { lobby: [['Vanesa', 'R-OFF']], laundry: [['Vanesa', '1', 'added']] } } };
+    win.schedApplyCrossCrewSyncForDate(SCH6e, ds, { crew: 'lobby', name: 'Vanesa' });
+    t.eq(SCH6e.days[ds].laundry[0][1], 'R-OFF', 'a granted R-OFF on Lobby carries across to her Laundry row too');
+
+    // ── Rubia/Julia are the one real exception left, 2026-09-28: unlike
+    // Karla Varela/Vanesa's genuine two-home-crew 'added' rows above,
+    // theirs is driven by the OLDER "any crew's cell reading LAUNDRY"
+    // convention (schedSyncLaundryCoverRow/schedReleaseStaleLaundryLabels),
+    // which already owns this relationship completely and disagrees with
+    // this generic pass about what an absence on Laundry even means (does
+    // she stop covering Laundry, or is she fully off?). Both a 'cover'-
+    // tagged row (excluded by tag alone) and Rubia/Julia's own permanent
+    // 'added' row (indistinguishable by tag from Vanesa's, excluded by
+    // name in SCHED_CROSS_CREW_EXTRA_EXCLUDED instead) stay out of this
+    // generic pass entirely. ──
+    t.assert(!win.schedApplyCrossCrewSyncForDate(
+      { days: { [ds]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '1', 'cover']] } } }, ds, { crew: 'laundry', name: 'Rubia' }),
+      "an ephemeral 'cover' row is skipped by its tag alone");
+    t.assert(!win.schedApplyCrossCrewSyncForDate(
+      { days: { [ds]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '1', 'added']] } } }, ds, { crew: 'laundry', name: 'Rubia' }),
+      "Rubia's permanent 'added' row is skipped too, by name — the tag alone can't tell it apart from Vanesa's");
+    t.assert(!win.schedApplyCrossCrewSyncForDate(
+      { days: { [ds]: { gra: [['Julia', 'LAUNDRY']], laundry: [['Julia', '1', 'added']] } } }, ds, { crew: 'laundry', name: 'Julia' }),
+      'and Julia, the second overflow backup');
 
     // ── Anyone already in SCHED_LINKED_PEOPLE, SCHED_COVER_CHAINS, or the
     // Sarahi/Andrea direct mirror is excluded entirely, so this generic

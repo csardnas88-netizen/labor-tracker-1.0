@@ -259,6 +259,13 @@ module.exports = {
     // People cross departments here constantly: a Room Attendant covers
     // Laundry, a Laundry attendant works as Houseman. The person is
     // already on the schedule, just on a different crew.
+    //
+    // Carlos's ask, 2026-09-28: EVERYONE with a row on 2+ crews syncs now,
+    // borrowed or not — no exception list (see schedApplyCrossCrewSyncForDate's
+    // own header comment). Karla Varela here used to be the deliberate
+    // counter-example ("borrowing is not a transfer," she could work both
+    // the same day without either cell touching the other) — that's gone;
+    // she now behaves exactly like Sandra S/Vanesa always did.
     win.schedViewWeekStart = new Date(2026, 7, 15);
     win.renderSchedule();
 
@@ -268,7 +275,7 @@ module.exports = {
     win.schedAddPerson('laundry', 'Karla Varela');
     t.assert(laundryNames().includes('Karla Varela'), 'she can be borrowed onto laundry');
     t.assert(win.dlLoadSchedule().days[sat].gra.some((p) => p[0] === 'Karla Varela'),
-      'and stays on her own crew — borrowing is not a transfer');
+      'and a row on her own crew still exists too — borrowing adds a row, not a move');
 
     // Added to EVERY day of the week, so the seven columns keep the same
     // shape and the days she actually covers get filled in after.
@@ -291,8 +298,8 @@ module.exports = {
     win.schedSetCell('laundry', kIdx, 'Karla Varela', sat, '1', null);
     t.eq(win.dlLoadSchedule().days[sat].laundry[kIdx][1], '1', 'her Saturday is set');
     t.eq(win.schedDayTotal(win.dlLoadSchedule(), sat, 'laundry'), 3, 'and now she counts on the crew');
-    t.eq(win.dlLoadSchedule().days[sat].gra.filter((p) => p[0] === 'Karla Varela')[0][1], '1',
-      'her room-attendant day is untouched by the laundry edit');
+    t.eq(win.dlLoadSchedule().days[sat].gra.filter((p) => p[0] === 'Karla Varela')[0][1], 'LAUNDRY',
+      "her room-attendant day relabels to LAUNDRY — the generic sync now applies to every borrowed row, no exception");
 
     // A wrong index must not write to the wrong person.
     win.schedSetCell('laundry', 0, 'Karla Varela', sat, 'OFF', null);
