@@ -1180,6 +1180,24 @@ module.exports = {
     t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Someone Not In Sections'), '7:00 AM - 3:30 PM',
       'someone with no match at all in Section Assignments falls back to the plain AM lobby time, same as before this fix');
 
+    // ── Carlos's real report, 2026-09-28: Andrea's exported Lobby shift
+    // printed 7:00 AM - 3:30 PM (the AM default) instead of her real PM
+    // time — her Lobby row only ever exists as a day-specific cover for
+    // Sarahi (schedApplyLobbyMirror), so she has no standing row in
+    // Section Assignments for the check above to find. His follow-up
+    // clarification, same day: her real time is NOT Sarahi's flat PM
+    // time (2:30 PM - 11:00 PM every day) — she's weekday 5:00 PM -
+    // 11:00 PM, only matching Sarahi's 2:30 PM - 11:00 PM on weekends.
+    // Checked for the 'lobby' crew specifically; her Turndown cell (her
+    // actual home crew) is untouched by this and keeps Turndown's own
+    // time, tested separately below. ──
+    t.eq(win.schedShiftTimeText('lobby', ds21[0], 'Andrea'), '2:30 PM - 11:00 PM',
+      "Andrea's Saturday Lobby shift is 2:30 PM - 11:00 PM, matching PM Lobby's weekend time");
+    t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Andrea'), '5:00 PM - 11:00 PM',
+      "but her Tuesday (weekday) Lobby shift is 5:00 PM - 11:00 PM — her own time, not Sarahi's flat PM default");
+    t.eq(win.schedShiftTimeText('td', ds21[3], 'Andrea'), win.schedShiftTimeText('td', ds21[3], 'Someone Else On Turndown'),
+      "and on her actual home crew (Turndown), she is NOT special-cased — same time as anyone else there");
+
     // Victoriano Ch/Jorge Gonzalez migrated off SCHED_COVER_CHAINS,
     // 2026-09-19 (see the removal note in index.html) — the automatic
     // "Victoriano off/Taylor -> Jorge covers Laundry" inference is gone
