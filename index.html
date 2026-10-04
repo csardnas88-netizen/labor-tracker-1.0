@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.43.3"/>
+<meta name="app-version" content="7.43.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1227,8 +1227,14 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 <script>
 (function(){
+  /* '?' on purpose, not a real-looking version number — Carlos's real
+     report, 2026-10-04: a stuck-forever old cached build happened to
+     fall back to the literal string '6.7.5' here (an actual past
+     version, picked as a placeholder), which read as "the app thinks
+     it's on 6.7.5" rather than "the app couldn't even find its own
+     version tag" — the real signal that something is badly stale. */
   var _mv=document.querySelector('meta[name="app-version"]');
-  var APP_VERSION = (_mv&&_mv.content)?_mv.content:'6.7.5';
+  var APP_VERSION = (_mv&&_mv.content)?_mv.content:'?';
   window.APP_VERSION = APP_VERSION;
   try{var fv=document.getElementById('footerVersion');if(fv)fv.textContent='v'+APP_VERSION;}catch(e){}
   var stored = localStorage.getItem('hk_app_version');
@@ -1353,7 +1359,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <div class="sync-dot" id="syncDot"></div>
       <span id="syncStatus" style="font-size:10px;color:rgba(255,255,255,.45);">Connecting...</span>
     </div>
-    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v6.7.5</span></div>
+    <div style="font-size:9px;color:rgba(255,255,255,.25);margin-top:4px;cursor:pointer;" onclick="showChangelogModal()" title="What's New"><span id="footerVersion">v?</span></div>
   </div>
 </div>
 
@@ -4571,8 +4577,12 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.43.4', date:'2026-10-04',
+    fixes:['Emergency fix: v7.43.3\'s own changelog text had an unescaped apostrophe (an unescaped \'lobby\' inside a single-quoted string) that broke the app\'s main script entirely — a hard syntax error, so NOTHING in it ran: blank Dashboard, "Connecting…" stuck forever, and the version badge falling back to its placeholder text since the script that reads the real one never got to run. Live for however long 7.43.3 was deployed; Carlos\'s real report, affecting him and every manager at once. Also wired up the version-update banner properly while fixing this (registerServiceWorker now actually listens for a new build finishing install and shows "🔄 New version available") and replaced the old fallback\'s real-looking "6.7.5" placeholder with a plain "?", so a problem like this reads as broken rather than as a specific old version — worth knowing for anyone debugging a future stuck-tab report.']
+  },
+  {
     v:'7.43.3', date:'2026-09-28',
-    fixes:['Fixed Andrea\'s exported Lobby shift printing 7:00 AM - 3:30 PM (Lobby\'s AM default) — Carlos\'s real report. Her Lobby row only ever exists as a day-specific cover for Sarahi (schedApplyLobbyMirror), so she has no standing row in the Section Assignments upload the AM/PM check otherwise reads. Now prints her own real time: weekday 5:00 PM - 11:00 PM, weekend 2:30 PM - 11:00 PM (NOT the same flat time as Sarahi/the rest of PM Lobby, his follow-up correction) — and only on the 'lobby' crew specifically; her Turndown cell, her actual home crew, is untouched.']
+    fixes:['Fixed Andrea\'s exported Lobby shift printing 7:00 AM - 3:30 PM (Lobby\'s AM default) — Carlos\'s real report. Her Lobby row only ever exists as a day-specific cover for Sarahi (schedApplyLobbyMirror), so she has no standing row in the Section Assignments upload the AM/PM check otherwise reads. Now prints her own real time: weekday 5:00 PM - 11:00 PM, weekend 2:30 PM - 11:00 PM (NOT the same flat time as Sarahi/the rest of PM Lobby, his follow-up correction) — and only on the \'lobby\' crew specifically; her Turndown cell, her actual home crew, is untouched.']
   },
   {
     v:'7.43.2', date:'2026-09-28',
@@ -7242,11 +7252,43 @@ function markStorageSuccess(){
    worker caches the app and its PDF/Excel/chart libraries on the device
    so it boots with no connection at all. Navigation stays network-first
    inside the worker, so a new deploy is still picked up when online. ── */
+/* Carlos's real report, 2026-10-04: several managers' tabs sat frozen on
+   a build so old the version badge fell back to its hardcoded "unknown"
+   string entirely — the app never told them a newer build existed, so a
+   tab nobody ever fully closed just kept running the same ancient code
+   against the (very different, by then) current backend indefinitely.
+   The pieces were all half-there — skipWaiting()/clients.claim() in
+   sw.js, and a #versionBanner div already built for exactly this — but
+   nothing ever actually wired up the one event that would have shown
+   it: the registration never listened for an update being found at
+   all, so a new worker could finish installing in the background and
+   nobody would ever know to reload. promptUpdate below is the missing
+   wire: show the existing banner the moment ANY install finishes while
+   a worker is already controlling the page (a genuine update, not the
+   very first visit), and check reg.waiting immediately too, in case an
+   update was already sitting there from before this listener attached. */
 function registerServiceWorker(){
   if(!('serviceWorker' in navigator))return;
   if(location.protocol!=='https:'&&location.hostname!=='localhost')return;
   navigator.serviceWorker.register('./sw.js').then(function(reg){
-    /* Check for a newer build whenever the app regains focus. */
+    function promptUpdate(){
+      var banner=document.getElementById('versionBanner');
+      if(!banner||banner.style.display==='block')return;
+      banner.style.display='block';
+      banner.onclick=function(){ window.location.reload(); };
+    }
+    if(reg.waiting&&navigator.serviceWorker.controller)promptUpdate();
+    reg.addEventListener('updatefound',function(){
+      var nw=reg.installing;
+      if(!nw)return;
+      nw.addEventListener('statechange',function(){
+        if(nw.state==='installed'&&navigator.serviceWorker.controller)promptUpdate();
+      });
+    });
+    /* Check for a newer build whenever the app regains focus — the most
+       common reason a long-lived hotel-ops tab would otherwise sit on a
+       stale build for days: nobody ever closes it, so the browser's own
+       update-on-navigate check never gets a chance to run. */
     document.addEventListener('visibilitychange',function(){
       if(!document.hidden){try{reg.update();}catch(e){}}
     });
