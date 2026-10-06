@@ -94,6 +94,7 @@ const cases = [
   require('./cases/schedule-last-week-off-strip'),
   require('./cases/weekly-pace-calloffs'),
   require('./cases/weekly-pace-standard-toggle'),
+  require('./cases/schedule-rest-weeks'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

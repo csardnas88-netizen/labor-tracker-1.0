@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.43.4"/>
+<meta name="app-version" content="7.44.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4576,6 +4576,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.44.0', date:'2026-10-04',
+    features:['Schedule Draft: a quiet "N wk" badge next to each person\'s name shows how many of the last 10 weeks had 3 or more OFF/R-OFF days — Carlos\'s ask, so whoever\'s deciding who to rest on a light-occupancy day can see who in that position has already rested the most lately, rather than stacking the next day off onto the same person and having it read as unfair. Only OFF/R-OFF count (Vacation/Flex/a Call-Off are not a manager\'s day-off decision, so they don\'t count against anyone here); a week with no row at all for that person is skipped entirely rather than counted as a zero. Tap the badge to open the week-by-week breakdown — each qualifying week as a Sat-Fri strip with the days off filled in, the most recent one tinted and labeled so it\'s the first thing you see. Omitted entirely at zero qualifying weeks, same as every other "nothing to flag" spot in the app.']
+  },
   {
     v:'7.43.4', date:'2026-10-04',
     fixes:['Emergency fix: v7.43.3\'s own changelog text had an unescaped apostrophe (an unescaped \'lobby\' inside a single-quoted string) that broke the app\'s main script entirely — a hard syntax error, so NOTHING in it ran: blank Dashboard, "Connecting…" stuck forever, and the version badge falling back to its placeholder text since the script that reads the real one never got to run. Live for however long 7.43.3 was deployed; Carlos\'s real report, affecting him and every manager at once. Also wired up the version-update banner properly while fixing this (registerServiceWorker now actually listens for a new build finishing install and shows "🔄 New version available") and replaced the old fallback\'s real-looking "6.7.5" placeholder with a plain "?", so a problem like this reads as broken rather than as a specific old version — worth knowing for anyone debugging a future stuck-tab report.']
@@ -21473,6 +21477,17 @@ function schedToggleLastWeekOff(bk,name){
   schedLastWeekOffOpen[k]=!schedLastWeekOffOpen[k];
   renderSchedule();
 }
+/* Same click-to-toggle shape as schedToggleLastWeekOff just above, for
+   the rested-most/least badge (schedRestWeeksFor) — its own toggle
+   rather than reusing that one, since the name itself is already the
+   tap target for "last week off" and the two answer different
+   questions (one week vs. a multi-week pattern). */
+var schedRestWeeksOpen={};
+function schedToggleRestWeeks(bk,name){
+  var k=bk+'|'+dlNorm(name);
+  schedRestWeeksOpen[k]=!schedRestWeeksOpen[k];
+  renderSchedule();
+}
 /* Case-insensitive on purpose — Carlos's real bug: a cell typed as
    lowercase "off" (Excel autocomplete, or the "Someone else…" free-text
    picker) rendered as a day off on screen (_schedCellCss already
@@ -21608,6 +21623,73 @@ function schedWeekendGap(SCH,bk,name,beforeWeekStart){
     if(schedHasFullWeekend(SCH,wdates,bk,name))return {weeksAgo:back,checked:weeksChecked};
   }
   return {weeksAgo:null,checked:weeksChecked};
+}
+/* Carlos's ask, 2026-10-04: while deciding who to rest on a light-
+   occupancy day, see at a glance who in a position has already rested
+   the most lately — so the day off goes to someone who HASN'T, instead
+   of stacking onto whoever's already had the most time off, which reads
+   as unfair. A week "counts" once it has 3 or more OFF/R-OFF days —
+   Carlos's own definition. Deliberately only OFF/R-OFF: Vacation, Flex
+   and a Call-Off aren't a day-off DECISION a manager made, so they
+   shouldn't count against someone for this (confirmed with Carlos,
+   rejecting "everything that isn't working").
+
+   Looks back SCHED_REST_LOOKBACK_WEEKS weeks from the week currently on
+   screen, NOT including it — this week isn't finished yet, counting it
+   would move while he's still building it. A week this person has no
+   literal row for at all is skipped entirely, never counted as a zero —
+   same "no data vs. a genuine zero" distinction schedWeekendGap already
+   makes, so someone new to a crew doesn't read as flagged (or clean)
+   from silence alone. */
+var SCHED_REST_LOOKBACK_WEEKS=10;
+var SCHED_REST_THRESHOLD=3;
+function _schedRestOffCount(SCH,dates,bk,name){
+  var hasRow=false,n=0;
+  dates.forEach(function(ds){
+    var day=SCH.days[ds]; if(!day||!day[bk])return;
+    var p=day[bk].filter(function(q){return dlNormAlias(q[0])===dlNormAlias(name);})[0];
+    if(!p)return;
+    hasRow=true;
+    if(schedStatusIs(p[1],'OFF')||schedStatusIs(p[1],'R-OFF'))n++;
+  });
+  return hasRow?n:null;
+}
+/* Returns the qualifying weeks, most recent first — each one
+   {start:Date, dates:[...7 date strings], count:n}. */
+function schedRestWeeksFor(SCH,bk,name){
+  var anchor=_schedWeekStart(), out=[];
+  for(var back=1;back<=SCHED_REST_LOOKBACK_WEEKS;back++){
+    var w=new Date(anchor); w.setDate(w.getDate()-7*back);
+    var dates=_schedDatesForWeekStart(w);
+    var n=_schedRestOffCount(SCH,dates,bk,name);
+    if(n===null)continue;
+    if(n>=SCHED_REST_THRESHOLD)out.push({start:w,dates:dates,count:n});
+  }
+  return out;
+}
+/* One qualifying week's Sat-Fri strip for the rested-most/least detail
+   panel — OFF/R-OFF days filled gold, everything else quiet, same visual
+   language as the "Prefers off" day-picker a few lines below. The most
+   recent qualifying week gets its own tinted background + label (Carlos's
+   ask) so the eye lands on "when was this last true" first, before
+   reading the older weeks underneath it. */
+function _schedRestWeekStripHTML(SCH,week,bk,name,isRecent){
+  var endLabel=new Date(week.start); endLabel.setDate(endLabel.getDate()+6);
+  var rangeLabel=week.start.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+    +' – '+endLabel.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  var html='<div style="margin-bottom:8px;border-radius:7px;padding:'+(isRecent?'7px':'0')+';'+(isRecent?'background:rgba(21,101,192,.10);':'')+'">';
+  html+='<div style="font-size:10px;color:'+(isRecent?'var(--blue)':'var(--text3)')+';font-weight:'+(isRecent?'700':'400')+';margin-bottom:3px;">'
+    +rangeLabel+' &middot; '+week.count+' day'+(week.count!==1?'s':'')+' off'+(isRecent?' — most recent':'')+'</div>';
+  html+='<div style="display:flex;gap:3px;">';
+  week.dates.forEach(function(ds,i){
+    var cell=schedCellFor(SCH,ds,bk,name);
+    var isOff=schedStatusIs(cell,'OFF')||schedStatusIs(cell,'R-OFF');
+    html+='<div style="flex:1;text-align:center;padding:4px 0;border-radius:5px;font-size:9px;'
+      +(isOff?'background:var(--gd);color:#fff;font-weight:700;':'background:var(--surface);color:var(--text3);')+'">'
+      +SCHED_DOW_ABBR[i]+'</div>';
+  });
+  html+='</div></div>';
+  return html;
 }
 /* One pass over every crew that carries a days-off rule, for the week
    currently on screen. Returns plain warnings — text plus a `type` used
@@ -24095,6 +24177,8 @@ function renderSchedule(){
       }
       var lwOffKey=b.key+'|'+dlNorm(nm), lwOffOpen=!!schedLastWeekOffOpen[lwOffKey];
       var menuKey=b.key+'|'+dlNorm(nm), menuOpen=!!schedPersonMenuOpen[menuKey];
+      var restWeeks=schedRestWeeksFor(SCH,b.key,nm);
+      var restKey=b.key+'|'+dlNorm(nm), restOpen=!!schedRestWeeksOpen[restKey];
       var anyMark=prefersWork||dayOffPrefList.length||splitPrefOn;
       html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-bottom:3px;'
         +(fullWeekend?'background:rgba(21,101,192,.18);border-radius:6px;':'')+'">';
@@ -24110,9 +24194,23 @@ function renderSchedule(){
         +(lwFullWeekend?'<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:#1565C0;" title="Had the full weekend off last week"></span>':'')
         +'<span onclick="schedToggleLastWeekOff(\''+b.key+'\',\''+nmJs+'\')" style="font-size:11px;font-weight:600;color:'+(borrowed?'var(--gd)':'var(--text1)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;"'
         +' title="'+escHtml(nm)+(borrowed?' — borrowed into this crew':'')+(fullWeekend?' — full weekend off':'')+(lwFullWeekend?' — had last weekend off too':'')+' — tap for last week\'s days off">'+escHtml(nm)+'</span>'
+        /* Carlos's ask, 2026-10-04: a quiet badge naming how many of the
+           last SCHED_REST_LOOKBACK_WEEKS weeks had 3+ OFF/R-OFF days —
+           so whoever's picking who to rest next can see, without tapping
+           anyone, who in this crew has already rested the most. Omitted
+           entirely at 0 (no weeks qualify) rather than printed as "0
+           wk" — a quiet row reads as "nothing notable," which is the
+           right message for someone with no flagged weeks at all. */
+        +(restWeeks.length?'<span onclick="schedToggleRestWeeks(\''+b.key+'\',\''+nmJs+'\')" title="'+restWeeks.length+' of the last '+SCHED_REST_LOOKBACK_WEEKS+' weeks had 3+ days off — tap for the breakdown" style="flex-shrink:0;font-size:9.5px;font-weight:700;color:var(--text3);cursor:pointer;white-space:nowrap;">'+restWeeks.length+' wk</span>':'')
         +'<button onclick="schedTogglePersonMenu(\''+b.key+'\',\''+nmJs+'\')" title="More options for '+escHtml(nm)+(anyMark?' (has a mark set)':'')+'"'
             +' style="flex-shrink:0;border:none;background:transparent;color:'+(anyMark?'var(--gd)':'var(--text3)')+';font-size:13px;font-weight:800;line-height:1;cursor:pointer;padding:0 4px;">&#8942;</button>'
         +'</div>';
+      if(restOpen&&restWeeks.length){
+        html+='<div style="grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 8px;margin:2px 0 4px;">'
+          +'<div style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;">Rested 3+ days, last '+SCHED_REST_LOOKBACK_WEEKS+' weeks</div>'
+          +restWeeks.map(function(w,wi){ return _schedRestWeekStripHTML(SCH,w,b.key,nm,wi===0); }).join('')
+          +'</div>';
+      }
       if(lwOffOpen){
         /* Option C from the three designs Carlos picked from: no
            floating popover, the row itself opens to show the strip —
