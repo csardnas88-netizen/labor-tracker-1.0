@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.49.0"/>
+<meta name="app-version" content="7.50.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4576,6 +4576,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.50.0', date:'2026-10-10',
+    fixes:['Fixed New Call-Off and New Tardiness silently refusing to save when the employee was typed into the search box but the dropdown suggestion was never actually clicked — Carlos\'s real report ("no me dejó agregar un Tardiness"). Every field looked filled in from his side, so there was no obvious reason it wouldn\'t go through. Now, typing an employee\'s exact name and saving directly still works as long as it matches exactly one person; if it doesn\'t resolve, the message now says to pick from the dropdown instead of the generic "fill in all fields."'],
+    improvements:['Overtime on the Labor day view: every hour figure now shows as whole hours + minutes (e.g. "40h 58m") instead of a decimal ("40.97h"), with the exact number of minutes over 40h called out — so it\'s obvious at a glance, not just roughly. Also split "Approaching OT" into two honest tiers: "Already over 40h this week" for anyone with zero scheduled days left (their total is already final, not an estimate — Carlos caught this with Petronila, who had 0 days left but was still being shown as merely "projected"), and "Projected to cross 40h" for anyone whose estimate still depends on real days yet to come.']
+  },
   {
     v:'7.49.0', date:'2026-10-10',
     features:['Overtime on the Labor day view now estimates real end-of-week hours instead of just flagging someone who worked 9+ hours today — it adds up what each employee has actually worked so far this week to hours still scheduled for the rest of the week (per the Schedule Draft, at their position\'s standard shift length) and flags anyone projected to cross 40h, with the math shown right there (hours so far + remaining days + projected total).'],
@@ -14088,6 +14093,16 @@ function buildWeeklyPaceHTML(days,rooms,wk){
    with reported hours at any point in the week is included, not just
    people working the exact day being viewed, so someone off today who
    worked earlier this week still shows up if they're projected over. */
+/* Carlos's ask, 2026-10-10: a decimal like "40.97h" doesn't tell a
+   manager anything useful at a glance — converted to whole hours +
+   minutes so it's obvious exactly how many minutes someone is from (or
+   past) the 40h line. Reuses toMins' decimal-hours-to-minutes rounding
+   so this always agrees with every other minutes figure in the app. */
+function _hToHM(h){
+  var totalMin=toMins(h||0);
+  var hh=Math.floor(totalMin/60),mm=totalMin%60;
+  return hh>0?(hh+'h '+mm+'m'):(mm+'m');
+}
 function laborProjectedWeekHours(ds){
   var weekStart=getHotelWeekStart(parseLocalDate(ds));
   var weekDates=_schedDatesForWeekStart(weekStart);
@@ -14337,35 +14352,63 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     /* Carlos's ask, 2026-10-10: estimate who's projected to actually cross
        40h this week (hours worked so far + remaining scheduled days ×
        their position's standard shift length — laborProjectedWeekHours
-       above), replacing the old "worked 9+ hours today" guess. */
-    var approaching=laborProjectedWeekHours(ds).filter(function(p){
-      return !otIds[p.id]&&p.projected>40;
-    }).sort(function(a,b){return b.projected-a.projected;});
+       above), replacing the old "worked 9+ hours today" guess.
 
-    if(otEmps.length||approaching.length){
-      var hasOT=otEmps.length>0;
+       Follow-up, same day: someone with ZERO scheduled days left (like
+       Petronila in his real report) isn't a PROJECTION anymore — her
+       week's hours are already final, so she's already over 40h, full
+       stop. Split into two tiers so that distinction actually shows:
+       "Already over 40h" (remainingDays===0 — nothing left to change
+       it) vs "Projected to cross 40h" (remainingDays>0 — a genuine
+       forward estimate that depends on those days actually happening). */
+    var weekProjections=laborProjectedWeekHours(ds).filter(function(p){
+      return !otIds[p.id]&&p.projected>40;
+    });
+    var alreadyOver=weekProjections.filter(function(p){return p.remainingDays===0;})
+      .sort(function(a,b){return b.projected-a.projected;});
+    var stillApproaching=weekProjections.filter(function(p){return p.remainingDays>0;})
+      .sort(function(a,b){return b.projected-a.projected;});
+
+    if(otEmps.length||alreadyOver.length||stillApproaching.length){
+      var hasOT=otEmps.length>0||alreadyOver.length>0;
+      var titleParts=[];
+      if(alreadyOver.length)titleParts.push('Already Over 40h');
+      if(stillApproaching.length)titleParts.push('Approaching OT');
       html+='<div class="card" style="margin-bottom:14px;border-color:'
         +(hasOT?'var(--red-border)':'var(--yellow-border)')+';background:'
         +(hasOT?'var(--red-bg)':'var(--yellow-bg)')+';">'
         +'<div class="card-head"><div class="card-title" style="color:'
         +(hasOT?'var(--red)':'var(--yellow)')+'">&#8987; Overtime'
-        +(approaching.length?' & Approaching OT':'')+'</div></div>';
+        +(titleParts.length?' & '+titleParts.join(' & '):'')+'</div></div>';
       otEmps.forEach(function(e){
         html+='<div style="display:flex;align-items:center;padding:10px 16px;'
           +'border-bottom:1px solid var(--border);gap:12px;">'
           +'<div style="flex:1;"><div style="font-size:13px;font-weight:600;">'+e.name+'</div>'
           +'<div style="font-size:11px;color:var(--text3);">'+primaryPos(e.name,e.id)+'</div></div>'
-          +'<div style="font-size:15px;font-weight:800;color:var(--red);">'+e.ot1.toFixed(2)+'h OT</div></div>';
+          +'<div style="font-size:15px;font-weight:800;color:var(--red);">'+_hToHM(e.ot1)+' OT</div></div>';
       });
-      if(approaching.length){
+      if(alreadyOver.length){
+        html+='<div style="padding:8px 16px;font-size:11px;font-weight:700;color:var(--red);">'
+          +'&#9888; Already over 40h this week — no scheduled days left to change it:</div>';
+        alreadyOver.forEach(function(p){
+          var overMin=Math.round((p.projected-40)*60);
+          html+='<div style="display:flex;align-items:center;padding:8px 16px;'
+            +'border-bottom:1px solid rgba(220,38,38,.15);gap:12px;">'
+            +'<div style="flex:1;"><div style="font-size:12px;font-weight:600;">'+p.name+'</div>'
+            +'<div style="font-size:10px;color:var(--text3);">'+_hToHM(p.hoursSoFar)+' worked this week, no more scheduled days</div></div>'
+            +'<div style="font-size:13px;font-weight:700;color:var(--red);">'+overMin+'m over 40h</div></div>';
+        });
+      }
+      if(stillApproaching.length){
         html+='<div style="padding:8px 16px;font-size:11px;font-weight:700;color:var(--yellow);">'
           +'&#9888; Projected to cross 40h this week:</div>';
-        approaching.forEach(function(p){
+        stillApproaching.forEach(function(p){
+          var overMin=Math.round((p.projected-40)*60);
           html+='<div style="display:flex;align-items:center;padding:8px 16px;'
             +'border-bottom:1px solid rgba(217,119,6,.15);gap:12px;">'
             +'<div style="flex:1;"><div style="font-size:12px;font-weight:600;">'+p.name+'</div>'
-            +'<div style="font-size:10px;color:var(--text3);">'+p.hoursSoFar.toFixed(2)+'h so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)</div></div>'
-            +'<div style="font-size:13px;font-weight:700;color:var(--yellow);">~'+p.projected.toFixed(2)+'h projected</div></div>';
+            +'<div style="font-size:10px;color:var(--text3);">'+_hToHM(p.hoursSoFar)+' so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)</div></div>'
+            +'<div style="font-size:13px;font-weight:700;color:var(--yellow);">~'+_hToHM(p.projected)+' projected ('+overMin+'m over)</div></div>';
         });
       }
       html+='</div>';
@@ -19482,11 +19525,32 @@ function coEmpCloseList(){
   if(list)list.style.display='none';
 }
 
+/* Carlos's real report, 2026-10-10: the hidden input behind an employee
+   search combobox only ever gets set by actually clicking a suggestion
+   — typing the exact name and going straight to Save silently failed
+   with "Please fill in all fields", even though every field looked
+   filled in from his side (nothing in the UI forces the click). Falls
+   back to resolving the typed text against the cached roster when the
+   click never registered: an unambiguous exact (accent/case-insensitive)
+   name match still saves. Shared by New Call-Off and New Tardiness —
+   both use the identical id|name|pos hidden-value convention. */
+function _resolveEmpPickerValue(hiddenVal,searchVal,roster){
+  if(hiddenVal)return hiddenVal;
+  var typed=(searchVal||'').trim();
+  if(!typed)return '';
+  function strip(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();}
+  var typedStripped=strip(typed.replace(/\s*\([^)]*\)\s*$/,''));
+  var matches=(roster||[]).filter(function(e){return strip(e.name)===typedStripped;});
+  return matches.length===1?(matches[0].id+'|'+matches[0].name+'|'+(matches[0].pos||'')):'';
+}
 function saveNewCallOff(){
   var date=(document.getElementById('coDate').value||'').trim();
-  var empVal=document.getElementById('coEmp').value||'';
+  var empVal=_resolveEmpPickerValue(document.getElementById('coEmp').value||'',document.getElementById('coEmpSearch').value,_coEmpAll);
   var reason=(document.getElementById('coReason').value||'').trim();
-  if(!date||!empVal||!reason){showToast('Please fill in all fields.');return;}
+  if(!date||!empVal||!reason){
+    showToast(!empVal&&(document.getElementById('coEmpSearch').value||'').trim()?'Select the employee from the list — tap her name in the dropdown.':'Please fill in all fields.');
+    return;
+  }
   var parts=empVal.split('|');
   var empId=parts[0],empName=parts[1]||'',pos=parts[2]||'';
   var rec={id:Date.now(),date:date,empId:empId,empName:empName,pos:pos,reason:reason,created:new Date().toISOString()};
@@ -19980,9 +20044,12 @@ function laEmpCloseList(){
 
 function saveNewLateArrival(){
   var date=(document.getElementById('laDate').value||'').trim();
-  var empVal=document.getElementById('laEmp').value||'';
+  var empVal=_resolveEmpPickerValue(document.getElementById('laEmp').value||'',document.getElementById('laEmpSearch').value,_laEmpAll);
   var arrivalRaw=(document.getElementById('laArrival').value||'').trim();
-  if(!date||!empVal||!arrivalRaw){showToast('Please fill in all fields.');return;}
+  if(!date||!empVal||!arrivalRaw){
+    showToast(!empVal&&(document.getElementById('laEmpSearch').value||'').trim()?'Select the employee from the list — tap her name in the dropdown.':'Please fill in all fields.');
+    return;
+  }
   var parts=empVal.split('|');
   var empId=parts[0],empName=parts[1]||'',pos=parts[2]||'';
   var arrivalMin=_hhmmToMinutes(arrivalRaw);
