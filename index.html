@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.48.0"/>
+<meta name="app-version" content="7.49.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4576,6 +4576,12 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.49.0', date:'2026-10-10',
+    features:['Overtime on the Labor day view now estimates real end-of-week hours instead of just flagging someone who worked 9+ hours today — it adds up what each employee has actually worked so far this week to hours still scheduled for the rest of the week (per the Schedule Draft, at their position\'s standard shift length) and flags anyone projected to cross 40h, with the math shown right there (hours so far + remaining days + projected total).'],
+    improvements:['Break Exceptions on the Labor day view no longer lists people who punched their break correctly (the old "Turndown — Part-time OK" rows) — Carlos\'s ask, to cut the clutter. It now only ever shows a real problem; "All breaks OK" already covers everyone-fine.'],
+    fixes:['Fixed Position Mismatches and today\'s Overtime list on the Labor day view sometimes failing to recognize an employee\'s primary position (silently showing a blank/"null" instead), because that lookup was passing the wrong field name (a leftover from an older data shape) — every other place in the app already did this correctly.']
+  },
   {
     v:'7.48.0', date:'2026-10-09',
     features:['Overview now shows every employee with a Call-Off and/or a Tardiness entry, side by side — Carlos\'s follow-up ask, widening it from only showing someone with both. A journal with zero entries for that person renders as a plain 0 instead of being hidden, and its jump-link only appears when there\'s actually something to jump to.'],
@@ -14057,6 +14063,78 @@ function buildWeeklyPaceHTML(days,rooms,wk){
   return html;
 }
 
+/* ── Approaching-OT estimate ──
+   Carlos's ask, 2026-10-10: he already knows the week's Schedule Draft
+   and each day's actual worked hours (from the Labor Distribution
+   Report) — estimate who's projected to cross 40 hours this week (the
+   real OT threshold he cares about) instead of the old, cruder "worked
+   9+ hours today" flag.
+
+   projected = hours actually worked this week so far (Sat..the viewed
+   day, summed from whichever month bucket holds each date — the same
+   cross-month day lookup Time Card Check already relies on via
+   wtc_buildDayIndex, so a week spanning a month boundary still adds up
+   correctly) + (days still scheduled to work for the REST of the week,
+   per the Schedule Draft) × that position's standard shift length
+   (ufShiftHoursForPos — the same number Weekly Labor Pace already
+   budgets against; falls back to 8h for a position with no Unifocus
+   standard on file). Matched into the Schedule Draft the same
+   unambiguous way Call-Offs already does (schedNameLooselyMatches,
+   searching only the crews that position normally sits in).
+
+   A flat shift-length assumption for the remaining days is a real
+   approximation, not a guarantee — someone's actual remaining days
+   could run shorter or longer than their position's standard. Anyone
+   with reported hours at any point in the week is included, not just
+   people working the exact day being viewed, so someone off today who
+   worked earlier this week still shows up if they're projected over. */
+function laborProjectedWeekHours(ds){
+  var weekStart=getHotelWeekStart(parseLocalDate(ds));
+  var weekDates=_schedDatesForWeekStart(weekStart);
+  var dayIndex=wtc_buildDayIndex();
+  var SCH=dlLoadSchedule();
+  var posMap={}; SCHED_UF_POS.forEach(function(p){posMap[p.label]=p.crews;});
+
+  var byEmp={};
+  weekDates.forEach(function(wds){
+    if(wds>ds)return;
+    var daySnap=dayIndex[wds];
+    if(!daySnap||!daySnap.emps)return;
+    daySnap.emps.forEach(function(e){
+      if(!e||!e.id)return;
+      if(!byEmp[e.id])byEmp[e.id]={id:e.id,name:e.name,pos:'',hoursSoFar:0};
+      byEmp[e.id].hoursSoFar+=Number(e.paid)||0;
+      if(e.pos)byEmp[e.id].pos=(e.pos||'').replace(/^\d+-/,'');
+    });
+  });
+
+  return Object.keys(byEmp).map(function(id){
+    var emp=byEmp[id];
+    var remainingDays=0;
+    if(SCH&&SCH.days){
+      var crews=posMap[emp.pos]||SCHED_BLOCKS.map(function(b){return b.key;});
+      weekDates.forEach(function(wds){
+        if(wds<=ds)return;
+        var day=SCH.days[wds];
+        if(!day)return;
+        var isWorking=crews.some(function(bk){
+          return (day[bk]||[]).some(function(row){
+            if(!schedNameLooselyMatches(row[0],emp.name))return false;
+            var v=String(row[1]||'').trim();
+            return v!==''&&!schedIsOff(v)&&!schedStatusIs(v,'TAILOR')&&!schedStatusIs(v,'CALL-OFF');
+          });
+        });
+        if(isWorking)remainingDays++;
+      });
+    }
+    var shiftHours=ufShiftHoursForPos(emp.pos)||8;
+    emp.remainingDays=remainingDays;
+    emp.shiftHours=shiftHours;
+    emp.projected=emp.hoursSoFar+remainingDays*shiftHours;
+    return emp;
+  });
+}
+
 function renderDashDayAnalysis(days,rooms,today,wk){
   var el=document.getElementById('dashDayAnalysis');
   if(!el)return;
@@ -14192,12 +14270,13 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       if(lastDs===ds)snapEmps=DATA.emps;
     }
 
-    /* Split into exceptions and OK-but-notable (Turndown 15-20 min) */
+    /* Carlos's ask, 2026-10-10: the Turndown "OK — 15/17 min" rows (people
+       who punched their break correctly) were only ever here as
+       reassurance, but they outnumbered the real exceptions and cluttered
+       the card — removed, so this section only ever shows an actual
+       problem. The "All breaks OK" badge above already covers the
+       reassurance case when there's truly nothing to flag. */
     var breakEmps=snapEmps.filter(function(e){return isBreakException(e);});
-    var tdOkEmps=snapEmps.filter(function(e){
-      var m=toMins(parseFloat(e.unpaid||0));
-      return isTurndown(e.pos)&&m>=15&&m<=20;
-    });
 
     html+='<div class="card" style="margin-bottom:14px;">'
       +'<div class="card-head"><div class="card-title">&#9749; Break Exceptions</div>'
@@ -14207,7 +14286,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     if(!snapEmps.length){
       html+='<div style="padding:14px;text-align:center;color:var(--text3);">'
         +'Re-upload this day\'s PDF to see employee break details</div>';
-    }else if(breakEmps.length||tdOkEmps.length){
+    }else if(breakEmps.length){
       /* Sort exceptions: No Break first, then by mins ascending */
       breakEmps.sort(function(a,b){
         var ma=toMins(parseFloat(a.unpaid||0));
@@ -14246,27 +14325,6 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         html+='</div>';
       });
 
-      /* Turndown OK rows (15-20 min) — shown in green */
-      if(tdOkEmps.length){
-        html+='<div style="margin:10px 0 4px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Turndown — Part-time OK</div>';
-        tdOkEmps.forEach(function(e){
-          var mins=toMins(parseFloat(e.unpaid||0));
-          var pos=(e.pos||'').replace(/^\d+-/,'')||'Unknown Position';
-          html+='<div style="margin:6px 0;border-radius:8px;background:var(--white);'
-            +'border:1px solid var(--border);border-left:3px solid var(--green);display:flex;align-items:center;'
-            +'justify-content:space-between;padding:8px 11px;gap:10px;">';
-          html+='<div style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;">';
-          html+='<span style="font-size:15px;flex-shrink:0;">✅</span>';
-          html+='<div style="min-width:0;">';
-          html+='<div style="font-weight:700;color:var(--text1);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+'</div>';
-          html+='<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+pos+' <span style="background:var(--indigo-bg);color:var(--indigo);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:3px;">Part-time</span></div>';
-          html+='</div></div>';
-          html+='<span style="flex-shrink:0;background:var(--green-bg);color:var(--green);'
-            +'font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;white-space:nowrap;">OK — '+mins+' min</span>';
-          html+='</div>';
-        });
-      }
-
       html+='</div>';
     }else{
       html+='<div style="padding:14px;text-align:center;color:var(--text3);">No break exceptions &#10003;</div>';
@@ -14274,10 +14332,15 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     html+='</div>';
 
     /* ── OT ── */
-    var otEmps=(DATA&&DATA.emps)?DATA.emps.filter(function(e){return(e.ot1||0)>0;}):[];
-    var approaching=(DATA&&DATA.emps)?DATA.emps.filter(function(e){
-      return(e.paid||0)>=9&&(e.ot1||0)===0;
-    }):[];
+    var otEmps=snapEmps.filter(function(e){return(e.ot1||0)>0;});
+    var otIds={}; otEmps.forEach(function(e){otIds[e.id]=1;});
+    /* Carlos's ask, 2026-10-10: estimate who's projected to actually cross
+       40h this week (hours worked so far + remaining scheduled days ×
+       their position's standard shift length — laborProjectedWeekHours
+       above), replacing the old "worked 9+ hours today" guess. */
+    var approaching=laborProjectedWeekHours(ds).filter(function(p){
+      return !otIds[p.id]&&p.projected>40;
+    }).sort(function(a,b){return b.projected-a.projected;});
 
     if(otEmps.length||approaching.length){
       var hasOT=otEmps.length>0;
@@ -14291,18 +14354,18 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         html+='<div style="display:flex;align-items:center;padding:10px 16px;'
           +'border-bottom:1px solid var(--border);gap:12px;">'
           +'<div style="flex:1;"><div style="font-size:13px;font-weight:600;">'+e.name+'</div>'
-          +'<div style="font-size:11px;color:var(--text3);">'+primaryPos(e.name,e.empId)+'</div></div>'
+          +'<div style="font-size:11px;color:var(--text3);">'+primaryPos(e.name,e.id)+'</div></div>'
           +'<div style="font-size:15px;font-weight:800;color:var(--red);">'+e.ot1.toFixed(2)+'h OT</div></div>';
       });
       if(approaching.length){
         html+='<div style="padding:8px 16px;font-size:11px;font-weight:700;color:var(--yellow);">'
-          +'&#9888; High daily hours &#8212; approaching 40h this week:</div>';
-        approaching.slice(0,5).forEach(function(e){
+          +'&#9888; Projected to cross 40h this week:</div>';
+        approaching.forEach(function(p){
           html+='<div style="display:flex;align-items:center;padding:8px 16px;'
             +'border-bottom:1px solid rgba(217,119,6,.15);gap:12px;">'
-            +'<div style="flex:1;font-size:12px;font-weight:600;">'+e.name+'</div>'
-            +'<div style="font-size:13px;font-weight:700;color:var(--yellow);">'
-            +e.paid.toFixed(2)+'h today</div></div>';
+            +'<div style="flex:1;"><div style="font-size:12px;font-weight:600;">'+p.name+'</div>'
+            +'<div style="font-size:10px;color:var(--text3);">'+p.hoursSoFar.toFixed(2)+'h so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)</div></div>'
+            +'<div style="font-size:13px;font-weight:700;color:var(--yellow);">~'+p.projected.toFixed(2)+'h projected</div></div>';
         });
       }
       html+='</div>';
@@ -14310,11 +14373,11 @@ function renderDashDayAnalysis(days,rooms,today,wk){
 
     /* ── Position mismatches only ── */
     var mismatches=(DATA&&DATA.emps)?DATA.emps.filter(function(e){
-      var pp=primaryPos(e.name,e.empId);
+      var pp=primaryPos(e.name,e.id);
       return pp&&e.pos&&pp!==e.pos&&pp!=='Unknown'&&pp!=='Other Dept';
     }):[];
     var unknowns=(DATA&&DATA.emps)?DATA.emps.filter(function(e){
-      return primaryPos(e.name,e.empId)==='Unknown';
+      return primaryPos(e.name,e.id)==='Unknown';
     }):[];
     var totalProblems=mismatches.length+unknowns.length;
 
@@ -14323,7 +14386,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         +'<div class="card-head"><div class="card-title">&#128260; Position Mismatches</div>'
         +'<span class="badge b-red">'+totalProblems+' need correction</span></div>';
       mismatches.forEach(function(e){
-        var pp=primaryPos(e.name,e.empId);
+        var pp=primaryPos(e.name,e.id);
         html+='<div style="display:flex;align-items:center;padding:10px 16px;'
           +'border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap;">'
           +'<div style="flex:1;min-width:140px;">'
