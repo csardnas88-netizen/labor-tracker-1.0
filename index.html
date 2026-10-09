@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.44.0"/>
+<meta name="app-version" content="7.45.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1693,7 +1693,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
       <div class="page-header">
         <div class="page-title">&#128222; Call-Offs</div>
-        <div class="page-sub">Track employee call-offs and absences</div>
+        <div class="page-sub">Track employee call-offs, absences, and late arrivals</div>
       </div>
       <div id="calloffsContent"></div>
     </div>
@@ -4576,6 +4576,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.45.0', date:'2026-10-09',
+    features:['Call-Offs now has a second tab: Late Arrivals — Carlos\'s ask, so a tardiness pattern can be documented for the time & attendance policy the same way an absence already is. Logging one only needs the date, the employee, and the actual arrival time; the scheduled start time is read automatically off that employee\'s own Schedule Draft cell for the day (same unambiguous crew-match rule Call-Offs already uses), so there\'s nothing to look up by hand, and minutes late is computed from the two. Same shape as Call-Offs throughout: a day-of-week pattern chart, a "Most Late Arrivals" table (count + average minutes late), a month-grouped history, filter by employee, and a PDF export — but unlike a Call-Off, nothing here ever touches the Schedule Draft itself, since the person still worked the shift.']
+  },
   {
     v:'7.44.0', date:'2026-10-04',
     features:['Schedule Draft: a quiet "N wk" badge next to each person\'s name shows how many of the last 10 weeks had 3 or more OFF/R-OFF days — Carlos\'s ask, so whoever\'s deciding who to rest on a light-occupancy day can see who in that position has already rested the most lately, rather than stacking the next day off onto the same person and having it read as unfair. Only OFF/R-OFF count (Vacation/Flex/a Call-Off are not a manager\'s day-off decision, so they don\'t count against anyone here); a week with no row at all for that person is skipped entirely rather than counted as a zero. Tap the badge to open the week-by-week breakdown — each qualifying week as a Sat-Fri strip with the days off filled in, the most recent one tinted and labeled so it\'s the first thing you see. Omitted entirely at zero qualifying weeks, same as every other "nothing to flag" spot in the app.']
@@ -8116,6 +8120,35 @@ function _mergeCallOffsFromRemote(all){
   safeSetItem('calloffs_data',JSON.stringify(mergedCArr));
   return true;
 }
+/* Same shape as _mergeCallOffsFromRemote, for the separate Late
+   Arrivals journal (latearrival_<id> rows + its own legacy blob and
+   tombstone list) — kept as its own function rather than a shared
+   helper so each journal's merge can evolve independently. */
+function _mergeLateArrivalsFromRemote(all){
+  var remoteRows={};
+  Object.keys(all).forEach(function(k){
+    if(k.indexOf('latearrival_')===0)remoteRows[k.replace('latearrival_','')]=all[k];
+  });
+  var legacyArr=Array.isArray(all['latearrivals_data'])?all['latearrivals_data']:[];
+  legacyArr.forEach(function(c){ if(c&&c.id&&!remoteRows[c.id])remoteRows[c.id]=c; });
+  if(Object.keys(remoteRows).length===0)return false;
+
+  var localList=[];
+  try{var ll=localStorage.getItem('latearrivals_data');if(ll)localList=JSON.parse(ll);}catch(e){}
+  var dDeletedIds=getDeletedIds('latearrivals_deleted_ids');
+  var remoteDDeletedIds=all['latearrivals_deleted_ids'];
+  if(Array.isArray(remoteDDeletedIds)){
+    remoteDDeletedIds.forEach(function(id){if(dDeletedIds.indexOf(id)===-1)dDeletedIds.push(id);});
+    safeSetItem('latearrivals_deleted_ids',JSON.stringify(dDeletedIds));
+  }
+  var mergedD={};
+  localList.forEach(function(c){ if(c.id)mergedD[c.id]=c; });
+  Object.keys(remoteRows).forEach(function(cid){ mergedD[cid]=remoteRows[cid]; });
+  dDeletedIds.forEach(function(id){ delete mergedD[id]; });
+  var mergedDArr=Object.values(mergedD).sort(function(a,b){return b.id-a.id;});
+  safeSetItem('latearrivals_data',JSON.stringify(mergedDArr));
+  return true;
+}
 
 /* Phase 4 of the Request Off notebook: realtime multi-device sync. Rides
    the SAME infra every other list here already uses (per-row supaPut,
@@ -8473,6 +8506,7 @@ function _syncFromSheetsPull(){
     });
     try{ if(_mergeProjectsFromRemote(all))updated=true; }catch(e){console.warn('[sync] projects merge',e);}
     try{ if(_mergeCallOffsFromRemote(all))updated=true; }catch(e){console.warn('[sync] calloffs merge',e);}
+    try{ if(_mergeLateArrivalsFromRemote(all))updated=true; }catch(e){console.warn('[sync] late arrivals merge',e);}
     try{ if(_mergeReqNotebookFromRemote(all))updated=true; }catch(e){console.warn('[sync] req notebook merge',e);}
     setSyncStatus("synced");
     if(updated){
@@ -18943,14 +18977,40 @@ function _coKeyEmployees(list){
     c._coKey=groupId[r]?groupId[r]:('name:'+_coMatchName(c.empName));
   });
 }
+/* ── Call-Offs / Late Arrivals tab switcher ──
+   Carlos's ask, 2026-10-09: a second journal living inside this same
+   page, alongside Call-Offs rather than as its own nav item — so late
+   arrivals get documented for the time & attendance policy the same way
+   absences already are. Tab choice isn't persisted across a reload,
+   same as every other in-page filter in this app (COF_FILTER, LA_FILTER
+   below) — it's a view state, not data. */
+var COF_TAB='calloffs'; // 'calloffs' | 'latearrivals'
+function setCofTab(tab){ COF_TAB=tab; renderCallOffs(); }
+function _buildCofTabsHTML(){
+  function tabBtn(key,icon,label){
+    var active=COF_TAB===key;
+    return '<button onclick="setCofTab(\''+key+'\')" style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:700;color:'+(active?'var(--navy)':'var(--text3)')+';border-bottom:2.5px solid '+(active?'var(--navy)':'transparent')+';">'+icon+' '+label+'</button>';
+  }
+  return '<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--border);">'
+    +tabBtn('calloffs','&#128222;','Call-Offs')
+    +tabBtn('latearrivals','&#9203;','Late Arrivals')
+    +'</div>';
+}
 function renderCallOffs(){
   var el=document.getElementById('calloffsContent');
   if(!el)return;
-  var list=loadCallOffs();
-  _coKeyEmployees(list);
   updateCallOffsBadge();
 
-  var html='';
+  var tabsHtml=_buildCofTabsHTML();
+  if(COF_TAB==='latearrivals'){
+    el.innerHTML=tabsHtml+_buildLateArrivalsHTML();
+    return;
+  }
+
+  var list=loadCallOffs();
+  _coKeyEmployees(list);
+
+  var html=tabsHtml;
   html+='<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
     +'<button onclick="showNewCallOffModal()" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Call-Off</button>'
     +'</div>';
@@ -19269,6 +19329,416 @@ function deleteCallOff(id){
   }
   renderCallOffs();
   showToast('&#128465; Call-off deleted');
+}
+
+/* ══════════════════════════════════════════════════════
+   LATE ARRIVALS TRACKER
+   Carlos's ask, 2026-10-09: a second journal living inside the
+   Call-Offs page (see the tab switcher above), so a tardiness pattern
+   is as easy to document for the time & attendance policy as an
+   absence already is. He only types the actual arrival time — the
+   scheduled time is read automatically off that employee's own
+   Schedule Draft cell for the day (schedScheduledStartTime below, the
+   exact same unambiguous crew-match rule schedApplyCallOff already
+   uses for Call-Offs), so there's nothing to look up by hand.
+   Storage key: latearrivals_data (isolated from calloffs_data, same
+   per-row cloud-sync shape — see _mergeLateArrivalsFromRemote). Unlike
+   a Call-Off, nothing here ever touches the Schedule Draft itself —
+   the person still worked the shift, just late, so there's no cell to
+   mark or revert. ══════════════════════════════════════════════════════ */
+function loadLateArrivals(){
+  try{var s=localStorage.getItem('latearrivals_data');if(s)return JSON.parse(s);}catch(e){}
+  return [];
+}
+function saveLateArrivals(list){
+  safeSetItem('latearrivals_data',JSON.stringify(list));
+  try{supaPut('latearrivals_data',list);}catch(e){} /* legacy blob, kept as a rollback safety net */
+  (list||[]).forEach(function(c){
+    if(c&&c.id){ try{ supaPut('latearrival_'+c.id,c); }catch(e){} }
+  });
+}
+/* Same identity-folding Call-Offs needed (_coKeyEmployees) — duplicated
+   rather than shared so a future fix to one journal's name-matching
+   can never silently change the other's. */
+function _laNormName(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/,/g,' ').replace(/\s+/g,' ').trim().toLowerCase();}
+function _laMatchName(s){var n=_laNormName(s);return n?n.split(' ').sort().join(' '):'';}
+function _laKeyEmployees(list){
+  var parent=list.map(function(_,i){return i;});
+  function find(i){while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;}
+  function union(i,j){var ri=find(i),rj=find(j);if(ri!==rj)parent[ri]=rj;}
+  var byId={},byMatchName={};
+  list.forEach(function(c,i){
+    var id=c.empId||'',mn=_laMatchName(c.empName);
+    if(id){if(byId[id]!==undefined)union(i,byId[id]);else byId[id]=i;}
+    if(mn){if(byMatchName[mn]!==undefined)union(i,byMatchName[mn]);else byMatchName[mn]=i;}
+  });
+  var groupId={};
+  list.forEach(function(c,i){var r=find(i);if(c.empId&&!groupId[r])groupId[r]=c.empId;});
+  list.forEach(function(c,i){
+    var r=find(i);
+    c._laKey=groupId[r]?groupId[r]:('name:'+_laMatchName(c.empName));
+  });
+}
+/* Late Arrivals' own "scheduled time" lookup — the exact same
+   unambiguous-match rule schedApplyCallOff uses for Call-Offs (search
+   only the crews that position normally sits in, and only trust it
+   when exactly one row matches), but read-only: it just reads
+   schedShiftTimeText's start time, never touches the Schedule Draft.
+   Returns null if the week isn't loaded or the match isn't
+   unambiguous — left for Carlos to note by hand, same as an unmatched
+   Call-Off. */
+function schedScheduledStartTime(ds,empName,pos){
+  var SCH=dlLoadSchedule();
+  if(!SCH||!SCH.days||!SCH.days[ds])return null;
+  var day=SCH.days[ds];
+  var posMap={}; SCHED_UF_POS.forEach(function(p){posMap[p.label]=p.crews;});
+  var crews=posMap[pos]||SCHED_BLOCKS.map(function(b){return b.key;});
+  var matches=[];
+  crews.forEach(function(bk){
+    (day[bk]||[]).forEach(function(row){
+      if(schedNameLooselyMatches(row[0],empName))matches.push({crew:bk,row:row});
+    });
+  });
+  if(matches.length!==1)return null;
+  var m=matches[0];
+  var t=schedShiftTimeText(m.crew,ds,m.row[0]);
+  return t?t.split(' - ')[0]:null;
+}
+/* "7:00 AM" -> 420. Returns null on anything that doesn't parse, so a
+   scheduled time the app couldn't read never masquerades as midnight. */
+function _timeTextToMinutes(t){
+  var m=/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(String(t||'').trim());
+  if(!m)return null;
+  var h=parseInt(m[1],10)%12; if(/pm/i.test(m[3]))h+=12;
+  return h*60+parseInt(m[2],10);
+}
+/* 420 -> "7:00 AM" — the inverse, used so the typed 24h <input
+   type="time"> value displays in the same 12h style as the scheduled
+   time it's being compared against. */
+function _minutesToTimeText(mins){
+  if(mins==null||isNaN(mins))return '';
+  mins=((mins%1440)+1440)%1440;
+  var h=Math.floor(mins/60),m=mins%60;
+  var ap=h>=12?'PM':'AM', h12=h%12; if(h12===0)h12=12;
+  return h12+':'+(m<10?'0':'')+m+' '+ap;
+}
+function _hhmmToMinutes(hhmm){
+  var m=/^(\d{1,2}):(\d{2})$/.exec(String(hhmm||'').trim());
+  if(!m)return null;
+  return parseInt(m[1],10)*60+parseInt(m[2],10);
+}
+var LA_FILTER='all';
+function setLaFilter(val){ LA_FILTER=val; renderCallOffs(); }
+function _buildLateArrivalsHTML(){
+  var list=loadLateArrivals();
+  _laKeyEmployees(list);
+
+  var html='<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
+    +'<button onclick="showNewLateArrivalModal()" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Late Arrival</button>'
+    +'</div>';
+
+  if(list.length===0){
+    html+='<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
+      +'<div style="font-size:40px;margin-bottom:12px;">&#9203;</div>'
+      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No late arrivals logged</div>'
+      +'<div style="font-size:13px;">Tap "+ New Late Arrival" to log one.</div>'
+      +'</div>';
+    return html;
+  }
+
+  var byEmp={};
+  list.forEach(function(c){
+    var key=c._laKey;
+    if(!byEmp[key])byEmp[key]={empName:c.empName,pos:c.pos,count:0,minutesSum:0,minutesN:0};
+    byEmp[key].count++;
+    if(typeof c.minutesLate==='number'){byEmp[key].minutesSum+=c.minutesLate;byEmp[key].minutesN++;}
+  });
+  var empKeys=Object.keys(byEmp).sort(function(a,b){return byEmp[a].empName.localeCompare(byEmp[b].empName);});
+
+  html+='<div class="card" style="margin-bottom:14px;"><div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">';
+  html+='<div style="flex:1;min-width:180px;">';
+  html+='<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Filter by employee</label>';
+  html+='<select id="laFilterEmp" onchange="setLaFilter(this.value)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;">';
+  html+='<option value="all"'+(LA_FILTER==='all'?' selected':'')+'>— All employees —</option>';
+  empKeys.forEach(function(k){
+    html+='<option value="'+escHtml(k)+'"'+(LA_FILTER===k?' selected':'')+'>'+escHtml(byEmp[k].empName)+' ('+byEmp[k].count+')</option>';
+  });
+  html+='</select></div>';
+  html+='<button onclick="exportLateArrivalsPDF()" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">&#128196; Export PDF</button>';
+  html+='</div></div>';
+
+  var filtered=LA_FILTER==='all'?list:list.filter(function(c){return c._laKey===LA_FILTER;});
+
+  var dowCounts=[0,0,0,0,0,0,0];
+  filtered.forEach(function(c){ if(c.date){try{dowCounts[parseLocalDate(c.date).getDay()]++;}catch(e){}} });
+  var maxDow=Math.max.apply(null,dowCounts.concat([1]));
+  html+='<div class="card" style="margin-bottom:14px;"><div class="card-head"><div class="card-title">&#9203; Late Arrivals by Day of Week</div></div>';
+  html+='<div class="card-body" style="display:flex;gap:6px;align-items:flex-end;height:96px;">';
+  DOW_NAMES.forEach(function(dn,i){
+    var barH=Math.round((dowCounts[i]/maxDow)*56)+6;
+    var isPeak=dowCounts[i]>0&&dowCounts[i]===maxDow;
+    html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'
+      +'<div style="font-size:11px;font-weight:800;color:'+(isPeak?'var(--red)':'var(--navy)')+';">'+dowCounts[i]+'</div>'
+      +'<div style="width:100%;background:'+(isPeak?'var(--red)':'var(--navy)')+';opacity:'+(isPeak?'1':'.55')+';border-radius:4px;height:'+barH+'px;"></div>'
+      +'<div style="font-size:9px;color:var(--text3);font-weight:700;">'+dn.substring(0,3)+'</div>'
+      +'</div>';
+  });
+  html+='</div></div>';
+
+  if(LA_FILTER==='all'){
+    var mk=monthKey();
+    var mtdCount=list.filter(function(c){return c.date&&c.date.substring(0,7)===mk;}).length;
+    html+='<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">';
+    html+='<div style="flex:1;min-width:120px;background:var(--red-bg);border-radius:10px;padding:12px 16px;text-align:center;">'
+      +'<div style="font-size:26px;font-weight:800;color:var(--red);">'+mtdCount+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--red);">&#9203; This Month</div></div>';
+    html+='<div style="flex:1;min-width:120px;background:var(--surface);border-radius:10px;padding:12px 16px;text-align:center;">'
+      +'<div style="font-size:26px;font-weight:800;color:var(--text2);">'+list.length+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--text2);">&#9203; All Time</div></div>';
+    html+='</div>';
+
+    var topEmps=empKeys.map(function(k){return byEmp[k];}).sort(function(a,b){return b.count-a.count;}).slice(0,8);
+    if(topEmps.length>0){
+      html+='<div class="card" style="margin-bottom:14px;">';
+      html+='<div class="card-head"><div class="card-title">&#128202; Most Late Arrivals — All Time</div></div>';
+      html+='<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Position</th><th style="text-align:center;">Late Arrivals</th><th style="text-align:center;">Avg Min Late</th></tr></thead><tbody>';
+      topEmps.forEach(function(e){
+        var avg=e.minutesN?Math.round(e.minutesSum/e.minutesN):null;
+        html+='<tr><td><b>'+escHtml(e.empName)+'</b></td><td>'+escHtml(e.pos||'')+'</td>'
+          +'<td style="text-align:center;font-weight:800;">'+e.count+'</td>'
+          +'<td style="text-align:center;">'+(avg!=null?avg:'—')+'</td></tr>';
+      });
+      html+='</tbody></table></div></div>';
+    }
+  }else{
+    var emp=byEmp[LA_FILTER]||{empName:'',pos:'',count:filtered.length};
+    html+='<div style="background:var(--red-bg);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+      +'<div><div style="font-size:14px;font-weight:800;color:var(--text1);">'+escHtml(emp.empName)+'</div>'
+      +(emp.pos?'<div style="font-size:11px;color:var(--text3);">'+escHtml(emp.pos)+'</div>':'')+'</div>'
+      +'<div style="text-align:right;"><div style="font-size:26px;font-weight:800;color:var(--red);">'+filtered.length+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--red);">&#9203; Total Late Arrivals</div></div>'
+      +'</div>';
+  }
+
+  var sorted=filtered.slice().sort(function(a,b){
+    if(a.date!==b.date)return a.date<b.date?1:-1;
+    return (b.id||0)-(a.id||0);
+  });
+  var byMonth={},monthOrder=[];
+  sorted.forEach(function(c){
+    var mkc=(c.date||'').substring(0,7)||'—';
+    if(!byMonth[mkc]){byMonth[mkc]=[];monthOrder.push(mkc);}
+    byMonth[mkc].push(c);
+  });
+  var MNAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  monthOrder.forEach(function(mkc){
+    var label=mkc;
+    var parts=mkc.split('-');
+    if(parts.length===2&&parts[1])label=MNAMES[parseInt(parts[1],10)-1]+' '+parts[0];
+    html+='<div class="card" style="margin-bottom:14px;">';
+    html+='<div class="card-head"><div class="card-title">'+label+'</div><div class="card-sub">'+byMonth[mkc].length+' late arrival'+(byMonth[mkc].length===1?'':'s')+'</div></div>';
+    byMonth[mkc].forEach(function(c){
+      html+='<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);">';
+      html+='<div style="flex-shrink:0;width:80px;font-size:12px;font-weight:700;color:var(--text2);padding-top:1px;">'+(c.date||'—')
+        +(c.date?'<div style="font-size:10px;font-weight:600;color:var(--text3);">'+dowName(c.date)+'</div>':'')+'</div>';
+      html+='<div style="flex:1;min-width:0;">';
+      html+='<div style="font-size:13px;font-weight:700;color:var(--text1);">'+escHtml(c.empName)+'</div>';
+      if(c.pos)html+='<div style="font-size:11px;color:var(--text3);margin-bottom:2px;">'+escHtml(c.pos)+'</div>';
+      html+='<div style="font-size:12.5px;color:var(--text2);margin-top:2px;">'
+        +(c.scheduledTime?'Scheduled '+escHtml(c.scheduledTime)+' &middot; ':'')
+        +'Arrived '+escHtml(c.arrivalTime||'—')
+        +(typeof c.minutesLate==='number'?' &middot; <b style="color:'+(c.minutesLate>0?'var(--red)':'var(--text2)')+';">'+(c.minutesLate>0?c.minutesLate+' min late':'On time')+'</b>':(c.scheduledTime?'':' &middot; scheduled time not found — note it by hand'))
+        +'</div>';
+      html+='</div>';
+      html+='<button onclick="deleteLateArrival('+c.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px;flex-shrink:0;" title="Delete">&#128465;</button>';
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+
+  if(filtered.length===0){
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;">No late arrivals match this filter.</div>';
+  }
+
+  return html;
+}
+
+/* ── Export Late Arrivals PDF (respects current filter) ── */
+function exportLateArrivalsPDF(){
+  var list=loadLateArrivals();
+  _laKeyEmployees(list);
+  var filtered=LA_FILTER==='all'?list:list.filter(function(c){return c._laKey===LA_FILTER;});
+  if(filtered.length===0){showToast('No late arrivals to export for this selection.');return;}
+
+  var sorted=filtered.slice().sort(function(a,b){return a.date<b.date?-1:(a.date>b.date?1:0);});
+
+  var isSingleEmp=LA_FILTER!=='all';
+  var empName=isSingleEmp?(sorted[0].empName||''):'';
+  var empPos=isSingleEmp?(sorted[0].pos||''):'';
+
+  var rows=sorted.map(function(c){
+    return '<tr>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;">'+c.date+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);">'+dowName(c.date)+'</td>'
+      +(isSingleEmp?'':'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;">'+escHtml(c.empName)+'</td>'
+        +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);">'+escHtml(c.pos||'')+'</td>')
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;">'+escHtml(c.scheduledTime||'—')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;">'+escHtml(c.arrivalTime||'—')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;">'+(typeof c.minutesLate==='number'?c.minutesLate+' min':'—')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var headCols=isSingleEmp
+    ?'<th>Date</th><th>Day</th><th>Scheduled</th><th>Arrived</th><th>Min Late</th>'
+    :'<th>Date</th><th>Day</th><th>Employee</th><th>Position</th><th>Scheduled</th><th>Arrived</th><th>Min Late</th>';
+
+  var title=isSingleEmp?escHtml(empName):'All Employees';
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
+    +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
+    +'.header{background:var(--navy);color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
+    +'.hotel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px;}'
+    +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}'
+    +'.sub{font-size:12px;color:rgba(255,255,255,.55);}'
+    +'.meta{display:grid;grid-template-columns:repeat('+(isSingleEmp?'2':'1')+',1fr);gap:16px;margin-bottom:28px;}'
+    +'.meta-box{background:var(--bg);border-radius:8px;padding:14px 16px;}'
+    +'.meta-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px;}'
+    +'.meta-val{font-size:16px;font-weight:700;color:var(--navy);}'
+    +'.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin:0 0 10px;}'
+    +'table{width:100%;border-collapse:collapse;}'
+    +'th{background:var(--navy);color:#fff;padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:left;}'
+    +'.total-row{background:var(--bg);font-weight:700;}'
+    +'.footer{margin-top:32px;text-align:center;font-size:10px;color:var(--text3);border-top:1px solid var(--border);padding-top:16px;}'
+    +'</style></head><body>'
+    +'<div class="header">'
+    +'<div class="title">Late Arrival Report — '+title+'</div>'
+    +'<div class="sub">'+(isSingleEmp&&empPos?escHtml(empPos)+' · ':'')+'Generated '+dateStr(new Date())+'</div>'
+    +'</div>'
+    +'<div class="meta">'
+    +(isSingleEmp?'<div class="meta-box"><div class="meta-label">Employee</div><div class="meta-val">'+escHtml(empName)+'</div></div>':'')
+    +'<div class="meta-box"><div class="meta-label">Total Late Arrivals</div><div class="meta-val">'+filtered.length+'</div></div>'
+    +'</div>'
+    +'<p class="section-title">Late arrival history</p>'
+    +'<table><thead><tr>'+headCols+'</tr></thead>'
+    +'<tbody>'+rows+'</tbody></table>'
+    +'<div class="footer">Generated '+dateStr(new Date())+' &middot; Confidential</div>'
+    +'</body></html>';
+
+  var win=window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(function(){win.print();},500);
+}
+
+var _laEmpAll=[]; /* cached roster for the New Late Arrival search box, set on modal open */
+function showNewLateArrivalModal(){
+  _laEmpAll=getProjectEmployeeOptions();
+  var today=dateStr(new Date());
+
+  var overlay=document.createElement('div');
+  overlay.id='lateArrivalModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#9203; New Late Arrival</div>'
+    +'<div style="display:flex;flex-direction:column;gap:13px;">'
+    +'<div>'
+    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date *</label>'
+    +'<input id="laDate" type="date" value="'+today+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
+    +'</div>'
+    +'<div>'
+    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee *</label>'
+    +'<div style="position:relative;">'
+    +'<input id="laEmpSearch" type="text" autocomplete="off" placeholder="&#128269; Search employee by name…" oninput="laEmpFilter()" onfocus="laEmpOpenList()" onblur="setTimeout(laEmpCloseList,150)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">'
+    +'<input type="hidden" id="laEmp" value="">'
+    +'<div id="laEmpList" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.15);"></div>'
+    +'</div>'
+    +'</div>'
+    +'<div>'
+    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Arrival time *</label>'
+    +'<input id="laArrival" type="time" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
+    +'<div style="font-size:11px;color:var(--text3);margin-top:5px;">The scheduled start time is pulled automatically from the Schedule Draft for this date and employee.</div>'
+    +'</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:20px;">'
+    +'<button onclick="document.getElementById(\'lateArrivalModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveNewLateArrival()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Late Arrival</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+
+/* New Late Arrival employee search box — identical type-to-search
+   combobox pattern as New Call-Off's coEmp* functions (see those for
+   the full rationale), just scoped to its own la* ids/state so neither
+   modal can stomp on the other's cached roster or hidden selection. */
+function laEmpRenderList(query){
+  var list=document.getElementById('laEmpList');
+  if(!list)return;
+  function strip(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();}
+  if(_laEmpAll.length===0){
+    list.innerHTML='<div style="padding:9px 12px;font-size:13px;color:var(--text3);">No employees found — upload a PDF first</div>';
+  }else{
+    var q=strip(query);
+    var matches=_laEmpAll.filter(function(e){return !q||strip(e.name).indexOf(q)!==-1;});
+    list.innerHTML=matches.length>0
+      ? matches.map(function(e){
+          return '<div data-id="'+e.id+'" data-name="'+escHtml(e.name)+'" data-pos="'+escHtml(e.pos||'')+'" onmousedown="selectLaEmpOption(this)" style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);">'+escHtml(e.name)+' <span style="color:var(--text3);">('+escHtml(e.pos||'')+')</span></div>';
+        }).join('')
+      : '<div style="padding:9px 12px;font-size:13px;color:var(--text3);">No matches</div>';
+  }
+  list.style.display='block';
+}
+function laEmpOpenList(){
+  laEmpRenderList(document.getElementById('laEmpSearch').value);
+}
+function laEmpFilter(){
+  document.getElementById('laEmp').value='';
+  laEmpRenderList(document.getElementById('laEmpSearch').value);
+}
+function selectLaEmpOption(el){
+  var id=el.getAttribute('data-id'),name=el.getAttribute('data-name'),pos=el.getAttribute('data-pos');
+  document.getElementById('laEmp').value=id+'|'+name+'|'+pos;
+  document.getElementById('laEmpSearch').value=name+(pos?' ('+pos+')':'');
+  laEmpCloseList();
+}
+function laEmpCloseList(){
+  var list=document.getElementById('laEmpList');
+  if(list)list.style.display='none';
+}
+
+function saveNewLateArrival(){
+  var date=(document.getElementById('laDate').value||'').trim();
+  var empVal=document.getElementById('laEmp').value||'';
+  var arrivalRaw=(document.getElementById('laArrival').value||'').trim();
+  if(!date||!empVal||!arrivalRaw){showToast('Please fill in all fields.');return;}
+  var parts=empVal.split('|');
+  var empId=parts[0],empName=parts[1]||'',pos=parts[2]||'';
+  var arrivalMin=_hhmmToMinutes(arrivalRaw);
+  var arrivalTime=_minutesToTimeText(arrivalMin);
+  var scheduledTime=schedScheduledStartTime(date,empName,pos);
+  var schedMin=scheduledTime?_timeTextToMinutes(scheduledTime):null;
+  var minutesLate=(schedMin!=null&&arrivalMin!=null)?(arrivalMin-schedMin):null;
+  var rec={id:Date.now(),date:date,empId:empId,empName:empName,pos:pos,arrivalTime:arrivalTime,scheduledTime:scheduledTime,minutesLate:minutesLate,created:new Date().toISOString()};
+  var list=loadLateArrivals();
+  list.unshift(rec);
+  saveLateArrivals(list);
+  document.getElementById('lateArrivalModal').remove();
+  renderCallOffs();
+  showToast(scheduledTime?'&#10003; Late arrival logged':'&#10003; Late arrival logged — couldn\'t find the scheduled time automatically, note it by hand');
+}
+
+function deleteLateArrival(id){
+  if(!confirm('Delete this late arrival record?'))return;
+  var list=loadLateArrivals().filter(function(c){return c.id!==id;});
+  saveLateArrivals(list);
+  addDeletedId('latearrivals_deleted_ids',id);
+  if(LA_FILTER!=='all'){
+    _laKeyEmployees(list);
+    if(!list.some(function(c){return c._laKey===LA_FILTER;}))LA_FILTER='all';
+  }
+  renderCallOffs();
+  showToast('&#128465; Late arrival deleted');
 }
 
 
