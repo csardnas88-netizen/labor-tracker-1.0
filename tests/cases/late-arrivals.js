@@ -75,11 +75,11 @@ module.exports = {
     win.showPage('calloffs');
     let html = win.document.getElementById('calloffsContent').innerHTML;
     t.assert(/New Call-Off/.test(html), 'the Call-Offs tab is shown by default');
-    t.assert(!/New Late Arrival/.test(html), 'the Late Arrivals panel is not rendered while on the Call-Offs tab');
+    t.assert(!/New Tardiness/.test(html), 'the Tardiness panel is not rendered while on the Call-Offs tab');
 
     win.setCofTab('latearrivals');
     html = win.document.getElementById('calloffsContent').innerHTML;
-    t.assert(/New Late Arrival/.test(html), 'switching tabs renders the Late Arrivals panel');
+    t.assert(/New Tardiness/.test(html), 'switching tabs renders the Tardiness panel');
     t.assert(/Marroquin/.test(html), "Marroquin's logged late arrival shows in the list");
     t.assert(/7:15 AM/.test(html) && /15 min late/.test(html), 'the arrival time and computed minutes-late both render');
     t.assert(/scheduled time not found/.test(html), "the unmatched record's fallback message renders instead of a fabricated time");

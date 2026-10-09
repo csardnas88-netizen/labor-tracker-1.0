@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.47.0"/>
+<meta name="app-version" content="7.48.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1693,7 +1693,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
       <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
       <div class="page-header">
         <div class="page-title">&#128222; Call-Offs</div>
-        <div class="page-sub">Track employee call-offs, absences, and late arrivals</div>
+        <div class="page-sub">Track employee call-offs, absences, and tardiness</div>
       </div>
       <div id="calloffsContent"></div>
     </div>
@@ -4576,6 +4576,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.48.0', date:'2026-10-09',
+    features:['Overview now shows every employee with a Call-Off and/or a Tardiness entry, side by side — Carlos\'s follow-up ask, widening it from only showing someone with both. A journal with zero entries for that person renders as a plain 0 instead of being hidden, and its jump-link only appears when there\'s actually something to jump to.'],
+    improvements:['"Late Arrivals" is now called "Tardiness" everywhere in this section — the tab, the "+ New Tardiness" button, every title and message — Carlos\'s ask. Nothing about how it works changed, just the word.']
+  },
   {
     v:'7.47.0', date:'2026-10-09',
     features:['Late Arrivals now also fills itself in from the Weekly Time Card Report — Carlos\'s ask, for whenever he doesn\'t catch a late arrival himself. Every time that report is uploaded in Time Card Check, the app reads Paychex\'s own Scheduled and Work Start columns for each day (not the app\'s own Schedule Draft) and auto-logs anyone who clocked in more than 10 minutes after their scheduled time — no review step, straight into Late Arrivals. A day only counts when Paychex actually recorded a Scheduled time for it; days without one are skipped rather than guessed at. Re-uploading the same or a corrected report never double-logs the same person\'s same day, whether it was auto-logged before or entered by hand.']
@@ -12629,7 +12634,7 @@ async function wtc_import(file){
     renderWtc();
     var laAdded=0;
     try{ laAdded=wtcAutoLogLateArrivals(parsed); }catch(e){console.warn('[wtc] late arrival auto-log',e);}
-    showToast('&#10003; Time Card loaded — '+Object.keys(parsed.byId).length+' employees'+(laAdded?' · '+laAdded+' late arrival'+(laAdded!==1?'s':'')+' auto-logged':''));
+    showToast('&#10003; Time Card loaded — '+Object.keys(parsed.byId).length+' employees'+(laAdded?' · '+laAdded+' tardiness record'+(laAdded!==1?'s':'')+' auto-logged':''));
   }catch(err){
     if(body)body.innerHTML='<div class="card" style="padding:24px;color:var(--red);font-size:13px;">Error reading PDF: '+(err&&err.message?err.message:err)+'</div>';
     console.error('[wtc_import]',err);
@@ -19107,7 +19112,7 @@ function _buildCofTabsHTML(){
   }
   return '<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--border);">'
     +tabBtn('calloffs','&#128222;','Call-Offs')
-    +tabBtn('latearrivals','&#9203;','Late Arrivals')
+    +tabBtn('latearrivals','&#9203;','Tardiness')
     +tabBtn('overview','&#9888;&#65039;','Overview')
     +'</div>';
 }
@@ -19553,14 +19558,14 @@ function _buildLateArrivalsHTML(){
   _laKeyEmployees(list);
 
   var html='<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
-    +'<button onclick="showNewLateArrivalModal()" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Late Arrival</button>'
+    +'<button onclick="showNewLateArrivalModal()" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Tardiness</button>'
     +'</div>';
 
   if(list.length===0){
     html+='<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
       +'<div style="font-size:40px;margin-bottom:12px;">&#9203;</div>'
-      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No late arrivals logged</div>'
-      +'<div style="font-size:13px;">Tap "+ New Late Arrival" to log one.</div>'
+      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No tardiness logged</div>'
+      +'<div style="font-size:13px;">Tap "+ New Tardiness" to log one.</div>'
       +'</div>';
     return html;
   }
@@ -19591,7 +19596,7 @@ function _buildLateArrivalsHTML(){
   var dowCounts=[0,0,0,0,0,0,0];
   filtered.forEach(function(c){ if(c.date){try{dowCounts[parseLocalDate(c.date).getDay()]++;}catch(e){}} });
   var maxDow=Math.max.apply(null,dowCounts.concat([1]));
-  html+='<div class="card" style="margin-bottom:14px;"><div class="card-head"><div class="card-title">&#9203; Late Arrivals by Day of Week</div></div>';
+  html+='<div class="card" style="margin-bottom:14px;"><div class="card-head"><div class="card-title">&#9203; Tardiness by Day of Week</div></div>';
   html+='<div class="card-body" style="display:flex;gap:6px;align-items:flex-end;height:96px;">';
   DOW_NAMES.forEach(function(dn,i){
     var barH=Math.round((dowCounts[i]/maxDow)*56)+6;
@@ -19619,8 +19624,8 @@ function _buildLateArrivalsHTML(){
     var topEmps=empKeys.map(function(k){return byEmp[k];}).sort(function(a,b){return b.count-a.count;}).slice(0,8);
     if(topEmps.length>0){
       html+='<div class="card" style="margin-bottom:14px;">';
-      html+='<div class="card-head"><div class="card-title">&#128202; Most Late Arrivals — All Time</div></div>';
-      html+='<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Position</th><th style="text-align:center;">Late Arrivals</th><th style="text-align:center;">Avg Min Late</th></tr></thead><tbody>';
+      html+='<div class="card-head"><div class="card-title">&#128202; Most Tardiness — All Time</div></div>';
+      html+='<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Position</th><th style="text-align:center;">Tardiness</th><th style="text-align:center;">Avg Min Late</th></tr></thead><tbody>';
       topEmps.forEach(function(e){
         var avg=e.minutesN?Math.round(e.minutesSum/e.minutesN):null;
         html+='<tr><td><b>'+escHtml(e.empName)+'</b></td><td>'+escHtml(e.pos||'')+'</td>'
@@ -19635,7 +19640,7 @@ function _buildLateArrivalsHTML(){
       +'<div><div style="font-size:14px;font-weight:800;color:var(--text1);">'+escHtml(emp.empName)+'</div>'
       +(emp.pos?'<div style="font-size:11px;color:var(--text3);">'+escHtml(emp.pos)+'</div>':'')+'</div>'
       +'<div style="text-align:right;"><div style="font-size:26px;font-weight:800;color:var(--red);">'+filtered.length+'</div>'
-      +'<div style="font-size:11px;font-weight:700;color:var(--red);">&#9203; Total Late Arrivals</div></div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--red);">&#9203; Total Tardiness</div></div>'
       +'</div>';
   }
 
@@ -19655,7 +19660,7 @@ function _buildLateArrivalsHTML(){
     var parts=mkc.split('-');
     if(parts.length===2&&parts[1])label=MNAMES[parseInt(parts[1],10)-1]+' '+parts[0];
     html+='<div class="card" style="margin-bottom:14px;">';
-    html+='<div class="card-head"><div class="card-title">'+label+'</div><div class="card-sub">'+byMonth[mkc].length+' late arrival'+(byMonth[mkc].length===1?'':'s')+'</div></div>';
+    html+='<div class="card-head"><div class="card-title">'+label+'</div><div class="card-sub">'+byMonth[mkc].length+' tardiness entr'+(byMonth[mkc].length===1?'y':'ies')+'</div></div>';
     byMonth[mkc].forEach(function(c){
       html+='<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);">';
       html+='<div style="flex-shrink:0;width:80px;font-size:12px;font-weight:700;color:var(--text2);padding-top:1px;">'+(c.date||'—')
@@ -19676,16 +19681,17 @@ function _buildLateArrivalsHTML(){
   });
 
   if(filtered.length===0){
-    html+='<div style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;">No late arrivals match this filter.</div>';
+    html+='<div style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;">No tardiness entries match this filter.</div>';
   }
 
   return html;
 }
 
-/* ── Overview tab: who has BOTH a Call-Off and a Late Arrival logged ──
-   Carlos's ask, 2026-10-09: a single screen to catch the combined
-   pattern — call-offs alone, or late arrivals alone, is a different
-   signal than someone who has both.
+/* ── Overview tab: every employee with a Call-Off and/or Tardiness ──
+   Carlos's ask, 2026-10-09, widened the same day it shipped: originally
+   only showed someone with BOTH; he asked it broadened to anyone with
+   EITHER, side by side, so Overview reads as the one combined
+   attendance screen rather than a narrow flag list.
 
    Identity has to fold the SAME way _coKeyEmployees/_laKeyEmployees
    already fold records WITHIN each journal (a shared empId, or a
@@ -19693,20 +19699,26 @@ function _buildLateArrivalsHTML(){
    _laMatchName is the identical algorithm) — but extended ACROSS both
    journals at once via one combined union-find, so a Call-Off logged
    under a bare name (no id yet, or a reversed word order) still folds
-   into the same person as a Late Arrival that does carry her real
+   into the same person as a Tardiness entry that does carry her real
    Paychex id, instead of silently showing as two different partial
-   people with 1 of each. Whichever real empId turns up anywhere in a
-   group becomes its key for ALL its records, same priority order the
-   per-journal folds already use — which is also exactly the key format
-   each tab's own filter dropdown already uses, so the "jump to that
-   journal, filtered" links always land on the right person. Only
-   employees with at least one of EACH show up here — this is a flag
-   list, not a side-by-side of everyone. */
+   people. Whichever real empId turns up anywhere in a group becomes
+   its key for ALL its records, same priority order the per-journal
+   folds already use — which is also exactly the key format each tab's
+   own filter dropdown already uses, so the "jump to that journal,
+   filtered" links always land on the right person. */
 function _buildCofOverviewHTML(){
   var callOffs=loadCallOffs(), lateArrivals=loadLateArrivals();
   var items=[];
   callOffs.forEach(function(c){ items.push({empId:c.empId||'',empName:c.empName,pos:c.pos||'',type:'co',rec:c}); });
   lateArrivals.forEach(function(c){ items.push({empId:c.empId||'',empName:c.empName,pos:c.pos||'',type:'la',rec:c}); });
+
+  if(!items.length){
+    return '<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
+      +'<div style="font-size:40px;margin-bottom:12px;">&#9989;</div>'
+      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">Nothing logged yet</div>'
+      +'<div style="font-size:13px;">Employees show up here once they have at least one Call-Off or Tardiness entry.</div>'
+      +'</div>';
+  }
 
   var parent=items.map(function(_,i){return i;});
   function find(i){while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;}
@@ -19732,37 +19744,26 @@ function _buildCofOverviewHTML(){
     else { g.laCount++; if(typeof it.rec.minutesLate==='number'){g.laMinSum+=it.rec.minutesLate;g.laMinN++;} }
   });
 
-  var both=Object.keys(byEmp).map(function(k){
-    var e=byEmp[k]; e.key=k; return e;
-  }).filter(function(e){return e.coCount>0&&e.laCount>0;});
-  both.sort(function(a,b){return (b.coCount+b.laCount)-(a.coCount+a.laCount);});
+  var combined=Object.keys(byEmp).map(function(k){ var e=byEmp[k]; e.key=k; return e; });
+  combined.sort(function(a,b){return (b.coCount+b.laCount)-(a.coCount+a.laCount);});
 
-  var html='<div style="margin-bottom:16px;color:var(--text3);font-size:12.5px;">Employees with at least one Call-Off <b>and</b> at least one Late Arrival logged — a combined attendance pattern worth a closer look.</div>';
-
-  if(both.length===0){
-    html+='<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
-      +'<div style="font-size:40px;margin-bottom:12px;">&#9989;</div>'
-      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No one currently has both</div>'
-      +'<div style="font-size:13px;">Someone shows up here only once they have at least one Call-Off and one Late Arrival.</div>'
-      +'</div>';
-    return html;
-  }
+  var html='<div style="margin-bottom:16px;color:var(--text3);font-size:12.5px;">Every employee with at least one Call-Off or Tardiness entry, side by side.</div>';
 
   html+='<div class="card"><div class="tbl-wrap"><table><thead><tr>'
-    +'<th>Employee</th><th>Position</th><th style="text-align:center;">Call-Offs</th><th style="text-align:center;">Late Arrivals</th><th style="text-align:center;">Avg Min Late</th><th></th>'
+    +'<th>Employee</th><th>Position</th><th style="text-align:center;">Call-Offs</th><th style="text-align:center;">Tardiness</th><th style="text-align:center;">Avg Min Late</th><th></th>'
     +'</tr></thead><tbody>';
-  both.forEach(function(e){
+  combined.forEach(function(e){
     var avg=e.laMinN?Math.round(e.laMinSum/e.laMinN):null;
     var keyJs=escHtml(schedJs(e.key));
     html+='<tr>'
       +'<td><b>'+escHtml(e.empName)+'</b></td>'
       +'<td>'+escHtml(e.pos)+'</td>'
-      +'<td style="text-align:center;font-weight:800;color:var(--red);">'+e.coCount+'</td>'
-      +'<td style="text-align:center;font-weight:800;color:var(--red);">'+e.laCount+'</td>'
+      +'<td style="text-align:center;'+(e.coCount>0?'font-weight:800;color:var(--red);':'color:var(--text3);')+'">'+e.coCount+'</td>'
+      +'<td style="text-align:center;'+(e.laCount>0?'font-weight:800;color:var(--red);':'color:var(--text3);')+'">'+e.laCount+'</td>'
       +'<td style="text-align:center;">'+(avg!=null?avg:'—')+'</td>'
       +'<td style="white-space:nowrap;text-align:right;">'
-      +'<button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--navy);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Call-Offs</button> '
-      +'<button onclick="cofJumpToFilter(\'latearrivals\',\''+keyJs+'\')" style="background:none;border:none;color:var(--navy);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Late Arrivals</button>'
+      +(e.coCount>0?'<button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--navy);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Call-Offs</button> ':'')
+      +(e.laCount>0?'<button onclick="cofJumpToFilter(\'latearrivals\',\''+keyJs+'\')" style="background:none;border:none;color:var(--navy);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Tardiness</button>':'')
       +'</td>'
       +'</tr>';
   });
@@ -19775,7 +19776,7 @@ function exportLateArrivalsPDF(){
   var list=loadLateArrivals();
   _laKeyEmployees(list);
   var filtered=LA_FILTER==='all'?list:list.filter(function(c){return c._laKey===LA_FILTER;});
-  if(filtered.length===0){showToast('No late arrivals to export for this selection.');return;}
+  if(filtered.length===0){showToast('No tardiness entries to export for this selection.');return;}
 
   var sorted=filtered.slice().sort(function(a,b){return a.date<b.date?-1:(a.date>b.date?1:0);});
 
@@ -19818,14 +19819,14 @@ function exportLateArrivalsPDF(){
     +'.footer{margin-top:32px;text-align:center;font-size:10px;color:var(--text3);border-top:1px solid var(--border);padding-top:16px;}'
     +'</style></head><body>'
     +'<div class="header">'
-    +'<div class="title">Late Arrival Report — '+title+'</div>'
+    +'<div class="title">Tardiness Report — '+title+'</div>'
     +'<div class="sub">'+(isSingleEmp&&empPos?escHtml(empPos)+' · ':'')+'Generated '+dateStr(new Date())+'</div>'
     +'</div>'
     +'<div class="meta">'
     +(isSingleEmp?'<div class="meta-box"><div class="meta-label">Employee</div><div class="meta-val">'+escHtml(empName)+'</div></div>':'')
-    +'<div class="meta-box"><div class="meta-label">Total Late Arrivals</div><div class="meta-val">'+filtered.length+'</div></div>'
+    +'<div class="meta-box"><div class="meta-label">Total Tardiness</div><div class="meta-val">'+filtered.length+'</div></div>'
     +'</div>'
-    +'<p class="section-title">Late arrival history</p>'
+    +'<p class="section-title">Tardiness history</p>'
     +'<table><thead><tr>'+headCols+'</tr></thead>'
     +'<tbody>'+rows+'</tbody></table>'
     +'<div class="footer">Generated '+dateStr(new Date())+' &middot; Confidential</div>'
@@ -19846,7 +19847,7 @@ function showNewLateArrivalModal(){
   overlay.id='lateArrivalModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#9203; New Late Arrival</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#9203; New Tardiness</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date *</label>'
@@ -19868,7 +19869,7 @@ function showNewLateArrivalModal(){
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
     +'<button onclick="document.getElementById(\'lateArrivalModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveNewLateArrival()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Late Arrival</button>'
+    +'<button onclick="saveNewLateArrival()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Tardiness</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(overlay);
@@ -19932,11 +19933,11 @@ function saveNewLateArrival(){
   saveLateArrivals(list);
   document.getElementById('lateArrivalModal').remove();
   renderCallOffs();
-  showToast(scheduledTime?'&#10003; Late arrival logged':'&#10003; Late arrival logged — couldn\'t find the scheduled time automatically, note it by hand');
+  showToast(scheduledTime?'&#10003; Tardiness logged':'&#10003; Tardiness logged — couldn\'t find the scheduled time automatically, note it by hand');
 }
 
 function deleteLateArrival(id){
-  if(!confirm('Delete this late arrival record?'))return;
+  if(!confirm('Delete this tardiness record?'))return;
   var list=loadLateArrivals().filter(function(c){return c.id!==id;});
   saveLateArrivals(list);
   addDeletedId('latearrivals_deleted_ids',id);
@@ -19945,7 +19946,7 @@ function deleteLateArrival(id){
     if(!list.some(function(c){return c._laKey===LA_FILTER;}))LA_FILTER='all';
   }
   renderCallOffs();
-  showToast('&#128465; Late arrival deleted');
+  showToast('&#128465; Tardiness deleted');
 }
 
 
