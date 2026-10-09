@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.45.0"/>
+<meta name="app-version" content="7.47.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4576,6 +4576,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.47.0', date:'2026-10-09',
+    features:['Late Arrivals now also fills itself in from the Weekly Time Card Report — Carlos\'s ask, for whenever he doesn\'t catch a late arrival himself. Every time that report is uploaded in Time Card Check, the app reads Paychex\'s own Scheduled and Work Start columns for each day (not the app\'s own Schedule Draft) and auto-logs anyone who clocked in more than 10 minutes after their scheduled time — no review step, straight into Late Arrivals. A day only counts when Paychex actually recorded a Scheduled time for it; days without one are skipped rather than guessed at. Re-uploading the same or a corrected report never double-logs the same person\'s same day, whether it was auto-logged before or entered by hand.']
+  },
+  {
+    v:'7.46.0', date:'2026-10-09',
+    features:['Call-Offs gets a third tab: Overview — Carlos\'s follow-up ask right after Late Arrivals shipped, to catch the combined pattern: an employee with BOTH a Call-Off and a Late Arrival logged is a different, more concerning signal than either alone. Shows only employees with at least one of each (a flag list, not a comparison of everyone), ranked by combined total, with the Call-Off count, Late Arrival count, and average minutes late side by side. Each row has a quick link to jump straight to either journal, already filtered to that same person, so a flagged pattern is one tap away from the full detail.']
+  },
   {
     v:'7.45.0', date:'2026-10-09',
     features:['Call-Offs now has a second tab: Late Arrivals — Carlos\'s ask, so a tardiness pattern can be documented for the time & attendance policy the same way an absence already is. Logging one only needs the date, the employee, and the actual arrival time; the scheduled start time is read automatically off that employee\'s own Schedule Draft cell for the day (same unambiguous crew-match rule Call-Offs already uses), so there\'s nothing to look up by hand, and minutes late is computed from the two. Same shape as Call-Offs throughout: a day-of-week pattern chart, a "Most Late Arrivals" table (count + average minutes late), a month-grouped history, filter by employee, and a PDF export — but unlike a Call-Off, nothing here ever touches the Schedule Draft itself, since the person still worked the shift.']
@@ -12437,6 +12445,36 @@ function parseWtc(items){
     });
     return out;
   }
+  /* Scheduled/Work Start/Lunch In/Lunch Out/Work End — each is printed as
+     TWO tokens (the "H:MM" time, then a separate "AM"/"PM" a bit further
+     right), so each logical column gets its own digit-x and its own
+     ampm-x, assigned independently by nearest-column-match exactly like
+     assignNums above — never by sequence/position-in-row, because
+     Scheduled is the one column Paychex sometimes leaves blank for a
+     given day (nothing was scheduled for them in Paychex that day), which
+     would shift every later column left if assignment depended on how
+     many time values came before it. Column centers confirmed against a
+     real export, 2026-10-09 (Weekly-Time-Card-Report 10092026.pdf). */
+  var TCOL={sched:148.5,wstart:193.5,lunchIn:235.5,lunchOut:280.5,workEnd:332.5};
+  var TAMPMCOL={sched:168.5,wstart:213.5,lunchIn:260.5,lunchOut:305.5,workEnd:352.5};
+  var TTHRESH=18;
+  function assignTimes(rowItems){
+    var digit={},ampm={};
+    rowItems.forEach(function(it){
+      if(/^\d{1,2}:\d{2}$/.test(it.str)){
+        var best=null,bd=TTHRESH;
+        Object.keys(TCOL).forEach(function(c){var d=Math.abs(it.x-TCOL[c]);if(d<bd){bd=d;best=c;}});
+        if(best)digit[best]=it.str;
+      }else if(/^(AM|PM)$/i.test(it.str)){
+        var best2=null,bd2=TTHRESH;
+        Object.keys(TAMPMCOL).forEach(function(c){var d=Math.abs(it.x-TAMPMCOL[c]);if(d<bd2){bd2=d;best2=c;}});
+        if(best2)ampm[best2]=it.str.toUpperCase();
+      }
+    });
+    var out={};
+    Object.keys(TCOL).forEach(function(c){ out[c]=digit[c]?(digit[c]+' '+(ampm[c]||'')).trim():''; });
+    return out;
+  }
 
   var report={startDate:null,endDate:null,byId:{}};
   for(var r=0;r<rows.length;r++){
@@ -12467,13 +12505,19 @@ function parseWtc(items){
       var type='';
       sorted.forEach(function(it){if(it.x>=78&&it.x<=110&&/[A-Za-z]/.test(it.str))type=it.str;});
       var nums=assignNums(sorted);
-      var d=curEmp.days[ds]||{reg:0,ot:0,nonwkd:0,total:0,unpaid:0,types:[]};
+      var times=assignTimes(sorted);
+      var d=curEmp.days[ds]||{reg:0,ot:0,nonwkd:0,total:0,unpaid:0,types:[],schedTime:'',workStartTime:''};
       d.reg+=nums.reg||0;
       d.ot+=nums.ot||0;
       d.nonwkd+=nums.nonwkd||0;
       d.total+=nums.total||0;
       d.unpaid+=nums.unpaid||0;
       if(type)d.types.push(type);
+      /* A day can have more than one row (e.g. a split shift) — keep the
+         FIRST segment's clock-in against Scheduled, not the last, since
+         that's the arrival that actually matters for lateness. */
+      if(times.sched&&!d.schedTime)d.schedTime=times.sched;
+      if(times.wstart&&!d.workStartTime)d.workStartTime=times.wstart;
       curEmp.days[ds]=d;
       continue;
     }
@@ -12496,6 +12540,62 @@ function wtc_clear(){
 }
 function wtc_showHelp(){var o=document.getElementById('wtcHelpOverlay');if(o)o.style.display='flex';}
 function wtc_hideHelp(){var o=document.getElementById('wtcHelpOverlay');if(o)o.style.display='none';}
+
+/* ── Auto-detect Late Arrivals from the Weekly Time Card Report ──
+   Carlos's ask, 2026-10-09: he doesn't always notice a late arrival
+   himself, so use the report he already uploads here for Time Card
+   Check to catch it for him. Paychex's own Scheduled/Work Start columns
+   (parseWtc's schedTime/workStartTime, added alongside the existing
+   hour totals) are native per-day ground truth — no need to guess via
+   the Schedule Draft at all. A day only counts if BOTH times are
+   present in the report (Scheduled is sometimes left blank in Paychex;
+   that day is simply skipped, not assumed on-time). Confirmed with
+   Carlos: auto-logged straight into Late Arrivals on every upload, no
+   review step — wtcAutoLogLateArrivals is idempotent (skips anyone
+   already logged for that exact empId+date) so re-uploading the same
+   or a corrected report never double-logs. */
+var WTC_LATE_THRESHOLD_MIN=10;
+function wtcLateArrivalCandidates(report){
+  var out=[];
+  if(!report||!report.byId)return out;
+  Object.keys(report.byId).forEach(function(id){
+    var emp=report.byId[id];
+    Object.keys(emp.days||{}).forEach(function(ds){
+      var d=emp.days[ds];
+      if(!d||!d.schedTime||!d.workStartTime)return;
+      var schedMin=_timeTextToMinutes(d.schedTime),arrMin=_timeTextToMinutes(d.workStartTime);
+      if(schedMin==null||arrMin==null)return;
+      var late=arrMin-schedMin;
+      if(late>WTC_LATE_THRESHOLD_MIN){
+        out.push({empId:emp.id,empName:emp.name,date:ds,scheduledTime:d.schedTime,arrivalTime:d.workStartTime,minutesLate:late});
+      }
+    });
+  });
+  return out;
+}
+function wtcAutoLogLateArrivals(report){
+  var candidates=wtcLateArrivalCandidates(report);
+  if(!candidates.length)return 0;
+  var list=loadLateArrivals();
+  var existing={};
+  list.forEach(function(c){ if(c.empId&&c.date)existing[c.empId+'|'+c.date]=1; });
+  var posById={};
+  getProjectEmployeeOptions().forEach(function(e){ posById[e.id]=e.pos; });
+  var added=0;
+  candidates.forEach(function(c,i){
+    var k=c.empId+'|'+c.date;
+    if(existing[k])return;
+    list.unshift({
+      id:Date.now()+i, date:c.date, empId:c.empId, empName:c.empName,
+      pos:posById[c.empId]||'', arrivalTime:c.arrivalTime, scheduledTime:c.scheduledTime,
+      minutesLate:c.minutesLate, created:new Date().toISOString()
+    });
+    existing[k]=1;
+    added++;
+  });
+  if(added)saveLateArrivals(list);
+  return added;
+}
 
 /* ── Import ── */
 async function wtc_import(file){
@@ -12527,7 +12627,9 @@ async function wtc_import(file){
     saveWtcReport(parsed);
     var fi=document.getElementById('wtcFile');if(fi)fi.value='';
     renderWtc();
-    showToast('&#10003; Time Card loaded — '+Object.keys(parsed.byId).length+' employees');
+    var laAdded=0;
+    try{ laAdded=wtcAutoLogLateArrivals(parsed); }catch(e){console.warn('[wtc] late arrival auto-log',e);}
+    showToast('&#10003; Time Card loaded — '+Object.keys(parsed.byId).length+' employees'+(laAdded?' · '+laAdded+' late arrival'+(laAdded!==1?'s':'')+' auto-logged':''));
   }catch(err){
     if(body)body.innerHTML='<div class="card" style="padding:24px;color:var(--red);font-size:13px;">Error reading PDF: '+(err&&err.message?err.message:err)+'</div>';
     console.error('[wtc_import]',err);
@@ -18984,8 +19086,20 @@ function _coKeyEmployees(list){
    absences already are. Tab choice isn't persisted across a reload,
    same as every other in-page filter in this app (COF_FILTER, LA_FILTER
    below) — it's a view state, not data. */
-var COF_TAB='calloffs'; // 'calloffs' | 'latearrivals'
+var COF_TAB='calloffs'; // 'calloffs' | 'latearrivals' | 'overview'
 function setCofTab(tab){ COF_TAB=tab; renderCallOffs(); }
+/* Jumps straight to a filtered employee view on the other tab — used by
+   the Overview tab's "Call-Offs" / "Late Arrivals" links (Carlos's ask,
+   2026-10-09: see who has BOTH logged against them, then drill into
+   either journal for that same person without re-finding her in the
+   filter dropdown). key is whatever COF_FILTER/LA_FILTER already use
+   (empId, or 'name:'+normalized — see _buildCofOverviewHTML). */
+function cofJumpToFilter(tab,key){
+  COF_TAB=tab;
+  if(tab==='calloffs')COF_FILTER=key;
+  else if(tab==='latearrivals')LA_FILTER=key;
+  renderCallOffs();
+}
 function _buildCofTabsHTML(){
   function tabBtn(key,icon,label){
     var active=COF_TAB===key;
@@ -18994,6 +19108,7 @@ function _buildCofTabsHTML(){
   return '<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--border);">'
     +tabBtn('calloffs','&#128222;','Call-Offs')
     +tabBtn('latearrivals','&#9203;','Late Arrivals')
+    +tabBtn('overview','&#9888;&#65039;','Overview')
     +'</div>';
 }
 function renderCallOffs(){
@@ -19004,6 +19119,10 @@ function renderCallOffs(){
   var tabsHtml=_buildCofTabsHTML();
   if(COF_TAB==='latearrivals'){
     el.innerHTML=tabsHtml+_buildLateArrivalsHTML();
+    return;
+  }
+  if(COF_TAB==='overview'){
+    el.innerHTML=tabsHtml+_buildCofOverviewHTML();
     return;
   }
 
@@ -19560,6 +19679,94 @@ function _buildLateArrivalsHTML(){
     html+='<div style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;">No late arrivals match this filter.</div>';
   }
 
+  return html;
+}
+
+/* ── Overview tab: who has BOTH a Call-Off and a Late Arrival logged ──
+   Carlos's ask, 2026-10-09: a single screen to catch the combined
+   pattern — call-offs alone, or late arrivals alone, is a different
+   signal than someone who has both.
+
+   Identity has to fold the SAME way _coKeyEmployees/_laKeyEmployees
+   already fold records WITHIN each journal (a shared empId, or a
+   word-order/case/accent-insensitive name match via _coMatchName —
+   _laMatchName is the identical algorithm) — but extended ACROSS both
+   journals at once via one combined union-find, so a Call-Off logged
+   under a bare name (no id yet, or a reversed word order) still folds
+   into the same person as a Late Arrival that does carry her real
+   Paychex id, instead of silently showing as two different partial
+   people with 1 of each. Whichever real empId turns up anywhere in a
+   group becomes its key for ALL its records, same priority order the
+   per-journal folds already use — which is also exactly the key format
+   each tab's own filter dropdown already uses, so the "jump to that
+   journal, filtered" links always land on the right person. Only
+   employees with at least one of EACH show up here — this is a flag
+   list, not a side-by-side of everyone. */
+function _buildCofOverviewHTML(){
+  var callOffs=loadCallOffs(), lateArrivals=loadLateArrivals();
+  var items=[];
+  callOffs.forEach(function(c){ items.push({empId:c.empId||'',empName:c.empName,pos:c.pos||'',type:'co',rec:c}); });
+  lateArrivals.forEach(function(c){ items.push({empId:c.empId||'',empName:c.empName,pos:c.pos||'',type:'la',rec:c}); });
+
+  var parent=items.map(function(_,i){return i;});
+  function find(i){while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;}
+  function union(i,j){var ri=find(i),rj=find(j);if(ri!==rj)parent[ri]=rj;}
+  var byId={},byMatchName={};
+  items.forEach(function(it,i){
+    var mn=_coMatchName(it.empName);
+    if(it.empId){if(byId[it.empId]!==undefined)union(i,byId[it.empId]);else byId[it.empId]=i;}
+    if(mn){if(byMatchName[mn]!==undefined)union(i,byMatchName[mn]);else byMatchName[mn]=i;}
+  });
+
+  var groupEmpId={};
+  items.forEach(function(it,i){var r=find(i);if(it.empId&&!groupEmpId[r])groupEmpId[r]=it.empId;});
+
+  var byEmp={};
+  items.forEach(function(it,i){
+    var r=find(i);
+    var k=groupEmpId[r]?groupEmpId[r]:('name:'+_coMatchName(it.empName));
+    if(!byEmp[k])byEmp[k]={empName:it.empName,pos:'',coCount:0,laCount:0,laMinSum:0,laMinN:0};
+    var g=byEmp[k];
+    if(!g.pos&&it.pos)g.pos=it.pos;
+    if(it.type==='co'){ g.coCount++; }
+    else { g.laCount++; if(typeof it.rec.minutesLate==='number'){g.laMinSum+=it.rec.minutesLate;g.laMinN++;} }
+  });
+
+  var both=Object.keys(byEmp).map(function(k){
+    var e=byEmp[k]; e.key=k; return e;
+  }).filter(function(e){return e.coCount>0&&e.laCount>0;});
+  both.sort(function(a,b){return (b.coCount+b.laCount)-(a.coCount+a.laCount);});
+
+  var html='<div style="margin-bottom:16px;color:var(--text3);font-size:12.5px;">Employees with at least one Call-Off <b>and</b> at least one Late Arrival logged — a combined attendance pattern worth a closer look.</div>';
+
+  if(both.length===0){
+    html+='<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
+      +'<div style="font-size:40px;margin-bottom:12px;">&#9989;</div>'
+      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No one currently has both</div>'
+      +'<div style="font-size:13px;">Someone shows up here only once they have at least one Call-Off and one Late Arrival.</div>'
+      +'</div>';
+    return html;
+  }
+
+  html+='<div class="card"><div class="tbl-wrap"><table><thead><tr>'
+    +'<th>Employee</th><th>Position</th><th style="text-align:center;">Call-Offs</th><th style="text-align:center;">Late Arrivals</th><th style="text-align:center;">Avg Min Late</th><th></th>'
+    +'</tr></thead><tbody>';
+  both.forEach(function(e){
+    var avg=e.laMinN?Math.round(e.laMinSum/e.laMinN):null;
+    var keyJs=escHtml(schedJs(e.key));
+    html+='<tr>'
+      +'<td><b>'+escHtml(e.empName)+'</b></td>'
+      +'<td>'+escHtml(e.pos)+'</td>'
+      +'<td style="text-align:center;font-weight:800;color:var(--red);">'+e.coCount+'</td>'
+      +'<td style="text-align:center;font-weight:800;color:var(--red);">'+e.laCount+'</td>'
+      +'<td style="text-align:center;">'+(avg!=null?avg:'—')+'</td>'
+      +'<td style="white-space:nowrap;text-align:right;">'
+      +'<button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--navy);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Call-Offs</button> '
+      +'<button onclick="cofJumpToFilter(\'latearrivals\',\''+keyJs+'\')" style="background:none;border:none;color:var(--navy);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Late Arrivals</button>'
+      +'</td>'
+      +'</tr>';
+  });
+  html+='</tbody></table></div></div>';
   return html;
 }
 
