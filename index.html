@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.50.0"/>
+<meta name="app-version" content="7.51.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4576,6 +4576,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.51.0', date:'2026-10-10',
+    fixes:['Fixed New Tardiness silently coming back with no scheduled time and no explanation, even when the employee really was on that day\'s schedule — Carlos\'s real report (Abby). The automatic lookup only ever checked the crews her picked position normally sits in; if she\'s actually covering a different crew that day, it found nothing there and said nothing about why. It now explains exactly what happened — e.g. "She\'s on today\'s schedule under Laundry Attendant, not Public Area Attendant" — both in the save toast and saved onto the record itself, so the reason is still there if you look at it later, not just in a toast that\'s already gone.']
+  },
   {
     v:'7.50.0', date:'2026-10-10',
     fixes:['Fixed New Call-Off and New Tardiness silently refusing to save when the employee was typed into the search box but the dropdown suggestion was never actually clicked — Carlos\'s real report ("no me dejó agregar un Tardiness"). Every field looked filled in from his side, so there was no obvious reason it wouldn\'t go through. Now, typing an employee\'s exact name and saving directly still works as long as it matches exactly one person; if it doesn\'t resolve, the message now says to pick from the dropdown instead of the generic "fill in all fields."'],
@@ -19639,8 +19643,24 @@ function _laKeyEmployees(list){
    unambiguous — left for Carlos to note by hand, same as an unmatched
    Call-Off. */
 function schedScheduledStartTime(ds,empName,pos){
+  return schedScheduledStartTimeReason(ds,empName,pos).time;
+}
+/* Carlos's real report, 2026-10-10: Abby was genuinely on the schedule
+   today, but the lookup still came back empty with no explanation why
+   — same silent-failure shape as the employee-picker bug fixed
+   earlier. The #1 real-world cause: the lookup only checks the crews
+   her PICKED POSITION normally sits in (via SCHED_UF_POS), so a day
+   she's covering a different crew than usual (lobby covering for
+   someone, borrowed into Laundry, etc.) finds nothing there even
+   though she's really on the schedule — just filed under a different
+   position's card. Widened to search every crew when the normal,
+   position-scoped search comes up empty, purely to explain what
+   happened; the narrow, position-scoped result is still what's
+   actually used when it finds exactly one match. */
+function schedScheduledStartTimeReason(ds,empName,pos){
   var SCH=dlLoadSchedule();
-  if(!SCH||!SCH.days||!SCH.days[ds])return null;
+  if(!SCH||!SCH.days)return {time:null,reason:'The Schedule Draft has no weeks loaded at all.'};
+  if(!SCH.days[ds])return {time:null,reason:'This week isn\'t loaded in the Schedule Draft.'};
   var day=SCH.days[ds];
   var posMap={}; SCHED_UF_POS.forEach(function(p){posMap[p.label]=p.crews;});
   var crews=posMap[pos]||SCHED_BLOCKS.map(function(b){return b.key;});
@@ -19650,10 +19670,31 @@ function schedScheduledStartTime(ds,empName,pos){
       if(schedNameLooselyMatches(row[0],empName))matches.push({crew:bk,row:row});
     });
   });
-  if(matches.length!==1)return null;
+  if(matches.length===0){
+    /* Named with the same Unifocus-style position label `pos` itself
+       uses (via SCHED_CREW_UF, same lookup the crew-card inline row
+       already uses) rather than the Schedule Draft's own generic crew
+       label (e.g. "Laundry Attendant", not just "Laundry") — otherwise
+       the message would mix two different naming conventions. mgr/night
+       have no Unifocus position mapped at all, so they fall back to
+       their plain crew label. */
+    var elsewhere=[];
+    SCHED_BLOCKS.forEach(function(b){
+      if(crews.indexOf(b.key)!==-1)return; // already searched above
+      (day[b.key]||[]).forEach(function(row){
+        if(!schedNameLooselyMatches(row[0],empName))return;
+        var ufLabel=(_schedUfForCrew(b.key)||{}).label||b.label;
+        if(elsewhere.indexOf(ufLabel)===-1)elsewhere.push(ufLabel);
+      });
+    });
+    if(elsewhere.length)return {time:null,reason:'She\'s on today\'s schedule under '+elsewhere.join('/')+', not '+(pos||'her usual position')+' — the automatic lookup only checks her own position\'s crews.'};
+    return {time:null,reason:'Couldn\'t find her on today\'s Schedule Draft at all (the name there may be spelled differently).'};
+  }
+  if(matches.length>1)return {time:null,reason:'She shows up in more than one crew today — too ambiguous to pick automatically.'};
   var m=matches[0];
   var t=schedShiftTimeText(m.crew,ds,m.row[0]);
-  return t?t.split(' - ')[0]:null;
+  if(!t)return {time:null,reason:'Her crew today has no defined shift time to compare against (e.g. Managers).'};
+  return {time:t.split(' - ')[0],reason:null};
 }
 /* "7:00 AM" -> 420. Returns null on anything that doesn't parse, so a
    scheduled time the app couldn't read never masquerades as midnight. */
@@ -19798,7 +19839,7 @@ function _buildLateArrivalsHTML(){
       html+='<div style="font-size:12.5px;color:var(--text2);margin-top:2px;">'
         +(c.scheduledTime?'Scheduled '+escHtml(c.scheduledTime)+' &middot; ':'')
         +'Arrived '+escHtml(c.arrivalTime||'—')
-        +(typeof c.minutesLate==='number'?' &middot; <b style="color:'+(c.minutesLate>0?'var(--red)':'var(--text2)')+';">'+(c.minutesLate>0?c.minutesLate+' min late':'On time')+'</b>':(c.scheduledTime?'':' &middot; scheduled time not found — note it by hand'))
+        +(typeof c.minutesLate==='number'?' &middot; <b style="color:'+(c.minutesLate>0?'var(--red)':'var(--text2)')+';">'+(c.minutesLate>0?c.minutesLate+' min late':'On time')+'</b>':(c.scheduledTime?'':' &middot; scheduled time not found — '+escHtml(c.scheduledTimeReason||'note it by hand')))
         +'</div>';
       html+='</div>';
       html+='<button onclick="deleteLateArrival('+c.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px;flex-shrink:0;" title="Delete">&#128465;</button>';
@@ -20054,16 +20095,17 @@ function saveNewLateArrival(){
   var empId=parts[0],empName=parts[1]||'',pos=parts[2]||'';
   var arrivalMin=_hhmmToMinutes(arrivalRaw);
   var arrivalTime=_minutesToTimeText(arrivalMin);
-  var scheduledTime=schedScheduledStartTime(date,empName,pos);
+  var schedResult=schedScheduledStartTimeReason(date,empName,pos);
+  var scheduledTime=schedResult.time;
   var schedMin=scheduledTime?_timeTextToMinutes(scheduledTime):null;
   var minutesLate=(schedMin!=null&&arrivalMin!=null)?(arrivalMin-schedMin):null;
-  var rec={id:Date.now(),date:date,empId:empId,empName:empName,pos:pos,arrivalTime:arrivalTime,scheduledTime:scheduledTime,minutesLate:minutesLate,created:new Date().toISOString()};
+  var rec={id:Date.now(),date:date,empId:empId,empName:empName,pos:pos,arrivalTime:arrivalTime,scheduledTime:scheduledTime,scheduledTimeReason:scheduledTime?null:schedResult.reason,minutesLate:minutesLate,created:new Date().toISOString()};
   var list=loadLateArrivals();
   list.unshift(rec);
   saveLateArrivals(list);
   document.getElementById('lateArrivalModal').remove();
   renderCallOffs();
-  showToast(scheduledTime?'&#10003; Tardiness logged':'&#10003; Tardiness logged — couldn\'t find the scheduled time automatically, note it by hand');
+  showToast(scheduledTime?'&#10003; Tardiness logged':'&#10003; Tardiness logged — '+(schedResult.reason||'couldn\'t find the scheduled time automatically, note it by hand'));
 }
 
 function deleteLateArrival(id){

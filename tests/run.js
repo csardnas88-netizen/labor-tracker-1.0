@@ -100,6 +100,7 @@ const cases = [
   require('./cases/wtc-late-arrivals'),
   require('./cases/labor-break-ot-projection'),
   require('./cases/emp-picker-typed-fallback'),
+  require('./cases/tardiness-scheduled-time-reason'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
