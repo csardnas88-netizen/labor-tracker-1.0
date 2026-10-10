@@ -101,6 +101,7 @@ const cases = [
   require('./cases/labor-break-ot-projection'),
   require('./cases/emp-picker-typed-fallback'),
   require('./cases/tardiness-scheduled-time-reason'),
+  require('./cases/sched-name-alias-matching'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

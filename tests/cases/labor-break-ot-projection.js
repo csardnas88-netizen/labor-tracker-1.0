@@ -91,7 +91,7 @@ module.exports = {
     // ── Full render ──
     win.dashSelectedDate = new Date(2026, 9, 5);
     win.renderDashDayAnalysis(win.loadMonthData('2026-10').days, null, null, null);
-    const html = win.document.getElementById('dashDayAnalysis').innerHTML;
+    let html = win.document.getElementById('dashDayAnalysis').innerHTML;
 
     // (1) Break Exceptions
     t.assert(!/Turndown — Part-time OK/.test(html), 'the "punched correctly" sub-header is gone');
@@ -124,5 +124,23 @@ module.exports = {
     // literal "&" back out as "&amp;" — this is jsdom/DOM round-tripping,
     // not something the app does; the real browser displays a plain "&").
     t.assert(/Overtime &amp; Already Over 40h &amp; Approaching OT/.test(html), 'the card title names every tier actually present');
+
+    // (5) Click-to-expand day-by-day breakdown — Carlos's follow-up ask,
+    // 2026-10-10: see hours worked per day, and which remaining days are
+    // still scheduled, made obviously visible instead of just a count.
+    t.assert(!/Hours by day this week/.test(html), 'the day-by-day breakdown is collapsed by default');
+    win.toggleLaborOtDetail('50001'); // Maria's id
+    html = win.document.getElementById('dashDayAnalysis').innerHTML;
+    t.assert(/Hours by day this week/.test(html), 'tapping her row opens the breakdown');
+    const stripIdx = html.indexOf('Hours by day this week');
+    const strip = html.slice(stripIdx, stripIdx + 2500);
+    t.assert(/Sat[\s\S]{0,60}8h 0m/.test(strip), 'Saturday (already reported) shows her real 8h worked');
+    t.assert(/Wed[\s\S]{0,60}Off/.test(strip), 'Wednesday (a real scheduled day off) shows as Off, not a work day');
+    t.eq((strip.match(/background:var\(--gd\)/g) || []).length, 3, 'exactly 3 cells are highlighted gold — the 3 real remaining scheduled work days (Tue/Thu/Fri) that make up her projection');
+
+    // Toggling again collapses it.
+    win.toggleLaborOtDetail('50001');
+    html = win.document.getElementById('dashDayAnalysis').innerHTML;
+    t.assert(!/Hours by day this week/.test(html), 'tapping again collapses it');
   },
 };
