@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.53.0"/>
+<meta name="app-version" content="7.54.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4576,6 +4576,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.54.0', date:'2026-10-10',
+    fixes:['Fixed the Overtime day-by-day breakdown showing a bare "—" for any day with no hours report, even when the Schedule Draft clearly showed that day as OFF — Carlos\'s real report (Petronila, off Thursday but the strip didn\'t say so). It now checks the Schedule Draft for any day with no actual hours on file, so a real day off correctly reads "Off"; a day genuinely missing from both sources still reads "—".'],
+    features:['The gold (still-to-work) day in that same breakdown now shows the actual clock-out time to stay under 40h — her real scheduled start that day plus however many hours are left in the 40h budget, not a flat guess. Carlos\'s ask: so a manager glancing at someone approaching overtime knows exactly when to tell her to leave.']
+  },
   {
     v:'7.53.0', date:'2026-10-10',
     features:['Overtime: tap anyone flagged as "Already Over 40h" or "Projected to cross 40h" to see her real week, day by day — Carlos\'s ask, to make the days she still has left to work obvious enough to actually act on. Already-reported days show her real worked hours; any day still scheduled to work shows highlighted in gold, so it\'s immediately clear which day(s) could still be given off to head off overtime before it happens, instead of just a bare "3 more days scheduled" count.']
@@ -14170,7 +14175,26 @@ function laborProjectedWeekHours(ds){
    not just a bare "3 more days" count). Reuses the same per-day actual
    totals and Schedule Draft lookup laborProjectedWeekHours already
    computes the week total from, just broken out day by day instead of
-   summed. */
+   summed.
+
+   Follow-up, same day — real report: Petronila's Schedule Draft clearly
+   showed her OFF Thursday, but her strip (and everyone else's) showed a
+   bare "—" for any day with no ACTUAL hours record, with no attempt to
+   tell a real day off apart from a day whose report simply hasn't been
+   uploaded yet. Classification is no longer keyed off "is this day in
+   the past" at all — it checks for real hours FIRST regardless of date,
+   then falls back to the Schedule Draft (OFF vs working) for whatever's
+   left, and only shows "—" when neither source has anything. This
+   naturally covers future days too, with the exact same logic.
+
+   Also adds the actual "leave by" time on the gold (still-to-work) day
+   that would tip her over 40h, assuming she works a normal shift on any
+   OTHER remaining day first: walks the remaining scheduled days in
+   order, running a cumulative total from hoursSoFar, and on the one
+   day where that total would cross 40h, reads her real scheduled start
+   time for THAT day (schedShiftTimeText, the same lookup Late Arrivals
+   already uses) and adds however many hours are left in the 40h budget
+   — not a flat number, the actual clock time she'd need to leave. */
 var laborOtDetailOpen={};
 function toggleLaborOtDetail(id){
   laborOtDetailOpen[id]=!laborOtDetailOpen[id];
@@ -14184,31 +14208,61 @@ function _laborOtDayStripHTML(ds,emp){
   var posMap={}; SCHED_UF_POS.forEach(function(p){posMap[p.label]=p.crews;});
   var crews=posMap[emp.pos]||SCHED_BLOCKS.map(function(b){return b.key;});
 
+  var cells=weekDates.map(function(wds){
+    var daySnap=dayIndex[wds];
+    var match=daySnap&&daySnap.emps?daySnap.emps.filter(function(x){return x.id===emp.id;})[0]:null;
+    if(match)return {wds:wds,kind:'actual',hours:Number(match.paid)||0};
+
+    var day=SCH&&SCH.days?SCH.days[wds]:null;
+    var scheduleMatch=null,hasScheduleRow=false;
+    if(day){
+      crews.forEach(function(bk){
+        (day[bk]||[]).forEach(function(row){
+          if(!schedNameLooselyMatches(row[0],emp.name))return;
+          hasScheduleRow=true;
+          var v=String(row[1]||'').trim();
+          if(v!==''&&!schedIsOff(v)&&!schedStatusIs(v,'TAILOR')&&!schedStatusIs(v,'CALL-OFF'))scheduleMatch={crew:bk,row:row};
+        });
+      });
+    }
+    if(scheduleMatch)return {wds:wds,kind:'scheduled',crew:scheduleMatch.crew,row:scheduleMatch.row};
+    if(hasScheduleRow)return {wds:wds,kind:'off'};
+    return {wds:wds,kind:'unknown'};
+  });
+
+  var cum=emp.hoursSoFar,leaveByWds=null,leaveByText=null;
+  cells.forEach(function(c){
+    if(c.kind!=='scheduled'||leaveByWds)return;
+    var before=cum;
+    cum+=emp.shiftHours;
+    if(cum<=40)return;
+    var startText=schedShiftTimeText(c.crew,c.wds,c.row[0]);
+    var startOnly=startText?startText.split(' - ')[0]:null;
+    var startMin=startOnly?_timeTextToMinutes(startOnly):null;
+    if(startMin==null)return;
+    var budgetMin=Math.max(0,Math.round((40-before)*60));
+    leaveByWds=c.wds;
+    leaveByText=_minutesToTimeText(startMin+budgetMin);
+  });
+
   var html='<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">'
     +'<div style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Hours by day this week &middot; gold = still scheduled to work</div>'
     +'<div style="display:flex;gap:3px;">';
-  weekDates.forEach(function(wds,i){
-    var cellStyle,label;
-    if(wds<=ds){
-      var daySnap=dayIndex[wds];
-      var match=daySnap&&daySnap.emps?daySnap.emps.filter(function(x){return x.id===emp.id;})[0]:null;
-      if(match){ label=_hToHM(Number(match.paid)||0); cellStyle='background:var(--navy);color:#fff;'; }
-      else{ label='&mdash;'; cellStyle='background:var(--surface);color:var(--text3);border:1px dashed var(--border);'; }
+  cells.forEach(function(c,i){
+    var cellStyle,label,sub='';
+    if(c.kind==='actual'){
+      label=_hToHM(c.hours); cellStyle='background:var(--navy);color:#fff;';
+    }else if(c.kind==='scheduled'){
+      label=emp.shiftHours+'h'; cellStyle='background:var(--gd);color:#1a1200;font-weight:800;';
+      if(c.wds===leaveByWds)sub='Out by '+leaveByText;
     }else{
-      var day=SCH&&SCH.days?SCH.days[wds]:null;
-      var isWorking=!!day&&crews.some(function(bk){
-        return (day[bk]||[]).some(function(row){
-          if(!schedNameLooselyMatches(row[0],emp.name))return false;
-          var v=String(row[1]||'').trim();
-          return v!==''&&!schedIsOff(v)&&!schedStatusIs(v,'TAILOR')&&!schedStatusIs(v,'CALL-OFF');
-        });
-      });
-      if(isWorking){ label=emp.shiftHours+'h'; cellStyle='background:var(--gd);color:#1a1200;font-weight:800;'; }
-      else{ label='Off'; cellStyle='background:var(--surface);color:var(--text3);border:1px dashed var(--border);'; }
+      label=(c.kind==='off')?'Off':'&mdash;';
+      cellStyle='background:var(--surface);color:var(--text3);border:1px dashed var(--border);';
     }
     html+='<div style="flex:1;text-align:center;padding:5px 2px;border-radius:5px;font-size:9px;'+cellStyle+'">'
       +'<div style="font-weight:700;">'+SCHED_DOW_ABBR[i]+'</div>'
       +'<div style="margin-top:2px;white-space:nowrap;">'+label+'</div>'
+      +(sub?'<div style="margin-top:2px;font-size:8px;white-space:nowrap;">'+sub+'</div>':'')
       +'</div>';
   });
   html+='</div></div>';
