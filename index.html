@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.54.0"/>
+<meta name="app-version" content="7.54.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4576,6 +4576,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.54.1', date:'2026-10-10',
+    fixes:['Fixed the "Out by" clock-out time in Overtime being ~30 minutes too early — Carlos caught it (3:17 PM shown, when her real shift ends 4:45 PM). It was counting forward from her scheduled START time, which silently assumed she works straight through with no break; her real shift span includes an unpaid lunch, so that always came out short by however long her lunch is. Now counts backward from her real scheduled END time instead, minus the exact minutes a full shift would put her over 40h — the lunch gap is already built into that end time, so it no longer needs to be guessed at.']
+  },
   {
     v:'7.54.0', date:'2026-10-10',
     fixes:['Fixed the Overtime day-by-day breakdown showing a bare "—" for any day with no hours report, even when the Schedule Draft clearly showed that day as OFF — Carlos\'s real report (Petronila, off Thursday but the strip didn\'t say so). It now checks the Schedule Draft for any day with no actual hours on file, so a real day off correctly reads "Off"; a day genuinely missing from both sources still reads "—".'],
@@ -14230,19 +14234,28 @@ function _laborOtDayStripHTML(ds,emp){
     return {wds:wds,kind:'unknown'};
   });
 
+  /* Carlos's real correction, 2026-10-10: this has to count back from
+     her scheduled END time, not forward from her start. Her printed
+     shift ("8:15 AM - 4:45 PM") is 8.5 clock-hours for 8 PAID hours —
+     there's a 30min unpaid lunch sitting inside it — so "start + budget
+     hours" silently assumed she works straight through with no break,
+     coming out 30min too early. Counting back from the scheduled END
+     time sidesteps the lunch gap entirely: the exact number of minutes
+     a FULL shift would put her over 40h (the same "Nm over" already
+     shown on the row itself) is just subtracted from her normal
+     clock-out, which already has the real break built in. */
   var cum=emp.hoursSoFar,leaveByWds=null,leaveByText=null;
   cells.forEach(function(c){
     if(c.kind!=='scheduled'||leaveByWds)return;
-    var before=cum;
     cum+=emp.shiftHours;
     if(cum<=40)return;
-    var startText=schedShiftTimeText(c.crew,c.wds,c.row[0]);
-    var startOnly=startText?startText.split(' - ')[0]:null;
-    var startMin=startOnly?_timeTextToMinutes(startOnly):null;
-    if(startMin==null)return;
-    var budgetMin=Math.max(0,Math.round((40-before)*60));
+    var shiftText=schedShiftTimeText(c.crew,c.wds,c.row[0]);
+    var endOnly=shiftText?shiftText.split(' - ')[1]:null;
+    var endMin=endOnly?_timeTextToMinutes(endOnly):null;
+    if(endMin==null)return;
+    var overageMin=Math.round((cum-40)*60);
     leaveByWds=c.wds;
-    leaveByText=_minutesToTimeText(startMin+budgetMin);
+    leaveByText=_minutesToTimeText(endMin-overageMin);
   });
 
   var html='<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">'

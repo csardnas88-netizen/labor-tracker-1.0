@@ -10,9 +10,12 @@
    same logic, no separate branch needed.
 
    Same-day follow-up: the gold (still-to-work) day that would actually
-   tip her over 40h now shows the real clock-out time to avoid it —
-   her real scheduled start that day (schedShiftTimeText) plus however
-   many hours are left in the 40h budget, not a flat guess. */
+   tip her over 40h now shows the real clock-out time to avoid it,
+   counted BACKWARD from her real scheduled END time minus the exact
+   overage minutes a full shift would cause — not forward from her
+   start, which Carlos caught as wrong: her printed shift span includes
+   an unpaid lunch gap, so "start + budget hours" silently assumed a
+   straight-through shift and came out 30min too early. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
@@ -66,10 +69,15 @@ module.exports = {
     t.assert(/Fri[\s\S]{0,60}8h/.test(strip), 'Friday (her one remaining scheduled day) shows the gold working cell');
 
     // ── Leave-by time: 33h worked so far (11+11+11) + her 8h Friday
-    // shift would land at 41h, 1h over — so the budget before crossing
-    // 40h is exactly 7h. Room Attendant's weekday start is 8:15 AM
-    // (SCHED_SHIFT_TIMES.gra), so 8:15 AM + 7h = 3:15 PM. ──
-    t.assert(/Out by 3:15 PM/.test(strip), 'Friday shows the real clock-out time (8:15 AM start + the 7h left in the 40h budget), not a flat guess');
+    // shift would land at 41h — 1h (60min) over. Carlos's real
+    // correction, 2026-10-10: this has to count BACK from her real
+    // scheduled END time (4:45 PM for Room Attendant's weekday shift,
+    // SCHED_SHIFT_TIMES.gra), not forward from her start — the printed
+    // "8:15 AM - 4:45 PM" is 8.5 clock-hours for 8 PAID hours (a 30min
+    // unpaid lunch sits inside it), so counting forward from the start
+    // would silently assume no break and land 30min too early.
+    // 4:45 PM minus the 60 overage minutes = 3:45 PM. ──
+    t.assert(/Out by 3:45 PM/.test(strip), "Friday shows the real clock-out time — her scheduled 4:45 PM end minus the 60 minutes a full shift would put her over 40h — not a start-time-forward guess that ignores her lunch break");
 
     const projections = win.laborProjectedWeekHours(ds);
     const emp = projections.find((p) => p.id === '80001');
