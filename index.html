@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.55.0"/>
+<meta name="app-version" content="7.56.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4576,6 +4576,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.56.0', date:'2026-10-10',
+    fixes:['Fixed the Overtime list losing its click-to-expand day-by-day breakdown for anyone showing today\'s actual OT1 minutes — Carlos\'s real report, right after uploading that day\'s Labor Distribution Report: everyone with real overtime today landed in that top list (not the "Already Over 40h" / "Approaching OT" tiers, which already had this), and that list never had the tap-to-see-her-week feature to begin with. It now opens the exact same day-strip breakdown, reusing her weekly projection when her name resolves to one; a name that doesn\'t resolve still shows the plain row rather than opening to nothing.']
+  },
   {
     v:'7.55.0', date:'2026-10-10',
     features:['The Schedule\'s OCC box now also picks up a LATER R106 upload that shows higher occupancy for a night it\'s already filled in — Carlos\'s ask: a real increase in the hotel\'s occupancy since the box was set shouldn\'t need retyping by hand. Only counts upward (a lower re-upload never pulls a filled box back down), and applies whether the box got its number from auto-fill or from Carlos typing it in himself. Departures keeps the old blank-only rule unchanged.']
@@ -14497,7 +14501,9 @@ function renderDashDayAnalysis(days,rooms,today,wk){
        "Already over 40h" (remainingDays===0 — nothing left to change
        it) vs "Projected to cross 40h" (remainingDays>0 — a genuine
        forward estimate that depends on those days actually happening). */
-    var weekProjections=laborProjectedWeekHours(ds).filter(function(p){
+    var allProjections=laborProjectedWeekHours(ds);
+    var projById={}; allProjections.forEach(function(p){projById[p.id]=p;});
+    var weekProjections=allProjections.filter(function(p){
       return !otIds[p.id]&&p.projected>40;
     });
     var alreadyOver=weekProjections.filter(function(p){return p.remainingDays===0;})
@@ -14517,11 +14523,26 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         +(hasOT?'var(--red)':'var(--yellow)')+'">&#8987; Overtime'
         +(titleParts.length?' & '+titleParts.join(' & '):'')+'</div></div>';
       otEmps.forEach(function(e){
-        html+='<div style="display:flex;align-items:center;padding:10px 16px;'
+        /* Carlos's ask, 2026-10-10: today's actual OT1 figure shouldn't
+           lose the click-to-expand week breakdown just because it's a
+           real number instead of a projection — his real report, after
+           uploading that day's Labor Distribution Report, everyone's
+           real OT1 pushed them out of the other two tiers (which already
+           had the click) and into this one (which never did). Reuses the
+           SAME weekly projection entry (by id) the other two tiers use
+           for their day-strip, when one exists; if her name doesn't
+           resolve to a weekly projection at all, the row falls back to
+           the old static (non-clickable) display rather than opening to
+           nothing. */
+        var p=projById[e.id];
+        var openP=p&&!!laborOtDetailOpen[e.id];
+        html+='<div '+(p?'onclick="toggleLaborOtDetail(\''+escHtml(schedJs(e.id))+'\')" style="cursor:pointer;':'style="')+'display:flex;align-items:center;padding:10px 16px;'
           +'border-bottom:1px solid var(--border);gap:12px;">'
-          +'<div style="flex:1;"><div style="font-size:13px;font-weight:600;">'+e.name+'</div>'
+          +'<div style="flex:1;"><div style="font-size:13px;font-weight:600;">'+e.name
+          +(p?' <span style="font-size:9px;color:var(--text3);">'+(openP?'&#9650;':'&#9660;')+'</span>':'')+'</div>'
           +'<div style="font-size:11px;color:var(--text3);">'+primaryPos(e.name,e.id)+'</div></div>'
           +'<div style="font-size:15px;font-weight:800;color:var(--red);">'+_hToHM(e.ot1)+' OT</div></div>';
+        if(openP)html+='<div style="padding:0 16px 10px;">'+_laborOtDayStripHTML(ds,p)+'</div>';
       });
       if(alreadyOver.length){
         html+='<div style="padding:8px 16px;font-size:11px;font-weight:700;color:var(--red);">'

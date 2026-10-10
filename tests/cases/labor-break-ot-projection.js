@@ -103,6 +103,22 @@ module.exports = {
     t.assert(/Carlos Tester/.test(html), "today's actual OT (Carlos) still shows in the Overtime list");
     t.assert(/2h 0m OT/.test(html), 'formatted as 2h 0m, not 2.00h');
 
+    // (2b) Carlos's ask, 2026-10-10 follow-up: today's actual-OT1 people
+    // (otEmps) get the SAME click-to-expand day-strip as the other two
+    // tiers — his real report, after uploading that day's Labor
+    // Distribution Report, everyone's real OT1 pushed them into THIS
+    // list and he lost the ability to click through to their week.
+    t.assert(!/Hours by day this week/.test(html), 'collapsed by default, same as the other tiers');
+    win.toggleLaborOtDetail('50003'); // Carlos Tester's id (today's actual OT)
+    html = win.document.getElementById('dashDayAnalysis').innerHTML;
+    const ctIdx = html.indexOf('Hours by day this week');
+    t.assert(ctIdx !== -1, "tapping an otEmps row (today's actual OT1, not a projection) opens the same day-strip breakdown");
+    const ctStrip = html.slice(ctIdx, ctIdx + 2500);
+    t.assert(/Mon[\s\S]{0,60}8h 0m/.test(ctStrip), 'Monday (his only reported day) shows his real 8h worked');
+    win.toggleLaborOtDetail('50003');
+    html = win.document.getElementById('dashDayAnalysis').innerHTML;
+    t.assert(!/Hours by day this week/.test(html), 'tapping again collapses it');
+
     // (3) Already-over tier (Petronila: no days left, so this is final, not a projection)
     t.assert(/Already over 40h this week/.test(html), 'the "already over" section header shows');
     const petroIdx = html.indexOf('Petronila Quiacain');
