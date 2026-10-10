@@ -103,6 +103,7 @@ const cases = [
   require('./cases/tardiness-scheduled-time-reason'),
   require('./cases/sched-name-alias-matching'),
   require('./cases/labor-ot-daystrip-off-and-leaveby'),
+  require('./cases/schedule-occ-increase-from-r106'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

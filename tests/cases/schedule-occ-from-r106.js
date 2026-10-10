@@ -33,7 +33,14 @@
    budget math wants net (comp rooms earn no revenue), but a Comp room
    still gets cleaned like any other, so the Schedule's "how many rooms to
    clean" box must keep it in the count. Every fixture below sets comp>0 on
-   at least one row specifically so occ !== net, and asserts against occ. */
+   at least one row specifically so occ !== net, and asserts against occ.
+
+   2026-10-10 update: the blank-only rule now has one exception, Carlos's
+   ask — a filled OCC box (hand-typed or auto) still bumps UP if a later
+   R106 upload shows a higher night figure, since that's real occupancy
+   growth, not a correction. Never downward, and Departures is unaffected.
+   The one assertion below that this changes is updated accordingly; full
+   coverage of the new rule lives in schedule-occ-increase-from-r106.js. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
@@ -93,15 +100,35 @@ module.exports = {
     // and everything else is now a real number it must not touch.
     t.eq(win.schedBackfillOccFromR106(SCH), 0, 'a second pass fills nothing — it settles instead of re-saving forever');
 
-    // A corrected re-upload must NOT walk back what is now on the grid.
-    // This is the fork Carlos chose, so it gets its own assertion.
+    // A corrected re-upload with a HIGHER night figure now bumps a filled
+    // OCC box up (Carlos's 2026-10-10 ask — real occupancy growth since
+    // the box was set), but Departures still keeps the old blank-only
+    // rule untouched — full coverage of the increase-only behavior lives
+    // in schedule-occ-increase-from-r106.js; this just confirms the two
+    // fields don't get tangled together.
     win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
       '2026-09-04': { occ: 340, comp: 5, net: 335, dep: 95 },
       '2026-09-05': { occ: 260, comp: 2, net: 258, dep: 70 },
     }));
-    t.eq(win.schedBackfillOccFromR106(SCH), 0, 'a corrected re-upload fills nothing — those boxes are no longer blank');
-    t.eq(SCH.days['2026-09-05'].occ, '320', 'the number already on the grid survives a corrected report, by design');
-    t.eq(SCH.days['2026-09-05'].dep, '61', 'departures likewise');
+    t.eq(win.schedBackfillOccFromR106(SCH), 1, "09-05's OCC picks up the higher night figure (320→340); nothing else is blank or higher");
+    t.eq(SCH.days['2026-09-05'].occ, '340', 'a corrected re-upload with a HIGHER night figure now updates the box');
+    t.eq(SCH.days['2026-09-05'].dep, '61', "Departures keeps the old blank-only rule — never auto-bumped, higher or lower");
+
+    // But a LOWER re-upload must never walk a box back down — only
+    // increases count.
+    win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
+      '2026-09-04': { occ: 300, comp: 5, net: 295, dep: 95 },
+      '2026-09-05': { occ: 260, comp: 2, net: 258, dep: 70 },
+    }));
+    t.eq(win.schedBackfillOccFromR106(SCH), 0, 'a lower re-upload for the same night changes nothing');
+    t.eq(SCH.days['2026-09-05'].occ, '340', 'the higher number already on the grid is never pulled back down');
+
+    // Restore the higher-than-09-06 report before the "new week" check
+    // below, which depends on this exact figure.
+    win.localStorage.setItem('hk_r106_2026-09', JSON.stringify({
+      '2026-09-04': { occ: 340, comp: 5, net: 335, dep: 95 },
+      '2026-09-05': { occ: 260, comp: 2, net: 258, dep: 70 },
+    }));
 
     // But a NEW week, created later, still picks the report up — this is
     // what makes uploading days ahead actually pay off.

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.54.1"/>
+<meta name="app-version" content="7.55.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4576,6 +4576,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.55.0', date:'2026-10-10',
+    features:['The Schedule\'s OCC box now also picks up a LATER R106 upload that shows higher occupancy for a night it\'s already filled in — Carlos\'s ask: a real increase in the hotel\'s occupancy since the box was set shouldn\'t need retyping by hand. Only counts upward (a lower re-upload never pulls a filled box back down), and applies whether the box got its number from auto-fill or from Carlos typing it in himself. Departures keeps the old blank-only rule unchanged.']
+  },
   {
     v:'7.54.1', date:'2026-10-10',
     fixes:['Fixed the "Out by" clock-out time in Overtime being ~30 minutes too early — Carlos caught it (3:17 PM shown, when her real shift ends 4:45 PM). It was counting forward from her scheduled START time, which silently assumed she works straight through with no break; her real shift span includes an unpaid lunch, so that always came out short by however long her lunch is. Now counts backward from her real scheduled END time instead, minus the exact minutes a full shift would put her over 40h — the lunch gap is already built into that end time, so it no longer needs to be guessed at.']
@@ -22022,7 +22026,17 @@ function schedBackfillTdOcc(SCH,dates){
    Only days the Schedule already has are filled: a week he hasn't
    created yet has nothing to write into. renderSchedule runs this on
    every open, so a future week picks up whatever OCC data is already
-   stored the moment it's built. */
+   stored the moment it's built.
+
+   EXCEPTION, Carlos's ask 2026-10-10: a FILLED OCC box (hand-typed or
+   auto) still gets re-checked against every fresh R106 upload, and is
+   bumped up if the new report's figure for that night is HIGHER —
+   real occupancy growth since the box was set, not a correction he'd
+   have to go type in himself. Only upward, only OCC (not Departures,
+   which he didn't ask about and keeps the old blank-only rule), and
+   deliberately ignores whether the box was manual or auto — he wants
+   the higher number either way. A later, lower re-upload never pulls
+   a box back down. */
 /* Returns the NUMBER of schedule days it filled, not a bare flag — the
    OCC upload's toast reports it, and 0 is falsy so the truthy callers
    read the same as before. */
@@ -22041,7 +22055,6 @@ function schedBackfillOccFromR106(SCH){
     var day=SCH.days[ds]; if(!day)return;
     var occBlank=String(day.occ||'').trim()==='';
     var depBlank=String(day.dep||'').trim()==='';
-    if(!occBlank&&!depBlank)return;
     /* OCC is stored by NIGHT date: the schedule's OCC box for date ds is
        "rooms occupied the night BEFORE ds", so the report row to read is
        prevDateStr(ds), not ds itself. Reading rec[ds] here (the fix this
@@ -22070,6 +22083,10 @@ function schedBackfillOccFromR106(SCH){
        read as a decision Carlos made. */
     var dayFilled=false;
     if(occBlank&&nightRec&&nightRec.occ>0){ day.occ=String(nightRec.occ); day.occAuto=true; dayFilled=true; }
+    else if(!occBlank&&nightRec&&nightRec.occ>0){
+      var curOcc=parseInt(day.occ,10);
+      if(isNaN(curOcc)||nightRec.occ>curOcc){ day.occ=String(nightRec.occ); dayFilled=true; }
+    }
     if(depBlank&&dayRec&&dayRec.dep>0){ day.dep=String(dayRec.dep); day.depAuto=true; dayFilled=true; }
     if(dayFilled)filled++;
   });
