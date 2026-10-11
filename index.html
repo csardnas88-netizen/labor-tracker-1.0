@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.57.0"/>
+<meta name="app-version" content="7.58.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4565,6 +4565,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.58.0', date:'2026-10-10',
+    fixes:['The Weekly Time Card Report\'s auto-detect-Tardiness feature now reads the scheduled time from the Schedule Draft instead of Paychex\'s own Scheduled column — Carlos\'s catch: Paychex leaves that column blank often enough that real late arrivals were being silently skipped, which is why the feature looked like it was never doing anything. Reuses the exact same Schedule-Draft lookup a manually-logged Tardiness already uses, so both paths now agree. The arrival time is still Paychex\'s real Work Start punch — nothing better to compare against than an actual clock-in.']
+  },
   {
     v:'7.57.0', date:'2026-10-10',
     improvements:['Removed the "Days Loaded / MTD Variance / Breaks MTD / Monthly Recap" KPI strip at the bottom of the Labor day view — Carlos\'s ask, it repeated numbers already shown elsewhere on the page. Overtime now renders ABOVE Break Exceptions on that same page, also at his request.']
@@ -12582,30 +12586,44 @@ function wtc_hideHelp(){var o=document.getElementById('wtcHelpOverlay');if(o)o.s
 /* ── Auto-detect Late Arrivals from the Weekly Time Card Report ──
    Carlos's ask, 2026-10-09: he doesn't always notice a late arrival
    himself, so use the report he already uploads here for Time Card
-   Check to catch it for him. Paychex's own Scheduled/Work Start columns
-   (parseWtc's schedTime/workStartTime, added alongside the existing
-   hour totals) are native per-day ground truth — no need to guess via
-   the Schedule Draft at all. A day only counts if BOTH times are
-   present in the report (Scheduled is sometimes left blank in Paychex;
-   that day is simply skipped, not assumed on-time). Confirmed with
-   Carlos: auto-logged straight into Late Arrivals on every upload, no
-   review step — wtcAutoLogLateArrivals is idempotent (skips anyone
-   already logged for that exact empId+date) so re-uploading the same
-   or a corrected report never double-logs. */
+   Check to catch it for him.
+
+   Follow-up, 2026-10-10 — scheduled time now comes from the Schedule
+   Draft, not Paychex's own Scheduled column. Paychex leaves that column
+   blank often enough that it silently swallowed most real late
+   arrivals (the day was just skipped, with no way to tell blank from
+   on-time). The Schedule Draft is the one Carlos actually keeps current
+   every week, so it's the far more reliable source for "what time was
+   she supposed to start" — this reuses schedScheduledStartTimeReason,
+   the exact same lookup a manually-logged Tardiness already uses, so
+   both paths agree. Paychex's Work Start column is still the arrival
+   time: a real clock punch has no better substitute. A day is only a
+   candidate when BOTH a Schedule Draft time AND a Work Start punch
+   exist; the same not-on-the-schedule-today edge cases that already
+   apply to a manual entry (week not loaded, ambiguous match, etc.)
+   just mean that day is skipped here too, same as before. Confirmed
+   with Carlos: auto-logged straight into Late Arrivals on every
+   upload, no review step — wtcAutoLogLateArrivals is idempotent (skips
+   anyone already logged for that exact empId+date) so re-uploading the
+   same or a corrected report never double-logs. */
 var WTC_LATE_THRESHOLD_MIN=10;
 function wtcLateArrivalCandidates(report){
   var out=[];
   if(!report||!report.byId)return out;
+  var posById={}; getProjectEmployeeOptions().forEach(function(e){ posById[e.id]=e.pos; });
   Object.keys(report.byId).forEach(function(id){
     var emp=report.byId[id];
+    var pos=posById[emp.id]||'';
     Object.keys(emp.days||{}).forEach(function(ds){
       var d=emp.days[ds];
-      if(!d||!d.schedTime||!d.workStartTime)return;
-      var schedMin=_timeTextToMinutes(d.schedTime),arrMin=_timeTextToMinutes(d.workStartTime);
+      if(!d||!d.workStartTime)return;
+      var schedResult=schedScheduledStartTimeReason(ds,emp.name,pos);
+      if(!schedResult.time)return;
+      var schedMin=_timeTextToMinutes(schedResult.time),arrMin=_timeTextToMinutes(d.workStartTime);
       if(schedMin==null||arrMin==null)return;
       var late=arrMin-schedMin;
       if(late>WTC_LATE_THRESHOLD_MIN){
-        out.push({empId:emp.id,empName:emp.name,date:ds,scheduledTime:d.schedTime,arrivalTime:d.workStartTime,minutesLate:late});
+        out.push({empId:emp.id,empName:emp.name,date:ds,scheduledTime:schedResult.time,arrivalTime:d.workStartTime,minutesLate:late});
       }
     });
   });
