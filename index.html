@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.61.0"/>
+<meta name="app-version" content="7.62.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4508,6 +4508,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.62.0', date:'2026-10-11',
+    fixes:['"Drop to Tomorrow" now reaches the Supervisors/Houseman/AM Room Attendant crew cards too — Carlos\'s real follow-up report: he dropped 20 rooms and the top OCC/Departures card updated correctly, but each crew card\'s own "Departures" mirror row, its "departures each"/"rooms each" split, and its Unifocus std OVER/UNDER label all kept showing the untouched raw Opera figure, so nothing down there reflected the drop. All three now read the same effective number the top card shows, and agree with Auto-fill\'s own headcount math — a crew card can no longer quietly disagree with the adjustment Carlos just made.']
+  },
   {
     v:'7.61.0', date:'2026-10-11',
     fixes:['Corrected "Drop to Tomorrow" the same day it shipped, after Carlos tried it and reported back: he expected to actually SEE both numbers move, and for the drop to affect OCC too, not just Departures. His own worked example — 229 OCC / 192 Departures, 20 rooms dropped — now shows 209 / 172 right on that day and 103/38 next door shows 123 / 58, both as their own bold figures under the raw boxes (which still never change, still match Opera exactly). One shared number now moves both figures together: a departure he can\'t get to today is still one of today\'s OCC rooms too, and still owed tomorrow on both counts. Auto-fill\'s headcount math uses both adjusted figures the same way.']
@@ -21406,11 +21410,21 @@ function ufShiftHoursForPos(pos){
    same-day figure comes from the "PM Turndown /GRA" block's own OCC row
    already carried on the day record (day.tdOcc), falling back to the
    header OCC the same way the Daily Lineup's tdOcc does when that row is
-   missing for a given week's layout. */
+   missing for a given week's layout.
+
+   occ/dep read through schedEffectiveDay, not the raw day fields —
+   Carlos's real follow-up report, 2026-10-11: he dropped 20 rooms to
+   the next day and the Supervisors/Houseman/Room Attendant cards'
+   "Departures" row and Unifocus std OVER/UNDER label sat completely
+   unchanged, because this function (and the header-row/ratio display
+   lower on the page) was still reading the raw box directly. Every
+   place that turns OCC/Departures into a headcount now goes through
+   the same effective figure the top card itself shows. */
 function schedUfExpected(SCH,pos,ds){
   var day=SCH.days&&SCH.days[ds]; if(!day)return null;
-  var occ=parseInt(day.occ,10); if(isNaN(occ))occ=0;
-  var dep=parseInt(day.dep,10); if(isNaN(dep))dep=null;
+  var eff=schedEffectiveDay(SCH,ds);
+  var occ=eff.occ;
+  var dep=isNaN(parseInt(day.dep,10))?null:eff.dep;
   var tdOcc=parseInt(day.tdOcc,10); if(isNaN(tdOcc))tdOcc=occ;
   var dow=parseLocalDate(ds).getDay();
   var hours=unifocusHoursFromVolumes(pos,occ,dep,tdOcc,dow);
@@ -21430,8 +21444,9 @@ function schedUfExpectedForShift(SCH,pos,shiftIndex,ds){
   var day=SCH.days&&SCH.days[ds]; if(!day)return null;
   var shift=UNIFOCUS_STANDARDS[pos]&&UNIFOCUS_STANDARDS[pos][shiftIndex];
   if(!shift)return null;
-  var occ=parseInt(day.occ,10); if(isNaN(occ))occ=0;
-  var dep=parseInt(day.dep,10); if(isNaN(dep))dep=null;
+  var eff=schedEffectiveDay(SCH,ds);
+  var occ=eff.occ;
+  var dep=isNaN(parseInt(day.dep,10))?null:eff.dep;
   if(shift.driver==='departures'&&dep==null)return null;
   var tdOcc=parseInt(day.tdOcc,10); if(isNaN(tdOcc))tdOcc=occ;
   var dow=parseLocalDate(ds).getDay();
@@ -24649,7 +24664,14 @@ function _schedRefreshTotals(SCH,onlyBk){
           var rEl=document.getElementById('scr_'+domKey+'_'+ri+'_'+di);
           if(!rEl)return;
           var day=SCH.days&&SCH.days[ds];
-          var num=day?parseFloat(day[rt.num]):NaN;
+          /* occ/dep both go through schedEffectiveDay — a dropped/
+             received day must split its EFFECTIVE rooms/departures
+             among the crew, not the raw Opera figure, same reasoning
+             as schedUfExpected. tdOcc ('rooms each' for Turndown)
+             isn't part of the drop/receive mechanic Carlos asked for,
+             so it stays on the raw box. */
+          var _effR=rt.num==='occ'||rt.num==='dep'?schedEffectiveDay(SCH,ds):null;
+          var num=!day?NaN:(_effR?(rt.num==='occ'?_effR.occ:_effR.dep):parseFloat(day[rt.num]));
           rEl.textContent=(!isNaN(num)&&ratioCount>0)?(num/ratioCount).toFixed(2):'';
         });
         if(ufPos&&showUf){
@@ -25076,7 +25098,19 @@ function renderSchedule(){
         var day=SCH.days[ds];
         if(!day){ html+='<div></div>'; return; }
         var _v=day[_hdrRatio.num];
+        html+='<div>';
         html+='<div id="schedHdrRatio_'+b.key+'_'+ds+'" style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+(_v!=null&&_v!==''?escHtml(_v):'&middot;')+'</div>';
+        /* Carlos's real follow-up report, 2026-10-11: dropping rooms to
+           the next day changed nothing he could see down here — this
+           row just mirrored the raw box above it. Same bold effective
+           figure the OCC/Departures card itself now shows, so a crew
+           card never quietly disagrees with the number Carlos actually
+           set. */
+        if(_hdrRatio.num==='dep'){
+          var _eff=schedEffectiveDay(SCH,ds);
+          if(_eff.drop||_eff.recv)html+='<div style="text-align:center;font-size:11px;font-weight:800;color:var(--gd);">'+_eff.dep+'</div>';
+        }
+        html+='</div>';
       });
       html+='</div>';
     }
@@ -25250,7 +25284,12 @@ function renderSchedule(){
       dates.forEach(function(ds,di){
         var day=SCH.days[ds];
         var tot=day?schedRatioCount(SCH,ds,b.key):0;
-        var num=day?parseFloat(day[rt.num]):NaN;
+        /* occ/dep go through schedEffectiveDay — see the matching
+           comment in _schedRefreshTotals, which this must always agree
+           with since one repaints live edits and the other builds the
+           page fresh. */
+        var _effR=rt.num==='occ'||rt.num==='dep'?schedEffectiveDay(SCH,ds):null;
+        var num=!day?NaN:(_effR?(rt.num==='occ'?_effR.occ:_effR.dep):parseFloat(day[rt.num]));
         var txt=(!isNaN(num)&&tot>0)?(num/tot).toFixed(2):'';
         html+='<div id="scr_'+b.key+'_'+ri+'_'+di+'" style="text-align:center;font-size:9.5px;font-weight:700;color:var(--gd);">'+txt+'</div>';
       });

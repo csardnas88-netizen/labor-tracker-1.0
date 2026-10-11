@@ -89,6 +89,45 @@ module.exports = {
     t.assert(/>123</.test(html), "Monday's effective OCC (123) is shown as its own figure");
     t.assert(/>58</.test(html), "Monday's effective Departures (58) is shown as its own figure");
 
+    // ── Carlos's real follow-up report, 2026-10-11: the Supervisors/
+    // Houseman/Room Attendant crew cards further down the page (their
+    // own "Departures" mirror row, "departures each"/"rooms each"
+    // ratios, and Unifocus std OVER/UNDER label) kept showing the raw,
+    // un-adjusted numbers — a drop that visibly changed the top card
+    // did nothing down here. Every one of those now has to agree with
+    // the same effective figures, proven by comparing against calling
+    // the same functions on a schedule where the raw boxes themselves
+    // were set to the effective numbers directly (no drop involved) —
+    // if drop-adjusted and manually-typed give the same answer, the
+    // wiring is correct, with no need to hand-derive the Unifocus
+    // formula's own internals in this test. ──
+    const manualDays = {};
+    DATES.forEach((ds) => { manualDays[ds] = { sheet: 'test', occ: String(OCC[ds]), dep: String(DEP[ds]), tdOcc: '', gra: [['Mayra', '1']], sup: [['Rosa', '1']] }; });
+    manualDays['2026-10-18'] = { ...manualDays['2026-10-18'], occ: '209', dep: '172' };
+    manualDays['2026-10-19'] = { ...manualDays['2026-10-19'], occ: '123', dep: '58' };
+    const manualSch = { days: manualDays, count: 7, savedAt: new Date().toISOString() };
+
+    t.eq(win.schedUfExpected(afterDrop, 'Housekeeping Supervisor', '2026-10-18'), win.schedUfExpected(manualSch, 'Housekeeping Supervisor', '2026-10-18'),
+      "Supervisors' Unifocus std on Sunday (what drives the crew card's OVER/UNDER label) matches typing 172 effective departures directly, not the raw 192");
+    t.eq(win.schedUfExpected(afterDrop, 'Housekeeping Supervisor', '2026-10-19'), win.schedUfExpected(manualSch, 'Housekeeping Supervisor', '2026-10-19'),
+      "same for Monday — matches typing 58 effective departures directly, not the raw 38");
+
+    // Houseman (hp, AM shift of House Attendant) uses schedUfExpectedForShift.
+    t.eq(win.schedUfExpectedForShift(afterDrop, 'House Attendant', 0, '2026-10-18'), win.schedUfExpectedForShift(manualSch, 'House Attendant', 0, '2026-10-18'),
+      "Houseman's Unifocus std on Sunday also matches the effective (172), not the raw (192) departures");
+
+    // The crew card's own HTML must carry the same adjusted number too —
+    // the "Departures" mirror row right under each crew card's title,
+    // and the "departures each"/"rooms each" ratio row underneath it.
+    win.schedViewWeekStart = new Date(2026, 9, 17); // re-render after the schedUfExpected calls above read a DIFFERENT SCH object, not the live one
+    win.renderSchedule();
+    const html2 = win.document.getElementById('scheduleContent').innerHTML;
+    const supIdx = html2.indexOf('>Supervisors<');
+    t.assert(supIdx !== -1, 'the Supervisors crew card is on the page');
+    const supCard = html2.slice(supIdx, supIdx + 3000);
+    t.assert(/>172</.test(supCard), "Supervisors' own Departures mirror row shows Sunday's effective 172, not the raw 192");
+    t.assert(/>58</.test(supCard), "Supervisors' own Departures mirror row shows Monday's effective 58, not the raw 38");
+
     // ── Clearing the drop removes the adjustment on both fronts, both days ──
     win.schedSetDrop('2026-10-18', '');
     const cleared = win.dlLoadSchedule();
