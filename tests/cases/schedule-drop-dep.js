@@ -1,24 +1,33 @@
 /* Carlos's real ask, 2026-10-11: some days Opera shows more real
    departures than he can actually clean — not enough staff — so he
-   deliberately leaves a known number of them for the next day. Modeled
-   on Daily Lineup's own drop/received mechanic (dlBuildPlan), but just
-   the drop half: Carlos only asked to be able to say "I'm leaving N for
-   tomorrow," not to hand-correct how much of that actually carried over.
+   deliberately leaves a known number of rooms for the next day.
 
-   Two things this has to do, both load-bearing:
-   (1) VISUAL — a day he drops into, and the day right after that
-       receives, both show a small note explaining why their effective
-       Departures differs from the raw box (which still matches Opera
-       exactly, untouched) — so another manager comparing the two
-       numbers has the answer right there instead of asking Carlos.
-   (2) REAL — schedAutoNeed (which decides how many Supervisors/House
-       Attendants/Room Attendants Auto-fill schedules) now reads the
-       EFFECTIVE departures, not the raw box, so a day he's intentionally
-       lightening doesn't also get overstaffed, and the day he pushed the
-       backlog into gets properly staffed for the extra load.
+   First version of this feature only touched Departures and only
+   showed a tiny note under the box — Carlos tried it and reported back
+   the SAME day: he wasn't seeing either number actually move. His own
+   worked example, using his real screenshot's numbers (Oct 17-23 2026,
+   Sunday 10/18 reading 229 OCC / 192 Departures): dropping 20 rooms
+   makes Sunday effectively run 209 OCC / 172 Departures, and Monday
+   (103 OCC / 38 Departures) effectively run 20 HIGHER on BOTH —
+   123 OCC / 58 Departures. A dropped departure is still one of that
+   day's OCC rooms going untouched, and it's still owed as a
+   departure-type clean tomorrow — ONE number moves one block of rooms
+   forward on both fronts, not two independent drops the way Daily
+   Lineup's fuller OCC-drop/Departures-drop keeps them.
 
-   Fixture week mirrors Carlos's own real screenshot (Oct 17-23 2026):
-   Sunday 10/18 is the real day he can't clean all 192 departures. */
+   Three things this has to do, all load-bearing:
+   (1) REAL — schedAutoNeed (which decides how many Supervisors/House
+       Attendants/Room Attendants Auto-fill schedules) reads the
+       EFFECTIVE OCC and Departures, not the raw boxes, for BOTH the
+       dropping day and the receiving day.
+   (2) VISUAL — both the dropping day and the receiving day show their
+       own bold effective OCC number AND effective Departures number
+       right on screen, not just a small note describing the delta —
+       so another manager comparing the Schedule Draft to Opera has the
+       actual number, not just an explanation of why it's different.
+   (3) The raw boxes themselves (what Carlos actually typed, or what
+       came from Opera/R106) are NEVER overwritten by a drop — only the
+       computed effective figure moves. */
 const { loadApp, fakeSession } = require('../_harness');
 
 const DATES = ['2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23'];
@@ -26,7 +35,7 @@ const OCC = { '2026-10-17': 237, '2026-10-18': 229, '2026-10-19': 103, '2026-10-
 const DEP = { '2026-10-17': 46, '2026-10-18': 192, '2026-10-19': 38, '2026-10-20': 66, '2026-10-21': 77, '2026-10-22': 155, '2026-10-23': 65 };
 
 module.exports = {
-  name: "Schedule Draft: Drop to Tomorrow adjusts the EFFECTIVE Departures that Auto-fill's headcount math uses, without touching the raw Opera-sourced box, and explains itself with a visible note on both the dropping and receiving day (Carlos's 2026-10-11 ask)",
+  name: "Schedule Draft: Drop to Tomorrow is ONE shared number that adjusts the EFFECTIVE OCC *and* Departures Auto-fill's headcount math uses, shown as its own bold figure on both the dropping and receiving day, without touching either raw Opera-sourced box (Carlos's 2026-10-11 ask, corrected same day)",
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
     await new Promise((r) => setTimeout(r, 60));
@@ -37,55 +46,62 @@ module.exports = {
     win.schedViewWeekStart = new Date(2026, 9, 17);
     win.renderSchedule();
 
-    // ── Before any drop: effective == raw, Sunday's real Supervisor/HP
-    // need is the "too many departures" number Carlos is actually facing. ──
-    let eff = win.schedEffectiveDep(win.dlLoadSchedule(), '2026-10-18');
-    t.eq(eff.depBase, 192, 'sanity: the raw box reads Opera\'s real 192');
+    // ── Before any drop: effective == raw on both fronts ──
+    let eff = win.schedEffectiveDay(win.dlLoadSchedule(), '2026-10-18');
+    t.eq(eff.occBase, 229, "sanity: Sunday's raw OCC box");
+    t.eq(eff.depBase, 192, "sanity: Sunday's raw Departures box");
     t.eq(eff.drop, 0, 'no drop yet');
     t.eq(eff.recv, 0, 'Saturday never dropped anything, so Sunday receives nothing');
-    t.eq(eff.dep, 192, 'with nothing dropped or received, effective equals the raw box');
-    t.eq(win.schedSupHpNeeded(192), 5, 'sanity check on the needs formula itself: 192 departures needs 5 Supervisors/House Attendants');
+    t.eq(eff.occ, 229, 'with nothing dropped or received, effective OCC equals the raw box');
+    t.eq(eff.dep, 192, 'with nothing dropped or received, effective Departures equals the raw box');
 
-    // ── Carlos drops 100 of Sunday's departures to Monday ──
-    win.schedSetDropDep('2026-10-18', '100');
+    // ── Carlos's own worked example: drop 20 rooms from Sunday ──
+    win.schedSetDrop('2026-10-18', '20');
     const afterDrop = win.dlLoadSchedule();
-    t.eq(afterDrop.days['2026-10-18'].dropDep, 100, 'the drop is saved on the day it was dropped FROM');
-    t.eq(afterDrop.days['2026-10-18'].dep, '192', "the raw Departures box is NEVER touched by a drop — it must keep matching Opera exactly");
-    t.eq(afterDrop.days['2026-10-19'].dep, '38', "Monday's own raw box is untouched too — only the EFFECTIVE figure moves, not the stored boxes");
+    t.eq(afterDrop.days['2026-10-18'].drop, 20, 'the drop is saved on the day it was dropped FROM');
+    t.eq(afterDrop.days['2026-10-18'].occ, '229', "the raw OCC box is NEVER touched by a drop — it must keep matching Opera exactly");
+    t.eq(afterDrop.days['2026-10-18'].dep, '192', "the raw Departures box is NEVER touched by a drop either");
+    t.eq(afterDrop.days['2026-10-19'].occ, '103', "Monday's own raw boxes are untouched too — only the EFFECTIVE figures move");
+    t.eq(afterDrop.days['2026-10-19'].dep, '38', "same for Monday's raw Departures box");
 
-    eff = win.schedEffectiveDep(afterDrop, '2026-10-18');
-    t.eq(eff.dep, 92, "Sunday's effective departures: 192 - 100 dropped = 92");
-    const effMon = win.schedEffectiveDep(afterDrop, '2026-10-19');
-    t.eq(effMon.recv, 100, "Monday automatically RECEIVES exactly what Sunday dropped — no separate box to keep in sync");
-    t.eq(effMon.dep, 138, "Monday's effective departures: 38 raw + 100 received = 138");
+    eff = win.schedEffectiveDay(afterDrop, '2026-10-18');
+    t.eq(eff.occ, 209, "Sunday's effective OCC: 229 - 20 dropped = 209, exactly Carlos's own worked example");
+    t.eq(eff.dep, 172, "Sunday's effective Departures: 192 - 20 dropped = 172, exactly Carlos's own worked example");
+    const effMon = win.schedEffectiveDay(afterDrop, '2026-10-19');
+    t.eq(effMon.recv, 20, "Monday automatically RECEIVES exactly what Sunday dropped — no separate box to keep in sync");
+    t.eq(effMon.occ, 123, "Monday's effective OCC: 103 + 20 received = 123, exactly Carlos's own worked example");
+    t.eq(effMon.dep, 58, "Monday's effective Departures: 38 + 20 received = 58, exactly Carlos's own worked example");
 
-    // ── schedAutoNeed (Auto-fill's own headcount math) uses the EFFECTIVE
-    // number, not the raw box — this is the whole point, not just a note. ──
-    t.eq(win.schedAutoNeed(afterDrop, '2026-10-18', 'sup'), win.schedSupHpNeeded(92), "Sunday needs fewer Supervisors/House Attendants once lightened (92 effective, not 192 raw)");
-    t.assert(win.schedAutoNeed(afterDrop, '2026-10-18', 'sup') < win.schedSupHpNeeded(192), 'concretely fewer than the raw 192 would have required');
-    t.eq(win.schedAutoNeed(afterDrop, '2026-10-19', 'sup'), win.schedSupHpNeeded(138), "Monday needs MORE Supervisors/House Attendants to handle the carried-over backlog (138 effective, not 38 raw)");
-    t.assert(win.schedAutoNeed(afterDrop, '2026-10-19', 'sup') > win.schedSupHpNeeded(38), 'concretely more than the raw 38 would have required');
-    // Room Attendants also take dueouts as an input (schedRaNeeded), so
-    // their need shifts the same direction for the same reason.
-    t.eq(win.schedAutoNeed(afterDrop, '2026-10-18', 'gra'), win.schedRaNeeded(229, 92), "Room Attendant need on Sunday (229 rooms) also uses the effective departures (92), not the raw (192)");
+    // ── schedAutoNeed (Auto-fill's own headcount math) uses the
+    // EFFECTIVE figures on BOTH fronts, not the raw boxes ──
+    t.eq(win.schedAutoNeed(afterDrop, '2026-10-18', 'sup'), win.schedSupHpNeeded(172), "Sunday's Supervisor/House Attendant need uses effective Departures (172), not raw (192)");
+    t.assert(win.schedAutoNeed(afterDrop, '2026-10-18', 'sup') <= win.schedSupHpNeeded(192), 'never MORE than the raw 192 would have required, since the day is being lightened');
+    t.eq(win.schedAutoNeed(afterDrop, '2026-10-19', 'sup'), win.schedSupHpNeeded(58), "Monday's Supervisor/House Attendant need uses effective Departures (58), not raw (38)");
+    t.assert(win.schedAutoNeed(afterDrop, '2026-10-19', 'sup') >= win.schedSupHpNeeded(38), 'never LESS than the raw 38 would have required, since Monday absorbs the backlog');
+    t.eq(win.schedAutoNeed(afterDrop, '2026-10-18', 'gra'), win.schedRaNeeded(209, 172), "Room Attendant need on Sunday uses BOTH effective figures (209 rooms, 172 departures), not either raw box");
+    t.eq(win.schedAutoNeed(afterDrop, '2026-10-19', 'gra'), win.schedRaNeeded(123, 58), "Room Attendant need on Monday uses both effective figures too (123 rooms, 58 departures)");
 
-    // ── Visual explanation: both days show a note, each pointing at the
-    // other and at the real effective number, not just a bare figure. ──
+    // ── Visual: both OCC and Departures show their own bold effective
+    // number on BOTH days, not a bare delta note ──
     const html = win.document.getElementById('scheduleContent').innerHTML;
-    t.assert(/100[\s\S]{0,20}to tomorrow/.test(html), "Sunday's box shows it dropped 100 to tomorrow");
-    t.assert(/100[\s\S]{0,20}from Sun/.test(html), "Monday's box shows it received 100 from Sunday — the actual explanation a manager needs");
+    t.assert(/>209</.test(html), "Sunday's effective OCC (209) is shown as its own figure");
+    t.assert(/>172</.test(html), "Sunday's effective Departures (172) is shown as its own figure");
+    t.assert(/>123</.test(html), "Monday's effective OCC (123) is shown as its own figure");
+    t.assert(/>58</.test(html), "Monday's effective Departures (58) is shown as its own figure");
 
-    // ── Clearing the drop removes the adjustment on both days ──
-    win.schedSetDropDep('2026-10-18', '');
+    // ── Clearing the drop removes the adjustment on both fronts, both days ──
+    win.schedSetDrop('2026-10-18', '');
     const cleared = win.dlLoadSchedule();
-    t.assert(!('dropDep' in cleared.days['2026-10-18']), 'an empty value clears the stored drop entirely, not just zeroes it');
-    t.eq(win.schedEffectiveDep(cleared, '2026-10-18').dep, 192, "Sunday's effective departures reverts to the raw 192");
-    t.eq(win.schedEffectiveDep(cleared, '2026-10-19').dep, 38, "Monday stops receiving anything once the drop is cleared");
+    t.assert(!('drop' in cleared.days['2026-10-18']), 'an empty value clears the stored drop entirely, not just zeroes it');
+    t.eq(win.schedEffectiveDay(cleared, '2026-10-18').occ, 229, "Sunday's effective OCC reverts to the raw 229");
+    t.eq(win.schedEffectiveDay(cleared, '2026-10-18').dep, 192, "Sunday's effective Departures reverts to the raw 192");
+    t.eq(win.schedEffectiveDay(cleared, '2026-10-19').occ, 103, "Monday stops receiving anything on OCC once the drop is cleared");
+    t.eq(win.schedEffectiveDay(cleared, '2026-10-19').dep, 38, "Monday stops receiving anything on Departures once the drop is cleared");
 
     // ── A negative number is rejected outright, same guard as every
     // other numeric Schedule field ──
-    win.schedSetDropDep('2026-10-18', '40');
-    win.schedSetDropDep('2026-10-18', '-5');
-    t.eq(win.dlLoadSchedule().days['2026-10-18'].dropDep, 40, 'a negative value is rejected — the last valid drop (40) survives untouched');
+    win.schedSetDrop('2026-10-18', '40');
+    win.schedSetDrop('2026-10-18', '-5');
+    t.eq(win.dlLoadSchedule().days['2026-10-18'].drop, 40, 'a negative value is rejected — the last valid drop (40) survives untouched');
   },
 };

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.60.0"/>
+<meta name="app-version" content="7.61.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4508,6 +4508,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.61.0', date:'2026-10-11',
+    fixes:['Corrected "Drop to Tomorrow" the same day it shipped, after Carlos tried it and reported back: he expected to actually SEE both numbers move, and for the drop to affect OCC too, not just Departures. His own worked example — 229 OCC / 192 Departures, 20 rooms dropped — now shows 209 / 172 right on that day and 103/38 next door shows 123 / 58, both as their own bold figures under the raw boxes (which still never change, still match Opera exactly). One shared number now moves both figures together: a departure he can\'t get to today is still one of today\'s OCC rooms too, and still owed tomorrow on both counts. Auto-fill\'s headcount math uses both adjusted figures the same way.']
+  },
   {
     v:'7.60.0', date:'2026-10-11',
     features:['Added "Drop to Tomorrow" to the Schedule\'s OCC/Departures card — Carlos\'s ask, modeled on Daily Lineup\'s own drop/received mechanic. Some days he genuinely can\'t clean every departure Opera shows (not enough staff), so he deliberately leaves a known number for the next day. Typing that number now shows right on screen why today\'s and tomorrow\'s effective Departures differ from the raw Opera-matching box — "−42 to tomorrow" / "+42 from [day]" — so another manager comparing the Schedule Draft to Opera has the answer without having to ask. It\'s not just a note: Auto-fill\'s own headcount math (how many Supervisors/House Attendants/Room Attendants it schedules) now reads this adjusted figure too, so the day he\'s lightening isn\'t overstaffed and the day absorbing the backlog is properly staffed for it.']
@@ -22047,20 +22051,20 @@ function schedSetNum(ds,field,val){
     if(tdHdr)tdHdr.textContent=SCH.days[prevDs].tdOcc||'·';
   }
 }
-/* Carlos's ask, 2026-10-11 — see schedEffectiveDep's header comment for
+/* Carlos's ask, 2026-10-11 — see schedEffectiveDay's header comment for
    the full reasoning. A full renderSchedule() rather than schedSetNum's
    surgical DOM patch: this box is edited far less often than OCC/
    Departures (no rapid tab-across-the-week flow to protect), and the
    edit needs to repaint the NEXT day's "received from" note too, which
    a targeted patch would otherwise have to duplicate. */
-function schedSetDropDep(ds,val){
+function schedSetDrop(ds,val){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days||!SCH.days[ds])return;
   var d=parseLocalDate(ds); d.setDate(d.getDate()+1);
-  _schedStashForUndo('the departures-dropped edit on '+ds,[ds,dateStr(d)]);
+  _schedStashForUndo('the rooms-dropped edit on '+ds,[ds,dateStr(d)]);
   var t=String(val==null?'':val).trim();
-  if(t===''){ delete SCH.days[ds].dropDep; }
-  else{ var n=parseInt(t,10); if(isNaN(n)||n<0)return; SCH.days[ds].dropDep=n; }
+  if(t===''){ delete SCH.days[ds].drop; }
+  else{ var n=parseInt(t,10); if(isNaN(n)||n<0)return; SCH.days[ds].drop=n; }
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   renderSchedule();
@@ -22667,34 +22671,37 @@ function schedSupHpNeeded(dueouts){
   if(dueouts<=150)return 4; if(dueouts<=199)return 5; return 9999;
 }
 function schedTurndownNeeded(rooms){ return Math.ceil(rooms/48); }
-/* Carlos's ask, 2026-10-11: some days he genuinely can't clean every
-   departure Opera shows — not enough staff — so he deliberately drops
-   a known number of them to the next day, same idea Daily Lineup
-   already has (dlBuildPlan's drop/recv). Without anywhere to record
-   that, the raw Departures box just reads however many Opera shows
-   and Auto-fill's own headcount math (schedAutoNeed below) staffs the
-   day as if every one of them is getting cleaned today — overstaffing
-   the day he's intentionally lightening and understaffing the day
-   he's pushing the backlog into.
+/* Carlos's ask, 2026-10-11, corrected same day after he tried the first
+   version: some days he genuinely can't clean every departure Opera
+   shows — not enough staff — so he deliberately drops a known number
+   of them to the next day. His real example: 20 rooms dropped from a
+   day reading 229 OCC / 192 Departures means THAT day effectively runs
+   209 OCC / 172 Departures, and the next day effectively runs 20
+   HIGHER on both — not just Departures. A dropped departure is still
+   one of that day's OCC rooms (nobody touches it today, so today's
+   real room-count is also down by the same 20), and it's still owed as
+   a departure-type clean tomorrow, so it raises tomorrow's effective
+   room count on both fronts too — a single number moving one block of
+   rooms a day forward, not two independently-tracked drops the way
+   Daily Lineup's fuller OCC-drop/Departures-drop keeps them.
 
-   Dropped rooms become the NEXT day's "received" automatically — that
-   is exactly where they went — with no separate override box, unlike
-   Daily Lineup's fuller version: Carlos only asked for the drop side,
-   so this stays the lean half of that mechanic rather than guessing
-   he also wants to hand-correct how much carried over. The raw
-   Departures box itself is never touched by this — it keeps matching
-   Opera exactly, so a manager comparing the two numbers still sees
-   them agree; schedEffectiveDep is the adjusted figure everything
-   downstream (the headcount math, and the on-screen "dropped
-   to.../received from..." note) actually uses. */
-function schedEffectiveDep(SCH,ds){
+   The first version only touched Departures and only showed a tiny
+   note, which is why Carlos didn't see anything change — he expected
+   to actually SEE both effective numbers move. schedAutoNeed below now
+   reads the effective OCC and Departures for both the headcount math
+   AND the two bold numbers rendered under each box. The raw boxes
+   themselves are still never overwritten by this — they keep matching
+   Opera exactly, so a manual retype or a corrected re-upload is never
+   silently walked back by a drop typed days earlier. */
+function schedEffectiveDay(SCH,ds){
   var day=SCH&&SCH.days&&SCH.days[ds];
-  if(!day)return {depBase:0,drop:0,recv:0,dep:0};
+  if(!day)return {occBase:0,depBase:0,drop:0,recv:0,occ:0,dep:0};
   var prev=SCH.days[prevDateStr(ds)]||{};
+  var occBase=parseInt(day.occ,10); if(isNaN(occBase))occBase=0;
   var depBase=parseInt(day.dep,10); if(isNaN(depBase))depBase=0;
-  var drop=dlNumOr(day.dropDep,0);
-  var recv=dlNumOr(prev.dropDep,0);
-  return {depBase:depBase,drop:drop,recv:recv,dep:depBase-drop+recv};
+  var drop=dlNumOr(day.drop,0);
+  var recv=dlNumOr(prev.drop,0);
+  return {occBase:occBase,depBase:depBase,drop:drop,recv:recv,occ:occBase-drop+recv,dep:depBase-drop+recv};
 }
 /* Turndown gets its own same-day OCC field (day.tdOcc) where Schedule
    Builder has only one rooms number for everything — this app's data
@@ -22703,8 +22710,8 @@ function schedEffectiveDep(SCH,ds){
    flattened back down to match Schedule Builder's simpler model. */
 function schedAutoNeed(SCH,ds,bk){
   var day=SCH&&SCH.days&&SCH.days[ds]; if(!day)return 0;
-  var rooms=parseInt(day.occ,10); if(isNaN(rooms))rooms=0;
-  var dueouts=schedEffectiveDep(SCH,ds).dep;
+  var eff=schedEffectiveDay(SCH,ds);
+  var rooms=eff.occ, dueouts=eff.dep;
   if(!rooms)return 0;
   if(bk==='gra')return schedRaNeeded(rooms,dueouts);
   if(bk==='sup'||bk==='hp')return schedSupHpNeeded(dueouts);
@@ -24913,36 +24920,43 @@ function renderSchedule(){
       html+='<input type="number" min="0" value="'+escHtml(day[f[0]]||'')+'" id="schedNumIn_'+ds+'_'+f[0]+'" onchange="schedSetNum(\''+ds+'\',\''+f[0]+'\',this.value)"'
         +' style="width:100%;min-width:0;padding:3px 2px;font-size:11px;font-weight:800;text-align:center;color:var(--navy);'
         +'border:1px solid var(--border);border-radius:5px;background:#fff;box-sizing:border-box;font-family:inherit;">';
-      /* Carlos's ask, 2026-10-11: when this day's Departures box reads
-         lower/higher than what another manager sees in Opera, the
-         reason should be sitting right here, not just in his head —
-         either he dropped some of today's to tomorrow, or he's the one
-         receiving yesterday's drop, or both. schedEffectiveDep below
-         feeds the exact same adjusted number into Auto-fill's own
-         headcount math, so this note and the actual staffing count
-         never disagree with each other. */
-      if(f[0]==='dep'){
-        var eff=schedEffectiveDep(SCH,ds);
+      /* Carlos's ask, 2026-10-11, corrected same day after he tried the
+         first version: he wasn't seeing either number actually MOVE — a
+         tiny note under Departures alone wasn't enough. Both OCC and
+         Departures now show their own bold effective figure right under
+         the raw box, on whichever day(s) a drop/receive actually
+         changes it — this IS the number schedAutoNeed below staffs
+         against, so what a manager sees here and what Auto-fill
+         actually does can never quietly disagree. */
+      var eff=schedEffectiveDay(SCH,ds);
+      var effVal=f[0]==='occ'?eff.occ:eff.dep;
+      if(eff.drop||eff.recv){
         var bits=[];
         if(eff.recv)bits.push('+'+eff.recv+' from '+parseLocalDate(prevDateStr(ds)).toLocaleDateString('en-US',{weekday:'short'}));
         if(eff.drop)bits.push('&minus;'+eff.drop+' to tomorrow');
-        if(bits.length)html+='<div style="font-size:7.5px;line-height:1.3;color:var(--gd);text-align:center;margin-top:1px;" title="Effective departures today: '+eff.dep+' — this is what Auto-fill actually staffs against, not the raw box above.">'+bits.join('<br>')+'</div>';
+        html+='<div style="font-size:12px;font-weight:800;color:var(--gd);text-align:center;margin-top:1px;" title="'+bits.join(', ')+' — this is what Auto-fill actually staffs against, not the raw box above.">'+effVal+'</div>';
       }
       html+='</div>';
     });
     html+='</div>';
   });
-  /* Drop to Tomorrow — editable half of schedEffectiveDep's mechanic;
-     see its header comment. Only ever touches dropDep on THIS day; the
-     next day's "received from" note above is purely derived, never a
-     separate box to keep in sync. */
+  /* Drop to Tomorrow — a single shared number, not one per field: a
+     departure room Carlos can't get to today is still one of today's
+     OCC rooms going untouched, and still owed as a departure-type
+     clean tomorrow, so the same 20 rooms move off BOTH of today's
+     figures and onto BOTH of tomorrow's — see schedEffectiveDay's
+     header comment for the full reasoning (his real worked example:
+     20 dropped turns 229/192 into an effective 209/172 that day, and
+     103/38 into 123/58 the next). Only ever touches drop on THIS day;
+     the next day's "received from" note above is purely derived, never
+     a separate box to keep in sync. */
   html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:4px;">';
-  html+='<div style="font-size:9px;font-weight:700;color:var(--text3);" title="Departures you know you won\'t get to today — they roll into tomorrow\'s effective Departures automatically.">Drop to Tomorrow</div>';
+  html+='<div style="font-size:9px;font-weight:700;color:var(--text3);" title="Rooms you know you won\'t get to today — they roll into tomorrow\'s effective OCC and Departures automatically.">Drop to Tomorrow</div>';
   dates.forEach(function(ds){
     var day=SCH.days[ds];
     if(!day){ html+='<div></div>'; return; }
-    var dropVal=day.dropDep||'';
-    html+='<input type="number" min="0" value="'+escHtml(dropVal)+'" onchange="schedSetDropDep(\''+ds+'\',this.value)"'
+    var dropVal=day.drop||'';
+    html+='<input type="number" min="0" value="'+escHtml(dropVal)+'" onchange="schedSetDrop(\''+ds+'\',this.value)"'
       +' style="width:100%;min-width:0;padding:3px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--text2);'
       +'border:1px solid '+(dropVal?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(dropVal?'var(--gt)':'#fff')+';box-sizing:border-box;font-family:inherit;">';
   });
