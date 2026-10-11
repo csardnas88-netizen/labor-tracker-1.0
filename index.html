@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.56.0"/>
+<meta name="app-version" content="7.57.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -693,12 +693,6 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .info-box{border-radius:8px;padding:12px 14px;font-size:12.5px;font-weight:500;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px;}
 .info-amber{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border);}
 .info-navy{background:var(--s3);color:var(--navy);border:1px solid var(--border2);}
-.month-kpi-strip{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:12px 16px;flex:1;min-width:110px;text-align:center;}
-.mks-val{font-size:20px;font-weight:800;color:var(--text1);}
-.mks-val.red{color:var(--red);}
-.mks-val.green{color:var(--green);}
-.mks-val.yellow{color:var(--yellow);}
-.mks-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;}
 /* .analysis-2col / .day-summary-card / .dsc-* lived here until v6.97.0 —
    they styled the "By Position" card and the 2-column row that held it
    beside Occupancy. Both were removed as redundant with Weekly Labor
@@ -830,7 +824,6 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   .topbar{padding-top:max(14px,env(safe-area-inset-top));}
   .hamburger{display:block;font-size:28px;padding:6px 12px;}
   .rooms-modal-grid{grid-template-columns:repeat(2,1fr);}
-  .month-kpi-strip{min-width:80px;}
   .pages-wrap{padding:12px 14px;}
   #page-dashboard .card>div:first-child{grid-template-columns:repeat(4,1fr);}
 }
@@ -858,7 +851,6 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   .pos-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .detail-kpi-grid{grid-template-columns:1fr 1fr;}
   .recap-hero{grid-template-columns:1fr;}
-  .month-kpi-strip{padding:10px 8px;}
   .pace-row{font-size:11px;}
   .break-item{padding:10px 12px;}
   .ot-emp-row{padding:8px 12px;}
@@ -1447,9 +1439,6 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 
       <!-- Day analysis -->
       <div id="dashDayAnalysis"></div>
-
-      <!-- Monthly KPI strip -->
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;" id="dashMonthStrip"></div>
     </div>
 
     <!-- ══ TIME CARD CHECK (Weekly Time Card Comparison) ══ -->
@@ -4576,6 +4565,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.57.0', date:'2026-10-10',
+    improvements:['Removed the "Days Loaded / MTD Variance / Breaks MTD / Monthly Recap" KPI strip at the bottom of the Labor day view — Carlos\'s ask, it repeated numbers already shown elsewhere on the page. Overtime now renders ABOVE Break Exceptions on that same page, also at his request.']
+  },
   {
     v:'7.56.0', date:'2026-10-10',
     fixes:['Fixed the Overtime list losing its click-to-expand day-by-day breakdown for anyone showing today\'s actual OT1 minutes — Carlos\'s real report, right after uploading that day\'s Labor Distribution Report: everyone with real overtime today landed in that top list (not the "Already Over 40h" / "Approaching OT" tiers, which already had this), and that list never had the tap-to-see-her-week feature to begin with. It now opens the exact same day-strip breakdown, reusing her weekly projection when her name resolves to one; a name that doesn\'t resolve still shows the plain row rather than opening to nothing.']
@@ -13307,14 +13300,11 @@ function renderLaborDash(){
      recently-uploaded / just-synced days show their budget instead of "—". */
   try{ Object.keys(localStorage).forEach(function(_k){ if(_k.indexOf('hk_r106_')===0)applyR106ToEmptyRooms(_k.replace('hk_r106_','')); }); }catch(e){}
   var wk=getDashWeek();
-  var yr=viewMonth.getFullYear(),mo=viewMonth.getMonth();
   /* Merge day/room snapshots from EVERY stored month — not just viewMonth.
      The dashboard week is anchored to today + dashWeekOffset and can land in
      a different month than viewMonth (e.g. viewing a June week while viewMonth
      is July). Loading only viewMonth made those out-of-month days look empty,
-     so every day showed a false "No Report" even though the data was saved.
-     Resolving each date against ALL months fixes that. (The Monthly KPI strip
-     below still filters to viewMonth via mo/yr, so it stays month-scoped.) */
+     so every day showed a false "No Report" even though the data was saved. */
   var days={},rooms={};
   Object.keys(localStorage).forEach(function(_k){
     if(_k.indexOf('hk_month_')!==0)return;
@@ -13446,34 +13436,6 @@ function renderLaborDash(){
 
   /* Day analysis */
   renderDashDayAnalysis(days,rooms,today,wk);
-
-  /* Monthly KPI strip */
-  var mPaid=0,mBudget=0,mNB=0,mSB=0,mDays=0;
-  Object.keys(days).forEach(function(ds2){
-    var d2=parseLocalDate(ds2);
-    if(d2.getMonth()!==mo||d2.getFullYear()!==yr)return;
-    var s=days[ds2];var r2=getRoomsForDay(ds2);
-    var sEmps=s.emps||[];
-    var sNB=sEmps.length?sEmps.filter(function(e){return breakStatus(toMins(e.unpaid||0),e.pos,e.id)==='none';}).length:(s.noBreak||0);
-    var sSB=sEmps.length?sEmps.filter(function(e){var st=breakStatus(toMins(e.unpaid||0),e.pos,e.id);return st==='short'||st==='over'||st==='long';}).length:(s.shortBreak||0);
-    mPaid+=s.totalPaid;mBudget+=dayBudget(r2);mNB+=sNB;mSB+=sSB;mDays++;
-  });
-  var mVar=mPaid-mBudget;
-  var dInMonth=new Date(yr,mo+1,0).getDate();
-  var stripEl=document.getElementById('dashMonthStrip');
-  if(stripEl){
-    stripEl.innerHTML=
-      '<div class="month-kpi-strip"><div class="mks-val">'+mDays+'/'+dInMonth+'</div>'
-      +'<div class="mks-label">Days Loaded</div></div>'
-      +'<div class="month-kpi-strip"><div class="mks-val '
-      +(mBudget>0?(mVar>0?'red':'green'):'')+'">'+( mBudget>0?(mVar>=0?'+':'')+mVar.toFixed(2)+'h':'&#8212;')+'</div>'
-      +'<div class="mks-label">MTD Variance</div></div>'
-      +'<div class="month-kpi-strip"><div class="mks-val '+(mNB+mSB>0?'yellow':'green')+'">'
-      +(mNB+mSB)+'</div><div class="mks-label">Breaks MTD</div></div>'
-      +'<div class="month-kpi-strip" style="cursor:pointer;" onclick="showPage(\'recap\')">'
-      +'<div class="mks-val" style="color:var(--navy);">&#8594;</div>'
-      +'<div class="mks-label">Monthly Recap</div></div>';
-  }
 }
 
 /* The six HK positions, in the order every weekly view (Weekly Labor Pace,
@@ -14425,68 +14387,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       if(lastDs===ds)snapEmps=DATA.emps;
     }
 
-    /* Carlos's ask, 2026-10-10: the Turndown "OK — 15/17 min" rows (people
-       who punched their break correctly) were only ever here as
-       reassurance, but they outnumbered the real exceptions and cluttered
-       the card — removed, so this section only ever shows an actual
-       problem. The "All breaks OK" badge above already covers the
-       reassurance case when there's truly nothing to flag. */
-    var breakEmps=snapEmps.filter(function(e){return isBreakException(e);});
-
-    html+='<div class="card" style="margin-bottom:14px;">'
-      +'<div class="card-head"><div class="card-title">&#9749; Break Exceptions</div>'
-      +'<span class="badge '+(snapEmps.length?(breakEmps.length?'b-red':'b-green'):'b-amber')+'">'
-      +(snapEmps.length?(breakEmps.length?breakEmps.length+' employees':'All breaks OK &#10003;'):'Re-upload PDF')+'</span></div>';
-
-    if(!snapEmps.length){
-      html+='<div style="padding:14px;text-align:center;color:var(--text3);">'
-        +'Re-upload this day\'s PDF to see employee break details</div>';
-    }else if(breakEmps.length){
-      /* Sort exceptions: No Break first, then by mins ascending */
-      breakEmps.sort(function(a,b){
-        var ma=toMins(parseFloat(a.unpaid||0));
-        var mb=toMins(parseFloat(b.unpaid||0));
-        if(ma===0&&mb!==0)return -1;
-        if(mb===0&&ma!==0)return 1;
-        return ma-mb;
-      });
-      html+='<div style="padding:0 14px 8px;">';
-
-      /* Exception rows */
-      breakEmps.forEach(function(e){
-        var mins=toMins(parseFloat(e.unpaid||0));
-        var st=breakStatus(mins,e.pos||'',e.id);
-        var pos=(e.pos||'').replace(/^\d+-/,'')||'Unknown Position';
-        var isNone=(st==='none');
-        var isOver=(st==='over');
-        var leftBar=isNone?'var(--red)':'var(--yellow)';
-        var badgeBg=isNone?'var(--red-bg)':'var(--yellow-bg)';
-        var badgeColor=isNone?'var(--red)':'var(--yellow)';
-        var icon=isNone?'🔴':'🟠';
-        var label=breakLabel(mins,e.pos||'',e.id);
-        var tdBadge=isTurndown(e.pos)?'<span style="background:var(--indigo-bg);color:var(--indigo);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:5px;">Part-time</span>':'';
-
-        html+='<div style="margin:6px 0;border-radius:8px;background:var(--white);'
-          +'border:1px solid var(--border);border-left:3px solid '+leftBar+';display:flex;align-items:center;'
-          +'justify-content:space-between;padding:8px 11px;gap:10px;">';
-        html+='<div style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;">';
-        html+='<span style="font-size:15px;flex-shrink:0;">'+icon+'</span>';
-        html+='<div style="min-width:0;">';
-        html+='<div style="font-weight:700;color:var(--text1);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+'</div>';
-        html+='<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+pos+tdBadge+'</div>';
-        html+='</div></div>';
-        html+='<span style="flex-shrink:0;background:'+badgeBg+';color:'+badgeColor+';'
-          +'font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;white-space:nowrap;">'+label+'</span>';
-        html+='</div>';
-      });
-
-      html+='</div>';
-    }else{
-      html+='<div style="padding:14px;text-align:center;color:var(--text3);">No break exceptions &#10003;</div>';
-    }
-    html+='</div>';
-
-    /* ── OT ── */
+    /* ── OT ── (moved above Break Exceptions, Carlos's 2026-10-10 ask) */
     var otEmps=snapEmps.filter(function(e){return(e.ot1||0)>0;});
     var otIds={}; otEmps.forEach(function(e){otIds[e.id]=1;});
     /* Carlos's ask, 2026-10-10: estimate who's projected to actually cross
@@ -14574,6 +14475,67 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       }
       html+='</div>';
     }
+
+    /* Carlos's ask, 2026-10-10: the Turndown "OK — 15/17 min" rows (people
+       who punched their break correctly) were only ever here as
+       reassurance, but they outnumbered the real exceptions and cluttered
+       the card — removed, so this section only ever shows an actual
+       problem. The "All breaks OK" badge above already covers the
+       reassurance case when there's truly nothing to flag. */
+    var breakEmps=snapEmps.filter(function(e){return isBreakException(e);});
+
+    html+='<div class="card" style="margin-bottom:14px;">'
+      +'<div class="card-head"><div class="card-title">&#9749; Break Exceptions</div>'
+      +'<span class="badge '+(snapEmps.length?(breakEmps.length?'b-red':'b-green'):'b-amber')+'">'
+      +(snapEmps.length?(breakEmps.length?breakEmps.length+' employees':'All breaks OK &#10003;'):'Re-upload PDF')+'</span></div>';
+
+    if(!snapEmps.length){
+      html+='<div style="padding:14px;text-align:center;color:var(--text3);">'
+        +'Re-upload this day\'s PDF to see employee break details</div>';
+    }else if(breakEmps.length){
+      /* Sort exceptions: No Break first, then by mins ascending */
+      breakEmps.sort(function(a,b){
+        var ma=toMins(parseFloat(a.unpaid||0));
+        var mb=toMins(parseFloat(b.unpaid||0));
+        if(ma===0&&mb!==0)return -1;
+        if(mb===0&&ma!==0)return 1;
+        return ma-mb;
+      });
+      html+='<div style="padding:0 14px 8px;">';
+
+      /* Exception rows */
+      breakEmps.forEach(function(e){
+        var mins=toMins(parseFloat(e.unpaid||0));
+        var st=breakStatus(mins,e.pos||'',e.id);
+        var pos=(e.pos||'').replace(/^\d+-/,'')||'Unknown Position';
+        var isNone=(st==='none');
+        var isOver=(st==='over');
+        var leftBar=isNone?'var(--red)':'var(--yellow)';
+        var badgeBg=isNone?'var(--red-bg)':'var(--yellow-bg)';
+        var badgeColor=isNone?'var(--red)':'var(--yellow)';
+        var icon=isNone?'🔴':'🟠';
+        var label=breakLabel(mins,e.pos||'',e.id);
+        var tdBadge=isTurndown(e.pos)?'<span style="background:var(--indigo-bg);color:var(--indigo);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:5px;">Part-time</span>':'';
+
+        html+='<div style="margin:6px 0;border-radius:8px;background:var(--white);'
+          +'border:1px solid var(--border);border-left:3px solid '+leftBar+';display:flex;align-items:center;'
+          +'justify-content:space-between;padding:8px 11px;gap:10px;">';
+        html+='<div style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;">';
+        html+='<span style="font-size:15px;flex-shrink:0;">'+icon+'</span>';
+        html+='<div style="min-width:0;">';
+        html+='<div style="font-weight:700;color:var(--text1);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+'</div>';
+        html+='<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+pos+tdBadge+'</div>';
+        html+='</div></div>';
+        html+='<span style="flex-shrink:0;background:'+badgeBg+';color:'+badgeColor+';'
+          +'font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;white-space:nowrap;">'+label+'</span>';
+        html+='</div>';
+      });
+
+      html+='</div>';
+    }else{
+      html+='<div style="padding:14px;text-align:center;color:var(--text3);">No break exceptions &#10003;</div>';
+    }
+    html+='</div>';
 
     /* ── Position mismatches only ── */
     var mismatches=(DATA&&DATA.emps)?DATA.emps.filter(function(e){
