@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.58.0"/>
+<meta name="app-version" content="7.59.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -365,33 +365,6 @@ tbody tr:hover td{background:var(--surface);}
 
 /* ── SETTINGS ── */
 
-/* ── TUTORIAL ── */
-.tut-layout{display:grid;grid-template-columns:190px 1fr;gap:16px;}
-.tut-nav-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:10px;position:sticky;top:80px;}
-.tut-nav-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:6px 8px 4px;}
-.tut-nav-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;margin-bottom:1px;}
-.tut-nav-item:hover{background:var(--surface);}
-.tut-nav-item.active{background:var(--navy);color:#fff;}
-.tut-num{width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;}
-.tut-nav-item.active .tut-num{background:rgba(255,255,255,.2);}
-.tut-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;}
-.tut-card-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
-.tut-badge{width:30px;height:30px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
-.tut-card-title{font-size:13px;font-weight:700;}
-.tut-card-sub{font-size:11px;color:var(--text3);margin-top:2px;}
-.tut-body{padding:16px 18px;}
-.tut-steps{display:flex;flex-direction:column;gap:12px;}
-.tut-step{display:flex;gap:10px;}
-.tut-step-num{width:22px;height:22px;border-radius:50%;background:var(--surface);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text2);flex-shrink:0;margin-top:1px;}
-.tut-step-title{font-size:13px;font-weight:600;margin-bottom:3px;}
-.tut-step-desc{font-size:12px;color:var(--text2);line-height:1.5;}
-.tut-tip{background:var(--yellow-bg);border:1px solid var(--yellow-border);border-radius:var(--radius-xs);padding:10px 13px;font-size:12px;color:var(--text2);margin-top:12px;display:flex;gap:8px;}
-.tut-warn{background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius-xs);padding:10px 13px;font-size:12px;color:var(--text2);margin-top:10px;display:flex;gap:8px;}
-.tut-ok{background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--radius-xs);padding:10px 13px;font-size:12px;color:var(--text2);margin-top:10px;display:flex;gap:8px;}
-.std-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
-.std-table th{background:var(--surface);padding:7px 10px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);}
-.std-table td{padding:8px 10px;border-bottom:1px solid var(--border);}
-.std-table tr:last-child td{border-bottom:none;}
 
 /* ── MONTHLY RECAP ── */
 .recap-hero{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
@@ -450,8 +423,6 @@ tbody tr:hover td{background:var(--surface);}
   .content{padding:14px 16px;}
   .topbar{padding:0 14px;}
   .week-right{display:none;}
-  .tut-layout{grid-template-columns:1fr;}
-  .tut-nav-card{display:none;}
   .recap-hero{grid-template-columns:1fr;}
   .critical-grid{grid-template-columns:1fr 1fr;}
   .days-grid{grid-template-columns:repeat(4,1fr);}
@@ -665,23 +636,6 @@ tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent
 tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .add-emp-form{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border);}
 .add-emp-form input{flex:1;padding:7px 10px;border:1.5px solid var(--border2);border-radius:6px;font-size:12px;}
-.tut-card{background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden;}
-.tut-card-head{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--navy);color:#fff;}
-.tut-badge{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;}
-.tut-card-title{font-size:14px;font-weight:700;}
-.tut-card-sub{font-size:11px;opacity:.7;margin-top:1px;}
-.tut-body{padding:16px 18px;}
-.tut-steps{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;}
-.tut-step{display:flex;gap:12px;align-items:flex-start;}
-.tut-step-num{width:22px;height:22px;border-radius:50%;background:var(--navy);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
-.tut-step-title{font-size:13px;font-weight:700;color:var(--text1);margin-bottom:2px;}
-.tut-step-desc{font-size:12px;color:var(--text2);line-height:1.5;}
-.tut-tip{display:flex;gap:8px;background:var(--yellow-bg);border:1px solid var(--yellow-border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--yellow);margin-top:10px;}
-.tut-warn{display:flex;gap:8px;background:var(--red2);border:1px solid var(--red-border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--red);margin-top:10px;}
-.tut-ok{display:flex;gap:8px;background:var(--green2);border:1px solid var(--green-border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);margin-top:10px;}
-.std-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px;}
-.std-table th{background:var(--navy);color:#fff;padding:8px 10px;text-align:left;}
-.std-table td{padding:7px 10px;border-bottom:1px solid var(--border);}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:12px 22px;border-radius:99px;font-size:13px;font-weight:600;z-index:999;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .3s;}
 .toast.show{opacity:1;}
 .tabs{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--offwhite);border-bottom:1px solid var(--border);}
@@ -1315,11 +1269,6 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <span class="nav-icon">&#128194;</span> Assignments
   </div>
 
-  <div class="nav-section-label">Help</div>
-  <div class="nav-item" id="nav-tutorial" onclick="showPage('tutorial')">
-    <span class="nav-icon">&#128214;</span> Tutorial
-  </div>
-
   <div class="nav-section-label">Management</div>
   <div class="nav-item" id="nav-staffing" onclick="showPage('staffing')">
     <span class="nav-icon">&#129489;&#8205;&#128188;</span> Staffing
@@ -1685,12 +1634,6 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div class="page-sub">Track employee call-offs, absences, and tardiness</div>
       </div>
       <div id="calloffsContent"></div>
-    </div>
-
-    <div id="page-tutorial" style="display:none;">
-      <div class="page-title">&#128214; Tutorial</div>
-      <div class="page-sub">Everything you need to know to use this app</div>
-      <div id="tutContent" style="margin-top:16px;"></div>
     </div>
 
     <!-- ══ SETTINGS ══ -->
@@ -4565,6 +4508,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.59.0', date:'2026-10-10',
+    improvements:['Removed the Tutorial page — Carlos\'s ask, he doesn\'t need it anymore. Gone from the sidebar (and the now-empty "Help" section header along with it), plus its page content, render functions, and dedicated CSS.']
+  },
   {
     v:'7.58.0', date:'2026-10-10',
     fixes:['The Weekly Time Card Report\'s auto-detect-Tardiness feature now reads the scheduled time from the Schedule Draft instead of Paychex\'s own Scheduled column — Carlos\'s catch: Paychex leaves that column blank often enough that real late arrivals were being silently skipped, which is why the feature looked like it was never doing anything. Reuses the exact same Schedule-Draft lookup a manually-logged Tardiness already uses, so both paths now agree. The arrival time is still Paychex\'s real Work Start punch — nothing better to compare against than an actual clock-in.']
@@ -11215,7 +11162,7 @@ function toggleSidebarSmart(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','latedep','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','reqnotebook','dailylineup','assignments','tutorial','settings'];
+var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','latedep','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','reqnotebook','dailylineup','assignments','settings'];
 var _pinGateBypass=false;
 var pendingGatePage=null;
 var PIN_GATED_PAGES=['labormodel','pnl','settings'];
@@ -11256,7 +11203,6 @@ function showPage(page){
   if(page==='trainhours')renderTrainingHours();
   if(page==='training')renderTraining();
   if(page==='calloffs')renderCallOffs();
-  if(page==='tutorial')renderTutContent();
   if(page==='settings'){
     var mn=document.getElementById('managerNameInput');
     if(mn)mn.value=localStorage.getItem('hk_manager_name')||'';
@@ -15257,99 +15203,6 @@ function renderRecap(){
 }
 
 function printRecap(){window.print();}
-
-/* ═══════════════════════════════════════════
-   TUTORIAL
-   ═══════════════════════════════════════════ */
-function renderTutorial(){renderTutContent();}
-function showTutSection(idx,el2){
-  document.querySelectorAll('.tut-nav-item').forEach(function(i){i.classList.remove('active');});
-  if(el2)el2.classList.add('active');
-  renderTutContent();
-}
-
-function renderTutContent(){
-  var tc=document.getElementById('tutContent');if(!tc)return;
-  var sections=[
-    {n:'Daily Workflow',sub:'Do this every morning before 10am',
-     s:[{t:'Download from Paychex Flex',d:'Go to Reports > Labor Distribution. Select yesterdays date and download the PDF to your device.'},
-        {t:'Tap Upload Paychex Report',d:'The button is in the top right corner on every page. It opens the upload modal.'},
-        {t:'Verify the date',d:'The date defaults to yesterday. Always verify it matches the PDF before proceeding. An incorrect date saves data to the wrong day.'},
-        {t:'Select your PDF file',d:'Tap Choose PDF File. Processing takes 5-10 seconds.'},
-        {t:'Review the results',d:'The Dashboard updates automatically showing breaks, OT, and position issues.'}],
-     tip:'Data syncs to Google Sheets automatically. Other managers see your upload within seconds.',
-     warn:'Always verify the date before uploading.'},
-    {n:'Rooms Occupied',sub:'Drives the budget for the following day',
-     s:[{t:'Find the Rooms field',d:'Large number input in the Dashboard under the selected day analysis.'},
-        {t:'Enter rooms from the PREVIOUS night',d:'Rooms from Friday night May 8 calculate the budget for Saturday May 9.'},
-        {t:'Budget updates live',d:'Variances recalculate in real time as you type.'}],
-     tip:'Example: 177 rooms x 56.2% = 99.5h budget for Room Attendants.'},
-    {n:'Labor Standards',sub:'How the budget is calculated',
-     s:[{t:'POR Positions',d:'Room Attendant 56.2%, House Attendant 17.5%, Supervisor 15.5%, Laundry 18%. Budget = rooms x standard.'},
-        {t:'Fixed Daily Positions',d:'Turndown Attendant 21h per day, Public Area Attendant 32h per day. Same budget regardless of occupancy.'},
-        {t:'Always use previous night rooms',d:'The budget for any work day uses rooms from the night before.'}],
-     tip:'No rooms entered means no budget calculated. Always enter rooms for accurate tracking.'},
-    {n:'Break Compliance',sub:'All employees must take a 30-minute break',
-     s:[{t:'No Break = 0 minutes',d:'Red badge. Employee has no break time recorded in Paychex.'},
-        {t:'Short Break = less than 28 minutes',d:'Yellow badge showing actual minutes taken.'},
-        {t:'Mark as Fixed',d:'After correcting in Paychex, tap Mark Fixed to resolve the exception.'},
-        {t:'Add a note',d:'Explain what happened. Notes sync to all managers via Google Sheets permanently.'}],
-     warn:'Review and resolve all pending exceptions within 48 hours.'},
-    {n:'Auditing Historical Days',sub:'Review any day from the weekly progression',
-     s:[{t:'Tap any day card',d:'The 7 day cards at the top of the Dashboard. Tap any day with data to see its full analysis.'},
-        {t:'Navigate weeks',d:'Use the Prev Week / Next Week buttons above the cards to go to earlier weeks.'},
-        {t:'Missing report alert',d:'A yellow alert appears when previous weeks have days without uploaded reports.'}],
-     ok:'Best practice: Review the previous week every Monday morning.'},
-    {n:'Monthly Recap',sub:'Full month summary for P&L reporting',
-     s:[{t:'Go to Monthly Recap',d:'In the sidebar under Reports section.'},
-        {t:'Navigate months',d:'Use the Prev Month / Next Month buttons to view historical data.'},
-        {t:'Print or PDF',d:'Tap Print / PDF for a formatted report ready for management meetings.'}],
-     tip:'The recap automatically compares to the previous month so you can see if performance is improving.'},
-    {n:'Sharing Data',sub:'All managers share the same real-time data',
-     s:[{t:'Google Sheets sync',d:'Every upload, rooms entry, and break note syncs automatically via Google Sheets.'},
-        {t:'Any manager can upload',d:'If one manager uploads Saturday, all others see it immediately on their devices.'},
-        {t:'Break notes are shared',d:'Notes and resolved status are visible to all managers across all devices.'}],
-     tip:'The sync status at the bottom of the sidebar shows when data was last synced.'},
-    {n:'Settings and Reset',sub:'Manage your profile and data',
-     s:[{t:'Set your manager name',d:'Settings > Manager Profile. Your name appears in the header greeting.'},
-        {t:'Reset Current Month',d:'Clears all labor data for the current month. Use if you need to re-upload all reports.'},
-        {t:'Reset ALL Data',d:'Permanently deletes everything including all months, roster overrides, and settings. Requires double confirmation.'}],
-     warn:'Reset ALL Data is permanent and cannot be reversed. Use with extreme caution.'}
-  ];
-  var html='';
-  sections.forEach(function(s,i){
-    html+='<div class="tut-card">'
-      +'<div class="tut-card-head">'
-      +'<div class="tut-badge">'+(i+1)+'</div>'
-      +'<div><div class="tut-card-title">'+s.n+'</div>'
-      +'<div class="tut-card-sub">'+s.sub+'</div></div></div>'
-      +'<div class="tut-body"><div class="tut-steps">';
-    s.s.forEach(function(st,si){
-      html+='<div class="tut-step">'
-        +'<div class="tut-step-num">'+(si+1)+'</div>'
-        +'<div><div class="tut-step-title">'+st.t+'</div>'
-        +'<div class="tut-step-desc">'+st.d+'</div></div></div>';
-    });
-    html+='</div>';
-    if(s.tip)html+='<div class="tut-tip">&#128161; <div><strong>Tip:</strong> '+s.tip+'</div></div>';
-    if(s.warn)html+='<div class="tut-warn">&#9888;&#65039; <div><strong>Important:</strong> '+s.warn+'</div></div>';
-    if(s.ok)html+='<div class="tut-ok">&#10003; <div><strong>Best practice:</strong> '+s.ok+'</div></div>';
-    if(i===2){
-      html+='<table class="std-table" style="margin-top:12px;">'
-        +'<thead><tr><th>Position</th><th>Standard</th><th>Type</th><th>Example 150 rooms</th></tr></thead>'
-        +'<tbody>'
-        +'<tr><td><b>Room Attendant</b></td><td>56.2% POR</td><td>Per Occupied Room</td><td>84.3h</td></tr>'
-        +'<tr><td><b>House Attendant</b></td><td>17.5% POR</td><td>Per Occupied Room</td><td>26.3h</td></tr>'
-        +'<tr><td><b>Housekeeping Supervisor</b></td><td>15.5% POR</td><td>Per Occupied Room</td><td>23.3h</td></tr>'
-        +'<tr><td><b>Laundry Attendant</b></td><td>18% POR</td><td>Per Occupied Room</td><td>27.0h</td></tr>'
-        +'<tr><td><b>Turndown Attendant</b></td><td>21h/day</td><td>Fixed Daily</td><td>21.0h</td></tr>'
-        +'<tr><td><b>Public Area Attendant</b></td><td>32h/day</td><td>Fixed Daily</td><td>32.0h</td></tr>'
-        +'</tbody></table>';
-    }
-    html+='</div></div>';
-  });
-  tc.innerHTML=html;
-}
 
 /* ═══════════════════════════════════════════
    ROOMS MODAL
