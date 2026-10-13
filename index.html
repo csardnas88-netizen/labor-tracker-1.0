@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.63.0"/>
+<meta name="app-version" content="7.64.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4508,6 +4508,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.64.0', date:'2026-10-11',
+    fixes:['Fixed Laundry crew card "Days" counts (and the departures-each/Unifocus std cells alongside them) landing on the WRONG person\'s row after any unrelated edit elsewhere on the page (an OCC/Departures box, a drop, etc.) — Carlos\'s real report, cross-checked against his actual card: Jorge showed 5 despite 3 real rest days, Gady showed 5 instead of her real 4, Adamary showed 2 instead of her real 5. Root cause: the Laundry card\'s "Lavadores first, Regulares after" grouping was applied when the page first draws, but the quick-refresh path every edit triggers rebuilt its own list in the plain, un-grouped order — same row on screen, different person\'s number silently written into it. The quick-refresh now groups Laundry exactly the same way the full page draw does.']
+  },
   {
     v:'7.63.0', date:'2026-10-11',
     fixes:['Fixed the bold effective-number figures (top OCC/Departures card and every crew card\'s Departures mirror row) sitting stale for a long time after updating a day\'s OCC/Departures box that already had a drop on it — Carlos\'s real report. Typing into those boxes deliberately never fully reloads the page (so a manager tabbing across a week of numbers doesn\'t get knocked out of the box they\'re about to type into next), but the two bold-figure spots had no way to catch up until something else eventually forced a full reload. They now update the instant the box changes, same as everything else on the page already did.']
@@ -24682,10 +24686,26 @@ function _schedRefreshTotals(SCH,onlyBk){
   SCHED_BLOCKS.forEach(function(b){
     if(onlyBk&&b.key!==onlyBk&&!b.ratios)return;
     var ufPos=_schedUfForCrew(b.key);
+    /* Laundry's washers-first reorder (schedLaundryWasherGroups) has to
+       be applied here too, identically to renderSchedule() below —
+       Carlos's real report, 2026-10-11: every "Days" count on his
+       Laundry card came out as someone ELSE's number after an unrelated
+       OCC/Departures edit ran this refresh. The scd_/scr_/scu_ DOM ids
+       this function patches were assigned during the full render using
+       the WASHERS-GROUPED order; rebuilding card.ref here in the plain
+       _schedCrewRef order (no regroup) meant idx 0 here could be a
+       totally different person than idx 0 in the DOM, silently writing
+       her count onto his row. */
+    var laundryRef=null;
+    if(b.key==='laundry'){
+      laundryRef=_schedCrewRef(SCH,b.key);
+      var _wg=schedLaundryWasherGroups(laundryRef);
+      if(_wg.washers.length&&_wg.others.length)laundryRef=_wg.washers.concat(_wg.others);
+    }
     var cards=(b.key==='lobby')?[
       {domKey:'lobby_am',shift:'am',ref:_schedCrewRef(SCH,b.key).filter(function(p){return schedLobbyShift(p[0])==='am';})},
       {domKey:'lobby_pm',shift:'pm',ref:_schedCrewRef(SCH,b.key).filter(function(p){return schedLobbyShift(p[0])==='pm';})}
-    ]:[{domKey:b.key,shift:null,ref:_schedCrewRef(SCH,b.key)}];
+    ]:[{domKey:b.key,shift:null,ref:laundryRef||_schedCrewRef(SCH,b.key)}];
     cards.forEach(function(card,cardIdx){
       var domKey=card.domKey, showUf=(b.key!=='lobby')||cardIdx===cards.length-1;
       dates.forEach(function(ds,di){

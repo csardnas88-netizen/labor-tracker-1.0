@@ -105,6 +105,7 @@ const cases = [
   require('./cases/labor-ot-daystrip-off-and-leaveby'),
   require('./cases/schedule-occ-increase-from-r106'),
   require('./cases/schedule-drop-dep'),
+  require('./cases/schedule-laundry-days-refresh-mismatch'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
