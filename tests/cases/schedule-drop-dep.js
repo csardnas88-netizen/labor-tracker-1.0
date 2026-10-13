@@ -128,12 +128,34 @@ module.exports = {
     t.assert(/>172</.test(supCard), "Supervisors' own Departures mirror row shows Sunday's effective 172, not the raw 192");
     t.assert(/>58</.test(supCard), "Supervisors' own Departures mirror row shows Monday's effective 58, not the raw 38");
 
+    // ── Carlos's real report, 2026-10-11, same day: he already had a
+    // drop set on Sunday, then UPDATED Sunday's own OCC/Departures
+    // numbers, and the bold effective figures (here and on every crew
+    // card) sat stale until something else forced a full page
+    // re-render — schedSetNum deliberately never does one (to protect
+    // tabbing across a week of boxes), so without its own surgical
+    // patch those numbers could stay wrong a long time. Drop is still
+    // 20 at this point in the test (never cleared yet). ──
+    win.schedSetNum('2026-10-18', 'occ', '259');
+    win.schedSetNum('2026-10-18', 'dep', '213');
+    const effOccEl = win.document.getElementById('schedEff_occ_2026-10-18');
+    const effDepEl = win.document.getElementById('schedEff_dep_2026-10-18');
+    t.eq(effOccEl.textContent, '239', "Sunday's bold effective OCC updates immediately on a plain OCC edit (259 - 20 drop = 239), with no full re-render needed");
+    t.eq(effDepEl.textContent, '193', "Sunday's bold effective Departures updates immediately too (213 - 20 drop = 193)");
+    const supHdrEl = win.document.getElementById('schedHdrEff_sup_2026-10-18');
+    t.eq(supHdrEl.textContent, '193', "the Supervisors crew card's own Departures-mirror bold figure catches up immediately too, not just the top card");
+    // Monday's own boxes are untouched by this — only Sunday's OWN
+    // effective figure needed to move; Monday's "received" comes from
+    // Sunday's drop field, not Sunday's OCC/Departures boxes.
+    const effOccMonEl = win.document.getElementById('schedEff_occ_2026-10-19');
+    t.eq(effOccMonEl.textContent, '123', "Monday's own effective OCC is unaffected by a plain edit to SUNDAY's OCC/Departures boxes");
+
     // ── Clearing the drop removes the adjustment on both fronts, both days ──
     win.schedSetDrop('2026-10-18', '');
     const cleared = win.dlLoadSchedule();
     t.assert(!('drop' in cleared.days['2026-10-18']), 'an empty value clears the stored drop entirely, not just zeroes it');
-    t.eq(win.schedEffectiveDay(cleared, '2026-10-18').occ, 229, "Sunday's effective OCC reverts to the raw 229");
-    t.eq(win.schedEffectiveDay(cleared, '2026-10-18').dep, 192, "Sunday's effective Departures reverts to the raw 192");
+    t.eq(win.schedEffectiveDay(cleared, '2026-10-18').occ, 259, "Sunday's effective OCC reverts to its (since updated) raw box, 259");
+    t.eq(win.schedEffectiveDay(cleared, '2026-10-18').dep, 213, "Sunday's effective Departures reverts to its (since updated) raw box, 213");
     t.eq(win.schedEffectiveDay(cleared, '2026-10-19').occ, 103, "Monday stops receiving anything on OCC once the drop is cleared");
     t.eq(win.schedEffectiveDay(cleared, '2026-10-19').dep, 38, "Monday stops receiving anything on Departures once the drop is cleared");
 

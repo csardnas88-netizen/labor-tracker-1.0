@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.62.0"/>
+<meta name="app-version" content="7.63.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4508,6 +4508,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.63.0', date:'2026-10-11',
+    fixes:['Fixed the bold effective-number figures (top OCC/Departures card and every crew card\'s Departures mirror row) sitting stale for a long time after updating a day\'s OCC/Departures box that already had a drop on it — Carlos\'s real report. Typing into those boxes deliberately never fully reloads the page (so a manager tabbing across a week of numbers doesn\'t get knocked out of the box they\'re about to type into next), but the two bold-figure spots had no way to catch up until something else eventually forced a full reload. They now update the instant the box changes, same as everything else on the page already did.']
+  },
   {
     v:'7.62.0', date:'2026-10-11',
     fixes:['"Drop to Tomorrow" now reaches the Supervisors/Houseman/AM Room Attendant crew cards too — Carlos\'s real follow-up report: he dropped 20 rooms and the top OCC/Departures card updated correctly, but each crew card\'s own "Departures" mirror row, its "departures each"/"rooms each" split, and its Unifocus std OVER/UNDER label all kept showing the untouched raw Opera figure, so nothing down there reflected the drop. All three now read the same effective number the top card shows, and agree with Auto-fill\'s own headcount math — a crew card can no longer quietly disagree with the adjustment Carlos just made.']
@@ -22033,6 +22037,26 @@ function schedRefreshOccFromR106Click(){
   showToast(n>0?('✓ Refreshed '+n+' day'+(n===1?'':'s')+' from R106'):'No changes — nothing new in R106 for this week');
   if(n>0)renderSchedule();
 }
+/* Surgical patch for the two bold effective-number spots that only ever
+   existed inside the full-render HTML string (the top OCC/Departures
+   card's own effective OCC/Departures, and every crew card's Departures
+   mirror row) — _schedRefreshTotals already catches the ratio/Unifocus-
+   std cells, which are rebuilt fresh every time regardless. Only
+   updates an element that's already on the page (i.e. a drop/receive
+   was already active when the week was last fully rendered) — editing
+   OCC/Departures alone can never newly create or remove one, since
+   recv depends on the PREVIOUS day's drop field, not today's boxes. */
+function _schedRefreshEffectiveDisplays(SCH,ds){
+  var eff=schedEffectiveDay(SCH,ds);
+  var occEl=document.getElementById('schedEff_occ_'+ds);
+  if(occEl)occEl.textContent=eff.occ;
+  var depEl=document.getElementById('schedEff_dep_'+ds);
+  if(depEl)depEl.textContent=eff.dep;
+  SCHED_BLOCKS.forEach(function(b){
+    var hdrEl=document.getElementById('schedHdrEff_'+b.key+'_'+ds);
+    if(hdrEl)hdrEl.textContent=eff.dep;
+  });
+}
 function schedSetNum(ds,field,val){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days||!SCH.days[ds])return;
@@ -22048,6 +22072,15 @@ function schedSetNum(ds,field,val){
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
   _schedRefreshTotals(SCH,null);
+  /* Carlos's real report, 2026-10-11: he already had a drop set on a
+     day, then updated that day's own OCC/Departures box, and the bold
+     effective numbers (here and on every crew card's Departures mirror
+     row) sat stale until something else forced a full renderSchedule()
+     — which could be a while, since this function deliberately avoids
+     one (see the Turndown comment below). _schedRefreshTotals above
+     already catches the ratio/Unifocus-std cells; this catches the
+     two spots that only ever existed in the full-render HTML string. */
+  if(field==='occ'||field==='dep')_schedRefreshEffectiveDisplays(SCH,ds);
   /* Carlos's ask: the OCC/Departures he types here to build the
      schedule is the same number the Occupancy page's "Sched" box wants
      — push it through live instead of making him type it twice. */
@@ -24956,7 +24989,7 @@ function renderSchedule(){
         var bits=[];
         if(eff.recv)bits.push('+'+eff.recv+' from '+parseLocalDate(prevDateStr(ds)).toLocaleDateString('en-US',{weekday:'short'}));
         if(eff.drop)bits.push('&minus;'+eff.drop+' to tomorrow');
-        html+='<div style="font-size:12px;font-weight:800;color:var(--gd);text-align:center;margin-top:1px;" title="'+bits.join(', ')+' — this is what Auto-fill actually staffs against, not the raw box above.">'+effVal+'</div>';
+        html+='<div id="schedEff_'+f[0]+'_'+ds+'" style="font-size:12px;font-weight:800;color:var(--gd);text-align:center;margin-top:1px;" title="'+bits.join(', ')+' — this is what Auto-fill actually staffs against, not the raw box above.">'+effVal+'</div>';
       }
       html+='</div>';
     });
@@ -25108,7 +25141,7 @@ function renderSchedule(){
            set. */
         if(_hdrRatio.num==='dep'){
           var _eff=schedEffectiveDay(SCH,ds);
-          if(_eff.drop||_eff.recv)html+='<div style="text-align:center;font-size:11px;font-weight:800;color:var(--gd);">'+_eff.dep+'</div>';
+          if(_eff.drop||_eff.recv)html+='<div id="schedHdrEff_'+b.key+'_'+ds+'" style="text-align:center;font-size:11px;font-weight:800;color:var(--gd);">'+_eff.dep+'</div>';
         }
         html+='</div>';
       });
