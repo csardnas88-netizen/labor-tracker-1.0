@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.65.0"/>
+<meta name="app-version" content="7.66.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4508,6 +4508,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.66.0', date:'2026-10-11',
+    fixes:['Fixed TRAINING silently flipping to OFF — Carlos\'s real report, same day it shipped: Maria Aguilar (training on PM Turndown while still a Room Attendant) had every one of her TRAINING days overwritten after he edited someone else\'s cell entirely. Root cause: a routine day off on her OTHER crew (Room Attendant — completely normal, not a bug on its own) was being treated by the cross-crew sync as "she\'s genuinely absent, so every crew she\'s on should show that" — the right call for an ordinary cover label, but wrong for training, which is its own independent commitment regardless of her home crew\'s rotation that week. TRAINING is now protected from this the same absolute way it\'s already protected from Auto-fill itself.']
+  },
   {
     v:'7.65.0', date:'2026-10-11',
     features:['Added a "TRAINING" value to every Schedule cell\'s picker — Carlos\'s ask, for someone (his real example: Maria Aguilar) starting training on a different position while still appearing on the schedule. Shows in her own indigo color so it stands out from the usual cover-label group at a glance. Still counts as a real day worked, but is NOT one of the bodies a manager splits rooms/departures among building the day\'s room assignment — the headcount and "each" splits already only count a plain number (same rule LOBBY/HOUSEMAN/TAILOR/LAUNDRY/TURNDOWN/ROOMS already follow), and Daily Lineup\'s own room/floor assignment is even stricter, so she gets none there either, automatically. Auto-fill is also blocked from silently overwriting a TRAINING day, same protection TAILOR already has. The Excel export prints the real shift time next to the TRAINING label (same lookup a plain "1" already gets), so the printed sheet still shows exactly when she\'s there.']
@@ -23869,6 +23873,20 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
       if(e.crew===source.crew)return;
       var cur=String(e.row[1]||'').trim();
       if(cur===want)return;
+      /* Carlos's real report, 2026-10-11: Maria Aguilar, training on PM
+         Turndown while still a Room Attendant, had every TRAINING day
+         silently flip to OFF the moment Auto-fill gave her a routine
+         day off on Room Attendant (her OTHER crew) — an absence there
+         is exactly what this sync otherwise treats as authoritative for
+         EVERY crew she's on. TRAINING is deliberately exempt: unlike a
+         plain cover label (LOBBY/HOUSEMAN/etc, which really does mean
+         "elsewhere, not resting"), her training day is its own
+         commitment, independent of whatever her home crew's fairness
+         rotation decides that week. Checked before the absence rule
+         below specifically so a genuine OFF elsewhere can never win
+         against it, the same absolute protection isFixedOff/
+         isFixedOffFn already give TRAINING against Auto-fill itself. */
+      if(schedStatusIs(cur,'TRAINING'))return;
       /* An absence overwrites whatever was there, same as
          SCHED_LINKED_PEOPLE — she can't be resting on one crew and
          PM/covering on another. Coming the other way (source is
