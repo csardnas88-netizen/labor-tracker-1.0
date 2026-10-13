@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.64.0"/>
+<meta name="app-version" content="7.65.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4508,6 +4508,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.65.0', date:'2026-10-11',
+    features:['Added a "TRAINING" value to every Schedule cell\'s picker — Carlos\'s ask, for someone (his real example: Maria Aguilar) starting training on a different position while still appearing on the schedule. Shows in her own indigo color so it stands out from the usual cover-label group at a glance. Still counts as a real day worked, but is NOT one of the bodies a manager splits rooms/departures among building the day\'s room assignment — the headcount and "each" splits already only count a plain number (same rule LOBBY/HOUSEMAN/TAILOR/LAUNDRY/TURNDOWN/ROOMS already follow), and Daily Lineup\'s own room/floor assignment is even stricter, so she gets none there either, automatically. Auto-fill is also blocked from silently overwriting a TRAINING day, same protection TAILOR already has. The Excel export prints the real shift time next to the TRAINING label (same lookup a plain "1" already gets), so the printed sheet still shows exactly when she\'s there.']
+  },
   {
     v:'7.64.0', date:'2026-10-11',
     fixes:['Fixed Laundry crew card "Days" counts (and the departures-each/Unifocus std cells alongside them) landing on the WRONG person\'s row after any unrelated edit elsewhere on the page (an OCC/Departures box, a drop, etc.) — Carlos\'s real report, cross-checked against his actual card: Jorge showed 5 despite 3 real rest days, Gady showed 5 instead of her real 4, Adamary showed 2 instead of her real 5. Root cause: the Laundry card\'s "Lavadores first, Regulares after" grouping was applied when the page first draws, but the quick-refresh path every edit triggers rebuilt its own list in the plain, un-grouped order — same row on screen, different person\'s number silently written into it. The quick-refresh now groups Laundry exactly the same way the full page draw does.']
@@ -21465,7 +21469,19 @@ function schedUfExpectedForShift(SCH,pos,shiftIndex,ds){
    not on this list (a stray "0.75", a lowercase "off") is offered as an
    extra option on that cell, so opening the picker can never silently
    throw away something he typed in Excel. */
-var SCHED_VALUES=['','1','OFF','R-OFF','CALL-OFF','FLEX','VAC','PM','LOBBY','ROOMS','HOUSEMAN','TAILOR','LAUNDRY','TURNDOWN'];
+/* "TRAINING" added 2026-10-11, Carlos's ask: a trainee shadowing a
+   different position (Maria Aguilar starting PM Turndown training,
+   his real example) still shows the real shift time she's there for
+   (same special-case the Excel export already gives a plain "1", see
+   that export's displayData mapping) but is a label, not a number —
+   which already keeps her out of schedDayTotal/schedRatioCount's
+   headcount (and Daily Lineup's dlIn room assignment) the exact same
+   way LOBBY/HOUSEMAN/TAILOR/LAUNDRY already are, with no extra
+   exclusion logic needed anywhere. Protected from Auto-fill like
+   TAILOR (see isFixedOff in schedAutoFillCrew/schedRepairShortfalls) —
+   a day Carlos marks as training is a commitment, not something a
+   rotation should silently reassign. */
+var SCHED_VALUES=['','1','OFF','R-OFF','CALL-OFF','FLEX','VAC','PM','LOBBY','ROOMS','HOUSEMAN','TAILOR','LAUNDRY','TURNDOWN','TRAINING'];
 /* Managers' own vocabulary — Carlos's ask: a plain "1" doesn't say
    anything useful for this crew (which shift?), so Managers gets its
    own dropdown instead of sharing every housekeeping crew's list.
@@ -22816,7 +22832,7 @@ function schedAutoFillCrew(SCH,dates,bk,names,offCount,wk){
      doesn't also hand him an OFF day that week expecting him to be idle)
      without ever silently overwriting Carlos's mark back to '1' or 'OFF'
      the next time Auto-fill runs. */
-  var isFixedOff=function(nm,i){ var v=cellVal(nm,i); return schedStatusIs(v,'R-OFF')||schedStatusIs(v,'FLEX')||schedStatusIs(v,'VAC')||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); };
+  var isFixedOff=function(nm,i){ var v=cellVal(nm,i); return schedStatusIs(v,'R-OFF')||schedStatusIs(v,'FLEX')||schedStatusIs(v,'VAC')||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'TRAINING')||schedStatusIs(v,'CALL-OFF'); };
   /* schedSupHpNeeded's 9999 stands for "everyone" (Schedule Builder's own
      'ALL') — clamped to the crew's actual size here, where names.length
      is known. */
@@ -22899,7 +22915,7 @@ function schedRepairShortfalls(SCH,dates,bk,names){
   /* TAILOR is protected the same as R-OFF/FLEX/VAC here too — a shortfall
      swap must never treat Victoriano's Taylor day as a spare working day
      to pull from, nor overwrite it with a plain OFF. */
-  var isFixedOffFn=function(nm,i){ var v=cellVal(nm,i); return schedStatusIs(v,'R-OFF')||schedStatusIs(v,'FLEX')||schedStatusIs(v,'VAC')||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'); };
+  var isFixedOffFn=function(nm,i){ var v=cellVal(nm,i); return schedStatusIs(v,'R-OFF')||schedStatusIs(v,'FLEX')||schedStatusIs(v,'VAC')||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'TRAINING')||schedStatusIs(v,'CALL-OFF'); };
   var needFn=function(i){ if(!SCH.days[dates[i]])return 0; return Math.min(schedAutoNeed(SCH,dates[i],bk),names.length); };
   var working=days.map(function(i){ return names.filter(function(nm){return !isOffCellFn(nm,i);}).length; });
   var guard=0;
@@ -24182,7 +24198,10 @@ var SCHED_XLS_COLORS={
   'LAUNDRY':  {bg:'FFF9EBEA',font:'FF7B241C'},
   'TAILOR':   {bg:'FFF9EBEA',font:'FF7B241C'},
   'TURNDOWN': {bg:'FFF9EBEA',font:'FF7B241C'},
-  'ROOMS':    {bg:'FFF9EBEA',font:'FF7B241C'}
+  'ROOMS':    {bg:'FFF9EBEA',font:'FF7B241C'},
+  /* Own color, not the LOBBY/HOUSEMAN/etc reddish group above — same
+     distinction the on-screen indigo gives TRAINING in _schedCellCss. */
+  'TRAINING': {bg:'FFE0E7FF',font:'FF3730A3'}
 };
 /* Real clock-in/clock-out times, confirmed with Carlos — separate from
    UNIFOCUS_STANDARDS' shift windows, which are Unifocus's own driver
@@ -24415,6 +24434,12 @@ async function schedExportExcel(){
       });
       var displayData=rawData.map(function(v,i){
         if(v==='1'){ var t=schedShiftTimeText(b.key,dates[i],nm); if(t)return t; }
+        /* Carlos's ask, 2026-10-11: a trainee still shows the real shift
+           time she's there for — same lookup as a plain "1" — but keeps
+           the TRAINING label next to it (unlike "1", which replaces
+           itself entirely), since the printed sheet has no color to
+           lean on the way the screen does. */
+        if(v==='TRAINING'){ var tt=schedShiftTimeText(b.key,dates[i],nm); if(tt)return 'TRAINING '+tt; }
         return v;
       });
       /* Row height history: 36 originally (Carlos's report: too cramped
@@ -24807,6 +24832,13 @@ function _schedCellCss(v,bk){
   if(v==='FLEX')   return base+'border:1px solid #2E6DA4;background:#EAF2FA;color:#2E6DA4;';
   if(v==='VAC')    return base+'border:1px solid var(--purple);background:var(--purple-bg);color:var(--purple);';
   if(v==='')       return base+'border:1px dashed var(--border2);background:transparent;color:var(--text3);';
+  /* Carlos's ask, 2026-10-11: a trainee on this crew — shown in her own
+     color (distinct from the gold cover-label group below) specifically
+     so whoever's building the room/departures assignment can tell at a
+     glance she's not one of the bodies that count, see schedDayTotal's
+     header comment for why that's already true for any non-numeric,
+     non-own-label value without further changes here. */
+  if(v==='TRAINING') return base+'border:1px solid var(--indigo);background:var(--indigo-bg);color:var(--indigo);';
   return base+'border:1px solid var(--gold);background:var(--gt);color:var(--gd);'; /* PM / LOBBY / HOUSEMAN / TAILOR / LAUNDRY */
 }
 

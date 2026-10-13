@@ -106,6 +106,7 @@ const cases = [
   require('./cases/schedule-occ-increase-from-r106'),
   require('./cases/schedule-drop-dep'),
   require('./cases/schedule-laundry-days-refresh-mismatch'),
+  require('./cases/schedule-training-status'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
