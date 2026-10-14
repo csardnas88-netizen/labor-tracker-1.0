@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.69.0"/>
+<meta name="app-version" content="7.70.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4517,6 +4517,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.70.0', date:'2026-10-14',
+    fixes:['Fixed 4 more real Under Hours name mismatches Carlos reported right after the first batch — Susan Aguilar (Supervisors), Julian Puac/Rolando (Supervisors), Sandra S (Laundry), and Elmer (Houseman) all had the same "payroll name and Schedule Draft nickname share no tokens" problem as the 5 Room Attendants fixed a moment ago. Bridged the same way via SCHED_NAME_ALIASES, with two of the four deliberately keyed on the payroll side instead of the Schedule Draft side — "sandra s" and bare "elmer" are themselves load-bearing identities elsewhere (a cross-crew-sync exception check, and an already-working Request Off match), so aliasing THOSE exact keys to something else would have silently broken what they already correctly resolve to. 3 other names Carlos listed in the same message (Melvin, Luis, Victoriano) already matched fine without any alias — nothing needed there.']
+  },
   {
     v:'7.69.0', date:'2026-10-14',
     fixes:['Fixed 5 real Room Attendants (Abby Puac, Gabriela Cuevas Ibarra, Sandra Tzunun De Leon, Hermelinda Noriega, Santa Elena Deleon Lopez) showing up in Under Hours\' "no more scheduled days" tier even though every one of them had real days left on the Schedule Draft — Carlos\'s real report, naming the exact Schedule Draft nickname for each (e.g. "Abigail Rosa") right after the payroll name the Under Hours card actually showed. Same root cause as the earlier Abby Puac/Tardiness bug: her payroll name and the nickname Carlos types into the Schedule Draft share no tokens in common, so the search that looks for her remaining scheduled days came up empty — not because she\'s truly out of days, but because it could never find her real rows. Last time this was patched by correcting Abby\'s saved data directly, which didn\'t survive the next week he typed her nickname again; all 5 are now bridged permanently via SCHED_NAME_ALIASES, the same mechanism already built for exactly this.']
@@ -20844,7 +20848,22 @@ var SCHED_NAME_ALIASES={
      "Sandra" for one of those other two, this needs its own alias. */
   'sandra':'tzunun de leon',
   'ermelinda noriega':'hermelinda noriega',
-  'elena de leon':'santa deleon lopez'
+  'elena de leon':'santa deleon lopez',
+  /* Carlos's follow-up, same day, 4 more real mismatches across other
+     positions (Supervisors, Laundry, Houseman) — same root cause, same
+     fix. Two of these are deliberately keyed on the PAYROLL side instead
+     of the Schedule Draft side (opposite of every entry above): "sandra
+     s" and bare "elmer" are themselves load-bearing identities elsewhere
+     in this file (a literal `dlNormAlias(name)==='sandra s'` check, and
+     Request Off's existing working match of Schedule Draft "Elmer"
+     against roster "Elmer Galindo") — aliasing either of THOSE keys to
+     something else would have silently redirected what they already
+     correctly resolve to. Keying the odd payroll-side spelling instead
+     reaches the same match without touching either. */
+  'susan aguilar':'aguilar ambrocio',
+  'julian puac':'rolando',
+  'silva henriquez':'sandra s',
+  'galindo melendez':'elmer galindo'
 };
 function dlNormAlias(s){
   var n=dlNorm(s);

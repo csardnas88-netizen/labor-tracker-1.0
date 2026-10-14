@@ -110,6 +110,7 @@ const cases = [
   require('./cases/schedule-training-cross-crew-protected'),
   require('./cases/labor-under-hours'),
   require('./cases/labor-under-hours-name-aliases'),
+  require('./cases/labor-under-hours-name-aliases-batch2'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
