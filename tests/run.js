@@ -108,6 +108,7 @@ const cases = [
   require('./cases/schedule-laundry-days-refresh-mismatch'),
   require('./cases/schedule-training-status'),
   require('./cases/schedule-training-cross-crew-protected'),
+  require('./cases/labor-under-hours'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

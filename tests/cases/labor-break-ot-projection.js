@@ -119,22 +119,33 @@ module.exports = {
     html = win.document.getElementById('dashDayAnalysis').innerHTML;
     t.assert(!/Hours by day this week/.test(html), 'tapping again collapses it');
 
-    // (3) Already-over tier (Petronila: no days left, so this is final, not a projection)
-    t.assert(/Already over 40h this week/.test(html), 'the "already over" section header shows');
+    // (3) Already-over tier (Petronila: no days left, so this is final, not a projection) —
+    // 2026-10-14: the OT list is now grouped by POSITION rather than by
+    // severity tier, so Petronila's row sits under her own position's
+    // group header instead of a literal "Already over 40h" sub-header.
+    t.assert(/Public Area Attendant/.test(html), "Petronila's position group header shows");
     const petroIdx = html.indexOf('Petronila Quiacain');
     t.assert(petroIdx !== -1, 'Petronila is flagged');
     const petroRow = html.slice(petroIdx, petroIdx + 400);
     t.assert(/40h 30m worked this week, no more scheduled days/.test(petroRow), "Petronila's row explains there are no days left to change the outcome");
     t.assert(/30m over 40h/.test(petroRow), 'and shows she is 30 real minutes over 40h, not folded into the uncertain "projected" bucket');
 
-    // (4) Still-projected tier (Maria: real scheduled days left, a genuine estimate)
-    t.assert(/Projected to cross 40h this week/.test(html), 'the projected-OT section header shows separately');
+    // (4) Still-projected tier (Maria: real scheduled days left, a genuine estimate) —
+    // same position-grouping change: her row sits under "Room Attendant"
+    // rather than a literal "Projected to cross 40h" sub-header.
+    t.assert(/Room Attendant/.test(html), "Maria's position group header shows");
     const mariaIdx = html.indexOf('Maria Lopez');
     t.assert(mariaIdx !== -1, 'Maria (projected 48h) is flagged as approaching OT');
     const mariaRow = html.slice(mariaIdx, mariaIdx + 500);
     t.assert(/24h 0m so far \+ 3 more days scheduled \(~8h each\)/.test(mariaRow), "Maria's row shows the real math behind the estimate, in h/m");
     t.assert(/~48h 0m projected \(480m over\)/.test(mariaRow), 'and her projected total with the exact minutes-over figure');
-    t.assert(!/Ana Ruiz/.test(html), 'Ana (projected only 32h) is NOT flagged — she has real scheduled days left, just not enough to cross 40');
+    // Ana (projected only 32h) is NOT flagged as Overtime — she has real
+    // scheduled days left, just not enough to cross 40. 2026-10-14: she
+    // now legitimately shows up in the separate Under Hours card instead
+    // (see labor-under-hours.js) — scope this check to the Overtime card
+    // only, which sits before "Under Hours" in the rendered html.
+    const otOnlyHtml = html.slice(0, html.indexOf('Under Hours') === -1 ? html.length : html.indexOf('Under Hours'));
+    t.assert(!/Ana Ruiz/.test(otOnlyHtml), 'Ana is NOT flagged as Overtime');
 
     // Card title reflects both tiers being present (innerHTML serializes a
     // literal "&" back out as "&amp;" — this is jsdom/DOM round-tripping,
