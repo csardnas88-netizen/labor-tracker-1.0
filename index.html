@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.67.0"/>
+<meta name="app-version" content="7.68.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4517,6 +4517,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.68.0', date:'2026-10-14',
+    improvements:['Under Hours (shipped a few hours earlier today) — Carlos\'s real report, after it had been live for a bit: the number of people under 40h is routinely much bigger than the number over, so each position group inside Under Hours now starts collapsed and only expands when tapped, independently per position, instead of dumping every name on screen at once. Overtime (far fewer names, by far the more common complaint) stays expanded as before — this only applies to Under Hours. Also fixed the "already under" tier showing a raw minute count ("1445m under 40h") next to the "projected" tier\'s readable hours-and-minutes figure right beside it — both now show the same h/m format as everywhere else on the card.']
+  },
   {
     v:'7.67.0', date:'2026-10-14',
     features:['Overtime & Approaching OT (Labor day view) is now organized by POSITION — a group header per crew (Room Attendant, Laundry Attendant, etc.) instead of one flat list sorted only by severity, so it\'s obvious at a glance which crew is actually driving the week\'s OT. Added a mirror-image "Under Hours" list right next to it, same projection math pointed the other direction, for anyone projected to come up SHORT of 40h this week — so a day can be handed out before the week closes instead of finding out after. Turndown and the three known part-time employees are excluded from Under Hours on purpose: their short shifts never reaching 40h is by design, not a shortfall. The two cards now sit side by side instead of each stretching across the full dashboard width on its own — Carlos\'s report: a short name + a right-aligned hour figure in a full-width row was leaving a wide empty gap in the middle of every line.']
@@ -14179,6 +14183,20 @@ function toggleLaborOtDetail(id){
   laborOtDetailOpen[id]=!laborOtDetailOpen[id];
   renderLaborDash();
 }
+/* Carlos's ask, 2026-10-14: the Under Hours card routinely has far more
+   names in it than Overtime, since coming up short of 40h is the common
+   case and crossing it is the exception — one flat expanded list per
+   position was too much to digest at once. Each position's group header
+   in a collapsible card (so far, only Under Hours) now starts collapsed
+   and expands on tap, independently per position, so a manager opens
+   only the one crew she's actually reviewing. Keyed by a prefix + the
+   position label (not just the label) so a future second collapsible
+   card can't collide with this one's open/closed state. */
+var laborPosGroupOpen={};
+function toggleLaborPosGroup(key){
+  laborPosGroupOpen[key]=!laborPosGroupOpen[key];
+  renderLaborDash();
+}
 function _laborOtDayStripHTML(ds,emp){
   var weekStart=getHotelWeekStart(parseLocalDate(ds));
   var weekDates=_schedDatesForWeekStart(weekStart);
@@ -14284,8 +14302,18 @@ function _laborPosCardHTML(opts){
   var html='<div class="card" style="border-color:'+opts.borderColor+';background:'+opts.bgColor+';">'
     +'<div class="card-head"><div class="card-title" style="color:'+opts.titleColor+'">'+opts.title+'</div></div>';
   groups.forEach(function(g){
-    html+='<div style="padding:5px 16px;font-size:10px;font-weight:800;color:var(--text3);'
-      +'text-transform:uppercase;letter-spacing:.3px;background:rgba(0,0,0,.035);">'+g.pos+'</div>';
+    var groupKey=opts.collapsible?(opts.collapseKeyPrefix||'')+g.pos:null;
+    var groupOpen=!opts.collapsible||!!laborPosGroupOpen[groupKey];
+    if(opts.collapsible){
+      html+='<div onclick="toggleLaborPosGroup(\''+escHtml(schedJs(groupKey))+'\')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:7px 16px;font-size:10px;font-weight:800;color:var(--text3);'
+        +'text-transform:uppercase;letter-spacing:.3px;background:rgba(0,0,0,.035);">'
+        +'<span>'+g.pos+'</span><span style="font-size:9px;letter-spacing:0;text-transform:none;">'
+        +g.rows.length+' '+(g.rows.length===1?'person':'people')+' '+(groupOpen?'&#9650;':'&#9660;')+'</span></div>';
+    }else{
+      html+='<div style="padding:5px 16px;font-size:10px;font-weight:800;color:var(--text3);'
+        +'text-transform:uppercase;letter-spacing:.3px;background:rgba(0,0,0,.035);">'+g.pos+'</div>';
+    }
+    if(!groupOpen)return;
     g.rows.forEach(function(r){
       var openP=r.detail&&!!laborOtDetailOpen[r.id];
       html+='<div '+(r.detail?'onclick="toggleLaborOtDetail(\''+escHtml(schedJs(r.id))+'\')" style="cursor:pointer;':'style="')
@@ -14515,16 +14543,20 @@ function renderDashDayAnalysis(days,rooms,today,wk){
 
       var underRows=[];
       underAlready.forEach(function(p){
-        var underMin=Math.round((40-p.projected)*60);
+        /* Carlos's real report, 2026-10-14: raw minutes ("1445m under
+           40h") was unreadable for this tier specifically — unlike
+           Overtime's "already over" minutes (usually a small overage,
+           fine as-is), someone who barely worked this week with no days
+           left can be close to the full 40h short, so the gap needs the
+           same h/m treatment as every other figure on this card. */
         underRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' worked this week, no more scheduled days',
-          value:underMin+'m under 40h',valueColor:'var(--indigo)',detail:p});
+          value:_hToHM(40-p.projected)+' under 40h',valueColor:'var(--indigo)',detail:p});
       });
       underApproaching.forEach(function(p){
-        var underMin=Math.round((40-p.projected)*60);
         underRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)',
-          value:'~'+_hToHM(p.projected)+' projected ('+underMin+'m under)',valueColor:'var(--indigo)',detail:p});
+          value:'~'+_hToHM(p.projected)+' projected ('+_hToHM(40-p.projected)+' under)',valueColor:'var(--indigo)',detail:p});
       });
 
       var otCardHtml=_laborPosCardHTML({
@@ -14537,7 +14569,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       var underCardHtml=_laborPosCardHTML({
         title:'&#128202; Under Hours',
         titleColor:'var(--indigo)', borderColor:'var(--indigo)', bgColor:'var(--indigo-bg)',
-        rows:underRows, ds:ds
+        rows:underRows, ds:ds, collapsible:true, collapseKeyPrefix:'under:'
       });
 
       if(otCardHtml&&underCardHtml){
