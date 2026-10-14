@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.68.0"/>
+<meta name="app-version" content="7.69.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4517,6 +4517,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.69.0', date:'2026-10-14',
+    fixes:['Fixed 5 real Room Attendants (Abby Puac, Gabriela Cuevas Ibarra, Sandra Tzunun De Leon, Hermelinda Noriega, Santa Elena Deleon Lopez) showing up in Under Hours\' "no more scheduled days" tier even though every one of them had real days left on the Schedule Draft — Carlos\'s real report, naming the exact Schedule Draft nickname for each (e.g. "Abigail Rosa") right after the payroll name the Under Hours card actually showed. Same root cause as the earlier Abby Puac/Tardiness bug: her payroll name and the nickname Carlos types into the Schedule Draft share no tokens in common, so the search that looks for her remaining scheduled days came up empty — not because she\'s truly out of days, but because it could never find her real rows. Last time this was patched by correcting Abby\'s saved data directly, which didn\'t survive the next week he typed her nickname again; all 5 are now bridged permanently via SCHED_NAME_ALIASES, the same mechanism already built for exactly this.']
+  },
   {
     v:'7.68.0', date:'2026-10-14',
     improvements:['Under Hours (shipped a few hours earlier today) — Carlos\'s real report, after it had been live for a bit: the number of people under 40h is routinely much bigger than the number over, so each position group inside Under Hours now starts collapsed and only expands when tapped, independently per position, instead of dumping every name on screen at once. Overtime (far fewer names, by far the more common complaint) stays expanded as before — this only applies to Under Hours. Also fixed the "already under" tier showing a raw minute count ("1445m under 40h") next to the "projected" tier\'s readable hours-and-minutes figure right beside it — both now show the same h/m format as everywhere else on the card.']
@@ -20816,7 +20820,32 @@ function dlIn(v){ return String(v||'').trim()==='1'; }
    duplicate Laundry row the moment LAUNDRY was typed into her Room
    Attendant cell). Add an entry here, not a code change, the next time
    this shows up for someone else. */
-var SCHED_NAME_ALIASES={'sandra s.':'sandra s'};
+var SCHED_NAME_ALIASES={
+  'sandra s.':'sandra s',
+  /* Carlos's real report, 2026-10-14: 5 Room Attendants whose payroll
+     name (what laborProjectedWeekHours/the Under Hours card reads from
+     the Paychex upload) shares no tokens at all with the nickname he
+     actually types into the Schedule Draft — the exact Abby Puac/
+     "Abigail Rosa" case that was first fixed by correcting her saved
+     data directly, which didn't stick once he typed the nickname again
+     in a later week. Aliased properly this time, the same way the code
+     comment above always intended: each key is the Schedule Draft
+     spelling, mapped to a string that shares tokens with the payroll
+     name, so remainingDays (and everything else that cross-references
+     the Schedule Draft by name) finds her real scheduled days instead of
+     concluding she has none left. */
+  'abigail rosa':'abby puac',
+  'gabriela cuevas':'cuevas ibarra',
+  /* "Sandra" bare (no last name/initial) is assumed to mean ONLY Sandra
+     Tzunun De Leon in Carlos's Schedule Draft — his roster also has a
+     "Sandra S"/"Sandra S." and a "Sandra Silva", but both always carry
+     at least a last initial, a different (longer) dlNorm string that
+     this exact-match key never touches. If he ever starts using a bare
+     "Sandra" for one of those other two, this needs its own alias. */
+  'sandra':'tzunun de leon',
+  'ermelinda noriega':'hermelinda noriega',
+  'elena de leon':'santa deleon lopez'
+};
 function dlNormAlias(s){
   var n=dlNorm(s);
   return SCHED_NAME_ALIASES[n]||n;
