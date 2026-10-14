@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.71.0"/>
+<meta name="app-version" content="7.72.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4517,6 +4517,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.72.0', date:'2026-10-14',
+    fixes:['Fixed Overtime & Under Hours showing NOTHING at all when viewing TODAY before today\'s own Labor Distribution Report is uploaded — Carlos\'s real report: Maria Aguilar\'s last scheduled day was today, projected well over 40h, and he wanted to know she should leave early, but the whole section was blank. Two root causes: (1) the projection math only ever looked at days strictly after the viewed date, so today fell into a gap neither "already reported" nor "still coming" ever counted; today now counts as a real remaining day for anyone with no actual hours posted for it yet. (2) The entire Overtime/Under Hours card lived behind a check that only opens once today\'s own report exists — moved outside it, since the card only ever needed PAST actual reports plus the Schedule Draft, never today\'s. Break Exceptions and Position Mismatches, which genuinely need today\'s real punch data, are unaffected and still wait for it.'],
+    features:['When today itself is someone\'s last scheduled day, her Overtime badge now shows the actual clock-out time to leave by ("Leave by 12:45 PM today") instead of a vague day-count — the exact same leave-by math the day-strip detail already computed, just surfaced immediately instead of requiring a click.']
+  },
   {
     v:'7.71.0', date:'2026-10-14',
     features:['Overtime & Approaching OT rows now show a badge the moment someone\'s LAST real scheduled day of the week is close: "Last day: tomorrow" in red, or "Last day: in 2 days" in amber — Carlos\'s ask, so a decision (give her the day off, let it ride) doesn\'t get missed until it\'s too late to act on. Shown Carlos 3 visual options (a top banner, this inline badge, and a standalone "decision needed" card); he picked the inline badge. Scoped to Overtime only, never Under Hours, per his explicit ask. Computed from the exact same remainingDays math the row\'s own sub-text already shows, so the two can never disagree; anyone with no remaining scheduled days (the "already over, nothing left to change it" tier) gets no badge at all — there\'s nothing left to warn ahead of.']
@@ -14140,8 +14145,26 @@ function laborProjectedWeekHours(ds){
     var remainingDays=0;
     if(SCH&&SCH.days){
       var crews=posMap[emp.pos]||SCHED_BLOCKS.map(function(b){return b.key;});
+      /* Carlos's real report, 2026-10-14: viewing TODAY before today's
+         own Labor Distribution Report is uploaded (the normal case — he
+         uploads yesterday's PDF today) showed nothing at all for someone
+         whose last scheduled day IS today, like Maria Aguilar. Root
+         cause: this loop only ever looked at days strictly AFTER ds
+         ("wds<=ds" skipped today too), so today fell into a gap neither
+         loop counted — not "already happened" (no actual hours reported
+         yet) and not "still coming" either. Changed to "wds<ds" (today
+         is eligible) plus a check for whether SHE SPECIFICALLY already
+         has an actual record for that day — so today counts as a real
+         remaining/current day (and can trigger a leave-by-X-time warning
+         TODAY, not just retroactively from yesterday's view) right up
+         until her own actual hours for today are actually uploaded,
+         at which point hoursSoFar above picks it up instead and this
+         stops double-counting it. */
       weekDates.forEach(function(wds){
-        if(wds<=ds)return;
+        if(wds<ds)return;
+        var daySnap=dayIndex[wds];
+        var hasActual=daySnap&&daySnap.emps&&daySnap.emps.some(function(x){return x&&x.id===id;});
+        if(hasActual)return;
         var day=SCH.days[wds];
         if(!day)return;
         var isWorking=crews.some(function(bk){
@@ -14219,39 +14242,14 @@ function toggleLaborPosGroup(key){
    Only meaningful for someone with remainingDays>0 — the "already over,
    no more scheduled days" tier has nothing left to warn about, her week
    is already final. */
-function _laborLastScheduledDate(ds,emp){
-  var weekStart=getHotelWeekStart(parseLocalDate(ds));
-  var weekDates=_schedDatesForWeekStart(weekStart);
-  var SCH=dlLoadSchedule();
-  if(!SCH||!SCH.days)return null;
-  var posMap={}; SCHED_UF_POS.forEach(function(p){posMap[p.label]=p.crews;});
-  var crews=posMap[emp.pos]||SCHED_BLOCKS.map(function(b){return b.key;});
-  var last=null;
-  weekDates.forEach(function(wds){
-    if(wds<=ds)return;
-    var day=SCH.days[wds];
-    if(!day)return;
-    var working=crews.some(function(bk){
-      return (day[bk]||[]).some(function(row){
-        if(!schedNameLooselyMatches(row[0],emp.name))return false;
-        var v=String(row[1]||'').trim();
-        return v!==''&&!schedIsOff(v)&&!schedStatusIs(v,'TAILOR')&&!schedStatusIs(v,'CALL-OFF');
-      });
-    });
-    if(working)last=wds;
-  });
-  return last;
-}
-function _laborLastDayBadge(ds,emp){
-  if(!emp||!(emp.remainingDays>0))return null;
-  var lastDs=_laborLastScheduledDate(ds,emp);
-  if(!lastDs)return null;
-  var daysUntil=Math.round((parseLocalDate(lastDs)-parseLocalDate(ds))/86400000);
-  if(daysUntil===1)return {text:'Last day: tomorrow',bg:'var(--red-bg)',color:'var(--red)'};
-  if(daysUntil===2)return {text:'Last day: in 2 days',bg:'var(--yellow-bg)',color:'var(--yellow)'};
-  return null;
-}
-function _laborOtDayStripHTML(ds,emp){
+/* Factored out of _laborOtDayStripHTML, 2026-10-14, so
+   _laborLastScheduledDate and the new leave-by-today badge can share the
+   exact same per-day classification instead of drifting from a second
+   copy. Checks for real hours FIRST regardless of date, then falls back
+   to the Schedule Draft (OFF vs working) for whatever's left — covers
+   today (no actual report uploaded yet, Schedule Draft says working) the
+   same way it already covered future days. */
+function _laborDayCells(ds,emp){
   var weekStart=getHotelWeekStart(parseLocalDate(ds));
   var weekDates=_schedDatesForWeekStart(weekStart);
   var dayIndex=wtc_buildDayIndex();
@@ -14259,7 +14257,7 @@ function _laborOtDayStripHTML(ds,emp){
   var posMap={}; SCHED_UF_POS.forEach(function(p){posMap[p.label]=p.crews;});
   var crews=posMap[emp.pos]||SCHED_BLOCKS.map(function(b){return b.key;});
 
-  var cells=weekDates.map(function(wds){
+  return weekDates.map(function(wds){
     var daySnap=dayIndex[wds];
     var match=daySnap&&daySnap.emps?daySnap.emps.filter(function(x){return x.id===emp.id;})[0]:null;
     if(match)return {wds:wds,kind:'actual',hours:Number(match.paid)||0};
@@ -14280,17 +14278,19 @@ function _laborOtDayStripHTML(ds,emp){
     if(hasScheduleRow)return {wds:wds,kind:'off'};
     return {wds:wds,kind:'unknown'};
   });
-
-  /* Carlos's real correction, 2026-10-10: this has to count back from
-     her scheduled END time, not forward from her start. Her printed
-     shift ("8:15 AM - 4:45 PM") is 8.5 clock-hours for 8 PAID hours —
-     there's a 30min unpaid lunch sitting inside it — so "start + budget
-     hours" silently assumed she works straight through with no break,
-     coming out 30min too early. Counting back from the scheduled END
-     time sidesteps the lunch gap entirely: the exact number of minutes
-     a FULL shift would put her over 40h (the same "Nm over" already
-     shown on the row itself) is just subtracted from her normal
-     clock-out, which already has the real break built in. */
+}
+/* Carlos's real correction, 2026-10-10: this has to count back from her
+   scheduled END time, not forward from her start. Her printed shift
+   ("8:15 AM - 4:45 PM") is 8.5 clock-hours for 8 PAID hours — there's a
+   30min unpaid lunch sitting inside it — so "start + budget hours"
+   silently assumed she works straight through with no break, coming out
+   30min too early. Counting back from the scheduled END time sidesteps
+   the lunch gap entirely: the exact number of minutes a FULL shift would
+   put her over 40h is just subtracted from her normal clock-out, which
+   already has the real break built in. Factored out of
+   _laborOtDayStripHTML, 2026-10-14, so the leave-by-today badge can ask
+   the exact same question without a second copy of this math. */
+function _laborLeaveByInfo(cells,emp){
   var cum=emp.hoursSoFar,leaveByWds=null,leaveByText=null;
   cells.forEach(function(c){
     if(c.kind!=='scheduled'||leaveByWds)return;
@@ -14304,6 +14304,52 @@ function _laborOtDayStripHTML(ds,emp){
     leaveByWds=c.wds;
     leaveByText=_minutesToTimeText(endMin-overageMin);
   });
+  return leaveByWds?{wds:leaveByWds,text:leaveByText}:null;
+}
+/* Carlos's ask, 2026-10-10: for anyone in Overtime/Approaching OT who
+   still has real days left this week, show how close she is to her LAST
+   scheduled day — today, tomorrow, or the day after — right on her row.
+   "Today" counts as eligible (c.wds>=ds, not >ds) since 2026-10-14: a
+   day with no actual report uploaded yet but a real Schedule Draft row
+   is just as much a real remaining day as tomorrow is — see
+   laborProjectedWeekHours' matching fix to remainingDays above. Only
+   meaningful for someone with remainingDays>0 — the "already over, no
+   more scheduled days" tier has nothing left to warn about. */
+function _laborLastScheduledDate(ds,emp){
+  var cells=_laborDayCells(ds,emp),last=null;
+  cells.forEach(function(c){ if(c.kind==='scheduled'&&c.wds>=ds)last=c.wds; });
+  return last;
+}
+function _laborLastDayBadge(ds,emp){
+  if(!emp||!(emp.remainingDays>0))return null;
+  var lastDs=_laborLastScheduledDate(ds,emp);
+  if(!lastDs)return null;
+  var daysUntil=Math.round((parseLocalDate(lastDs)-parseLocalDate(ds))/86400000);
+  if(daysUntil===0){
+    /* Carlos's real report, 2026-10-14: viewing TODAY, before today's own
+       report is uploaded, showed nothing at all for someone whose last
+       scheduled day IS today (Maria Aguilar, his real example) — he
+       wants to know SHE needs to leave early to avoid OT today, not find
+       out about it tomorrow after the fact. Today being her actual LAST
+       remaining day guarantees (by the same math that put her in this
+       list at all — projected = hoursSoFar + remainingDays*shiftHours)
+       that finishing today's full shift is exactly what crosses her over
+       40h, so the leave-by time is expected to resolve to today
+       specifically, not some later day. Falls back to a plain "today"
+       badge only if schedShiftTimeText can't resolve a real clock-out
+       for her crew/day, so the day is never silently unflagged just
+       because the clock-out math came up empty. */
+    var leaveBy=_laborLeaveByInfo(_laborDayCells(ds,emp),emp);
+    if(leaveBy&&leaveBy.wds===ds)return {text:'Leave by '+leaveBy.text+' today',bg:'var(--red-bg)',color:'var(--red)'};
+    return {text:'Last day: today',bg:'var(--red-bg)',color:'var(--red)'};
+  }
+  if(daysUntil===1)return {text:'Last day: tomorrow',bg:'var(--red-bg)',color:'var(--red)'};
+  if(daysUntil===2)return {text:'Last day: in 2 days',bg:'var(--yellow-bg)',color:'var(--yellow)'};
+  return null;
+}
+function _laborOtDayStripHTML(ds,emp){
+  var cells=_laborDayCells(ds,emp);
+  var leaveBy=_laborLeaveByInfo(cells,emp);
 
   var html='<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">'
     +'<div style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Hours by day this week &middot; gold = still scheduled to work</div>'
@@ -14314,7 +14360,7 @@ function _laborOtDayStripHTML(ds,emp){
       label=_hToHM(c.hours); cellStyle='background:var(--navy);color:#fff;';
     }else if(c.kind==='scheduled'){
       label=emp.shiftHours+'h'; cellStyle='background:var(--gd);color:#1a1200;font-weight:800;';
-      if(c.wds===leaveByWds)sub='Out by '+leaveByText;
+      if(leaveBy&&c.wds===leaveBy.wds)sub='Out by '+leaveBy.text;
     }else{
       label=(c.kind==='off')?'Off':'&mdash;';
       cellStyle='background:var(--surface);color:var(--text3);border:1px dashed var(--border);';
@@ -14508,17 +14554,31 @@ function renderDashDayAnalysis(days,rooms,today,wk){
   /* ── Weekly Pace ── */
   html+=buildWeeklyPaceHTML(days,rooms,wk);
 
-  if(snap){
-    /* ── Breaks — use the selected day's saved employees ── */
-    var snapEmps=snap.emps||[];
-    var hasEmpData=snapEmps.length>0;
+  /* ── Breaks — use the selected day's saved employees ── */
+  var snapEmps=snap?(snap.emps||[]):[];
+  var hasEmpData=snapEmps.length>0;
 
-    /* If no emp data saved (old snapshot), use live DATA.emps if it matches this day */
-    if(!hasEmpData&&DATA&&DATA.emps&&DATA.emps.length){
-      var lastDs=localStorage.getItem('hk_last_pdf_date');
-      if(lastDs===ds)snapEmps=DATA.emps;
-    }
+  /* If no emp data saved (old snapshot), use live DATA.emps if it matches this day */
+  if(!hasEmpData&&DATA&&DATA.emps&&DATA.emps.length){
+    var lastDs=localStorage.getItem('hk_last_pdf_date');
+    if(lastDs===ds)snapEmps=DATA.emps;
+  }
 
+  /* Carlos's real report, 2026-10-14: viewing TODAY before today's own
+     Labor Distribution Report is uploaded (the normal case — he uploads
+     yesterday's PDF today) showed NOTHING for Overtime/Under Hours at
+     all, even for someone like Maria Aguilar whose last scheduled day
+     IS today and who clearly needs a heads-up before her shift ends.
+     This whole section used to live inside "if(snap)" below, which only
+     opens once today's OWN actual report exists — but Overtime/Under
+     Hours never actually needed that: laborProjectedWeekHours builds its
+     projection from PAST days' actual reports plus the Schedule Draft,
+     neither of which depends on today's report existing yet. Moved
+     outside that gate so it can always show whatever it can compute;
+     Break Exceptions and Position Mismatches below still need snap —
+     those read TODAY's real punch data, which genuinely isn't there
+     yet. */
+  {
     /* ── OT ── (moved above Break Exceptions, Carlos's 2026-10-10 ask) */
     var otEmps=snapEmps.filter(function(e){return(e.ot1||0)>0;});
     var otIds={}; otEmps.forEach(function(e){otIds[e.id]=1;});
@@ -14642,7 +14702,9 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         html+='<div style="margin-bottom:14px;">'+(otCardHtml||underCardHtml)+'</div>';
       }
     }
+  }
 
+  if(snap){
     /* Carlos's ask, 2026-10-10: the Turndown "OK — 15/17 min" rows (people
        who punched their break correctly) were only ever here as
        reassurance, but they outnumbered the real exceptions and cluttered
