@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.75.0"/>
+<meta name="app-version" content="7.75.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4518,6 +4518,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.75.1', date:'2026-10-15',
+    fixes:['Overtime\'s "approaching" figure ("~40h 35m projected (35m over)") no longer shows in orange — black now, per Carlos\'s ask right after the redesign shipped.', 'Under Hours had the same wash problem Overtime just got fixed for, one step removed: the card\'s own background was the SAME light blue as the "stay until" badge\'s pill, so the badge disappeared into the card and read as plain colored text with no pill at all. Card is now plain white, same fix as Overtime.'],
+    improvements:['Under Hours\' "today" stay-until badge now gets the same solid-pill treatment Overtime\'s "today" badge just got — solid indigo fill, white text, plus a light indigo tint across the row — clearly distinct from a future day\'s quieter outline pill.']
+  },
   {
     v:'7.75.0', date:'2026-10-15',
     improvements:['Overtime card redesign — Carlos\'s real complaint looking at a real list: "todos me parecen iguales" (everyone looks the same). Someone whose last day is TODAY (the most urgent case) used the exact same light red pill as someone whose last day is merely tomorrow — now "today" gets a solid red badge (white text) plus a light red tint across her whole row, so she\'s the one thing that jumps out while scanning; "tomorrow"/"in 2 days" stay the quieter outline pills, unchanged. Also dropped the orange wash (var(--yellow), despite the name an orange hex) that used to cover the whole card the moment nobody had confirmed real OT yet — the card itself is now plain white, shown him 2 title-color options (navy vs a muted maroon), he picked the maroon.']
@@ -14451,8 +14456,15 @@ function _laborStayUntilInfo(ds,emp){
 function _laborStayUntilBadge(ds,emp){
   var info=_laborStayUntilInfo(ds,emp);
   if(!info)return null;
-  var text='Stay until '+info.text+(info.wds===ds?' today':' on '+parseLocalDate(info.wds).toLocaleDateString('en-US',{weekday:'short'}));
-  return {text:text,bg:'var(--indigo-bg)',color:'var(--indigo)'};
+  var isToday=info.wds===ds;
+  var text='Stay until '+info.text+(isToday?' today':' on '+parseLocalDate(info.wds).toLocaleDateString('en-US',{weekday:'short'}));
+  /* Carlos's follow-up, 2026-10-15, right after the Overtime redesign:
+     same treatment here — "today" gets a SOLID blue pill (white text)
+     plus a light blue row tint, same as Overtime's "today" badge;
+     a future day stays the quieter light outline pill. */
+  return isToday
+    ? {text:text,bg:'var(--indigo)',color:'#fff',rowBg:'var(--indigo-bg)'}
+    : {text:text,bg:'var(--indigo-bg)',color:'var(--indigo)'};
 }
 function _laborOtDayStripHTML(ds,emp){
   var cells=_laborDayCells(ds,emp);
@@ -14761,9 +14773,13 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       });
       stillApproaching.forEach(function(p){
         var overMin=Math.round((p.projected-40)*60);
+        /* Carlos's ask, 2026-10-15: no more orange text on this tier —
+           black (var(--text1)), same as every other row label. Red stays
+           red for the real/already-over tiers above (he didn't object
+           to that one); this was specifically the orange. */
         otRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)',
-          value:'~'+_hToHM(p.projected)+' projected ('+overMin+'m over)',valueColor:'var(--yellow)',detail:p});
+          value:'~'+_hToHM(p.projected)+' projected ('+overMin+'m over)',valueColor:'var(--text1)',detail:p});
       });
       /* Carlos's ask, 2026-10-14, Option B of the 3 he was shown: a badge
          right on the name, Overtime-side only (never Under Hours — he
@@ -14810,9 +14826,14 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         titleColor:(hasOT?'var(--red)':'var(--maroon)'),
         rows:otRows, ds:ds
       });
+      /* Carlos's follow-up, 2026-10-15: the blue wash (bgColor:
+         var(--indigo-bg)) was the SAME color as the stay-until badge's
+         own light-pill background, so the badge disappeared into the
+         card — it read as plain colored text with no pill at all. Card
+         is now plain/neutral like Overtime, same fix. */
       var underCardHtml=_laborPosCardHTML({
         title:'&#128202; Under Hours',
-        titleColor:'var(--indigo)', borderColor:'var(--indigo)', bgColor:'var(--indigo-bg)',
+        titleColor:'var(--indigo)',
         rows:underRows, ds:ds, collapsible:true, collapseKeyPrefix:'under:'
       });
 

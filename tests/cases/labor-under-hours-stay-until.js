@@ -75,10 +75,20 @@ module.exports = {
     const noneEmp = projections.find((p) => p.id === 't3');
 
     t.eq(todayEmp.projected, 36, '28 so far + 1 remaining day (today) × 8h = 36');
-    t.eq(win._laborStayUntilBadge(ds, todayEmp).text, 'Stay until 8:45 PM today', "4h (240min) short of 40, added to her normal 4:45 PM end time, today being her only remaining day");
+    const todayBadge = win._laborStayUntilBadge(ds, todayEmp);
+    t.eq(todayBadge.text, 'Stay until 8:45 PM today', "4h (240min) short of 40, added to her normal 4:45 PM end time, today being her only remaining day");
+    // Carlos's follow-up, 2026-10-15, right after the Overtime redesign
+    // shipped: "today" gets the same solid-pill treatment here too.
+    t.eq(todayBadge.bg, 'var(--indigo)', "today's badge is a SOLID indigo fill");
+    t.eq(todayBadge.color, '#fff', 'white text on the solid fill');
+    t.eq(todayBadge.rowBg, 'var(--indigo-bg)', "today's whole row also gets a light indigo tint");
 
     t.eq(futureEmp.projected, 38, '30 so far + 1 remaining day (Wed) × 8h = 38');
-    t.eq(win._laborStayUntilBadge(ds, futureEmp).text, 'Stay until 6:45 PM on Wed', "2h (120min) short of 40, added to her normal 4:45 PM end time, on her real last day (Wed, not today)");
+    const futureBadge = win._laborStayUntilBadge(ds, futureEmp);
+    t.eq(futureBadge.text, 'Stay until 6:45 PM on Wed', "2h (120min) short of 40, added to her normal 4:45 PM end time, on her real last day (Wed, not today)");
+    t.eq(futureBadge.bg, 'var(--indigo-bg)', "a future day stays the quieter light pill");
+    t.eq(futureBadge.color, 'var(--indigo)', 'dark indigo text on the light fill');
+    t.assert(!futureBadge.rowBg, 'a future day gets NO row tint — only today earns the stronger treatment');
 
     t.eq(noneEmp.remainingDays, 0, 'None Girl has no remaining scheduled days at all');
     t.eq(win._laborStayUntilBadge(ds, noneEmp), null, 'no stay-until badge when there is no remaining day to stay late on');
@@ -102,6 +112,14 @@ module.exports = {
     const underHtml = html.slice(underIdx);
 
     t.assert(!/Stay until/.test(otHtml), 'the stay-until badge never leaks into the Overtime card (there is none here anyway, but guards the scoping)');
+
+    // Card itself: no blue wash — the badge's own light-pill background
+    // used to be the SAME color as the card background, so it read as
+    // plain text with no pill at all. Card is now plain/neutral.
+    const cardIdx = html.lastIndexOf('class="card"', underIdx);
+    const cardOpenTag = html.slice(cardIdx, html.indexOf('>', cardIdx) + 1);
+    t.assert(!/var\(--indigo-bg\)/.test(cardOpenTag), 'the Under Hours card no longer washes blue (var(--indigo-bg)) across the whole background');
+    t.assert(!/border-color:var\(--indigo\)/.test(cardOpenTag), 'nor does it keep the solid indigo border');
 
     const tIdx = underHtml.indexOf('Today Girl');
     t.assert(tIdx !== -1, 'Today Girl appears in Under Hours');
