@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.73.0"/>
+<meta name="app-version" content="7.74.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4517,6 +4517,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.74.0', date:'2026-10-15',
+    features:['Under Hours rows now show a "Stay until HH:MM" badge, the mirror of Overtime\'s "Leave by" badge — Carlos\'s ask: the exact clock-out time on her LAST scheduled day that lands her exactly at 40h, so a manager can just tell her to stay until that time instead of adding a whole extra shift. Computed forward from her normal scheduled end time (the same real shift-time lookup Leave By already uses), since nobody in this list crosses 40h even working every remaining day at its normal length — the whole shortfall has to land on that one last day. Left unbadged (not shown) when the shortfall is too large for a single extended shift to make up (would wrap the clock-out time past midnight) or when there are no remaining scheduled days left to stay late on.']
+  },
   {
     v:'7.73.0', date:'2026-10-15',
     fixes:['Fixed someone showing up in NEITHER Overtime nor Under Hours at all — Carlos\'s real report: Rubia Toro Munoz was missing from both. Root cause: the projection list was only ever built from people with ACTUAL reported hours somewhere this week; anyone who simply hadn\'t worked a single day yet (every day so far off, like Rubia\'s real week) never entered it at all, no matter what the Schedule Draft said about the days still coming — invisible everywhere, not just missing from one card. Now backfills anyone scheduled to work today or later who isn\'t already known, matched against the real roster, so she shows up (Under Hours, in Rubia\'s case) the moment her Schedule Draft says she has days coming, even with zero hours posted yet.']
@@ -14387,6 +14391,42 @@ function _laborLastDayBadge(ds,emp){
   if(daysUntil===2)return {text:'Last day: in 2 days',bg:'var(--yellow-bg)',color:'var(--yellow)'};
   return null;
 }
+/* Carlos's ask, 2026-10-15: the mirror of the Overtime "Leave by" badge
+   — for anyone in Under Hours who still has a real scheduled day left,
+   show the clock-out time on her LAST scheduled day that lands her
+   EXACTLY at 40h, so a manager can simply tell her to stay until that
+   time instead of adding a whole extra shift. Since by definition
+   nobody in this list crosses 40h even working every remaining day at
+   its normal length, the entire shortfall has to land on that one last
+   day — there's no earlier day to spread it across. Counts FORWARD
+   from the normal scheduled end time (the mirror of Leave By counting
+   backward for an overage), on the same "end time already has the real
+   lunch break built in" assumption that math already relies on. Only
+   meaningful for remainingDays>0 — someone with no days left (the
+   "already under, nothing left to change it" tier) has no day to stay
+   late on. */
+function _laborStayUntilBadge(ds,emp){
+  if(!emp||!(emp.remainingDays>0))return null;
+  var lastDs=_laborLastScheduledDate(ds,emp);
+  if(!lastDs)return null;
+  var cell=_laborDayCells(ds,emp).filter(function(c){return c.wds===lastDs&&c.kind==='scheduled';})[0];
+  if(!cell)return null;
+  var shiftText=schedShiftTimeText(cell.crew,cell.wds,cell.row[0]);
+  var endOnly=shiftText?shiftText.split(' - ')[1]:null;
+  var endMin=endOnly?_timeTextToMinutes(endOnly):null;
+  if(endMin==null)return null;
+  var shortMin=Math.round((40-emp.projected)*60);
+  if(shortMin<=0)return null;
+  /* A shortfall this large (e.g. someone who hasn't worked at all this
+     week yet) would push "stay until" past midnight into the next
+     calendar day — not a real instruction anyone could follow on a
+     single shift. Left unbadged rather than showing a wrapped-around,
+     nonsensical time; her row's own "so far + N more days" sub-text
+     already explains the real shape of what's needed. */
+  if(endMin+shortMin>=1440)return null;
+  var text='Stay until '+_minutesToTimeText(endMin+shortMin)+(lastDs===ds?' today':' on '+parseLocalDate(lastDs).toLocaleDateString('en-US',{weekday:'short'}));
+  return {text:text,bg:'var(--indigo-bg)',color:'var(--indigo)'};
+}
 function _laborOtDayStripHTML(ds,emp){
   var cells=_laborDayCells(ds,emp);
   var leaveBy=_laborLeaveByInfo(cells,emp);
@@ -14720,7 +14760,8 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       underApproaching.forEach(function(p){
         underRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)',
-          value:'~'+_hToHM(p.projected)+' projected ('+_hToHM(40-p.projected)+' under)',valueColor:'var(--indigo)',detail:p});
+          value:'~'+_hToHM(p.projected)+' projected ('+_hToHM(40-p.projected)+' under)',valueColor:'var(--indigo)',detail:p,
+          lastDayBadge:_laborStayUntilBadge(ds,p)});
       });
 
       var otCardHtml=_laborPosCardHTML({
