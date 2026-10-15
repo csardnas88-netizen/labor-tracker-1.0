@@ -113,6 +113,7 @@ const cases = [
   require('./cases/labor-under-hours-name-aliases-batch2'),
   require('./cases/labor-ot-last-day-badge'),
   require('./cases/labor-ot-today-before-upload'),
+  require('./cases/labor-projection-backfill-unworked'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

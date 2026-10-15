@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.72.0"/>
+<meta name="app-version" content="7.73.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4517,6 +4517,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.73.0', date:'2026-10-15',
+    fixes:['Fixed someone showing up in NEITHER Overtime nor Under Hours at all — Carlos\'s real report: Rubia Toro Munoz was missing from both. Root cause: the projection list was only ever built from people with ACTUAL reported hours somewhere this week; anyone who simply hadn\'t worked a single day yet (every day so far off, like Rubia\'s real week) never entered it at all, no matter what the Schedule Draft said about the days still coming — invisible everywhere, not just missing from one card. Now backfills anyone scheduled to work today or later who isn\'t already known, matched against the real roster, so she shows up (Under Hours, in Rubia\'s case) the moment her Schedule Draft says she has days coming, even with zero hours posted yet.']
+  },
   {
     v:'7.72.0', date:'2026-10-14',
     fixes:['Fixed Overtime & Under Hours showing NOTHING at all when viewing TODAY before today\'s own Labor Distribution Report is uploaded — Carlos\'s real report: Maria Aguilar\'s last scheduled day was today, projected well over 40h, and he wanted to know she should leave early, but the whole section was blank. Two root causes: (1) the projection math only ever looked at days strictly after the viewed date, so today fell into a gap neither "already reported" nor "still coming" ever counted; today now counts as a real remaining day for anyone with no actual hours posted for it yet. (2) The entire Overtime/Under Hours card lived behind a check that only opens once today\'s own report exists — moved outside it, since the card only ever needed PAST actual reports plus the Schedule Draft, never today\'s. Break Exceptions and Position Mismatches, which genuinely need today\'s real punch data, are unaffected and still wait for it.'],
@@ -14139,6 +14143,42 @@ function laborProjectedWeekHours(ds){
       if(e.pos)byEmp[e.id].pos=(e.pos||'').replace(/^\d+-/,'');
     });
   });
+
+  /* Carlos's real report, 2026-10-15: Rubia Toro Munoz showed up in
+     NEITHER Overtime nor Under Hours. Root cause — byEmp above only ever
+     gets populated from ACTUAL reported hours, so anyone who simply
+     hadn't worked a single day yet this week (every day so far off, or
+     her reports are genuinely still blank) never entered the projection
+     at all, no matter what the Schedule Draft says about the days still
+     coming — invisible to both cards, not just missing from one. Backfills
+     anyone scheduled to work today or later who isn't already known,
+     resolved against ROSTER_BY_ID (the same identity source primaryPos
+     already uses) — skips any row that doesn't resolve to exactly one
+     roster person, the same caution schedApplyCallOff already uses for
+     an ambiguous match. */
+  if(SCH&&SCH.days){
+    var crewToLabel={};
+    SCHED_UF_POS.forEach(function(p){ p.crews.forEach(function(bk){ crewToLabel[bk]=p.label; }); });
+    weekDates.forEach(function(wds){
+      if(wds<ds)return;
+      var day=SCH.days[wds]; if(!day)return;
+      SCHED_BLOCKS.forEach(function(b){
+        var label=crewToLabel[b.key]; if(!label)return;
+        (day[b.key]||[]).forEach(function(row){
+          var nm=String(row[0]||'').trim(); if(!nm)return;
+          var v=String(row[1]||'').trim();
+          if(v===''||schedIsOff(v)||schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'))return;
+          var candidates=Object.keys(ROSTER_BY_ID).filter(function(rid){
+            return ROSTER_BY_ID[rid].pos===label&&schedNameLooselyMatches(nm,ROSTER_BY_ID[rid].name);
+          });
+          if(candidates.length!==1)return;
+          var rid=candidates[0];
+          if(byEmp[rid])return;
+          byEmp[rid]={id:rid,name:ROSTER_BY_ID[rid].name,pos:ROSTER_BY_ID[rid].pos,hoursSoFar:0};
+        });
+      });
+    });
+  }
 
   return Object.keys(byEmp).map(function(id){
     var emp=byEmp[id];
