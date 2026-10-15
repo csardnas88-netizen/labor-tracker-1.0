@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.75.1"/>
+<meta name="app-version" content="7.76.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4518,6 +4518,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.76.0', date:'2026-10-15',
+    improvements:['Overtime/Under Hours typography matched to the rest of Labor — Carlos asked for a senior-designer pass after noticing the text ran bigger than everywhere else in the section. Person name and the right-side value figure both drop from 12-13px to 11px/700, and the position group header from 10px/800 to 9px/700 — the same scale Weekly Pace\'s position label, Labor Effectiveness\'s row cells, and Occupancy\'s tile labels already use.'],
+    fixes:['Found in the same pass, from a real screenshot: the "already over 40h" tier\'s over-figure ("488m over 40h") was raw minutes while the figure right next to it ("~48h 8m projected") was already in hours-and-minutes — same bug class Under Hours\' own under-figure was fixed for a few versions back. Both tiers now read "8h 8m over 40h".']
+  },
   {
     v:'7.75.1', date:'2026-10-15',
     fixes:['Overtime\'s "approaching" figure ("~40h 35m projected (35m over)") no longer shows in orange — black now, per Carlos\'s ask right after the redesign shipped.', 'Under Hours had the same wash problem Overtime just got fixed for, one step removed: the card\'s own background was the SAME light blue as the "stay until" badge\'s pill, so the badge disappeared into the card and read as plain colored text with no pill at all. Card is now plain white, same fix as Overtime.'],
@@ -14526,25 +14531,34 @@ function _laborPosCardHTML(opts){
     var groupKey=opts.collapsible?(opts.collapseKeyPrefix||'')+g.pos:null;
     var groupOpen=!opts.collapsible||!!laborPosGroupOpen[groupKey];
     if(opts.collapsible){
-      html+='<div onclick="toggleLaborPosGroup(\''+escHtml(schedJs(groupKey))+'\')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:7px 16px;font-size:10px;font-weight:800;color:var(--text3);'
+      /* Carlos's ask, 2026-10-15, senior-designer pass: this card's text
+         ran noticeably larger than the rest of Labor (Weekly Pace,
+         Labor Effectiveness, Occupancy all cluster 9-11.5px/700 for row
+         content). Group header matched down to 9px/700, same as Labor
+         Effectiveness's column headers and Occupancy's tile labels. */
+      html+='<div onclick="toggleLaborPosGroup(\''+escHtml(schedJs(groupKey))+'\')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:7px 16px;font-size:9px;font-weight:700;color:var(--text3);'
         +'text-transform:uppercase;letter-spacing:.3px;background:rgba(0,0,0,.035);">'
         +'<span>'+g.pos+'</span><span style="font-size:9px;letter-spacing:0;text-transform:none;">'
         +g.rows.length+' '+(g.rows.length===1?'person':'people')+' '+(groupOpen?'&#9650;':'&#9660;')+'</span></div>';
     }else{
-      html+='<div style="padding:5px 16px;font-size:10px;font-weight:800;color:var(--text3);'
+      html+='<div style="padding:5px 16px;font-size:9px;font-weight:700;color:var(--text3);'
         +'text-transform:uppercase;letter-spacing:.3px;background:rgba(0,0,0,.035);">'+g.pos+'</div>';
     }
     if(!groupOpen)return;
     g.rows.forEach(function(r){
       var openP=r.detail&&!!laborOtDetailOpen[r.id];
+      /* Name and value figure matched down to 11px/700, same scale as
+         Weekly Pace's position name (11.5px/700) and Labor
+         Effectiveness's position/Var cells (11px/700) — this card used
+         to render every row at 12-13px, bigger than anything else. */
       html+='<div '+(r.detail?'onclick="toggleLaborOtDetail(\''+escHtml(schedJs(r.id))+'\')" style="cursor:pointer;':'style="')
         +'display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid var(--border);gap:12px;'
         +(r.lastDayBadge&&r.lastDayBadge.rowBg?'background:'+r.lastDayBadge.rowBg+';':'')+'">'
-        +'<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;">'+r.name
+        +'<div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:700;">'+r.name
         +(r.lastDayBadge?' <span style="font-size:10px;font-weight:700;background:'+r.lastDayBadge.bg+';color:'+r.lastDayBadge.color+';padding:2px 7px;border-radius:5px;margin-left:2px;">'+r.lastDayBadge.text+'</span>':'')
         +(r.detail?' <span style="font-size:9px;color:var(--text3);">'+(openP?'&#9650;':'&#9660;')+'</span>':'')+'</div>'
-        +(r.sub?'<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+r.sub+'</div>':'')+'</div>'
-        +'<div style="font-size:13px;font-weight:700;color:'+r.valueColor+';white-space:nowrap;">'+r.value+'</div></div>';
+        +(r.sub?'<div style="font-size:9px;color:var(--text3);margin-top:1px;">'+r.sub+'</div>':'')+'</div>'
+        +'<div style="font-size:11px;font-weight:700;color:'+r.valueColor+';white-space:nowrap;">'+r.value+'</div></div>';
       if(openP)html+='<div style="padding:0 16px 10px;">'+_laborOtDayStripHTML(opts.ds,r.detail)+'</div>';
     });
   });
@@ -14767,9 +14781,13 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       });
       alreadyOver.forEach(function(p){
         var overMin=Math.round((p.projected-40)*60);
+        /* Carlos's senior-designer pass, 2026-10-15: this was raw
+           minutes ("488m over 40h") while the figure right next to it
+           used _hToHM — same two-standards-in-one-string bug the Under
+           Hours "already under" tier had already been fixed for. */
         otRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' worked this week, no more scheduled days',
-          value:overMin+'m over 40h',valueColor:'var(--red)',detail:p});
+          value:_hToHM(overMin/60)+' over 40h',valueColor:'var(--red)',detail:p});
       });
       stillApproaching.forEach(function(p){
         var overMin=Math.round((p.projected-40)*60);
@@ -14779,7 +14797,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
            to that one); this was specifically the orange. */
         otRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)',
-          value:'~'+_hToHM(p.projected)+' projected ('+overMin+'m over)',valueColor:'var(--text1)',detail:p});
+          value:'~'+_hToHM(p.projected)+' projected ('+_hToHM(overMin/60)+' over)',valueColor:'var(--text1)',detail:p});
       });
       /* Carlos's ask, 2026-10-14, Option B of the 3 he was shown: a badge
          right on the name, Overtime-side only (never Under Hours — he

@@ -138,7 +138,7 @@ module.exports = {
     t.assert(mariaIdx !== -1, 'Maria (projected 48h) is flagged as approaching OT');
     const mariaRow = html.slice(mariaIdx, mariaIdx + 500);
     t.assert(/24h 0m so far \+ 3 more days scheduled \(~8h each\)/.test(mariaRow), "Maria's row shows the real math behind the estimate, in h/m");
-    t.assert(/~48h 0m projected \(480m over\)/.test(mariaRow), 'and her projected total with the exact minutes-over figure');
+    t.assert(/~48h 0m projected \(8h 0m over\)/.test(mariaRow), 'and her projected total with the over-figure in h/m, not raw minutes (fixed 2026-10-15, same bug class as Under Hours\' own under-figure)');
     // Ana (projected only 32h) is NOT flagged as Overtime — she has real
     // scheduled days left, just not enough to cross 40. 2026-10-14: she
     // now legitimately shows up in the separate Under Hours card instead
