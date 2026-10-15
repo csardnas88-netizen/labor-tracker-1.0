@@ -111,6 +111,21 @@ module.exports = {
     t.assert(fIdx !== -1, 'Future Girl appears in Under Hours');
     t.assert(/Stay until 6:45 PM on Wed/.test(underHtml.slice(fIdx, fIdx + 300)), "her row shows the future-day stay-until badge");
 
+    // ── Carlos's follow-up ask, same day: the gold (still-scheduled) day
+    // cell in the expanded day-strip should show "Stay until X" too, the
+    // same way Overtime's strip already shows "Out by X" on its crossing
+    // day — not just the row-level badge above the strip. Isolated to
+    // the strip markup itself (not the whole card), since the row's own
+    // badge right above it already legitimately says the same thing —
+    // a test scanning the whole card could pass even without the gold
+    // cell ever getting it. ──
+    win.toggleLaborOtDetail('t2');
+    const html2 = win.document.getElementById('dashDayAnalysis').innerHTML;
+    const stripIdx = html2.indexOf('Hours by day this week');
+    t.assert(stripIdx !== -1, "Future Girl's day-strip expands");
+    const strip = html2.slice(stripIdx, stripIdx + 2500);
+    t.assert(/Stay until 6:45 PM/.test(strip), "her Wednesday gold cell itself shows the stay-until time, same treatment as Overtime's 'Out by'");
+
     const nIdx = underHtml.indexOf('None Girl');
     t.assert(nIdx !== -1, 'None Girl appears in Under Hours (already under, no days left)');
     t.assert(!/Stay until/.test(underHtml.slice(nIdx, nIdx + 300)), 'her row shows NO stay-until badge — she has no remaining day to stay late on');
