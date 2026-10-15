@@ -115,6 +115,7 @@ const cases = [
   require('./cases/labor-ot-today-before-upload'),
   require('./cases/labor-projection-backfill-unworked'),
   require('./cases/labor-under-hours-stay-until'),
+  require('./cases/labor-ot-today-visual-redesign'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

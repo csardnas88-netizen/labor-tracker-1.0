@@ -70,7 +70,9 @@ module.exports = {
     // (SCHED_SHIFT_TIMES.gra.weekday) — not a vague "today" placeholder.
     const expectedMin = win._timeTextToMinutes('4:45 PM') - 240;
     t.eq(badge.text, 'Leave by ' + win._minutesToTimeText(expectedMin) + ' today', 'the leave-by time is computed from her real scheduled clock-out minus the exact overage, same math the day-strip already used');
-    t.eq(badge.bg, 'var(--red-bg)', "today's warning is red — the most urgent tier, same as tomorrow's");
+    t.eq(badge.bg, 'var(--red)', "today's badge is solid red (white text), the most urgent tier — visually distinct from tomorrow's lighter pill");
+    t.eq(badge.color, '#fff', "white text on the solid red fill");
+    t.eq(badge.rowBg, 'var(--red-bg)', "her whole row also gets a light red tint, on top of the solid badge, so she stands out while scanning the list");
 
     // ── Full render: no snap exists for today (days['2026-10-14'] was
     // never uploaded) — Overtime must still render; Break Exceptions and

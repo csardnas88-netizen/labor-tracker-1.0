@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.74.1"/>
+<meta name="app-version" content="7.75.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -54,6 +54,7 @@
   --red:#C0392B;--red-bg:#FCEFEF;--red-border:#E8B5AE;--rd:#FCEFEF;
   --green:#2D9E45;--green-bg:#EFF7F2;--green-border:#A7D9B5;--grn:#2D9E45;--grd:#EFF7F2;
   --yellow:#E67E22;--yellow-bg:#FDF5EA;--yellow-border:#F2C79B;--amb:#E67E22;--ad:#FDF5EA;
+  --maroon:#993C1D;
   /* Layout */
   --sidebar-w:230px;
   --radius:12px;--radius-sm:8px;--radius-xs:6px;
@@ -4517,6 +4518,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.75.0', date:'2026-10-15',
+    improvements:['Overtime card redesign — Carlos\'s real complaint looking at a real list: "todos me parecen iguales" (everyone looks the same). Someone whose last day is TODAY (the most urgent case) used the exact same light red pill as someone whose last day is merely tomorrow — now "today" gets a solid red badge (white text) plus a light red tint across her whole row, so she\'s the one thing that jumps out while scanning; "tomorrow"/"in 2 days" stay the quieter outline pills, unchanged. Also dropped the orange wash (var(--yellow), despite the name an orange hex) that used to cover the whole card the moment nobody had confirmed real OT yet — the card itself is now plain white, shown him 2 title-color options (navy vs a muted maroon), he picked the maroon.']
+  },
   {
     v:'7.74.1', date:'2026-10-15',
     fixes:['The "Stay until" time (shipped a moment ago) now also shows on the gold day-strip cell itself when you tap a row to expand it — Carlos\'s follow-up: Overtime\'s "Out by X" already shows right on its crossing day, and Under Hours\' "Stay until X" was only showing in the row-level badge, not on the gold cell the same way. Both now read from the exact same calculation, so they can never disagree.']
@@ -14387,9 +14392,15 @@ function _laborLastDayBadge(ds,emp){
        badge only if schedShiftTimeText can't resolve a real clock-out
        for her crew/day, so the day is never silently unflagged just
        because the clock-out math came up empty. */
+    /* Carlos's follow-up, 2026-10-15: "today" and "tomorrow" used the
+       exact same light red pill — scanning the list, everyone in it
+       looked the same. "Today" now gets a SOLID red pill (white text)
+       plus a light red tint across her whole row, so she's the one
+       thing that visually jumps out; "tomorrow"/"in 2 days" keep the
+       quieter light pill below, unchanged. */
     var leaveBy=_laborLeaveByInfo(_laborDayCells(ds,emp),emp);
-    if(leaveBy&&leaveBy.wds===ds)return {text:'Leave by '+leaveBy.text+' today',bg:'var(--red-bg)',color:'var(--red)'};
-    return {text:'Last day: today',bg:'var(--red-bg)',color:'var(--red)'};
+    if(leaveBy&&leaveBy.wds===ds)return {text:'Leave by '+leaveBy.text+' today',bg:'var(--red)',color:'#fff',rowBg:'var(--red-bg)'};
+    return {text:'Last day: today',bg:'var(--red)',color:'#fff',rowBg:'var(--red-bg)'};
   }
   if(daysUntil===1)return {text:'Last day: tomorrow',bg:'var(--red-bg)',color:'var(--red)'};
   if(daysUntil===2)return {text:'Last day: in 2 days',bg:'var(--yellow-bg)',color:'var(--yellow)'};
@@ -14497,7 +14508,7 @@ function _laborGroupRowsByPos(rows){
 function _laborPosCardHTML(opts){
   if(!opts.rows.length)return '';
   var groups=_laborGroupRowsByPos(opts.rows);
-  var html='<div class="card" style="border-color:'+opts.borderColor+';background:'+opts.bgColor+';">'
+  var html='<div class="card" style="border-color:'+(opts.borderColor||'')+';background:'+(opts.bgColor||'')+';">'
     +'<div class="card-head"><div class="card-title" style="color:'+opts.titleColor+'">'+opts.title+'</div></div>';
   groups.forEach(function(g){
     var groupKey=opts.collapsible?(opts.collapseKeyPrefix||'')+g.pos:null;
@@ -14515,7 +14526,8 @@ function _laborPosCardHTML(opts){
     g.rows.forEach(function(r){
       var openP=r.detail&&!!laborOtDetailOpen[r.id];
       html+='<div '+(r.detail?'onclick="toggleLaborOtDetail(\''+escHtml(schedJs(r.id))+'\')" style="cursor:pointer;':'style="')
-        +'display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid var(--border);gap:12px;">'
+        +'display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid var(--border);gap:12px;'
+        +(r.lastDayBadge&&r.lastDayBadge.rowBg?'background:'+r.lastDayBadge.rowBg+';':'')+'">'
         +'<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;">'+r.name
         +(r.lastDayBadge?' <span style="font-size:10px;font-weight:700;background:'+r.lastDayBadge.bg+';color:'+r.lastDayBadge.color+';padding:2px 7px;border-radius:5px;margin-left:2px;">'+r.lastDayBadge.text+'</span>':'')
         +(r.detail?' <span style="font-size:9px;color:var(--text3);">'+(openP?'&#9650;':'&#9660;')+'</span>':'')+'</div>'
@@ -14782,11 +14794,20 @@ function renderDashDayAnalysis(days,rooms,today,wk){
           lastDayBadge:_laborStayUntilBadge(ds,p)});
       });
 
+      /* Carlos's ask, 2026-10-15: the whole card used to wash orange
+         (var(--yellow), which despite the name is an orange hex) any
+         time nobody had crossed 40h yet — every row looked the same at
+         a glance, and he specifically didn't want that orange. The card
+         itself is now plain/neutral (borderColor/bgColor left unset, so
+         .card's own default white/border wins) — color now lives only
+         in the per-row badges and figures, which is where it actually
+         needs to catch the eye. The title still needs its own color
+         when nobody's confirmed over yet; shown him 2 options (navy,
+         a muted maroon), he picked the maroon — var(--maroon), the same
+         family as the "today" badge below, not var(--yellow). */
       var otCardHtml=_laborPosCardHTML({
         title:'&#8987; Overtime'+(titleParts.length?' & '+titleParts.join(' & '):''),
-        titleColor:(hasOT?'var(--red)':'var(--yellow)'),
-        borderColor:(hasOT?'var(--red-border)':'var(--yellow-border)'),
-        bgColor:(hasOT?'var(--red-bg)':'var(--yellow-bg)'),
+        titleColor:(hasOT?'var(--red)':'var(--maroon)'),
         rows:otRows, ds:ds
       });
       var underCardHtml=_laborPosCardHTML({
