@@ -118,6 +118,7 @@ const cases = [
   require('./cases/labor-ot-today-visual-redesign'),
   require('./cases/labor-ot-typography-and-overmin-fix'),
   require('./cases/req-notebook-cross-crew-fallback'),
+  require('./cases/schedule-linked-people-third-crew-relabel'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
