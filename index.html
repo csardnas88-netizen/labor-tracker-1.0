@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.77.0"/>
+<meta name="app-version" content="7.78.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4518,6 +4518,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.78.0', date:'2026-10-15',
+    fixes:['Cleaned up the cross-crew sync exclusion list (SCHED_CROSS_CREW_EXTRA_EXCLUDED) after a conversation with Carlos about why it exists: Victoriano Ch/Jorge Gonzalez no longer need to be on it — confirmed their old dedicated Laundry mirror was already removed last month, migrated to this same generic sync, so excluding them by name was stale and did nothing. Rubia/Julia were also removed on the same theory (Carlos correctly pointed out the old comment calling them "permanent Laundry members" is wrong — they\'re really Houseman overflow backups), but that broke a real test: their Laundry row, whenever schedSyncLaundryCoverRow actually puts one there off a LAUNDRY relabel, is still fully owned by that mechanism end to end, regardless of what tag it carries or whether anyone would call it "permanent" — removing them let the generic sync fight it and corrupt the release behavior. Put back, with the comment now explaining the real reason instead of the wrong one.']
+  },
   {
     v:'7.77.0', date:'2026-10-15',
     fixes:['Fixed Request Off entries silently failing to write to the Schedule for anyone who sits on two crews — Carlos\'s real report: Jorge Gonzalez (Houseman, plus a Laundry backup role covering Victoriano Ch) had 3 real R-OFF requests logged against "(Laundry)" that never showed up anywhere on the Schedule — Houseman read all dashes for him that week. Root cause: Laundry only carries a row for him on days he\'s actually covering, so the picked crew had nothing to write to, and the write-through gave up entirely rather than trying his other crew, where his real row (and his real day off) actually needed to land. The picked crew is now a preference, not a requirement — it falls back to every other crew, writing through only when exactly one match turns up, the same "never guess" rule the existing name-matching fallback already uses. Also now reconciles both crews immediately after writing (same as a Call-Off already does), instead of waiting for Auto-fill or the next render to catch a stale cell on the other crew. Jorge\'s 3 real requests need "Re-sync Request Off to this week" tapped once on the Schedule page to actually land now that this is fixed — new requests write through correctly without it.']
@@ -24161,21 +24165,32 @@ var SCHED_CREW_AWAY_LABEL={
   gra:'ROOMS', lobby:'LOBBY', laundry:'LAUNDRY', td:'TURNDOWN',
   pmhm:'HOUSEMAN', hp:'HOUSEMAN', sup:'SUPERVISOR', mgr:'MANAGER', night:'OVERNIGHT'
 };
-/* Victoriano Ch/Jorge Gonzalez are already excluded via SCHED_COVER_CHAINS
-   above. Sarahi/Andrea run their own direct-row mirror (schedApplyLobbyMirror)
+/* Sarahi/Andrea run their own direct-row mirror (schedApplyLobbyMirror)
    entirely outside both config arrays — see its header comment for why it
    was pulled out of the generic chain mechanism in the first place. Both
    named here explicitly so this generic pass can't fight that tuned
    behavior over the same Lobby/Turndown cells.
-   Rubia/Julia (SCHED_HP_OVERFLOW_BACKUPS) are the Laundry case of the
-   same problem: they're PERMANENT 'added' Laundry members (unlike a
-   plain 'cover' row, which the tag check above already excludes on its
-   own), but still covered via the same "any crew's cell reading LAUNDRY"
-   convention (schedSyncLaundryCoverRow/schedReleaseStaleLaundryLabels).
-   The tag alone can't tell their row apart from Sandra S/Vanesa/Karla
-   Varela's genuine two-home-crew rows, which also carry 'added' and DO
-   need to sync generically now — so they're excluded by name instead,
-   same as Sarahi/Andrea. */
+   Victoriano Ch/Jorge Gonzalez used to be here too — removed 2026-10-15,
+   confirmed directly with Carlos that neither is tied to a second crew by
+   name anymore (their old dedicated Laundry mirror was already removed
+   2026-09-19, migrated to this same generic sync).
+   Rubia/Julia stay — tried removing them the same day, on the theory
+   (from Carlos, correcting an older comment here that called them
+   "permanent Laundry members," which isn't actually true — they're
+   really Houseman overflow backups, SCHED_HP_OVERFLOW_BACKUPS) that
+   nothing ties them to Laundry anymore either. That broke a real,
+   already-passing test: schedSetCell('laundry',...,'Rubia',...,'OFF')
+   on a gra row reading 'LAUNDRY' stopped releasing back to '1' and left
+   'OFF' stamped there instead. The "permanent member" framing was
+   wrong, but the underlying reason for the exclusion wasn't about
+   permanence at all — whenever schedSyncLaundryCoverRow/
+   schedReleaseStaleLaundryLabels has put them on Laundry off a LAUNDRY
+   relabel on their own Room Attendant cell, that mechanism already owns
+   the whole relationship (create, update, release) end to end, and this
+   generic pass disagreeing about what an absence on Laundry even means
+   (does she stop covering, or is she fully off?) corrupts it. Still
+   true regardless of what tag that row carries or whether anyone would
+   call it "permanent." */
 var SCHED_CROSS_CREW_EXTRA_EXCLUDED=['Sarahi','Andrea','Rubia','Julia'];
 function _schedCrossCrewExcluded(name){
   var nk=dlNorm(name);

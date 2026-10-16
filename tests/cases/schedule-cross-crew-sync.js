@@ -107,23 +107,27 @@ module.exports = {
     win.schedApplyCrossCrewSyncForDate(SCH6e, ds, { crew: 'lobby', name: 'Vanesa' });
     t.eq(SCH6e.days[ds].laundry[0][1], 'R-OFF', 'a granted R-OFF on Lobby carries across to her Laundry row too');
 
-    // ── Rubia/Julia are the one real exception left, 2026-09-28: unlike
+    // ── Rubia/Julia are the one real exception left, confirmed again
+    // 2026-10-15 after trying (and reverting) to remove them: unlike
     // Karla Varela/Vanesa's genuine two-home-crew 'added' rows above,
-    // theirs is driven by the OLDER "any crew's cell reading LAUNDRY"
-    // convention (schedSyncLaundryCoverRow/schedReleaseStaleLaundryLabels),
-    // which already owns this relationship completely and disagrees with
-    // this generic pass about what an absence on Laundry even means (does
-    // she stop covering Laundry, or is she fully off?). Both a 'cover'-
-    // tagged row (excluded by tag alone) and Rubia/Julia's own permanent
-    // 'added' row (indistinguishable by tag from Vanesa's, excluded by
-    // name in SCHED_CROSS_CREW_EXTRA_EXCLUDED instead) stay out of this
-    // generic pass entirely. ──
+    // theirs is governed end-to-end by the OLDER "any crew's cell
+    // reading LAUNDRY" convention (schedSyncLaundryCoverRow/
+    // schedReleaseStaleLaundryLabels, see schedule-page.js's own tests)
+    // — that mechanism already owns this relationship completely and
+    // disagrees with this generic pass about what an absence on Laundry
+    // even means (does she stop covering Laundry, or is she fully off?).
+    // Both an ephemeral 'cover'-tagged row (excluded by tag alone, for
+    // anyone) and Rubia/Julia's own 'added'-tagged row (indistinguishable
+    // by tag from Vanesa's, excluded by name instead) stay out of this
+    // generic pass entirely — NOT because either is a "permanent Laundry
+    // member" (they're not; the real reason is this tuned mechanism
+    // already owning the cell), just because of who creates/owns the row. ──
     t.assert(!win.schedApplyCrossCrewSyncForDate(
       { days: { [ds]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '1', 'cover']] } } }, ds, { crew: 'laundry', name: 'Rubia' }),
       "an ephemeral 'cover' row is skipped by its tag alone");
     t.assert(!win.schedApplyCrossCrewSyncForDate(
       { days: { [ds]: { gra: [['Rubia', 'LAUNDRY']], laundry: [['Rubia', '1', 'added']] } } }, ds, { crew: 'laundry', name: 'Rubia' }),
-      "Rubia's permanent 'added' row is skipped too, by name — the tag alone can't tell it apart from Vanesa's");
+      "Rubia's 'added'-tagged row is skipped too, by name — the tag alone can't tell it apart from Vanesa's");
     t.assert(!win.schedApplyCrossCrewSyncForDate(
       { days: { [ds]: { gra: [['Julia', 'LAUNDRY']], laundry: [['Julia', '1', 'added']] } } }, ds, { crew: 'laundry', name: 'Julia' }),
       'and Julia, the second overflow backup');
