@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.79.0"/>
+<meta name="app-version" content="7.80.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4518,6 +4518,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.80.0', date:'2026-10-15',
+    improvements:['Request Off picker simplified — Carlos\'s ask, right after the Jorge Gonzalez fallback fix: most people who sit on 2+ crews under the exact same name used to be listed once per crew ("Jorge Gonzalez (Houseman)" / "Jorge Gonzalez (Laundry)"), which he had to pick between every time. Now they show up once — the crew is just a starting point, and reqWriteToSchedule already falls back to whichever crew actually has her row that date. Sarahi/Andrea/Rubia/Julia (the small list where the crew genuinely means something different — a mirror/cover relationship, not a second home) still get a separate option per crew, since there\'s no fallback to lean on for them.']
+  },
   {
     v:'7.79.0', date:'2026-10-15',
     fixes:['Fixed Gabriela Cuevas\'s Lobby row getting stuck on a stale "ROOMS" — Carlos\'s real report: he moved her to cover Laundry on a Saturday, her Room Attendant cell correctly relabeled to LAUNDRY and she showed up on Laundry\'s own crew card, but her literal Lobby row never updated to match. Root cause: the moment her Room Attendant cell names a THIRD crew (neither her home crew nor Lobby), the dedicated sync that keeps her Room Attendant/Lobby rows in agreement used to just skip the whole day, assuming some other mechanism would finish reconciling Lobby — but nothing does, since the generic cross-crew sync has no way to know "Gabriela" (Lobby\'s own spelling) and "Gabriela Cuevas" (Room Attendant\'s) are the same person. Lobby now relabels to wherever she\'s actually covering instead of being left behind.']
@@ -25977,15 +25981,26 @@ function saveReqNotebook(list){
   (list||[]).forEach(function(r){ if(r&&r.id){ try{supaPut('reqnb_'+r.id,r);}catch(e){} } });
 }
 function rnTypeLabel(t){ return t==='vac'?'Vacation':(t==='flex'?'Flex':'R-OFF'); }
-/* Dedup key is (name, crew) — NOT name alone. Someone who actually sits
-   on two crews the same week (Andrea: PM Turndown/GRA most days, AM
-   Lobby covering Sarahi some days) has a real row in both, and picking
-   just one — whichever SCHED_BLOCKS happens to scan first — silently
-   hid the other and could write R-OFF to the wrong crew's cell for
-   dates she isn't even on that crew. Carlos's report: Andrea kept
-   showing as "AM Lobby" only, when she works mostly PM. Both now list
-   separately ("Andrea (AM Lobby)" / "Andrea (PM Turndown / GRA)") so he
-   picks the one he actually means.
+/* Dedup key USED to be (name, crew) for everyone, not name alone —
+   Andrea (PM Turndown/GRA most days, AM Lobby covering Sarahi some
+   days) has a real row in both, and picking just one — whichever
+   SCHED_BLOCKS happens to scan first — silently hid the other and
+   could write R-OFF to the wrong crew's cell for dates she isn't even
+   on that crew. Both listed separately so he picks the one he means.
+
+   Carlos's ask, 2026-10-15, after the Jorge Gonzalez fix shipped: for
+   almost everyone else, the crew picked is now just a starting
+   preference, not a hard requirement — reqWriteToSchedule falls back to
+   whichever crew actually has her row that date, and reconciles the
+   other crew via cross-crew sync right after writing. So most people
+   who sit on 2+ crews under the exact same name no longer need to be
+   listed twice; one option (her first-found crew) is enough, and
+   reqWriteToSchedule's own fallback does the rest. The small exclusion
+   list that already skips cross-crew sync for a different reason
+   (SCHED_CROSS_CREW_EXTRA_EXCLUDED/_schedCrossCrewExcluded — Sarahi/
+   Andrea/Rubia/Julia) still needs its own option per crew: for them the
+   crew really does carry different meaning (a mirror/cover
+   relationship, not a second home), and there's no fallback to lean on.
 
    Roster is pulled from EVERY currently loaded week, not just the
    chronologically latest one — schedLatestLoadedWeekStart picks whatever
@@ -26003,10 +26018,15 @@ function reqEmpOptions(){
   var allDates=Object.keys(SCH.days);
   if(!allDates.length)return [];
   var roster=schedRosterForDates(SCH,allDates);
-  var out=[],seen={};
+  var out=[],seenByCrew={},seenByName={};
   SCHED_BLOCKS.forEach(function(b){
     (roster[b.key]||[]).forEach(function(n){
-      var k=dlNorm(n)+'|'+b.key; if(seen[k])return; seen[k]=1;
+      if(_schedCrossCrewExcluded(n)){
+        var k=dlNorm(n)+'|'+b.key; if(seenByCrew[k])return; seenByCrew[k]=1;
+        out.push({name:n,crewKey:b.key,crewLabel:b.label});
+        return;
+      }
+      var nk=dlNorm(n); if(seenByName[nk])return; seenByName[nk]=1;
       out.push({name:n,crewKey:b.key,crewLabel:b.label});
     });
   });

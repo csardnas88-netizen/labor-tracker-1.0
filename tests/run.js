@@ -119,6 +119,7 @@ const cases = [
   require('./cases/labor-ot-typography-and-overmin-fix'),
   require('./cases/req-notebook-cross-crew-fallback'),
   require('./cases/schedule-linked-people-third-crew-relabel'),
+  require('./cases/req-notebook-merged-options'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
