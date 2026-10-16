@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.80.0"/>
+<meta name="app-version" content="7.81.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4518,6 +4518,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.81.0', date:'2026-10-15',
+    features:['Overtime rows now explain part of the overage when the data supports it — Carlos\'s real question: is some of this coming from a short break or an early clock-in? A short break (less unpaid time than her position\'s own floor, 25min normal / 15min Turndown/part-time) uses the SAME Labor Distribution data Break Compliance already runs on — no new upload needed. An early clock-in needs the Weekly Time Card Report\'s real punch time against her scheduled start, the same comparison Late Arrivals already makes, just mirrored to the early side. When neither explains anything AND a worked day this week has no Weekly Time Card row at all, the row prompts to upload it (tap jumps straight to Time Card Check) instead of staying silent — but only then; a row with nothing to explain and complete data shows nothing extra.']
+  },
   {
     v:'7.80.0', date:'2026-10-15',
     improvements:['Request Off picker simplified — Carlos\'s ask, right after the Jorge Gonzalez fallback fix: most people who sit on 2+ crews under the exact same name used to be listed once per crew ("Jorge Gonzalez (Houseman)" / "Jorge Gonzalez (Laundry)"), which he had to pick between every time. Now they show up once — the crew is just a starting point, and reqWriteToSchedule already falls back to whichever crew actually has her row that date. Sarahi/Andrea/Rubia/Julia (the small list where the crew genuinely means something different — a mirror/cover relationship, not a second home) still get a separate option per crew, since there\'s no fallback to lean on for them.']
@@ -14487,6 +14491,97 @@ function _laborStayUntilBadge(ds,emp){
     ? {text:text,bg:'var(--indigo)',color:'#fff',rowBg:'var(--indigo-bg)'}
     : {text:text,bg:'var(--indigo-bg)',color:'var(--indigo)'};
 }
+function _laborDowAbbr(ds){ return parseLocalDate(ds).toLocaleDateString('en-US',{weekday:'short'}); }
+/* Carlos's real question, 2026-10-15: is part of someone's Overtime
+   overage actually explained by a short break (less unpaid time than
+   her position's own floor — 25min normal, 15min Turndown/part-time —
+   means more of her shift counted as PAID) or an early clock-in? Both
+   are real, already-available signals, just never surfaced together
+   before. Uses the SAME breakStatus/combineDayEntries math Break
+   Compliance already runs on the Labor Distribution Report's own
+   unpaid-minutes field — no new upload needed for this half. Only
+   counts a day that's an actual 'short' violation (not merely under
+   the top of the OK band), and only the minutes BELOW her position's
+   floor — the real extra paid time a full break would have cost her. */
+function _laborBreakShortfallMinutes(ds,emp){
+  var weekStart=getHotelWeekStart(parseLocalDate(ds));
+  var weekDates=_schedDatesForWeekStart(weekStart);
+  var dayIndex=wtc_buildDayIndex();
+  var total=0,days=[];
+  weekDates.forEach(function(wds){
+    if(wds>ds)return;
+    var daySnap=dayIndex[wds]; if(!daySnap||!daySnap.emps)return;
+    var combined=combineDayEntries(daySnap.emps,emp.id);
+    if(!combined)return;
+    var pos=combined.pos||emp.pos;
+    if(breakStatus(combined.unpaidMin,pos,emp.id)!=='short')return;
+    var floor=uses15MinBreak(pos,emp.id)?15:25;
+    var extra=floor-combined.unpaidMin;
+    if(extra>0){ total+=extra; days.push(wds); }
+  });
+  return days.length?{minutes:total,days:days}:null;
+}
+/* The other half, Carlos's same question: an early clock-in. Unlike
+   the break check, this genuinely needs the Weekly Time Card Report —
+   it's the only source with a real punch time (workStartTime), vs the
+   Schedule Draft's own scheduled start (schedScheduledStartTimeReason,
+   the same lookup Late Arrivals already uses). Same
+   WTC_LATE_THRESHOLD_MIN tolerance as Late Arrivals, just mirrored to
+   the early side instead of a brand new number. Separately tracks
+   which of her real worked days this week have NO Weekly Time Card row
+   at all yet (missingDays) — not because she necessarily clocked in
+   early those days, but because there's genuinely no way to know
+   without that report, which the caller uses to decide whether to
+   prompt for it instead of silently saying nothing contributed. */
+function _laborEarlyClockInMinutes(ds,emp){
+  var report=loadWtcReport();
+  var weekStart=getHotelWeekStart(parseLocalDate(ds));
+  var weekDates=_schedDatesForWeekStart(weekStart);
+  var dayIndex=wtc_buildDayIndex();
+  var total=0,days=[],missingDays=[];
+  weekDates.forEach(function(wds){
+    if(wds>ds)return;
+    var daySnap=dayIndex[wds]; if(!daySnap||!daySnap.emps)return;
+    var hasActual=daySnap.emps.some(function(x){return x&&x.id===emp.id;});
+    if(!hasActual)return;
+    var d=report?wtcDayFor(emp.id,wds):null;
+    if(!d||!d.workStartTime){ missingDays.push(wds); return; }
+    var schedResult=schedScheduledStartTimeReason(wds,emp.name,emp.pos);
+    if(!schedResult.time)return;
+    var schedMin=_timeTextToMinutes(schedResult.time),arrMin=_timeTextToMinutes(d.workStartTime);
+    if(schedMin==null||arrMin==null)return;
+    var diff=arrMin-schedMin;
+    if(diff<-WTC_LATE_THRESHOLD_MIN){ total+=(-diff); days.push(wds); }
+  });
+  return {minutes:total,days:days,missingDays:missingDays};
+}
+/* Combines both signals into whatever's worth showing on an Overtime
+   row: a real explanation when either contributed, or — only when
+   there's genuinely no way to know yet (a worked day this week has no
+   Weekly Time Card row at all) — a prompt to upload it instead of just
+   staying silent. Says nothing at all when neither contributed and the
+   data IS complete — the overage is simply real scheduled hours, no
+   extra explanation needed. */
+function _laborOtContributingFactorsNote(ds,emp){
+  if(!emp)return null;
+  var breakInfo=_laborBreakShortfallMinutes(ds,emp);
+  var earlyInfo=_laborEarlyClockInMinutes(ds,emp);
+  var parts=[];
+  if(breakInfo)parts.push('a short break ('+breakInfo.days.map(_laborDowAbbr).join(', ')+')');
+  if(earlyInfo.minutes>0)parts.push('an early clock-in ('+earlyInfo.days.map(_laborDowAbbr).join(', ')+')');
+  if(parts.length){
+    var totalMin=(breakInfo?breakInfo.minutes:0)+earlyInfo.minutes;
+    return {type:'detail',text:_hToHM(totalMin/60)+' over comes from '+parts.join(' and ')};
+  }
+  if(earlyInfo.missingDays.length>0)return {type:'missing'};
+  return null;
+}
+function _laborFactorsNoteHTML(note){
+  if(note.type==='missing'){
+    return '<div style="margin-top:4px;display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text3);"><span onclick="event.stopPropagation();showPage(\'wtc\');" style="cursor:pointer;text-decoration:underline;">Upload the Weekly Time Card Report</span>&nbsp;to see what\'s driving this</div>';
+  }
+  return '<div style="margin-top:4px;display:flex;align-items:center;gap:4px;font-size:9px;color:var(--gd);">&#9888;&nbsp;'+note.text+'</div>';
+}
 function _laborOtDayStripHTML(ds,emp){
   var cells=_laborDayCells(ds,emp);
   var leaveBy=_laborLeaveByInfo(cells,emp);
@@ -14573,7 +14668,8 @@ function _laborPosCardHTML(opts){
         +'<div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:700;">'+r.name
         +(r.lastDayBadge?' <span style="font-size:10px;font-weight:700;background:'+r.lastDayBadge.bg+';color:'+r.lastDayBadge.color+';padding:2px 7px;border-radius:5px;margin-left:2px;">'+r.lastDayBadge.text+'</span>':'')
         +(r.detail?' <span style="font-size:9px;color:var(--text3);">'+(openP?'&#9650;':'&#9660;')+'</span>':'')+'</div>'
-        +(r.sub?'<div style="font-size:9px;color:var(--text3);margin-top:1px;">'+r.sub+'</div>':'')+'</div>'
+        +(r.sub?'<div style="font-size:9px;color:var(--text3);margin-top:1px;">'+r.sub+'</div>':'')
+        +(r.factorsNote?_laborFactorsNoteHTML(r.factorsNote):'')+'</div>'
         +'<div style="font-size:11px;font-weight:700;color:'+r.valueColor+';white-space:nowrap;">'+r.value+'</div></div>';
       if(openP)html+='<div style="padding:0 16px 10px;">'+_laborOtDayStripHTML(opts.ds,r.detail)+'</div>';
     });
@@ -14824,6 +14920,11 @@ function renderDashDayAnalysis(days,rooms,today,wk){
          over, nothing left to change it" tier), so that tier is naturally
          left alone with no extra check needed here. */
       otRows.forEach(function(r){ r.lastDayBadge=_laborLastDayBadge(ds,r.detail); });
+      /* Carlos's real question, 2026-10-15: is part of someone's overage
+         actually a short break or an early clock-in, and could the app
+         surface that? Shown him a mockup, approved — same every-row
+         pattern as lastDayBadge above, reusing r.detail. */
+      otRows.forEach(function(r){ r.factorsNote=_laborOtContributingFactorsNote(ds,r.detail); });
 
       var underRows=[];
       underAlready.forEach(function(p){

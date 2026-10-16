@@ -46,7 +46,7 @@ module.exports = {
 
     const idx = html.indexOf('Diana Martinez');
     t.assert(idx !== -1, 'Diana is flagged as already over 40h');
-    const row = html.slice(idx, idx + 400);
+    const row = html.slice(idx, idx + 800);
     t.assert(/8h 8m over 40h/.test(row), 'the overage figure is in h/m ("8h 8m over 40h"), not raw minutes ("488m over 40h")');
     t.assert(!/488m/.test(row), 'the old raw-minutes string never appears');
 

@@ -126,7 +126,7 @@ module.exports = {
     t.assert(/Public Area Attendant/.test(html), "Petronila's position group header shows");
     const petroIdx = html.indexOf('Petronila Quiacain');
     t.assert(petroIdx !== -1, 'Petronila is flagged');
-    const petroRow = html.slice(petroIdx, petroIdx + 400);
+    const petroRow = html.slice(petroIdx, petroIdx + 800);
     t.assert(/40h 30m worked this week, no more scheduled days/.test(petroRow), "Petronila's row explains there are no days left to change the outcome");
     t.assert(/30m over 40h/.test(petroRow), 'and shows she is 30 real minutes over 40h, not folded into the uncertain "projected" bucket');
 
@@ -136,7 +136,7 @@ module.exports = {
     t.assert(/Room Attendant/.test(html), "Maria's position group header shows");
     const mariaIdx = html.indexOf('Maria Lopez');
     t.assert(mariaIdx !== -1, 'Maria (projected 48h) is flagged as approaching OT');
-    const mariaRow = html.slice(mariaIdx, mariaIdx + 500);
+    const mariaRow = html.slice(mariaIdx, mariaIdx + 900);
     t.assert(/24h 0m so far \+ 3 more days scheduled \(~8h each\)/.test(mariaRow), "Maria's row shows the real math behind the estimate, in h/m");
     t.assert(/~48h 0m projected \(8h 0m over\)/.test(mariaRow), 'and her projected total with the over-figure in h/m, not raw minutes (fixed 2026-10-15, same bug class as Under Hours\' own under-figure)');
     // Ana (projected only 32h) is NOT flagged as Overtime — she has real

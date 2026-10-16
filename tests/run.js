@@ -120,6 +120,7 @@ const cases = [
   require('./cases/req-notebook-cross-crew-fallback'),
   require('./cases/schedule-linked-people-third-crew-relabel'),
   require('./cases/req-notebook-merged-options'),
+  require('./cases/labor-ot-contributing-factors'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
