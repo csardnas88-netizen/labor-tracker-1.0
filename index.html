@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.76.0"/>
+<meta name="app-version" content="7.77.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4518,6 +4518,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.77.0', date:'2026-10-15',
+    fixes:['Fixed Request Off entries silently failing to write to the Schedule for anyone who sits on two crews — Carlos\'s real report: Jorge Gonzalez (Houseman, plus a Laundry backup role covering Victoriano Ch) had 3 real R-OFF requests logged against "(Laundry)" that never showed up anywhere on the Schedule — Houseman read all dashes for him that week. Root cause: Laundry only carries a row for him on days he\'s actually covering, so the picked crew had nothing to write to, and the write-through gave up entirely rather than trying his other crew, where his real row (and his real day off) actually needed to land. The picked crew is now a preference, not a requirement — it falls back to every other crew, writing through only when exactly one match turns up, the same "never guess" rule the existing name-matching fallback already uses. Also now reconciles both crews immediately after writing (same as a Call-Off already does), instead of waiting for Auto-fill or the next render to catch a stale cell on the other crew. Jorge\'s 3 real requests need "Re-sync Request Off to this week" tapped once on the Schedule page to actually land now that this is fixed — new requests write through correctly without it.']
+  },
   {
     v:'7.76.0', date:'2026-10-15',
     improvements:['Overtime/Under Hours typography matched to the rest of Labor — Carlos asked for a senior-designer pass after noticing the text ran bigger than everywhere else in the section. Person name and the right-side value figure both drop from 12-13px to 11px/700, and the position group header from 10px/800 to 9px/700 — the same scale Weekly Pace\'s position label, Labor Effectiveness\'s row cells, and Occupancy\'s tile labels already use.'],
@@ -25984,12 +25988,40 @@ var RN_TYPE_CELL={roff:'R-OFF',flex:'FLEX',vac:'VAC'};
    Sandra S./Sandra S. alias case correct); loose match only kicks in when
    it resolves to exactly ONE row on that crew, so it can never write to
    the wrong person's cell. */
-function _reqScheduleRow(day,crewKey,name){
+function _reqScheduleRowInCrew(day,crewKey,name){
   var arr=(day&&day[crewKey])||[];
   var exact=arr.filter(function(p){return dlNormAlias(p[0])===dlNormAlias(name);});
   if(exact.length)return exact[0];
   var loose=arr.filter(function(p){return schedNameLooselyMatches(p[0],name);});
   return loose.length===1?loose[0]:null;
+}
+/* Carlos's real report, 2026-10-15 (Jorge Gonzalez): someone who sits
+   on two crews — his home crew, Houseman, plus Laundry as Victoriano's
+   cover — doesn't necessarily have a row on BOTH crews every single
+   day; Laundry's is often only added on days he's actually covering.
+   Picking "(Laundry)" in the picker for a day that row doesn't exist
+   used to fail outright and leave EVERY crew untouched, even though
+   his real Houseman row — where his actual day off needed to show —
+   was sitting right there the whole time; his 3 real requests all
+   landed in "missing" with nothing written anywhere. The picked crew
+   is now a preference, not a hard requirement: falls back to every
+   OTHER crew for that date, but only acts if exactly one match turns
+   up across all of them combined — the same "never guess" rule a
+   single crew's own loose match already follows, so this still can
+   never write to the wrong person's cell. Returns {row,crew} (not a
+   bare row) so callers know which crew actually got written, since it
+   may differ from the one picked. */
+function _reqScheduleRow(day,crewKey,name){
+  if(!day)return null;
+  var preferred=_reqScheduleRowInCrew(day,crewKey,name);
+  if(preferred)return {row:preferred,crew:crewKey};
+  var others=[];
+  SCHED_BLOCKS.forEach(function(b){
+    if(b.key===crewKey)return;
+    var m=_reqScheduleRowInCrew(day,b.key,name);
+    if(m)others.push({row:m,crew:b.key});
+  });
+  return others.length===1?others[0]:null;
 }
 /* Writes the request's cell value onto this person's cell for every
    date that's actually part of a built/loaded week. A date the
@@ -26005,9 +26037,15 @@ function reqWriteToSchedule(name,crewKey,dates,type){
   var written=[],missing=[];
   dates.forEach(function(ds){
     var day=SCH.days[ds];
-    var row=_reqScheduleRow(day,crewKey,name);
-    if(!row){ missing.push(ds); return; }
-    row[1]=val;
+    var found=_reqScheduleRow(day,crewKey,name);
+    if(!found){ missing.push(ds); return; }
+    found.row[1]=val;
+    /* Reconciles her OTHER crew (if she has one) right away, same as
+       schedApplyCallOff already does after its own write — otherwise a
+       second crew still showing a stale '1' only gets caught whenever
+       renderSchedule()'s own self-heal pass next happens to run for
+       this week, not immediately. */
+    schedApplyCrossCrewSyncForDate(SCH,ds,{name:name,crew:found.crew});
     written.push(ds);
   });
   if(written.length){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
@@ -26024,8 +26062,8 @@ function reqClearFromSchedule(name,crewKey,dates,type){
   var touched=false;
   dates.forEach(function(ds){
     var day=SCH.days[ds];
-    var row=_reqScheduleRow(day,crewKey,name);
-    if(row&&row[1]===val){ row[1]=''; touched=true; }
+    var found=_reqScheduleRow(day,crewKey,name);
+    if(found&&found.row[1]===val){ found.row[1]=''; touched=true; }
   });
   if(touched){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
 }
