@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.81.0"/>
+<meta name="app-version" content="7.82.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -376,6 +376,92 @@ tbody tr:hover td{background:var(--surface);}
    on mobile, same pattern as .recap-hero above. */
 .ot-under-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;margin-bottom:14px;}
 .ot-under-grid .card{margin-bottom:0;}
+/* ── Overtime card: weekly total + Friday mascot ──
+   Carlos's ask, 2026-10-17: show the total overtime generated this week
+   right in the card header (with a brief attention pulse so it actually
+   gets looked at), and on Fridays only, a little housekeeper whose mood
+   reflects that total — happy under 5h, neutral 5-10h, sad over 10h.
+   Approved via mockup after several rounds (duster had to be visible
+   beside her instead of hidden behind her z-index-wise; the "being
+   punished" gag moved from the happy one to the sad one and the hitting
+   duster had to match her own duster, swung in from her side not from
+   above). Mascot reuses the same scaled-character technique as the
+   birthday mascot (.bm-*) and loader (.hkl-*) — a from-scratch CSS build,
+   not a shared component, since each one is dressed differently. */
+.owm-total-wrap{display:flex;align-items:center;gap:8px;}
+.owm-total{display:flex;flex-direction:column;background:rgba(153,60,29,.07);border-radius:8px;padding:5px 10px;}
+.owm-total-label{font-size:9px;color:var(--maroon);font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+.owm-total-val{font-size:12px;font-weight:800;color:var(--maroon);}
+.owm-total.owm-pulse{animation:owm-ring 1.1s ease-out 3;}
+.owm-total.owm-pulse .owm-total-val{animation:owm-pop 1.1s ease-out 3;display:inline-block;}
+@keyframes owm-ring{0%{box-shadow:0 0 0 0 rgba(153,60,29,.38);}60%{box-shadow:0 0 0 9px rgba(153,60,29,0);}100%{box-shadow:0 0 0 0 rgba(153,60,29,0);}}
+@keyframes owm-pop{0%,100%{transform:scale(1);}35%{transform:scale(1.08);}}
+@media (prefers-reduced-motion: reduce){.owm-total.owm-pulse,.owm-total.owm-pulse .owm-total-val{animation:none!important;}}
+.owm-char-box{position:relative;width:36px;height:43px;flex-shrink:0;transform:scale(.6);transform-origin:top left;}
+.owm-char{position:absolute;left:0;top:0;width:60px;height:72px;}
+.owm-head2{position:absolute;width:36px;height:40px;left:12px;top:0;background:#d99a6c;border-radius:48% 48% 46% 46%;z-index:5;}
+.owm-hair{position:absolute;width:38px;height:20px;left:11px;top:-2px;background:#2c211c;border-radius:60% 60% 35% 35%;z-index:6;}
+.owm-bun{position:absolute;width:16px;height:16px;left:33px;top:-11px;background:#2c211c;border-radius:50%;z-index:6;}
+.owm-eye{position:absolute;width:3px;height:3px;background:#1d1d1d;border-radius:50%;top:19px;z-index:7;}
+.owm-eye.l{left:19px}
+.owm-eye.r{left:28px}
+.owm-brow{position:absolute;width:6px;height:1.6px;background:#1d1d1d;border-radius:2px;top:14px;z-index:7;}
+.owm-brow.l{left:17px;transform:rotate(10deg);}
+.owm-brow.r{left:27px;transform:rotate(-10deg);}
+.owm-mouth{position:absolute;left:21px;top:25px;z-index:7;}
+.owm-torso{position:absolute;width:48px;height:34px;left:6px;top:38px;background:var(--navy);border-radius:11px 11px 8px 8px;z-index:3;}
+.owm-apron{position:absolute;width:50px;height:20px;left:5px;top:52px;background:#c9a56b;border-radius:3px 3px 9px 9px;z-index:4;}
+.owm-collar{position:absolute;width:22px;height:9px;left:19px;top:38px;background:var(--gold);clip-path:polygon(0 0,50% 100%,100% 0,78% 0,50% 55%,22% 0);z-index:4;}
+.owm-happy .owm-mouth{width:11px;height:6px;border-bottom:1.8px solid #7f4a35;border-radius:50%;}
+.owm-neutral .owm-mouth{width:11px;height:0;border-bottom:1.8px solid #7f4a35;}
+.owm-sad .owm-mouth{width:11px;height:6px;border-top:1.8px solid #7f4a35;border-radius:50%;top:29px;}
+.owm-arm{position:absolute;width:5px;height:15px;background:#d99a6c;border-radius:4px;top:41px;z-index:2;}
+.owm-arm.l{left:3px;top:42px;transform-origin:2.5px 2px;transform:rotate(8deg);}
+.owm-arm.r{left:51px;top:42px;transform-origin:2.5px 2px;transform:rotate(-8deg);}
+.owm-sparkle{position:absolute;right:-2px;top:-2px;font-size:11px;color:var(--gl);z-index:9;opacity:0;}
+.owm-happy{animation:owm-bounce-happy .72s ease-in-out infinite;}
+.owm-happy .owm-arm.r{z-index:9;animation:owm-wave-happy .5s ease-in-out infinite;}
+.owm-happy .owm-sparkle{animation:owm-twinkle 1.4s ease-in-out infinite;}
+.owm-neutral{animation:owm-breathe-neutral 2.4s ease-in-out infinite;}
+.owm-sad{animation:owm-droop-sad 2.8s ease-in-out infinite;}
+.owm-sad .owm-arm.l{animation:owm-limp-swing 2.8s ease-in-out infinite;}
+.owm-sad .owm-arm.r{animation:owm-limp-swing 2.8s ease-in-out infinite reverse;}
+@keyframes owm-bounce-happy{0%,100%{transform:translateY(0) rotate(0deg);}50%{transform:translateY(-7px) rotate(-3deg);}}
+@keyframes owm-wave-happy{0%,100%{transform:rotate(-10deg);}25%{transform:rotate(-95deg);}50%{transform:rotate(-55deg);}75%{transform:rotate(-100deg);}}
+@keyframes owm-twinkle{0%,55%,100%{opacity:0;transform:scale(.5);}70%{opacity:1;transform:scale(1.1);}}
+@keyframes owm-breathe-neutral{0%,100%{transform:translateY(0);}50%{transform:translateY(-1.5px);}}
+@keyframes owm-droop-sad{0%,100%{transform:translateY(0) rotate(0deg);}50%{transform:translateY(2px) rotate(3deg);}}
+@keyframes owm-limp-swing{0%,100%{transform:rotate(6deg);}50%{transform:rotate(11deg);}}
+.owm-duster-handle{position:absolute;width:3.4px;height:13px;left:0;top:-13px;background:linear-gradient(180deg,var(--gd),var(--gold));border-radius:2px;z-index:8;}
+.owm-duster-band{position:absolute;width:8px;height:3.5px;left:-2.3px;top:-16px;background:var(--gd);border-radius:2px;z-index:8;}
+.owm-feather{position:absolute;width:2.6px;height:13px;left:1.7px;top:-28px;border-radius:2px 2px 1px 1px;transform-origin:50% 100%;z-index:8;}
+.owm-feather.f1{background:var(--gl);transform:rotate(-38deg);}
+.owm-feather.f2{background:var(--gold);transform:rotate(-18deg);height:14px;}
+.owm-feather.f3{background:var(--gl);transform:rotate(2deg);height:15px;}
+.owm-feather.f4{background:var(--gold);transform:rotate(21deg);height:14px;}
+.owm-feather.f5{background:var(--gl);transform:rotate(40deg);}
+.owm-duster-spark{position:absolute;font-size:8px;color:var(--gl);z-index:9;opacity:0;}
+.owm-duster-spark.s1{left:-11px;top:-33px;animation:owm-twinkle .85s ease-in-out infinite;}
+.owm-duster-spark.s2{left:8px;top:-36px;animation:owm-twinkle .85s ease-in-out .28s infinite;}
+.owm-sad-impact{position:absolute;left:15px;top:13px;font-size:15px;line-height:1;color:var(--maroon);z-index:11;opacity:0;animation:owm-sad-hit-flash 1.3s ease-in-out infinite;}
+@keyframes owm-sad-hit-flash{0%,63%,86%,100%{opacity:0;transform:scale(.4) rotate(0deg);}73%{opacity:1;transform:scale(1.3) rotate(-14deg);}80%{opacity:.5;transform:scale(1) rotate(8deg);}}
+.owm-hit{position:absolute;left:-8px;top:16px;z-index:12;transform-origin:0% 50%;animation:owm-hit-swing 1.3s ease-in-out infinite;}
+.owm-hit-handle{position:absolute;left:0;top:-1.7px;width:13px;height:3.4px;background:linear-gradient(90deg,var(--gold),var(--gd));border-radius:2px;}
+.owm-hit-band{position:absolute;left:11px;top:-4px;width:3.5px;height:8px;background:var(--gd);border-radius:2px;}
+.owm-hit-feather{position:absolute;left:13px;top:-1.3px;width:13px;height:2.6px;border-radius:1px;transform-origin:0% 50%;}
+.owm-hit-feather.f1{background:var(--gl);transform:rotate(-38deg);}
+.owm-hit-feather.f2{background:var(--gold);transform:rotate(-18deg);width:14px;}
+.owm-hit-feather.f3{background:var(--gl);transform:rotate(2deg);width:15px;}
+.owm-hit-feather.f4{background:var(--gold);transform:rotate(21deg);width:14px;}
+.owm-hit-feather.f5{background:var(--gl);transform:rotate(40deg);}
+@keyframes owm-hit-swing{0%,58%,100%{transform:rotate(-38deg);}73%{transform:rotate(4deg);}80%{transform:rotate(-6deg);}86%{transform:rotate(2deg);}}
+.owm-confetti{position:absolute;width:4px;height:4px;z-index:1;opacity:0;}
+.owm-confetti.c1{left:4px;top:18px;background:var(--maroon);animation:owm-confetti-burst .72s ease-out infinite;}
+.owm-confetti.c2{left:50px;top:12px;background:var(--gold);animation:owm-confetti-burst .72s ease-out .18s infinite;}
+.owm-confetti.c3{left:44px;top:50px;background:var(--navy);border-radius:50%;animation:owm-confetti-burst .72s ease-out .36s infinite;}
+.owm-confetti.c4{left:10px;top:52px;background:var(--gold);border-radius:50%;animation:owm-confetti-burst .72s ease-out .54s infinite;}
+@keyframes owm-confetti-burst{0%{opacity:0;transform:translate(0,0) scale(.3) rotate(0deg);}18%{opacity:1;}100%{opacity:0;transform:translate(var(--cx,10px),var(--cy,-16px)) scale(1) rotate(220deg);}}
+@media (prefers-reduced-motion: reduce){.owm-happy,.owm-neutral,.owm-sad,.owm-happy .owm-arm.r,.owm-sad .owm-arm.l,.owm-sad .owm-arm.r,.owm-happy .owm-sparkle,.owm-duster-spark,.owm-confetti,.owm-sad-impact,.owm-hit{animation:none!important;}}
 .recap-main{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:20px;}
 .recap-side{display:flex;flex-direction:column;gap:10px;}
 .recap-metric{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;display:flex;align-items:center;gap:12px;}
@@ -4518,6 +4604,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.82.0', date:'2026-10-17',
+    features:['The Overtime card now shows the total overtime generated this week right in its header, with a brief attention pulse so it actually gets noticed (Carlos\'s ask). On Fridays only, a little housekeeper mascot shows up next to it whose mood tracks that total — happy and waving her duster under 5h, a calm neutral breather 5-10h, and over 10h she gets bonked on the head by that same duster, swung in from her side (Carlos\'s idea, after a few rounds getting the gag right: it started on the happy one, moved to the sad one, and the duster itself had to stop hiding behind her and start reading clearly as a duster before landing here).']
+  },
   {
     v:'7.81.0', date:'2026-10-15',
     features:['Overtime rows now explain part of the overage when the data supports it — Carlos\'s real question: is some of this coming from a short break or an early clock-in? A short break (less unpaid time than her position\'s own floor, 25min normal / 15min Turndown/part-time) uses the SAME Labor Distribution data Break Compliance already runs on — no new upload needed. An early clock-in needs the Weekly Time Card Report\'s real punch time against her scheduled start, the same comparison Late Arrivals already makes, just mirrored to the early side. When neither explains anything AND a worked day this week has no Weekly Time Card row at all, the row prompts to upload it (tap jumps straight to Time Card Check) instead of staying silent — but only then; a row with nothing to explain and complete data shows nothing extra.']
@@ -14633,11 +14723,67 @@ function _laborGroupRowsByPos(rows){
   });
   return keys.map(function(k){return {pos:k,rows:groups[k]};});
 }
+/* Carlos's thresholds, 2026-10-17: under 5h happy, 5-10h (inclusive)
+   neutral, over 10h sad. Friday-only — see renderDashDayAnalysis. */
+function _owmMascotStateFor(min){
+  return min<300?'happy':(min<=600?'neutral':'sad');
+}
+/* The housekeeper mascot for the Overtime card's weekly total — a
+   from-scratch CSS build (same technique as the loader's #appLoader
+   .hkl-* character and the birthday banner's .bm-* character, each
+   dressed differently for its own spot). happy holds and waves a
+   feather duster; sad gets bonked on the head by the same duster,
+   swung in from her side by an unseen "someone"; neutral just breathes. */
+function _laborOtMascotPartsHTML(state){
+  var html='';
+  if(state==='happy'){
+    html+='<span class="owm-sparkle">&#10022;</span>'
+      +'<span class="owm-confetti c1" style="--cx:-16px;--cy:-20px;"></span>'
+      +'<span class="owm-confetti c2" style="--cx:18px;--cy:-22px;"></span>'
+      +'<span class="owm-confetti c3" style="--cx:14px;--cy:20px;"></span>'
+      +'<span class="owm-confetti c4" style="--cx:-14px;--cy:18px;"></span>';
+  }
+  if(state==='sad'){
+    html+='<span class="owm-sad-impact">&#10038;</span>'
+      +'<div class="owm-hit"><div class="owm-hit-handle"></div><div class="owm-hit-band"></div>'
+      +'<div class="owm-hit-feather f1"></div><div class="owm-hit-feather f2"></div>'
+      +'<div class="owm-hit-feather f3"></div><div class="owm-hit-feather f4"></div>'
+      +'<div class="owm-hit-feather f5"></div></div>';
+  }
+  html+='<div class="owm-bun"></div><div class="owm-head2"></div><div class="owm-hair"></div>';
+  if(state==='sad')html+='<div class="owm-brow l"></div><div class="owm-brow r"></div>';
+  html+='<div class="owm-eye l"></div><div class="owm-eye r"></div><div class="owm-mouth"></div>'
+    +'<div class="owm-collar"></div><div class="owm-torso"></div><div class="owm-apron"></div>'
+    +'<div class="owm-arm l"></div>';
+  if(state==='happy'){
+    html+='<div class="owm-arm r">'
+      +'<div class="owm-duster-handle"></div><div class="owm-duster-band"></div>'
+      +'<div class="owm-feather f1"></div><div class="owm-feather f2"></div>'
+      +'<div class="owm-feather f3"></div><div class="owm-feather f4"></div><div class="owm-feather f5"></div>'
+      +'<span class="owm-duster-spark s1">&#10022;</span><span class="owm-duster-spark s2">&#10022;</span>'
+      +'</div>';
+  }else{
+    html+='<div class="owm-arm r"></div>';
+  }
+  return html;
+}
+function _laborOtWeeklyTotalHTML(min,mascotState){
+  var html='<div class="owm-total-wrap">';
+  if(mascotState){
+    html+='<div class="owm-char-box"><div class="owm-char owm-'+mascotState+'">'
+      +_laborOtMascotPartsHTML(mascotState)+'</div></div>';
+  }
+  html+='<div class="owm-total owm-pulse"><span class="owm-total-label">Total OT this week</span>'
+    +'<span class="owm-total-val">'+_hToHM(min/60)+'</span></div></div>';
+  return html;
+}
 function _laborPosCardHTML(opts){
   if(!opts.rows.length)return '';
   var groups=_laborGroupRowsByPos(opts.rows);
   var html='<div class="card" style="border-color:'+(opts.borderColor||'')+';background:'+(opts.bgColor||'')+';">'
-    +'<div class="card-head"><div class="card-title" style="color:'+opts.titleColor+'">'+opts.title+'</div></div>';
+    +'<div class="card-head"><div class="card-title" style="color:'+opts.titleColor+'">'+opts.title+'</div>'
+    +(opts.weeklyTotalMin!=null?_laborOtWeeklyTotalHTML(opts.weeklyTotalMin,opts.mascotState):'')
+    +'</div>';
   groups.forEach(function(g){
     var groupKey=opts.collapsible?(opts.collapseKeyPrefix||'')+g.pos:null;
     var groupOpen=!opts.collapsible||!!laborPosGroupOpen[groupKey];
@@ -14889,7 +15035,8 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       otEmps.forEach(function(e){
         var p=projById[e.id];
         otRows.push({id:e.id,name:e.name,pos:primaryPos(e.name,e.id)||'Unknown Position',
-          sub:'',value:_hToHM(e.ot1)+' OT',valueColor:'var(--red)',detail:p||null});
+          sub:'',value:_hToHM(e.ot1)+' OT',valueColor:'var(--red)',detail:p||null,
+          otMin:Math.round((e.ot1||0)*60)});
       });
       alreadyOver.forEach(function(p){
         var overMin=Math.round((p.projected-40)*60);
@@ -14899,7 +15046,8 @@ function renderDashDayAnalysis(days,rooms,today,wk){
            Hours "already under" tier had already been fixed for. */
         otRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' worked this week, no more scheduled days',
-          value:_hToHM(overMin/60)+' over 40h',valueColor:'var(--red)',detail:p});
+          value:_hToHM(overMin/60)+' over 40h',valueColor:'var(--red)',detail:p,
+          otMin:overMin});
       });
       stillApproaching.forEach(function(p){
         var overMin=Math.round((p.projected-40)*60);
@@ -14909,7 +15057,8 @@ function renderDashDayAnalysis(days,rooms,today,wk){
            to that one); this was specifically the orange. */
         otRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)',
-          value:'~'+_hToHM(p.projected)+' projected ('+_hToHM(overMin/60)+' over)',valueColor:'var(--text1)',detail:p});
+          value:'~'+_hToHM(p.projected)+' projected ('+_hToHM(overMin/60)+' over)',valueColor:'var(--text1)',detail:p,
+          otMin:overMin});
       });
       /* Carlos's ask, 2026-10-14, Option B of the 3 he was shown: a badge
          right on the name, Overtime-side only (never Under Hours — he
@@ -14925,6 +15074,13 @@ function renderDashDayAnalysis(days,rooms,today,wk){
          surface that? Shown him a mockup, approved — same every-row
          pattern as lastDayBadge above, reusing r.detail. */
       otRows.forEach(function(r){ r.factorsNote=_laborOtContributingFactorsNote(ds,r.detail); });
+      /* Carlos's ask, 2026-10-17: show the total overtime generated this
+         week right on the card, with a Friday-only mascot whose mood
+         reflects it. Sums every row actually shown above (real OT plus
+         projected overage) — same figures Carlos is already looking at,
+         just added up. */
+      var weeklyOtMin=otRows.reduce(function(sum,r){return sum+(r.otMin||0);},0);
+      var owmMascotState=dashSelectedDate.getDay()===5?_owmMascotStateFor(weeklyOtMin):null;
 
       var underRows=[];
       underAlready.forEach(function(p){
@@ -14959,7 +15115,8 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       var otCardHtml=_laborPosCardHTML({
         title:'&#8987; Overtime'+(titleParts.length?' & '+titleParts.join(' & '):''),
         titleColor:(hasOT?'var(--red)':'var(--maroon)'),
-        rows:otRows, ds:ds
+        rows:otRows, ds:ds,
+        weeklyTotalMin:weeklyOtMin, mascotState:owmMascotState
       });
       /* Carlos's follow-up, 2026-10-15: the blue wash (bgColor:
          var(--indigo-bg)) was the SAME color as the stay-until badge's

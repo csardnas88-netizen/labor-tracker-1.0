@@ -121,6 +121,7 @@ const cases = [
   require('./cases/schedule-linked-people-third-crew-relabel'),
   require('./cases/req-notebook-merged-options'),
   require('./cases/labor-ot-contributing-factors'),
+  require('./cases/labor-ot-weekly-total-mascot'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
