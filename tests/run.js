@@ -122,6 +122,7 @@ const cases = [
   require('./cases/req-notebook-merged-options'),
   require('./cases/labor-ot-contributing-factors'),
   require('./cases/labor-ot-weekly-total-mascot'),
+  require('./cases/labor-effectiveness-total-ot'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

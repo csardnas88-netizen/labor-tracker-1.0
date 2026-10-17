@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.82.0"/>
+<meta name="app-version" content="7.82.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -397,8 +397,14 @@ tbody tr:hover td{background:var(--surface);}
 @keyframes owm-ring{0%{box-shadow:0 0 0 0 rgba(153,60,29,.38);}60%{box-shadow:0 0 0 9px rgba(153,60,29,0);}100%{box-shadow:0 0 0 0 rgba(153,60,29,0);}}
 @keyframes owm-pop{0%,100%{transform:scale(1);}35%{transform:scale(1.08);}}
 @media (prefers-reduced-motion: reduce){.owm-total.owm-pulse,.owm-total.owm-pulse .owm-total-val{animation:none!important;}}
-.owm-char-box{position:relative;width:36px;height:43px;flex-shrink:0;transform:scale(.6);transform-origin:top left;}
-.owm-char{position:absolute;left:0;top:0;width:60px;height:72px;}
+/* Carlos's ask, 2026-10-17: she looked pinned to the top edge, not
+   centered — her bun (top:-11px on .owm-bun below) was poking out above
+   this box's own top edge, since the box was only sized to the 60x72
+   character canvas and not the bun's extra reach. Box now covers the
+   bun-to-apron span (-11 to 72 = 83px tall) and .owm-char is pushed down
+   by the same 11px so nothing pokes out above row 0 anymore. */
+.owm-char-box{position:relative;width:36px;height:50px;flex-shrink:0;transform:scale(.6);transform-origin:top left;}
+.owm-char{position:absolute;left:0;top:11px;width:60px;height:72px;}
 .owm-head2{position:absolute;width:36px;height:40px;left:12px;top:0;background:#d99a6c;border-radius:48% 48% 46% 46%;z-index:5;}
 .owm-hair{position:absolute;width:38px;height:20px;left:11px;top:-2px;background:#2c211c;border-radius:60% 60% 35% 35%;z-index:6;}
 .owm-bun{position:absolute;width:16px;height:16px;left:33px;top:-11px;background:#2c211c;border-radius:50%;z-index:6;}
@@ -4604,6 +4610,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.82.1', date:'2026-10-17',
+    fixes:['The Overtime card\'s housekeeper mascot was pinned to the top edge of her spot instead of centered — her bun reached above her own box\'s boundary, which this fixes. Also added a "Total OT" line under Labor Effectiveness\'s OT column, summing every position\'s weekly overtime, so whoever\'s running the live labor meeting can read the week\'s total at a glance (Carlos\'s ask).']
+  },
   {
     v:'7.82.0', date:'2026-10-17',
     features:['The Overtime card now shows the total overtime generated this week right in its header, with a brief attention pulse so it actually gets noticed (Carlos\'s ask). On Fridays only, a little housekeeper mascot shows up next to it whose mood tracks that total — happy and waving her duster under 5h, a calm neutral breather 5-10h, and over 10h she gets bonked on the head by that same duster, swung in from her side (Carlos\'s idea, after a few rounds getting the gag right: it started on the happy one, moved to the sad one, and the duster itself had to stop hiding behind her and start reading clearly as a duster before landing here).']
@@ -13849,6 +13859,22 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
     html+='</div>';
     html+='</div>';
   });
+
+  /* Carlos's ask, 2026-10-17: a Total OT line under the OT column so
+     whoever's running the live labor meeting can read the week's total
+     overtime at a glance, without adding up every position's own OT by
+     hand. Sums EVERY position's weekOT, not just the ones with a visible
+     row above (a position can be skipped from display with 0 worked/0
+     budget but that never carries real OT alongside it, so this stays
+     accurate either way). */
+  var totalOT=positions.reduce(function(s,p){return s+(wt.weekOT[p.key]||0);},0);
+  html+='<div style="border-top:2px solid var(--border);background:var(--surface);">';
+  html+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;padding:8px 14px;align-items:center;font-size:11px;">';
+  html+='<div style="font-weight:700;color:var(--text1);text-align:right;grid-column:1 / 6;">Total OT</div>';
+  html+='<div style="text-align:right;font-weight:800;color:'+(totalOT>0?'var(--yellow)':'var(--text3)')+';">'+(totalOT>0?totalOT.toFixed(2):'&#8212;')+'</div>';
+  html+='<div></div>';
+  if(hasUpload)html+='<div></div><div></div>';
+  html+='</div></div>';
 
   html+='</div></div>';
   if(!hasUpload)html+='<div style="padding:9px 14px;font-size:10.5px;color:var(--text3);border-top:1px solid var(--border);">Upload this week\'s Labor Effectiveness PDF to add Scheduled and Projected hours from Unifocus, and check our Worked/Standard against theirs.</div>';
