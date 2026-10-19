@@ -1,6 +1,11 @@
 /* Carlos's real report, 2026-10-19: House Attendant/Supervisor/Houseman's
    standard was visibly slow to update after changing Departures on the
-   Schedule page — "a veces se demora que ocurra el cambio". The numbers
+   Schedule page — "a veces se demora que ocurra el cambio". He then
+   asked whether OCC got the same fix, not just Departures — yes: both
+   fields share the exact same schedSetNum code path (the scoping call
+   is guarded by `field==='occ'||field==='dep'`, one line, not two
+   separate ones), so there's nothing field-specific left to fix. The
+   numbers
    WERE being recomputed synchronously (schedSetNum -> _schedRefreshTotals
    patches the DOM cells directly), but right after that, schedSetNum also
    called occForecastBackfillFromSchedule() with no argument, which scans
@@ -52,5 +57,22 @@ module.exports = {
     const recB = win.loadOccForecast(weekBKey);
     t.assert(recB, "week B's occForecast record now exists after the full, no-argument backfill — full-history self-heal is still intact");
     t.eq(recB.days[weekBDs].depSched, 55, "week B's day got its real Departures value from the full scan");
+
+    // ── Carlos's follow-up: OCC must be scoped exactly the same way,
+    // not just Departures. A third, still-untouched week, edited via
+    // the 'occ' field this time. ──
+    const weekCDs = '2026-10-10';
+    const days2 = Object.assign({}, win.dlLoadSchedule().days, {
+      [weekCDs]: { sheet: 't', occ: '160', dep: '65', tdOcc: '160' },
+    });
+    win.dlSaveSchedule({ days: days2, count: 3, savedAt: new Date().toISOString() });
+    const weekCKey = win.occForecastWeekKey(win.parseLocalDate(weekCDs));
+    t.eq(win.loadOccForecast(weekCKey), null, "no occForecast record for week C yet");
+
+    win.schedSetNum(weekCDs, 'occ', '171');
+    const recC = win.loadOccForecast(weekCKey);
+    t.assert(recC, "week C's occForecast record now exists after editing its own day via OCC");
+    t.eq(recC.days[weekCDs].sched, 171, "week C's day reflects the new OCC value");
+    t.eq(win.loadOccForecast(weekAKey).days[weekADs].depSched, 80, "week A's own record is untouched by the OCC edit on week C — still the 80 from its earlier Departures edit, not reset or clobbered");
   },
 };
