@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.83.0"/>
+<meta name="app-version" content="7.84.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4610,6 +4610,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.84.0', date:'2026-10-19',
+    features:['Export Excel now warns you before publishing the week, if there is anything worth double-checking first: anyone with zero days off (a likely overtime week), or any day where Lobby has nobody actually working AM or PM even though someone\'s assigned to that shift. "Export anyway?" lets you publish regardless, or cancel to go fix it on the grid first.']
+  },
   {
     v:'7.83.0', date:'2026-10-19',
     fixes:['Re-audited the whole employee-sync family after the TRAINING fix above and found the same bug pattern in 5 more places (schedApplyLinkedPeopleForDate\'s main mirror — reachable today for Gabriela Cuevas/Sandra — plus the Lobby mirror, the Call-Off auto-mark, Paty\'s Houseman cover sync, and the overnight rotation): each was missing an exemption for TRAINING (some also for TAILOR/CALL-OFF/OFF) in its own "should I overwrite this cell" check. All six now protect the same set of statuses consistently.',
@@ -25154,6 +25158,53 @@ function schedShiftTimeText(bk,ds,name){
   var dow=parseLocalDate(ds).getDay();
   return (dow===0||dow===6)?t.weekend:t.weekday;
 }
+/* Carlos's ask, 2026-10-19: a last check before publishing the week,
+   right when he clicks Export Excel — not buried in the Schedule Checks
+   card he might not scroll to. Two things:
+   1. Anyone with literally ZERO days off this week (not just below the
+      usual minimum — schedScheduleChecks already covers that, more
+      gently) on a crew that's supposed to get days off at all. Working
+      all 7 days is exactly the shape of mistake that turns into real
+      overtime, and the whole point is catching it before the week goes
+      out, not after.
+   2. Any day where Lobby's AM or PM shift has nobody actually working,
+      even though people ARE assigned to that shift this week — everyone
+      happened to land on OFF/VAC/etc. the same day. Reuses the exact
+      same AM/PM split (schedLobbyShift) and coverage total
+      (_schedSubsetTotal) the on-screen Lobby AM/PM sub-cards already
+      use, so "covered" here means the same thing it does there. */
+function schedExportWarnings(SCH,dates){
+  var out=[];
+  SCHED_BLOCKS.forEach(function(b){
+    if(!SCHED_MIN_OFF[b.key])return;
+    var names=[],seen={};
+    dates.forEach(function(ds){
+      var day=SCH.days[ds]; if(!day)return;
+      (day[b.key]||[]).forEach(function(p){
+        var n=String(p[0]||'').trim(); if(!n)return;
+        var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n);
+      });
+    });
+    names.forEach(function(nm){
+      if(schedOffCount(SCH,dates,b.key,nm)===0){
+        out.push(nm+' ('+b.label+') has no day off this week — likely overtime');
+      }
+    });
+  });
+  var lobbyRows=_schedCrewRef(SCH,'lobby',dates);
+  var amRows=lobbyRows.filter(function(p){return schedLobbyShift(p[0])==='am';});
+  var pmRows=lobbyRows.filter(function(p){return schedLobbyShift(p[0])==='pm';});
+  dates.forEach(function(ds){
+    var dLabel=parseLocalDate(ds).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    if(amRows.length&&_schedSubsetTotal(SCH,ds,'lobby',amRows,true)===0){
+      out.push('Lobby AM has no coverage on '+dLabel);
+    }
+    if(pmRows.length&&_schedSubsetTotal(SCH,ds,'lobby',pmRows,true)===0){
+      out.push('Lobby PM has no coverage on '+dLabel);
+    }
+  });
+  return out;
+}
 async function schedExportExcel(){
   if(typeof ExcelJS==='undefined'){showToast('&#9888; Export library still loading — try again in a second.');return;}
   var SCH=dlLoadSchedule();
@@ -25161,6 +25212,11 @@ async function schedExportExcel(){
   var dates=schedWeekDates();
   var loaded=dates.filter(function(ds){return !!SCH.days[ds];});
   if(!loaded.length){showToast('&#9888; This week isn\'t loaded — nothing to export.');return;}
+
+  var exportWarnings=schedExportWarnings(SCH,dates);
+  if(exportWarnings.length&&!confirm('Are you sure? This week has '+exportWarnings.length+' issue'+(exportWarnings.length===1?'':'s')+' worth checking before you export:\n\n'+exportWarnings.join('\n')+'\n\nExport anyway?')){
+    return;
+  }
 
   var wb=new ExcelJS.Workbook();
   var ws=wb.addWorksheet('Schedule');
