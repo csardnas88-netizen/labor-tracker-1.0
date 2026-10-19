@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.82.2"/>
+<meta name="app-version" content="7.83.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4611,6 +4611,11 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.83.0', date:'2026-10-19',
+    fixes:['Re-audited the whole employee-sync family after the TRAINING fix above and found the same bug pattern in 5 more places (schedApplyLinkedPeopleForDate\'s main mirror — reachable today for Gabriela Cuevas/Sandra — plus the Lobby mirror, the Call-Off auto-mark, Paty\'s Houseman cover sync, and the overnight rotation): each was missing an exemption for TRAINING (some also for TAILOR/CALL-OFF/OFF) in its own "should I overwrite this cell" check. All six now protect the same set of statuses consistently.',
+      'Departures/OCC edits on the Schedule page were slow to show up in House Attendant/Supervisor/Houseman\'s standard — Carlos\'s report. Found the real cause: a self-heal step scanned EVERY day ever saved to the schedule (never pruned) on every single edit, not just the day that changed. Scoped it to just the edited day for live edits; measured ~4-5x faster with a year+ of schedule history. The page-open self-heal (catching up a week built any other way) still scans full history, unchanged.']
+  },
+  {
     v:'7.82.2', date:'2026-10-19',
     fixes:['Maria Aguilar\'s TRAINING day on Turndown kept flipping back to a plain "1" every time Carlos edited ANY other employee on the Schedule page, anywhere — not even someone related to her. Root cause: once her Room Attendant cell legitimately showed TURNDOWN (confirming she\'s really there that day), the cross-crew sync\'s redirect logic re-picked her TRAINING row by that label text alone and force-confirmed it to "1", with no exemption for TRAINING the way a different part of this same sync already had. Fixed; her training day now survives edits to anyone else.']
   },
@@ -8228,12 +8233,29 @@ function saveDepForecastDay(weekKey,ds,field,raw){
    opened, no manual re-entry needed. Always overwrites rather than
    filling blanks only: since Schedule IS the source of truth here,
    these two numbers should never be allowed to drift apart. */
-function occForecastBackfillFromSchedule(){
+/* Carlos's ask, 2026-10-19: every single Departures/OCC edit on the
+   Schedule page was visibly slow to reflect in House Attendant/
+   Supervisor/Houseman's standard — the numbers WERE recomputed
+   synchronously (see schedSetNum/_schedRefreshTotals), but this
+   function ran right after, unconditionally scanning EVERY day ever
+   saved to the schedule (schedule days are never pruned, see
+   dlSaveSchedule/_schedMergeRecord) with a localStorage read+parse per
+   day, all before the browser got a chance to paint the already-
+   computed update. The slowdown grows with how much schedule history
+   has piled up, which is exactly the "a veces se demora" pattern he
+   described. onlyDs scopes this to the single day that could actually
+   have changed when called live from schedSetNum, making that path
+   O(1) instead of O(every day ever built). The OTHER caller
+   (renderOccupancy's self-heal, catching up a week built any way other
+   than a live edit) still needs full history coverage and keeps
+   calling with no argument — that behavior is untouched. */
+function occForecastBackfillFromSchedule(onlyDs){
   var SCH=dlLoadSchedule();
   if(!SCH||!SCH.days)return false;
   var changed=false;
   var touchedWeeks={};
-  Object.keys(SCH.days).forEach(function(ds){
+  var scanDates=onlyDs?(SCH.days[onlyDs]?[onlyDs]:[]):Object.keys(SCH.days);
+  scanDates.forEach(function(ds){
     var day=SCH.days[ds];
     var occN=parseInt(day.occ,10);
     var depN=parseInt(day.dep,10);
@@ -22847,9 +22869,14 @@ function schedSetNum(ds,field,val){
   if(field==='occ'||field==='dep')_schedRefreshEffectiveDisplays(SCH,ds);
   /* Carlos's ask: the OCC/Departures he types here to build the
      schedule is the same number the Occupancy page's "Sched" box wants
-     — push it through live instead of making him type it twice. */
+     — push it through live instead of making him type it twice. Scoped
+     to just this one day (ds) — see occForecastBackfillFromSchedule's
+     own header comment, 2026-10-19 — since only this day could have
+     actually changed; a full-history scan here was the real cause of
+     the delay Carlos reported before House Attendant/Supervisor/
+     Houseman's standard visibly updated. */
   if(field==='occ'||field==='dep'){
-    try{ occForecastBackfillFromSchedule(); }catch(e){}
+    try{ occForecastBackfillFromSchedule(ds); }catch(e){}
   }
   /* Update the previous day's Turndown Rooms box directly rather than a
      full renderSchedule() — the manager is typically tabbing across a
@@ -23828,7 +23855,11 @@ function schedApplyOvernight(SCH,dates){
     if(!offDays)return;   // not one of the two fixed-pattern people — left alone
     dates.forEach(function(ds,i){
       var row=schedRawCell(SCH,ds,'night',nm);
-      if(!row||schedStatusIs(row[1],'R-OFF')||schedStatusIs(row[1],'FLEX')||schedStatusIs(row[1],'VAC'))return;
+      /* Carlos's ask, 2026-10-19: CALL-OFF, TAILOR, and TRAINING were
+         missing here — same exemption set isFixedOff already uses
+         elsewhere for this exact reason (a status outside the fixed
+         rotation pattern that must never be silently reassigned). */
+      if(!row||schedStatusIs(row[1],'R-OFF')||schedStatusIs(row[1],'FLEX')||schedStatusIs(row[1],'VAC')||schedStatusIs(row[1],'CALL-OFF')||schedStatusIs(row[1],'TAILOR')||schedStatusIs(row[1],'TRAINING'))return;
       row[1]=offDays.indexOf(i)!==-1?'OFF':'1';
     });
   });
@@ -23917,7 +23948,12 @@ function schedSyncPatyFromYeseniaForDate(SCH,ds){
   var patyRow=schedRawCell(SCH,ds,'td','Paty');
   if(!patyRow)return false;
   var patyCell=String(patyRow[1]||'').trim();
-  if(schedStatusIs(patyCell,'R-OFF')||schedStatusIs(patyCell,'FLEX')||schedStatusIs(patyCell,'VAC')||schedStatusIs(patyCell,'CALL-OFF'))return false; // her own real day off always wins, covering or not
+  /* Carlos's ask, 2026-10-19: TAILOR and TRAINING were missing from
+     this exemption — Paty's own tailor fitting or training day was
+     getting silently overwritten with '1'/'HOUSEMAN' depending on
+     Yesenia's status, same omission already found and fixed for the
+     same statuses elsewhere in this sync family. */
+  if(schedStatusIs(patyCell,'R-OFF')||schedStatusIs(patyCell,'FLEX')||schedStatusIs(patyCell,'VAC')||schedStatusIs(patyCell,'CALL-OFF')||schedStatusIs(patyCell,'TAILOR')||schedStatusIs(patyCell,'TRAINING'))return false; // her own real day off always wins, covering or not
   var yesOff=schedIsOff(schedCellFor(SCH,ds,'pmhm','Yesenia'));
   var want=yesOff?'HOUSEMAN':(patyCell!==''&&!schedStatusIs(patyCell,'OFF')?'1':patyCell);
   if(patyCell===want)return false;
@@ -24097,15 +24133,21 @@ function schedApplyLobbyMirror(SCH,dates){
     var aRow=schedRawCell(SCH,ds,'lobby','Andrea');
     if(aRow){
       var aCell=String(aRow[1]||'').trim();
-      if(!(schedStatusIs(aCell,'R-OFF')||schedStatusIs(aCell,'FLEX')||schedStatusIs(aCell,'VAC')||schedStatusIs(aCell,'CALL-OFF'))){
+      /* Carlos's ask, 2026-10-19: this hand-rolled exemption list was
+         missing plain OFF, TAILOR, and TRAINING — any of those on
+         Andrea's own Lobby cell was getting silently overwritten the
+         moment Sarahi's status changed, the same class of bug already
+         fixed for Maria Aguilar's TRAINING day elsewhere in this sync
+         family. Matches _schedIsUnavailable's own set plus TRAINING. */
+      if(!(_schedIsUnavailable(aCell)||schedStatusIs(aCell,'TRAINING'))){
         aRow[1]=sUnavailable?'1':'';
       }
     }
     var aTdRow=schedRawCell(SCH,ds,'td','Andrea');
     if(aTdRow){
       var aTdCell=String(aTdRow[1]||'').trim();
-      if(schedStatusIs(aTdCell,'R-OFF')||schedStatusIs(aTdCell,'FLEX')||schedStatusIs(aTdCell,'VAC')||schedStatusIs(aTdCell,'CALL-OFF')){
-        // a real granted absence on her Turndown row wins, same as Lobby above
+      if(_schedIsUnavailable(aTdCell)||schedStatusIs(aTdCell,'TRAINING')){
+        // a real granted absence (or TRAINING) on her Turndown row wins, same as Lobby above
       } else if(sUnavailable){
         aTdRow[1]='LOBBY';
       } else if(schedStatusIs(aTdCell,'LOBBY')){
@@ -24344,7 +24386,14 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
            recognized as the same person without an alias. Same principle
            as the plain-ROOMS relabel a few lines below, generalized to
            wherever she's really covering instead of hardcoded to ROOMS. */
-        if(bCell!==thirdAway){
+        /* Carlos's ask, 2026-10-19: this write had NO exemption at all —
+           not even for the statuses _schedIsUnavailable already knows
+           about. A TRAINING day sitting on the b-side was getting
+           silently relabeled to the third crew's away-label just because
+           the a-side pointed somewhere else; same class of bug already
+           fixed for the write sites below, TRAINING is independent of
+           wherever her home crew says she is. */
+        if(bCell!==thirdAway&&!schedStatusIs(bCell,'TRAINING')){
           var bRowThird=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
           if(bRowThird){ bRowThird[1]=thirdAway; bCell=thirdAway; changed=true; }
         }
@@ -24386,10 +24435,14 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
        gra/lobby pair) keeps the original one-way behavior below
        untouched, so none of their already-tuned behavior changes. */
     if(pair.symmetric){
-      if(aCell===SCHED_CREW_AWAY_LABEL[pair.b.crew]&&bCell!=='1'&&!_schedIsUnavailable(bCell)){
+      /* TRAINING exemption added 2026-10-19 alongside the other write
+         sites in this function, defensively — no pair currently sets
+         symmetric:true, but the next one that does should inherit the
+         same protection instead of reintroducing the bug a third time. */
+      if(aCell===SCHED_CREW_AWAY_LABEL[pair.b.crew]&&bCell!=='1'&&!_schedIsUnavailable(bCell)&&!schedStatusIs(bCell,'TRAINING')){
         var bRowSym=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
         if(bRowSym){ bRowSym[1]='1'; bCell='1'; changed=true; }
-      } else if(bCell===SCHED_CREW_AWAY_LABEL[pair.a.crew]&&aCell!=='1'&&!_schedIsUnavailable(aCell)){
+      } else if(bCell===SCHED_CREW_AWAY_LABEL[pair.a.crew]&&aCell!=='1'&&!_schedIsUnavailable(aCell)&&!schedStatusIs(aCell,'TRAINING')){
         var aRowSym=schedRawCell(SCH,ds,pair.a.crew,pair.a.name);
         if(aRowSym){ aRowSym[1]='1'; aCell='1'; changed=true; }
       }
@@ -24402,7 +24455,7 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
          so her literal row there must read a plain '1', not whatever it
          happened to say before the cover kicked in. Same every-pass
          treatment, no "which side is newer" needed. */
-      if(bCell!=='1'&&!_schedIsUnavailable(bCell)){
+      if(bCell!=='1'&&!_schedIsUnavailable(bCell)&&!schedStatusIs(bCell,'TRAINING')){
         var bRowCover=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
         if(bRowCover){ bRowCover[1]='1'; bCell='1'; changed=true; }
       }
@@ -24447,6 +24500,15 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
     var want=srcOff?srcCell:(dstAwayLabel||'1');
     var cur=String(dstRow[1]||'').trim();
     if(cur===want)return;
+    /* Carlos's ask, 2026-10-19: the main mirror write in this function
+       had no TRAINING exemption at all, unlike the sibling function
+       (schedApplyCrossCrewSyncForDate) that already protects it. Traced
+       concretely: a genuine absence on the src side (e.g. VAC) made
+       want=srcCell, and an independent TRAINING commitment sitting on
+       dst was getting silently overwritten with that absence's text —
+       every single render, no edit required. TRAINING is its own
+       commitment regardless of what her OTHER linked crew says. */
+    if(schedStatusIs(cur,'TRAINING'))return;
     /* Both sides already agree on working-vs-resting, so the ONLY thing
        left worth doing is Carlos's relabel: he just marked her working
        on this crew, and the other crew still reads a plain '1' as if
@@ -24805,6 +24867,12 @@ function schedSyncCallOffMarks(SCH,dates){
     if(v==='')return;                       // nothing scheduled — not ours to fill in
     if(schedIsOff(v))return;                // OFF / R-OFF / VAC / FLEX already
     if(schedStatusIs(v,'TAILOR')||schedStatusIs(v,'CALL-OFF'))return;
+    /* Carlos's ask, 2026-10-19: TRAINING was missing from this list —
+       the header comment above even claims it already covers "OFF,
+       R-OFF, VAC, FLEX, TAILOR, or CALL-OFF itself" but TRAINING was
+       simply left out, same omission already found and fixed for the
+       same status elsewhere in this sync family. */
+    if(schedStatusIs(v,'TRAINING'))return;
     row[1]='CALL-OFF';
     changed=true;
   });

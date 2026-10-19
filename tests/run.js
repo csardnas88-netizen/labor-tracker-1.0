@@ -109,6 +109,8 @@ const cases = [
   require('./cases/schedule-training-status'),
   require('./cases/schedule-training-cross-crew-protected'),
   require('./cases/schedule-training-redirect-protected'),
+  require('./cases/schedule-linked-people-training-protected'),
+  require('./cases/occforecast-backfill-scoped'),
   require('./cases/labor-under-hours'),
   require('./cases/labor-under-hours-name-aliases'),
   require('./cases/labor-under-hours-name-aliases-batch2'),
