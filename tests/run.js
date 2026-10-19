@@ -108,6 +108,7 @@ const cases = [
   require('./cases/schedule-laundry-days-refresh-mismatch'),
   require('./cases/schedule-training-status'),
   require('./cases/schedule-training-cross-crew-protected'),
+  require('./cases/schedule-training-redirect-protected'),
   require('./cases/labor-under-hours'),
   require('./cases/labor-under-hours-name-aliases'),
   require('./cases/labor-under-hours-name-aliases-batch2'),

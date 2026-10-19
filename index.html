@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.82.1"/>
+<meta name="app-version" content="7.82.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4610,6 +4610,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.82.2', date:'2026-10-19',
+    fixes:['Maria Aguilar\'s TRAINING day on Turndown kept flipping back to a plain "1" every time Carlos edited ANY other employee on the Schedule page, anywhere — not even someone related to her. Root cause: once her Room Attendant cell legitimately showed TURNDOWN (confirming she\'s really there that day), the cross-crew sync\'s redirect logic re-picked her TRAINING row by that label text alone and force-confirmed it to "1", with no exemption for TRAINING the way a different part of this same sync already had. Fixed; her training day now survives edits to anyone else.']
+  },
   {
     v:'7.82.1', date:'2026-10-17',
     fixes:['The Overtime card\'s housekeeper mascot was pinned to the top edge of her spot instead of centered — her bun reached above her own box\'s boundary, which this fixes. Also added a "Total OT" line under Labor Effectiveness\'s OT column, summing every position\'s weekly overtime, so whoever\'s running the live labor meeting can read the week\'s total at a glance (Carlos\'s ask).']
@@ -24633,7 +24637,20 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
        forced to '1' just because it happened to become source; only a
        genuine absence there is ever left alone regardless. */
     var srcCellNow=String(source.row[1]||'').trim();
-    if(wasRedirected&&srcCellNow!=='1'&&!_schedIsUnavailable(srcCellNow)){
+    /* Carlos's real report, 2026-10-19: Maria Aguilar's TRAINING cell on
+       Turndown kept flipping back to '1' every time he edited ANY other
+       employee, anywhere — not just on her own Room Attendant day-off
+       rotation (that case was already fixed below at the TRAINING check
+       on the relabel loop). Root cause: once her Room Attendant cell
+       reads 'TURNDOWN' (the normal away-label this same sync writes once
+       she's confirmed working Turndown), the redirect scan above re-picks
+       her TRAINING entry as "source" purely from that label text — with
+       no connection to who was actually edited — and this line then
+       force-confirmed it to '1' on every single pass. Same exemption as
+       the relabel loop: TRAINING is her own independent commitment, never
+       silently replaced with a plain '1' just because a redirect landed
+       on it. */
+    if(wasRedirected&&srcCellNow!=='1'&&!_schedIsUnavailable(srcCellNow)&&!schedStatusIs(srcCellNow,'TRAINING')){
       source.row[1]='1'; changed=true;
     }
     var srcCell=String(source.row[1]||'').trim();
