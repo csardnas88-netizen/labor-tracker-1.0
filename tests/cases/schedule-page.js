@@ -286,11 +286,21 @@ module.exports = {
       t.assert(arr.laundry.some((p) => p[0] === 'Karla Varela'), 'present on ' + ds);
     });
 
-    // She lands with no days set — borrowed onto the crew, not yet working.
-    t.eq(win.dlLoadSchedule().days[sat].laundry.filter((p) => p[0] === 'Karla Varela')[0][1], '',
-      'and starts blank rather than being assumed in');
+    // Carlos's real report, 2026-10-19 (Vanesa's Lobby cell staying
+    // blank instead of LAUNDRY despite her genuinely working Laundry):
+    // a blank 'added' cell used to be treated as a deliberate value
+    // worth protecting, same as a real 'PM' shift, so it silently never
+    // reconciled even once her OTHER crew had a confirmed value.
+    // Karla's own gra row already reads a real '1' that same Saturday
+    // (loaded from the seeded workbook before this point), so the
+    // moment she's borrowed onto Laundry, that's accurate information
+    // worth showing immediately, not a blank dash to leave ambiguous —
+    // she IS confirmed on Room Attendant that day, so Laundry correctly
+    // reads ROOMS, exactly like any other two-crew row already would.
+    t.eq(win.dlLoadSchedule().days[sat].laundry.filter((p) => p[0] === 'Karla Varela')[0][1], 'ROOMS',
+      "and relabels to ROOMS immediately — she's confirmed working Room Attendant that day already");
     t.eq(win.schedDayTotal(win.dlLoadSchedule(), sat, 'laundry'), 2,
-      'so the crew total does not move until a day is actually given to her');
+      "so the crew total does not move — ROOMS isn't Laundry's own label, same as a blank cell wouldn't have counted either");
 
     // Editing her day must find HER row, not whatever sits at that index
     // on another day — she was appended, so the index is only a hint.

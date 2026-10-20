@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.84.0"/>
+<meta name="app-version" content="7.84.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4610,6 +4610,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.84.1', date:'2026-10-19',
+    fixes:['A blank cell on a crew someone was just borrowed onto ("+ Add someone to this crew") was being protected the same way a deliberate value like PM would be, so it never picked up the other crew\'s label even once she had a real confirmed value there — Carlos\'s real report: Vanesa\'s Lobby cell stayed blank instead of showing LAUNDRY despite genuinely working Laundry. Fixed — a blank+pending cell now reconciles the same way a plain "1" already did.',
+      'The Export Excel "days off" warning only fired at literally zero — Carlos\'s real report: Abby worked 6 of 7 days (1 day off, below the usual 2) and wasn\'t flagged. Widened to match the same "below the usual minimum" standard Schedule Checks already uses.']
+  },
   {
     v:'7.84.0', date:'2026-10-19',
     features:['Export Excel now warns you before publishing the week, if there is anything worth double-checking first: anyone with zero days off (a likely overtime week), or any day where Lobby has nobody actually working AM or PM even though someone\'s assigned to that shift. "Export anyway?" lets you publish regardless, or cancel to go fix it on the grid first.']
@@ -24759,7 +24764,22 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
          a genuinely different deliberate value (PM, or her own crew's
          legitimate label) is left exactly as is. */
       var curIsForeignAwayLabel=cur!==SCHED_CREW_AWAY_LABEL[e.crew]&&Object.keys(SCHED_CREW_AWAY_LABEL).some(function(ck){ return SCHED_CREW_AWAY_LABEL[ck]===cur; });
-      if(!srcOff&&cur!=='1'&&!_schedIsUnavailable(cur)&&!curIsForeignAwayLabel)return;
+      /* Carlos's real report, 2026-10-19: Vanesa's Lobby cell — a row
+         created by "+ Add someone to this crew" (schedAddPerson), which
+         deliberately starts every day blank+'added' until she's actually
+         given one — never picked up LAUNDRY even though she was
+         genuinely working Laundry every day. A plain blank cell
+         normally DOES mean "not scheduled on this crew that day at all"
+         (confirmed on purpose for Elsa/"Nueva Empleada" below — a brand
+         new employee's still-blank OTHER crew stays blank, she simply
+         isn't on it yet that day). The 'added' tag is what tells the two
+         cases apart: it only ever exists because Carlos explicitly put
+         her on this crew this week, so blank there means "pending a
+         real value," not "not applicable" — exactly as safe to relabel
+         as a plain '1'. A blank cell with NO 'added' tag is left alone,
+         unchanged from before. */
+      var curIsPendingAdded=cur===''&&e.row[2]==='added';
+      if(!srcOff&&cur!=='1'&&!curIsPendingAdded&&!_schedIsUnavailable(cur)&&!curIsForeignAwayLabel)return;
       e.row[1]=want; changed=true;
     });
   });
@@ -25174,9 +25194,25 @@ function schedShiftTimeText(bk,ds,name){
       (_schedSubsetTotal) the on-screen Lobby AM/PM sub-cards already
       use, so "covered" here means the same thing it does there. */
 function schedExportWarnings(SCH,dates){
+  /* Carlos's real report, 2026-10-19: a Lobby cell that should've shown
+     LAUNDRY (she's genuinely working Laundry that day) was still sitting
+     blank when he hit Export, and a Lobby AM gap he could see was wrong
+     on screen still fired here — the live edit's own self-heal
+     (renderSchedule's cross-crew sync passes) hadn't necessarily run
+     since whatever last touched this data (another device, a direct
+     dlSaveSchedule from Fill Week/Excel import, or simply no re-render
+     having happened yet). Rather than trust SCH to already be fully
+     reconciled, force the exact same two passes renderSchedule's own
+     self-heal runs, right before reading anything — so this always
+     checks the SETTLED state, never a stale one, no matter what put SCH
+     in this shape or when a render last happened to run. */
+  var synced=false;
+  if(schedApplyLinkedPeople(SCH,dates))synced=true;
+  if(schedApplyCrossCrewSync(SCH,dates))synced=true;
+  if(synced){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
   var out=[];
   SCHED_BLOCKS.forEach(function(b){
-    if(!SCHED_MIN_OFF[b.key])return;
+    var minOff=SCHED_MIN_OFF[b.key]; if(!minOff)return;
     var names=[],seen={};
     dates.forEach(function(ds){
       var day=SCH.days[ds]; if(!day)return;
@@ -25186,8 +25222,15 @@ function schedExportWarnings(SCH,dates){
       });
     });
     names.forEach(function(nm){
-      if(schedOffCount(SCH,dates,b.key,nm)===0){
-        out.push(nm+' ('+b.label+') has no day off this week — likely overtime');
+      /* Carlos's ask, 2026-10-19: Abby worked 6 of 7 days (just 1 day
+         off) and this warning missed her entirely, since it only fired
+         at literally zero. Widened to match schedScheduleChecks' own
+         "below the usual minimum" standard — the same threshold already
+         shown elsewhere on the page, just surfaced here too, right
+         before publishing. */
+      var off=schedOffCount(SCH,dates,b.key,nm);
+      if(off<minOff){
+        out.push(nm+' ('+b.label+') has '+off+' day'+(off===1?'':'s')+' off this week (usually '+minOff+') — likely overtime');
       }
     });
   });
