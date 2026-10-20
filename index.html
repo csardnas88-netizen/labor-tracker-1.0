@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.84.1"/>
+<meta name="app-version" content="7.84.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4610,6 +4610,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.84.2', date:'2026-10-20',
+    fixes:['Someone added to a crew and confirmed working by hand (e.g. Vanesa, added to Lobby, confirmed \'1\' on Thu/Fri) could silently lose that value on the next Schedule Draft re-upload, if the fresh workbook happened to also list her there with a still-blank cell — "she\'s already named in the file" was treated as reason enough to skip carrying her real value across, blank or not. Carlos\'s real report: she "disappeared" after an unrelated change. Fixed — her carried value now only loses to a REAL value already sitting in the fresh import, never to a blank one.']
+  },
   {
     v:'7.84.1', date:'2026-10-19',
     fixes:['A blank cell on a crew someone was just borrowed onto ("+ Add someone to this crew") was being protected the same way a deliberate value like PM would be, so it never picked up the other crew\'s label even once she had a real confirmed value there — Carlos\'s real report: Vanesa\'s Lobby cell stayed blank instead of showing LAUNDRY despite genuinely working Laundry. Fixed — a blank+pending cell now reconciles the same way a plain "1" already did.',
@@ -25654,7 +25658,16 @@ function schedPickPerson(bk,sel,shift){
    intended direction, Excel is still where a new week gets built. But
    people borrowed into another crew live only in the app, so replacing
    the week wholesale would silently delete them every Wednesday. They
-   are carried across, unless the workbook now names them there itself. */
+   are carried across, unless the workbook now names them there itself
+   WITH a real value — Carlos's real report, 2026-10-20: Vanesa, added to
+   Lobby and confirmed working ('1') Thu/Fri by hand, "disappeared" after
+   a later re-upload. Root cause: that re-upload's workbook happened to
+   list her on Lobby too (same spelling) but with a blank cell — "already
+   named there" used to mean exactly that, blank or not, so her carried
+   value was dropped in favor of the fresh blank rather than kept. A
+   workbook row that's still blank hasn't actually said anything about
+   her yet, so her app-confirmed value now survives unless the fresh
+   import gives that same cell a real value of its own to override it. */
 function schedCarryAddedRows(oldSch,newSch){
   if(!oldSch||!oldSch.days||!newSch||!newSch.days)return newSch;
   Object.keys(newSch.days).forEach(function(ds){
@@ -25665,8 +25678,10 @@ function schedCarryAddedRows(oldSch,newSch){
       if(!newArr)return;
       oldArr.forEach(function(p){
         if(p[2]!=='added')return;
-        var here=newArr.some(function(q){ return dlNorm(q[0])===dlNorm(p[0]); });
-        if(!here)newArr.push([p[0],p[1],'added']);
+        var match=null;
+        newArr.some(function(q){ if(dlNorm(q[0])===dlNorm(p[0])){match=q;return true;} return false; });
+        if(!match){ newArr.push([p[0],p[1],'added']); return; }
+        if(String(match[1]||'').trim()===''&&String(p[1]||'').trim()!=='')match[1]=p[1];
       });
     });
   });
