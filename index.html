@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.84.2"/>
+<meta name="app-version" content="7.84.3"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4610,6 +4610,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.84.3', date:'2026-10-20',
+    fixes:['Re-uploading the Schedule Draft will no longer silently remove anyone who was working on a crew — your explicit call after Vanesa\'s Lobby row kept disappearing. Her Lobby row comes from Excel (not from "+ Add someone"), so it had no protection: any re-upload that didn\'t re-list her — or that had her row hidden — deleted her. Now a re-upload refreshes values but keeps everyone who was actually scheduled, and treats them as app-managed from then on. The only ways to take someone off a crew are the deliberate ones: hide their row in Excel, retire them, or use "Remove from crew". (Also closes a gap from v7.84.2 where the fix dropped an internal tag, letting the next re-upload delete her anyway.)']
+  },
   {
     v:'7.84.2', date:'2026-10-20',
     fixes:['Someone added to a crew and confirmed working by hand (e.g. Vanesa, added to Lobby, confirmed \'1\' on Thu/Fri) could silently lose that value on the next Schedule Draft re-upload, if the fresh workbook happened to also list her there with a still-blank cell — "she\'s already named in the file" was treated as reason enough to skip carrying her real value across, blank or not. Carlos\'s real report: she "disappeared" after an unrelated change. Fixed — her carried value now only loses to a REAL value already sitting in the fresh import, never to a blank one.']
@@ -25654,34 +25658,82 @@ function schedPickPerson(bk,sel,shift){
   }
   schedAddPerson(bk,v,shift);
 }
+/* True if this person had any real (non-blank) cell on this crew on any
+   day of the window being re-uploaded, in the schedule we already had —
+   i.e. she genuinely worked the crew that week, not an all-blank
+   placeholder row left lying around. Used to decide whether a native
+   (workbook) row the fresh import dropped is worth carrying across, so a
+   blank ghost isn't resurrected. */
+function _schedWorkedCrewInOld(oldSch,windowDays,crewKey,name){
+  var nn=dlNorm(name);
+  return windowDays.some(function(ds){
+    var od=oldSch.days[ds]; if(!od)return false;
+    return (od[crewKey]||[]).some(function(p){
+      return dlNorm(p[0])===nn&&String(p[1]||'').trim()!=='';
+    });
+  });
+}
 /* A re-upload replaces the weeks the workbook covers — that is the
-   intended direction, Excel is still where a new week gets built. But
-   people borrowed into another crew live only in the app, so replacing
-   the week wholesale would silently delete them every Wednesday. They
-   are carried across, unless the workbook now names them there itself
-   WITH a real value — Carlos's real report, 2026-10-20: Vanesa, added to
-   Lobby and confirmed working ('1') Thu/Fri by hand, "disappeared" after
-   a later re-upload. Root cause: that re-upload's workbook happened to
-   list her on Lobby too (same spelling) but with a blank cell — "already
-   named there" used to mean exactly that, blank or not, so her carried
-   value was dropped in favor of the fresh blank rather than kept. A
-   workbook row that's still blank hasn't actually said anything about
-   her yet, so her app-confirmed value now survives unless the fresh
-   import gives that same cell a real value of its own to override it. */
+   intended direction, Excel is still where a new week gets built. But a
+   re-upload must NEVER silently remove someone who was actually working
+   (Carlos's explicit call, 2026-10-20, after Vanesa's Lobby row kept
+   "disappearing" on re-uploads). So anyone present and working on a crew
+   in the schedule we already had, who the fresh import dropped from that
+   crew, is carried across — tagged 'added' so she stays app-managed and
+   protected on every future upload too.
+
+   The ONLY ways a re-upload still removes someone are the deliberate
+   ones: her row is hidden in the workbook (hiddenPeople — how Carlos
+   takes someone off the team), she was retired in the app (filtered
+   right after this pass in dlUploadSchedule), or he uses "Remove from
+   crew". A row that was blank all week isn't carried either — it never
+   meant she was on the crew.
+
+   History: this used to carry ONLY app-added ('added') rows and delete
+   every native workbook row the file dropped, which is exactly what made
+   Vanesa (a native Lobby row, not an app-added one) vanish. A narrower
+   2026-10-20 fix (keep an 'added' row's value when the file re-listed her
+   blank) also quietly dropped the 'added' TAG on merge, letting the next
+   re-upload delete her anyway — both are handled below now. */
 function schedCarryAddedRows(oldSch,newSch){
   if(!oldSch||!oldSch.days||!newSch||!newSch.days)return newSch;
-  Object.keys(newSch.days).forEach(function(ds){
+  var hidden=newSch.hiddenPeople||{};
+  var windowDays=Object.keys(newSch.days);
+  windowDays.forEach(function(ds){
     var od=oldSch.days[ds],nd=newSch.days[ds];
     if(!od)return;
     SCHED_BLOCKS.forEach(function(b){
       var oldArr=od[b.key]||[],newArr=nd[b.key];
       if(!newArr)return;
       oldArr.forEach(function(p){
-        if(p[2]!=='added')return;
+        var isAdded=p[2]==='added';
         var match=null;
         newArr.some(function(q){ if(dlNorm(q[0])===dlNorm(p[0])){match=q;return true;} return false; });
-        if(!match){ newArr.push([p[0],p[1],'added']); return; }
-        if(String(match[1]||'').trim()===''&&String(p[1]||'').trim()!=='')match[1]=p[1];
+        if(match){
+          /* Still named in the fresh import. For an app-added row, keep
+             her app-confirmed value when the file left the cell blank
+             ("blank" there means pending, not a real change), and keep
+             the 'added' tag so she stays protected. A native row that's
+             present in both is left exactly as the file has it — a blank
+             on a day she IS listed is the file legitimately changing that
+             one day's assignment, not her vanishing. */
+          if(isAdded){
+            if(String(match[1]||'').trim()===''&&String(p[1]||'').trim()!=='')match[1]=p[1];
+            if(match[2]!=='added')match[2]='added';
+          }
+          return;
+        }
+        /* Dropped from this crew by the fresh import. An app-added row
+           always carries. A native workbook row carries TOO now — unless
+           it was a deliberate removal (hidden in the new workbook) or an
+           all-blank placeholder that never actually worked this week.
+           Either way it lands tagged 'added', i.e. app-managed from here
+           on, so he can still take her off explicitly with "Remove from
+           crew". */
+        if(isAdded){ newArr.push([p[0],p[1],'added']); return; }
+        if(hidden[dlNorm(p[0])])return;
+        if(!_schedWorkedCrewInOld(oldSch,windowDays,b.key,p[0]))return;
+        newArr.push([p[0],p[1],'added']);
       });
     });
   });
