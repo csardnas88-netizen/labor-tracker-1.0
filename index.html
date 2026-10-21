@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.85.0"/>
+<meta name="app-version" content="7.86.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1631,6 +1631,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <div id="page-recap" style="display:none;">
       <div class="page-title">&#128203; Monthly Recap</div>
       <div class="page-sub">Full month summary for P&amp;L reporting</div>
+      <div id="recapStdToggleBar" style="margin-bottom:14px;"></div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap;">
         <button class="btn btn-ghost btn-sm" onclick="changeRecapMonth(-1)">&#8592; Prev Month</button>
         <span id="recapMonthLabel" style="font-size:14px;font-weight:700;min-width:110px;text-align:center;"></span>
@@ -4610,6 +4611,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.86.0', date:'2026-10-21',
+    features:['Monthly Recap now has the same Current Standard/Unifocus toggle Labor already has — Carlos\'s ask, this was the one place left hardcoded to Current Standard. The Unifocus month-to-date budget sums each day\'s Unifocus Labor Standard (same per-band formulas as Weekly Pace), per position. A position with no usable Unifocus data all month (e.g. departures never entered) shows "no standard" instead of a fabricated number, with a note listing which positions were excluded from the totals — never a false "over budget."']
+  },
   {
     v:'7.85.0', date:'2026-10-20',
     features:['Safer new-employee detection on report uploads. If you open the app after being away a while and upload a Labor Distribution before it has finished syncing, associates who already exist in the cloud could read as "new" and the app would offer to add them — risking a duplicate. Now, when the roster hasn\'t synced yet this session, that prompt is replaced by a short warning ("Sync before adding these") with a one-tap "Sync now & re-check": after it syncs, anyone already in the system is recognized automatically and only the genuinely-new hires are offered to add. Your report still saves either way. Real case: Ingrid returning after ~20 days and being asked to add David Pérez and Isabel Cruz, who had been in the roster since early September.']
@@ -10514,7 +10519,10 @@ function getLaborStandardMode(){
 }
 function setLaborStandardMode(mode){
   try{localStorage.setItem('hk_labor_std_mode',mode==='unifocus'?'unifocus':'current');}catch(e){}
-  renderLaborDash();
+  /* Shared setting, but two different pages now read it (Labor, Recap) —
+     re-render whichever one is actually on screen. */
+  if(typeof currentPage!=='undefined'&&currentPage==='recap'){ try{renderRecap();}catch(e){} }
+  else{ try{renderLaborDash();}catch(e){} }
 }
 /* The ONE standard toggle for the whole Labor page — used to live here,
    inside the Weekly Pace card, AND inside the Adjusted card (three
@@ -15648,6 +15656,15 @@ function renderRecap(){
   var elLabel=document.getElementById('recapMonthLabel');
   if(elLabel)elLabel.textContent=label;
 
+  /* Current Standard / Unifocus toggle — the same shared setting and
+     control Labor already has (getLaborStandardMode/buildStandardToggleHtml),
+     so picking a standard reads the same everywhere. Carlos's ask,
+     2026-10-21: Recap was the one place in the app still hardcoded to
+     Current Standard with no way to see it against Unifocus. */
+  var stdMode=getLaborStandardMode();
+  var recapStdBarEl=document.getElementById('recapStdToggleBar');
+  if(recapStdBarEl)recapStdBarEl.innerHTML=buildStandardToggleHtml(stdMode);
+
   var mData=loadMonthData(monthKey(recapViewMonth));
   var days=mData.days||{},rooms=mData.rooms||{};
 
@@ -15661,10 +15678,35 @@ function renderRecap(){
   for(var _rdi=1;_rdi<=rcEffectiveDays;_rdi++){
     totalMonthRoomsRecap+=getRoomsForDay(dateStr(new Date(yr,mo,_rdi)))||0;
   }
+  /* Unifocus MTD budget per position — day 1 → last loaded day, same window
+     as the Current Standard rooms sum above. unifocusHoursForPosition
+     already returns null for a day missing the driver data it needs (rooms
+     or departures never entered) — those days simply don't count toward
+     that position's Unifocus total, same rule Weekly Labor Pace already
+     uses day-by-day. */
+  var recapUfBudget={},recapUfDays={};
+  HK_POS_LIST.forEach(function(pos){recapUfBudget[pos]=0;recapUfDays[pos]=0;});
+  for(var _udi=1;_udi<=rcEffectiveDays;_udi++){
+    var _uds=dateStr(new Date(yr,mo,_udi));
+    HK_POS_LIST.forEach(function(pos){
+      var uf=unifocusHoursForPosition(pos,_uds);
+      if(uf!==null){recapUfBudget[pos]+=uf;recapUfDays[pos]++;}
+    });
+  }
+  /* Active-standard MTD budget for one position — null only when Unifocus
+     mode has NO usable day at all for that position this month. Never a
+     fabricated zero or a false "over budget" for a position with simply no
+     data under the selected standard; the per-row renderer below shows
+     "no standard" instead. */
+  function recapStdBudgetFor(pos){
+    if(stdMode==='unifocus')return recapUfDays[pos]>0?recapUfBudget[pos]:null;
+    var std=LABOR_STD[pos];
+    return std?(std.type==='fixed'?std.daily*rcEffectiveDays:totalMonthRoomsRecap*std.factor):null;
+  }
   var recapMonthBudget=0;
   HK_POS_LIST.forEach(function(pos){
-    var std=LABOR_STD[pos];
-    if(std) recapMonthBudget+=std.type==='fixed'?std.daily*rcEffectiveDays:totalMonthRoomsRecap*std.factor;
+    var b=recapStdBudgetFor(pos);
+    if(b!==null)recapMonthBudget+=b;
   });
 
   /* Totals */
@@ -15705,10 +15747,12 @@ function renderRecap(){
     }
   });
 
-  /* Set per-position budget once using effectiveDays (day 1 → last loaded day) */
+  /* Set per-position budget once using effectiveDays (day 1 → last loaded day).
+     Nullable now — see recapStdBudgetFor — the per-row renderer below shows
+     "no standard" instead of a fabricated number when a position has none
+     under the active standard. */
   HK_POS_LIST.forEach(function(pos){
-    var std=LABOR_STD[pos];
-    byPos[pos].budget=std?(std.type==='fixed'?std.daily*rcEffectiveDays:totalMonthRoomsRecap*std.factor):0;
+    byPos[pos].budget=recapStdBudgetFor(pos);
   });
 
   /* Previous month for comparison — also accounting method */
@@ -15722,8 +15766,27 @@ function renderRecap(){
     var d=parseLocalDate(ds);
     if(d.getMonth()===prevMo.getMonth()&&d.getFullYear()===prevMo.getFullYear()) prevTotalRooms+=parseInt(pRooms[ds])||0;
   });
+  /* Same Unifocus day-by-day sum as the current month above, but over the
+     previous month's full day count (prevDaysInMonth) — matching how the
+     Current Standard branch already treats the previous month as a closed,
+     fully-loaded period rather than an "effective days" window. */
+  var prevUfBudget={},prevUfDays={};
+  HK_POS_LIST.forEach(function(pos){prevUfBudget[pos]=0;prevUfDays[pos]=0;});
+  if(stdMode==='unifocus'){
+    for(var _pudi=1;_pudi<=prevDaysInMonth;_pudi++){
+      var _puds=dateStr(new Date(prevMo.getFullYear(),prevMo.getMonth(),_pudi));
+      HK_POS_LIST.forEach(function(pos){
+        var uf=unifocusHoursForPosition(pos,_puds);
+        if(uf!==null){prevUfBudget[pos]+=uf;prevUfDays[pos]++;}
+      });
+    }
+  }
   var prevBudget=0;
   HK_POS_LIST.forEach(function(pos){
+    if(stdMode==='unifocus'){
+      if(prevUfDays[pos]>0)prevBudget+=prevUfBudget[pos];
+      return;
+    }
     var std=LABOR_STD[pos];
     if(std) prevBudget+=std.type==='fixed'?std.daily*prevDaysInMonth:prevTotalRooms*std.factor;
   });
@@ -15736,7 +15799,18 @@ function renderRecap(){
   var prevVar=prevPaid-prevBudget;
 
   var mBudget=recapMonthBudget;
-  var mActual=mPaid+mOT;
+  /* Scoped to the same positions recapMonthBudget actually includes, so
+     "Total Actual"/"Total Budget"/"% of budget" here and the Monthly Labor
+     Pace header's Dept Over/Under Budget below can never silently
+     disagree. Identical to mPaid+mOT whenever every position has a budget
+     this month (always true for Current Standard; true for Unifocus too
+     unless a position had literally no usable day all month). */
+  var mActual=0,recapExcludedPositions=[];
+  HK_POS_LIST.forEach(function(pos){
+    var p=byPos[pos];if(!p)return;
+    if(p.budget===null){recapExcludedPositions.push(pos);return;}
+    mActual+=(p.paid+p.ot);
+  });
   var mVar=mActual-mBudget;
   var avgRooms=mRooms.length?Math.round(mRooms.reduce(function(a,b){return a+b;},0)/mRooms.length):0;
   var peakRooms=mRooms.length?Math.max.apply(null,mRooms):0;
@@ -15800,6 +15874,11 @@ function renderRecap(){
     html+='<span style="color:var(--text3);">vs '+(prevVar>=0?'+':'')+prevVar.toFixed(2)+'h in '+prevLabel+'</span></div>';
     html+='</div>';
   }
+  if(recapExcludedPositions.length){
+    html+='<div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;">&#9888; No Unifocus data this month for '
+      +recapExcludedPositions.map(function(p){return p.replace(' Attendant','').replace('Housekeeping ','Sup.');}).join(', ')
+      +' — excluded from the totals above (see its row below).</div>';
+  }
   html+='</div>';
 
   /* Side metrics — compact */
@@ -15823,7 +15902,7 @@ function renderRecap(){
   /* Monthly Labor Pace — replaces Labor by Position + Weekly Trend */
   var totalOver=0,totalUnder=0,netVariance=0;
   HK_POS_LIST.forEach(function(pos){
-    var p=byPos[pos];if(!p)return;
+    var p=byPos[pos];if(!p||p.budget===null)return;
     var v=(p.paid+p.ot)-p.budget;
     netVariance+=v;
     if(v>0.5)totalOver+=v;else if(v<-0.5)totalUnder+=Math.abs(v);
@@ -15834,9 +15913,10 @@ function renderRecap(){
 
   html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
   html+='<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
+  var recapBudgetFormulaText=stdMode==='unifocus'?'Unifocus Labor Standard (per band, by day)':'rooms × factor | fixed hrs × days loaded';
   html+='<div>'
     +'<div style="font-size:13px;font-weight:700;color:#fff;">&#128202; Monthly Labor Pace &mdash; '+label+'</div>'
-    +'<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+rcEffectiveDays+' of '+recapDaysInMonth+' days loaded &nbsp;&middot;&nbsp; '+dRemaining+' days remaining &nbsp;&middot;&nbsp; Budget: rooms × factor | fixed hrs × days loaded</div>'
+    +'<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+rcEffectiveDays+' of '+recapDaysInMonth+' days loaded &nbsp;&middot;&nbsp; '+dRemaining+' days remaining &nbsp;&middot;&nbsp; Budget: '+recapBudgetFormulaText+'</div>'
     +'</div>';
   html+='<div style="text-align:right;">';
   html+='<div style="font-size:18px;font-weight:800;color:'+(netIsOver?'var(--red-border)':'var(--green-border)')+'">'+(netVariance>=0?'+':'')+netVariance.toFixed(2)+'h</div>';
@@ -15855,20 +15935,21 @@ function renderRecap(){
   HK_POS_LIST.forEach(function(pos){
     var p=byPos[pos];
     if(!p||(!p.paid&&!p.budget))return;
+    var hasBudget=p.budget!==null&&p.budget!==undefined;
     var std=LABOR_STD[pos];
-    var sub=std?(std.type==='fixed'?std.daily+'h fixed · daily':parseFloat((std.factor*100).toFixed(4))+'% of rooms'):'';
+    var sub=stdMode==='unifocus'?'Unifocus labor standard':(std?(std.type==='fixed'?std.daily+'h fixed · daily':parseFloat((std.factor*100).toFixed(4))+'% of rooms'):'');
     var pActual=p.paid+p.ot;
-    var variance=pActual-p.budget;
-    var isOver=variance>0.5;
-    var isUnder=variance<-0.5;
+    var variance=hasBudget?pActual-p.budget:null;
+    var isOver=variance!==null&&variance>0.5;
+    var isUnder=variance!==null&&variance<-0.5;
     var rowBg=isOver?'var(--red-bg)':isUnder?'var(--green-bg)':'var(--white)';
     var valColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
     var barColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text3)';
-    var paceLabel=isOver?'\u25b2 over pace':isUnder?'\u25bc under pace':'\u2014 on track';
-    var paceColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
+    var paceLabel=!hasBudget?'\u2014 no standard':isOver?'\u25b2 over pace':isUnder?'\u25bc under pace':'\u2014 on track';
+    var paceColor=!hasBudget?'var(--text3)':isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
     var pillBg=isOver?'var(--red-border)':isUnder?'var(--green-border)':'var(--border)';
     var pillColor=isOver?'var(--red)':isUnder?'var(--green)':'var(--text2)';
-    var barPct=p.budget>0?Math.min(100,Math.round((pActual/p.budget)*100)):0;
+    var barPct=hasBudget&&p.budget>0?Math.min(100,Math.round((pActual/p.budget)*100)):0;
     var posLabel=pos.replace(' Attendant','').replace('Housekeeping ','Sup.');
 
     html+='<div style="display:grid;grid-template-columns:155px 1fr 75px 75px 85px;align-items:center;padding:11px 14px;border-top:1px solid var(--border);background:'+rowBg+';">';
@@ -15876,16 +15957,16 @@ function renderRecap(){
       +'<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+sub+'</div></div>';
     html+='<div style="padding:0 12px;">';
     html+='<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">'
-      +'<span style="color:var(--text3);">Budget MTD: '+p.budget.toFixed(2)+'h</span>'
+      +'<span style="color:var(--text3);">Budget MTD: '+(hasBudget?p.budget.toFixed(2)+'h':'—')+'</span>'
       +'<span style="color:'+paceColor+';font-weight:700;">'+paceLabel+'</span></div>';
     html+='<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;">'
       +'<div style="height:100%;width:'+barPct+'%;background:'+barColor+';border-radius:3px;"></div></div>';
-    html+='<div style="font-size:10px;color:var(--text3);margin-top:2px;">'+pActual.toFixed(2)+'h worked vs '+p.budget.toFixed(2)+'h budget</div>';
+    html+='<div style="font-size:10px;color:var(--text3);margin-top:2px;">'+pActual.toFixed(2)+'h worked'+(hasBudget?' vs '+p.budget.toFixed(2)+'h budget':' — no Unifocus data this month')+'</div>';
     html+='</div>';
     html+='<div style="text-align:right;font-size:13px;font-weight:800;color:'+valColor+';">'+pActual.toFixed(2)+'h</div>';
-    html+='<div style="text-align:right;font-size:13px;color:var(--text2);">'+(p.budget>0?p.budget.toFixed(2)+'h':'—')+'</div>';
-    html+='<div style="text-align:right;"><span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'
-      +(variance>=0?'+':'')+variance.toFixed(2)+'h</span></div>';
+    html+='<div style="text-align:right;font-size:13px;color:var(--text2);">'+(hasBudget&&p.budget>0?p.budget.toFixed(2)+'h':'—')+'</div>';
+    html+='<div style="text-align:right;">'+(hasBudget?('<span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap;background:'+pillBg+';color:'+pillColor+';">'
+      +(variance>=0?'+':'')+variance.toFixed(2)+'h</span>'):'<span style="font-size:10px;font-weight:700;color:var(--text3);">—</span>')+'</div>';
     html+='</div>';
   });
   html+='</div>';
