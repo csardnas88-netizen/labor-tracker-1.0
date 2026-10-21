@@ -131,6 +131,7 @@ const cases = [
   require('./cases/schedule-lobby-cover-inflow'),
   require('./cases/roster-stale-sync-guard'),
   require('./cases/recap-standard-toggle'),
+  require('./cases/departures-clear-pushes-tombstone'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

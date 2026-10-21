@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.86.0"/>
+<meta name="app-version" content="7.87.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4612,6 +4612,11 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.87.0', date:'2026-10-21',
+    fixes:['Clearing a Departures box (a deliberate "I don\'t know this day") never actually reached other devices — the clear only ever took effect on the device that made it, so a different device kept showing its own R106 number, reading as data "disappearing" rather than a deliberate call. Carlos\'s real report: his work PC correctly stayed blank on two real days, but his laptop — which never touched that field — kept showing the real figure, with no amount of syncing reconciling the two. Fixed: a cleared day now pushes explicitly, so every device learns the same deliberate decision.',
+    'Hardened the cloud pull (supaGetAll) to fetch in explicit pages instead of one unbounded request — the sync data table has already grown past 1,000 rows. A safety net against a REST layer silently capping results as the app\'s data keeps growing, regardless of whether that was the exact cause of the above.']
+  },
+  {
     v:'7.86.0', date:'2026-10-21',
     features:['Monthly Recap now has the same Current Standard/Unifocus toggle Labor already has — Carlos\'s ask, this was the one place left hardcoded to Current Standard. The Unifocus month-to-date budget sums each day\'s Unifocus Labor Standard (same per-band formulas as Weekly Pace), per position. A position with no usable Unifocus data all month (e.g. departures never entered) shows "no standard" instead of a fabricated number, with a note listing which positions were excluded from the totals — never a false "over budget."']
   },
@@ -7779,20 +7784,42 @@ function _supaPutAll(pairs){
 }
 
 /* Pull all keys from Supabase */
+/* Explicitly paginated — a single unbounded request used to be trusted to
+   return every row in labor_data. Carlos's real report, 2026-10-21: his
+   work PC's Departures for two real days stayed missing (reading only R106
+   auto-fill, which lives in ONE big row, r106_<mk>) even after a confirmed
+   successful sync, while his laptop had it correctly. The table has
+   already crossed 1000 rows and keeps growing with every day's/month's
+   per-row sync data — a REST layer that silently caps an unbounded
+   select at some row limit (common default behavior on this kind of API)
+   would show up EXACTLY like this: a confirmed-OK sync that quietly
+   returns fewer rows than actually exist, depending on which rows happen
+   to land in or out of the cut depending on server-side ordering, so one
+   device's pull can lose a since-grown table's tail while another
+   device's earlier pull (from before the table crossed the limit) still
+   has it cached locally. Paginating here removes that whole class of
+   failure regardless of where any cap actually sits — continues fetching
+   pages until one comes back short of a full page, so growth in the
+   table can never again silently shrink what a pull receives. */
 function supaGetAll(cb){
-  fetch(SUPA_URL+"/rest/v1/labor_data?select=key,value", {
-    method:"GET",
-    headers:SUPA_HEADERS
-  })
-  .then(function(r){ if(!r.ok)throw new Error('HTTP '+r.status); return r.json(); })
-  .then(function(rows){
-    var all={};
-    (rows||[]).forEach(function(row){
-      try{ all[row.key]=JSON.parse(row.value); }catch(e){ all[row.key]=row.value; }
-    });
-    cb(null,all);
-  })
-  .catch(function(e){ cb(e,{}); });
+  var PAGE=1000;
+  var all={};
+  function fetchPage(offset){
+    fetch(SUPA_URL+"/rest/v1/labor_data?select=key,value&offset="+offset+"&limit="+PAGE, {
+      method:"GET",
+      headers:SUPA_HEADERS
+    })
+    .then(function(r){ if(!r.ok)throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(rows){
+      (rows||[]).forEach(function(row){
+        try{ all[row.key]=JSON.parse(row.value); }catch(e){ all[row.key]=row.value; }
+      });
+      if(rows&&rows.length===PAGE)fetchPage(offset+PAGE);
+      else cb(null,all);
+    })
+    .catch(function(e){ cb(e,all); });
+  }
+  fetchPage(0);
 }
 /* One quiet retry before a failed pull flips the sidebar to "Offline" —
    same reasoning as supaPut's 401 retry above: on a slow/proxied
@@ -7967,6 +7994,30 @@ function _pushMonthRows(data,mk){
     if(shadow[sk]===ts)return;
     rows.push({key:'mdep_'+mk+'_'+ds, value:JSON.stringify({v:deps[ds],ts:ts,src:depSrc[ds]||'',by:who})});
     newShadow[sk]=ts;
+  });
+  /* A manual override that was just CLEARED (saveDeparturesForDate back to
+     blank/0 — a deliberate "I don't know this day," confirmed by
+     unifocus-houseperson.js, NOT "go re-read R106") removes the date from
+     `deps` entirely — invisible to the loop above, which only walks keys
+     still present. Without this, the clear never reaches other devices:
+     each one just keeps whatever it already had (its own stale manual
+     number, or its own R106 auto-fill), with no way to learn THIS device
+     made a deliberate call — Carlos's real report, 2026-10-21: his work
+     PC correctly stayed on a deliberately-blank Departures day, but his
+     laptop never found out and kept showing R106's own figure instead,
+     reading as "it got deleted" rather than "this device said don't
+     guess." Detected by diffing the push shadow (every date this device
+     has EVER successfully pushed) against what's still actually in
+     `deps` now — anything missing was cleared since the last push, and
+     gets one explicit v:null row (still carrying the 'manual' tag — see
+     saveDeparturesForDate) so every device learns the SAME deliberate
+     null, not just whichever one made the call. */
+  Object.keys(shadow).forEach(function(sk){
+    if(sk.indexOf('dep:')!==0)return;
+    var ds=sk.slice(4);
+    if(Object.prototype.hasOwnProperty.call(deps,ds))return;
+    rows.push({key:'mdep_'+mk+'_'+ds, value:JSON.stringify({v:null,ts:_depTs(data,ds),src:depSrc[ds]||'',by:who})});
+    delete newShadow[sk];
   });
   Object.keys(vnotes).forEach(function(ds){
     var ts=_vnoteTs(data,ds), sk='vn:'+ds;
@@ -9312,6 +9363,22 @@ function saveDeparturesForDate(ds,val){
   if(!mData.departuresUpdatedAt)mData.departuresUpdatedAt={};
   var n=parseInt(val)||0;
   if(n>0)mData.departures[ds]=n;else delete mData.departures[ds];
+  /* Unconditional, including on a clear — confirmed deliberate (see
+     unifocus-houseperson.js): clearing the box is "I don't know this
+     day," not "go re-read R106." getDeparturesForDay checks this tag
+     FIRST and returns null rather than silently falling back once it's
+     set, by design. What WAS a real gap (Carlos's real report,
+     2026-10-21 — his work PC's Departures for two real days stayed blank
+     while his laptop, which had never touched that field, correctly
+     showed R106's number): a clear like this deletes departures[ds], so
+     it's invisible to _pushMonthRows's normal per-key push loop and never
+     reached other devices — on the work PC alone, "manual, deliberately
+     blank" is exactly correct and nothing to fix; the gap was that this
+     decision never SYNCED, so nothing could tell it apart from a plain
+     sync lag. Fixed in _pushMonthRows: a cleared date now pushes an
+     explicit null tombstone (carrying this same 'manual' tag) so every
+     device learns the SAME deliberate state, instead of each one quietly
+     keeping whatever it already had. */
   mData.departuresSource[ds]='manual';
   mData.departuresUpdatedAt[ds]=new Date().toISOString();
   saveMonthData(mData,mk);
