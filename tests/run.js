@@ -129,6 +129,7 @@ const cases = [
   require('./cases/labor-effectiveness-total-ot'),
   require('./cases/schedule-carry-added-rows-value'),
   require('./cases/schedule-lobby-cover-inflow'),
+  require('./cases/roster-stale-sync-guard'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.84.5"/>
+<meta name="app-version" content="7.85.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4611,6 +4611,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.85.0', date:'2026-10-20',
+    features:['Safer new-employee detection on report uploads. If you open the app after being away a while and upload a Labor Distribution before it has finished syncing, associates who already exist in the cloud could read as "new" and the app would offer to add them — risking a duplicate. Now, when the roster hasn\'t synced yet this session, that prompt is replaced by a short warning ("Sync before adding these") with a one-tap "Sync now & re-check": after it syncs, anyone already in the system is recognized automatically and only the genuinely-new hires are offered to add. Your report still saves either way. Real case: Ingrid returning after ~20 days and being asked to add David Pérez and Isabel Cruz, who had been in the roster since early September.']
+  },
+  {
     v:'7.84.5', date:'2026-10-20',
     features:['Someone covering the Lobby from another crew now SHOWS on the Lobby AM/PM card — Carlos\'s ask. A Laundry attendant marked LOBBY for the day (e.g. Vanesa on Thu/Fri) now appears as a row right on the Lobby card she\'s covering, the same way a LAUNDRY mark already pulls someone onto the Laundry card. The row goes away on its own once she\'s no longer marked LOBBY.'],
     fixes:['Along with the above: a cover row never falsely trips the "0 days off — likely overtime" export warning (her days off belong to her home crew, not the one she\'s covering), and a re-upload never freezes a cover row into a permanent member (it\'s re-created from the underlying mark each render).']
@@ -7367,6 +7371,17 @@ window.addEventListener('load',function(){
   _authUpdateUI();
 });
 
+/* True once a FULL cloud pull (syncFromSheets → _syncFromSheetsPull) has
+   completed successfully at least once this session, i.e. the local roster
+   has been merged from the current cloud copy. Used to guard the "add new
+   employee" prompt on a report upload: Carlos's real report, 2026-10-20 —
+   Ingrid opened the app after ~20 days away and uploaded a Labor
+   Distribution before that first pull had finished, so two associates who'd
+   been in the cloud roster since early September (David Pérez, Isabel Cruz)
+   read as brand-new and she was prompted to add them, risking duplicates.
+   While this is false, a report upload warns to sync first instead of
+   silently offering to add people who may already exist. */
+var _rosterSyncedThisSession=false;
 function setSyncStatus(s){
   var el=document.getElementById("syncStatus");
   if(!el)return;
@@ -8767,6 +8782,10 @@ function _syncFromSheetsPull(){
     try{ if(_mergeLateArrivalsFromRemote(all))updated=true; }catch(e){console.warn('[sync] late arrivals merge',e);}
     try{ if(_mergeReqNotebookFromRemote(all))updated=true; }catch(e){console.warn('[sync] req notebook merge',e);}
     setSyncStatus("synced");
+    /* A full pull just finished — the roster is now current with the cloud,
+       so the "add new employee" prompt can trust that an unknown name is
+       genuinely new rather than merely not-yet-synced. */
+    _rosterSyncedThisSession=true;
     if(updated){
       try{renderLaborDash();}catch(e){}
       try{renderDashHub();}catch(e){}
@@ -16128,9 +16147,18 @@ go=async function(file){
       }
       showToast('✓ Report loaded for '+finalDate.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
       fireConfetti();
-      /* Show new employee modal after save if any */
+      /* Show new employee modal after save if any — but only once the
+         roster has actually synced with the cloud this session. If it
+         hasn't (Ingrid's real case: opened after ~20 days away and uploaded
+         before the first pull finished), an "unknown" name may just be
+         not-yet-synced rather than genuinely new, so warn and offer to sync
+         first instead of risking a duplicate add. */
       if(newEmps.length>0){
-        showNewEmployeeModal(newEmps, dateStr(finalDate));
+        if(_rosterSyncedThisSession){
+          showNewEmployeeModal(newEmps, dateStr(finalDate));
+        } else {
+          showRosterStaleWarning(newEmps, dateStr(finalDate));
+        }
       } else {
         /* Only auto-prompt for inactive employees if no new-emp modal is open */
         try{maybePromptInactive();}catch(e){}
@@ -20888,6 +20916,69 @@ function deleteLateArrival(id){
 }
 
 
+/* ── Roster-stale guard before the New Employee modal ──
+   Carlos's ask, 2026-10-20 (Ingrid's real case): before offering to add
+   "new" employees found in a report upload, make sure the roster has
+   actually synced with the cloud this session. If it hasn't, these names
+   may already exist there and simply haven't loaded on this device, so
+   adding them would risk duplicates. Warn and offer to sync first, then
+   re-check — only the names still unknown AFTER a successful pull are
+   genuinely new. The report itself is already saved by the time this shows,
+   so nothing is lost either way. */
+function showRosterStaleWarning(newEmps, pdfDate){
+  var existing=document.getElementById('rosterStaleModal');
+  if(existing)existing.remove();
+  var names=newEmps.map(function(e){
+    return '<li style="margin:3px 0;">'+escHtml(e.name)+' <span style="color:var(--text3);font-size:11px;font-weight:400;">(ID '+e.id+')</span></li>';
+  }).join('');
+  var overlay=document.createElement('div');
+  overlay.id='rosterStaleModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+    +'<div style="font-size:24px;margin-bottom:8px;">&#9888;&#65039;</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--text1);margin-bottom:8px;">Sync before adding these</div>'
+    +'<div style="font-size:13px;color:var(--text2);line-height:1.55;margin-bottom:12px;">The app hasn\'t finished syncing with the cloud on this device yet, so these associates may <strong>already exist</strong> and just haven\'t loaded. Adding them now could create duplicates:</div>'
+    +'<ul style="margin:0 0 14px 18px;padding:0;font-size:13.5px;font-weight:700;color:var(--text1);">'+names+'</ul>'
+    +'<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:18px;">Your report is already saved. Sync first — if they\'re already in the system they\'ll be recognized automatically.</div>'
+    +'<div style="display:flex;flex-direction:column;gap:9px;">'
+    +'<button id="rosterStaleSyncBtn" class="btn btn-navy" style="width:100%;">&#9729; Sync now &amp; re-check</button>'
+    +'<button id="rosterStaleAddBtn" style="width:100%;background:none;border:none;color:var(--text3);font-size:12.5px;cursor:pointer;padding:6px;">They&rsquo;re genuinely new &mdash; add them anyway</button>'
+    +'</div></div>';
+  document.body.appendChild(overlay);
+  document.getElementById('rosterStaleAddBtn').onclick=function(){
+    overlay.remove();
+    showNewEmployeeModal(newEmps, pdfDate);
+  };
+  document.getElementById('rosterStaleSyncBtn').onclick=function(){
+    var btn=this; btn.disabled=true; btn.textContent='☁ Syncing…';
+    if(!_rosterSyncedThisSession){ try{ syncFromSheets(); }catch(e){} }
+    var waited=0;
+    var iv=setInterval(function(){
+      waited+=500;
+      if(_rosterSyncedThisSession){
+        clearInterval(iv);
+        overlay.remove();
+        /* Only the ones STILL unknown after a current pull are genuinely new. */
+        var stillNew=newEmps.filter(function(e){ return e.id && !ROSTER_BY_ID[e.id]; });
+        if(stillNew.length){
+          showNewEmployeeModal(stillNew, pdfDate);
+        } else {
+          showToast('✓ Roster synced — they were already in the system');
+        }
+      } else if(waited>=10000){
+        clearInterval(iv);
+        btn.disabled=false; btn.textContent='☁ Sync now & re-check';
+        if(!document.getElementById('rosterStaleErr')){
+          var errEl=document.createElement('div');
+          errEl.id='rosterStaleErr';
+          errEl.style.cssText='font-size:12px;color:var(--red-border,#c0392b);margin-top:11px;line-height:1.5;';
+          errEl.textContent='Still couldn’t sync — check your connection, or sign out and back in (Settings). You can add them anyway if you’re sure they’re new.';
+          btn.parentNode.appendChild(errEl);
+        }
+      }
+    },500);
+  };
+}
 /* ── New Employee Detection Modal ── */
 function showNewEmployeeModal(newEmps, pdfDate){
   window._newEmpHireDate=pdfDate||dateStr(new Date());
