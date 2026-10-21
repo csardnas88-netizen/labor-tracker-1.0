@@ -99,5 +99,32 @@ module.exports = {
     const merged = win.schedCarryAddedRows(oldWithCover, freshImport);
     t.assert(!merged.days['2026-10-29'].lobby.some((p) => p[0] === 'Vanesa'),
       'the old cover row is not carried into the fresh import as a permanent row: ' + JSON.stringify(merged.days['2026-10-29'].lobby));
+
+    // ── Name-collision guard (from Carlos's real week): there is an
+    // "Andrea" on Lobby PM, and a DIFFERENT "Andrea" on Turndown who is
+    // marked LOBBY some days. The cover-sync must NOT add a second "Andrea"
+    // row to the Lobby crew (she's already there) — otherwise she'd show
+    // twice and double-count. ──
+    const collide = {
+      days: {
+        '2026-10-25': {
+          lobby: [['Marroquin', '1'], ['Andrea', '1']],
+          td: [['Andrea', 'LOBBY']],
+        },
+      },
+    };
+    win.schedSyncAllLobbyCoverRows(collide, ['2026-10-25']);
+    const andreaRows = collide.days['2026-10-25'].lobby.filter((p) => win.dlNormAlias(p[0]) === win.dlNormAlias('Andrea'));
+    t.eq(andreaRows.length, 1, 'no duplicate Andrea row is added when one already exists on Lobby: ' + JSON.stringify(collide.days['2026-10-25'].lobby));
+
+    // ── Idempotency on a multi-row week: running the cover-sync twice must
+    // leave exactly one cover row, never stack duplicates. ──
+    build(win, 'LOBBY');
+    SCH = win.dlLoadSchedule();
+    win.schedSyncAllLobbyCoverRows(SCH, DATES);
+    const changedAgain = win.schedSyncAllLobbyCoverRows(SCH, DATES);
+    t.assert(!changedAgain, 'a second cover-sync pass is a no-op (idempotent)');
+    t.eq(SCH.days['2026-10-29'].lobby.filter((p) => p[0] === 'Vanesa').length, 1,
+      'exactly one Vanesa cover row after two passes');
   },
 };
