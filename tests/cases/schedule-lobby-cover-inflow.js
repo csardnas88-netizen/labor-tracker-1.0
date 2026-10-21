@@ -57,5 +57,47 @@ module.exports = {
       'the cover helper names Vanesa as covering Lobby AM on Thu');
     t.eq(win._schedLobbyCoverNames(SCH, '2026-10-29', 'pm').length, 0,
       'and does not put her on the PM shift (she is an AM-default name)');
+
+    // ── Carlos's follow-up ask: she should SHOW on the Lobby AM card too.
+    // schedSyncAllLobbyCoverRows makes a disposable 'cover' row for her in
+    // the Lobby crew (so _schedCrewRef/the card pick her up), on the AM
+    // sub-card, and removes it again once her LOBBY mark is gone. ──
+    build(win, 'LOBBY');
+    SCH = win.dlLoadSchedule();
+    t.assert(win.schedSyncAllLobbyCoverRows(SCH, DATES), 'the lobby cover-sync reports it made a change');
+    let vCover = SCH.days['2026-10-29'].lobby.find((p) => p[0] === 'Vanesa');
+    t.assert(vCover && vCover[1] === '1' && vCover[2] === 'cover',
+      "Vanesa now has a 'cover' row on the Lobby crew: " + JSON.stringify(SCH.days['2026-10-29'].lobby));
+    t.eq(win.schedLobbyShift('Vanesa'), 'am', 'and she lands on the AM sub-card');
+    // Idempotent: running it again changes nothing.
+    t.assert(!win.schedSyncAllLobbyCoverRows(SCH, DATES), 'running the cover-sync again is a no-op');
+    // Clearing her LOBBY mark removes the cover row (never leaves a ghost).
+    SCH.days['2026-10-29'].laundry.find((p) => p[0] === 'Vanesa')[1] = '1';
+    SCH.days['2026-10-30'].laundry.find((p) => p[0] === 'Vanesa')[1] = '1';
+    win.schedSyncAllLobbyCoverRows(SCH, DATES);
+    t.assert(!SCH.days['2026-10-29'].lobby.some((p) => p[0] === 'Vanesa'),
+      'the cover row is removed once she is no longer marked LOBBY');
+
+    // ── Guard: a 'cover' row must NOT trip the days-off/overtime warning.
+    // Her days off belong to her home crew (Laundry), not the Lobby she is
+    // only covering — counting the cover row here would flag her every time. ──
+    build(win, 'LOBBY');
+    SCH = win.dlLoadSchedule();
+    win.schedSyncAllLobbyCoverRows(SCH, DATES); // gives her a Lobby cover row with 0 days off
+    warnings = win.schedExportWarnings(SCH, DATES);
+    t.assert(!warnings.some((w) => w.indexOf('Vanesa (Lobby)') !== -1),
+      'a Lobby cover row never flags Vanesa for Lobby overtime: ' + JSON.stringify(warnings));
+
+    // ── Guard: a re-upload must NOT carry a 'cover' row across (it is
+    // regenerated from the underlying LOBBY mark, not a persistent member). ──
+    const oldWithCover = {
+      days: {
+        '2026-10-29': { lobby: [['Marroquin', '1'], ['Vanesa', '1', 'cover']], laundry: [['Vanesa', 'LOBBY']] },
+      },
+    };
+    const freshImport = { days: { '2026-10-29': { lobby: [['Marroquin', '1']], laundry: [['Vanesa', 'LOBBY']] } } };
+    const merged = win.schedCarryAddedRows(oldWithCover, freshImport);
+    t.assert(!merged.days['2026-10-29'].lobby.some((p) => p[0] === 'Vanesa'),
+      'the old cover row is not carried into the fresh import as a permanent row: ' + JSON.stringify(merged.days['2026-10-29'].lobby));
   },
 };

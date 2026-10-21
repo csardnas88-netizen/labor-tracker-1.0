@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.84.4"/>
+<meta name="app-version" content="7.84.5"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4610,6 +4610,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.84.5', date:'2026-10-20',
+    features:['Someone covering the Lobby from another crew now SHOWS on the Lobby AM/PM card — Carlos\'s ask. A Laundry attendant marked LOBBY for the day (e.g. Vanesa on Thu/Fri) now appears as a row right on the Lobby card she\'s covering, the same way a LAUNDRY mark already pulls someone onto the Laundry card. The row goes away on its own once she\'s no longer marked LOBBY.'],
+    fixes:['Along with the above: a cover row never falsely trips the "0 days off — likely overtime" export warning (her days off belong to her home crew, not the one she\'s covering), and a re-upload never freezes a cover row into a permanent member (it\'s re-created from the underlying mark each render).']
+  },
   {
     v:'7.84.4', date:'2026-10-20',
     fixes:['The Export Excel warning no longer falsely says "Lobby AM has no coverage" when someone is actually covering the Lobby from another crew. Your real case: Vanesa works Laundry but spends Thu/Fri on the Lobby, marked LOBBY on her Laundry row — she has no Lobby row of her own, so the coverage check (which only counted rows sitting in the Lobby list) couldn\'t see her and flagged a gap that wasn\'t there. It now counts anyone covering the Lobby from another crew, the same way a LAUNDRY mark already pulls someone onto the Laundry card.']
@@ -24337,6 +24342,48 @@ function schedReleaseStaleLaundryLabels(SCH,ds){
   });
   return changed;
 }
+/* The LOBBY-direction twin of schedSyncAllLaundryCoverRows above. Carlos's
+   ask, 2026-10-20: a Laundry attendant who spends a day covering the Lobby
+   is marked 'LOBBY' on her Laundry row (Vanesa, Thu/Fri). She has no row of
+   her own in the Lobby crew, so she never appeared on the Lobby card even
+   though she was covering it — the exact inverse of how a 'LAUNDRY' mark
+   already pulls someone onto the Laundry card. This makes a disposable
+   'cover' row for her in the Lobby crew (tagged 'cover' so the generic
+   cross-crew sync leaves it alone, same as the Laundry side), and removes
+   that cover row again the moment her home cell stops reading 'LOBBY'.
+   Idempotent — safe to run on every render/export. schedLobbyShift already
+   lands her on the right AM/PM sub-card. */
+function schedSyncAllLobbyCoverRows(SCH,dates){
+  var changed=false;
+  dates.forEach(function(ds){
+    var day=SCH.days&&SCH.days[ds]; if(!day)return;
+    /* Who is covering the Lobby from another crew today (home cell reads
+       'LOBBY'), keyed by normalized name → the spelling to show. */
+    var coverers={};
+    SCHED_BLOCKS.forEach(function(b){
+      if(b.key==='lobby')return;
+      (day[b.key]||[]).forEach(function(p){
+        if(!schedStatusIs(p[1],'LOBBY'))return;
+        var nm=String(p[0]||'').trim(); if(!nm)return;
+        coverers[dlNormAlias(nm)]=nm;
+      });
+    });
+    if(!day.lobby)day.lobby=[];
+    Object.keys(coverers).forEach(function(k){
+      var present=day.lobby.some(function(p){ return dlNormAlias(p[0])===k; });
+      if(present)return;
+      day.lobby.push([coverers[k],'1','cover']);
+      changed=true;
+    });
+    /* Drop any stale lobby 'cover' row whose source cell no longer reads
+       LOBBY — never touches a real (non-cover) row. */
+    for(var i=day.lobby.length-1;i>=0;i--){
+      if(day.lobby[i][2]!=='cover')continue;
+      if(!coverers[dlNormAlias(day.lobby[i][0])]){ day.lobby.splice(i,1); changed=true; }
+    }
+  });
+  return changed;
+}
 /* Carlos's real report: Gabriela Cuevas (Room Attendant) and Gabriela
    (Lobby) are the same real person, listed independently on both
    crews — different name spelling on each, same as the cover chains
@@ -25259,6 +25306,12 @@ function schedExportWarnings(SCH,dates){
     dates.forEach(function(ds){
       var day=SCH.days[ds]; if(!day)return;
       (day[b.key]||[]).forEach(function(p){
+        /* A 'cover' row is someone from ANOTHER crew covering here that day
+           (e.g. Vanesa, a Laundry attendant, on the Lobby). Her days off
+           belong to her home crew, not this one — counting a cover row here
+           would flag her for "overtime" on a crew she isn't really a member
+           of, every time she covers. Skip it. */
+        if(p[2]==='cover')return;
         var n=String(p[0]||'').trim(); if(!n)return;
         var k=dlNorm(n); if(seen[k])return; seen[k]=1; names.push(n);
       });
@@ -25747,6 +25800,13 @@ function schedCarryAddedRows(oldSch,newSch){
       var oldArr=od[b.key]||[],newArr=nd[b.key];
       if(!newArr)return;
       oldArr.forEach(function(p){
+        /* A 'cover' row is disposable — it only exists because some other
+           crew's cell reads this crew's away-label, and the cover-sync
+           passes (schedSyncAllLaundryCoverRows / schedSyncAllLobbyCoverRows)
+           re-create it from that underlying mark on the next render. Never
+           carry it across a re-upload (doing so would freeze it into a
+           permanent 'added' row, divorced from the mark that justifies it). */
+        if(p[2]==='cover')return;
         var isAdded=p[2]==='added';
         var match=null;
         newArr.some(function(q){ if(dlNorm(q[0])===dlNorm(p[0])){match=q;return true;} return false; });
@@ -25933,6 +25993,11 @@ function renderSchedule(){
      device's newer data. */
   if(SCH&&schedNormalizePmHm(SCH)){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   if(SCH&&SCH.days&&schedSyncAllLaundryCoverRows(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
+  /* The LOBBY-direction twin: a Laundry (or any) attendant marked 'LOBBY'
+     gets a matching 'cover' row on the Lobby card, so a Lobby cover shows
+     up there the same way a Laundry cover already does — Carlos's ask,
+     2026-10-20 (Vanesa covering Lobby Thu/Fri). */
+  if(SCH&&SCH.days&&schedSyncAllLobbyCoverRows(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   /* Same self-healing idea, for SCHED_LINKED_PEOPLE: a mismatch that
      arrived any way other than a live single-cell edit (Fill Week, an
      Excel upload, another device) never gets corrected on its own
