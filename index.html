@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.84.3"/>
+<meta name="app-version" content="7.84.4"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4610,6 +4610,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.84.4', date:'2026-10-20',
+    fixes:['The Export Excel warning no longer falsely says "Lobby AM has no coverage" when someone is actually covering the Lobby from another crew. Your real case: Vanesa works Laundry but spends Thu/Fri on the Lobby, marked LOBBY on her Laundry row — she has no Lobby row of her own, so the coverage check (which only counted rows sitting in the Lobby list) couldn\'t see her and flagged a gap that wasn\'t there. It now counts anyone covering the Lobby from another crew, the same way a LAUNDRY mark already pulls someone onto the Laundry card.']
+  },
   {
     v:'7.84.3', date:'2026-10-20',
     fixes:['Re-uploading the Schedule Draft will no longer silently remove anyone who was working on a crew — your explicit call after Vanesa\'s Lobby row kept disappearing. Her Lobby row comes from Excel (not from "+ Add someone"), so it had no protection: any re-upload that didn\'t re-list her — or that had her row hidden — deleted her. Now a re-upload refreshes values but keeps everyone who was actually scheduled, and treats them as app-managed from then on. The only ways to take someone off a crew are the deliberate ones: hide their row in Excel, retire them, or use "Remove from crew". (Also closes a gap from v7.84.2 where the fix dropped an internal tag, letting the next re-upload delete her anyway.)']
@@ -22485,6 +22489,36 @@ function _schedSubsetTotal(SCH,ds,bk,names,includeInflow){
   });
   return includeInflow?t+_schedCoverInflow(SCH,ds,bk):t;
 }
+/* People covering the Lobby from ANOTHER crew on this day — their own
+   crew's cell reads 'LOBBY' (the lobby away-label), exactly the way a
+   Laundry attendant's row reads 'LOBBY' on the days she spends on the
+   Lobby. _schedSubsetTotal only sums rows that physically sit in the
+   lobby array, so a cover like this is invisible to it — Carlos's real
+   report, 2026-10-20: Vanesa, a Laundry attendant marked LOBBY on Thu/Fri
+   (with NO lobby row of her own), was flagged "Lobby AM has no coverage"
+   even though she was covering it. This is the LOBBY-direction twin of
+   schedSyncLaundryCoverRow (which only handles the 'LAUNDRY' direction).
+   Returns the covering names for the requested shift (am/pm per
+   schedLobbyShift), deduped against anyone already holding a real lobby
+   row so a lobby '1' plus a stray away-label elsewhere can't double-count. */
+function _schedLobbyCoverNames(SCH,ds,shift){
+  var day=SCH.days&&SCH.days[ds]; if(!day)return [];
+  var inLobby={};
+  (day.lobby||[]).forEach(function(p){ inLobby[dlNormAlias(p[0])]=1; });
+  var names=[],seen={};
+  SCHED_BLOCKS.forEach(function(b){
+    if(b.key==='lobby')return;
+    (day[b.key]||[]).forEach(function(p){
+      if(!schedStatusIs(p[1],'LOBBY'))return;
+      var nm=String(p[0]||'').trim(); if(!nm)return;
+      var k=dlNormAlias(nm);
+      if(inLobby[k]||seen[k])return;
+      if(schedLobbyShift(nm)!==shift)return;
+      seen[k]=1; names.push(nm);
+    });
+  });
+  return names;
+}
 /* Embedding a name in an inline handler: escape it for JS first, then
    the whole attribute gets HTML-escaped on the way out. Names here are
    typed by hand and this app already carries an "O'Brien" class of
@@ -25247,10 +25281,17 @@ function schedExportWarnings(SCH,dates){
   var pmRows=lobbyRows.filter(function(p){return schedLobbyShift(p[0])==='pm';});
   dates.forEach(function(ds){
     var dLabel=parseLocalDate(ds).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    if(amRows.length&&_schedSubsetTotal(SCH,ds,'lobby',amRows,true)===0){
+    /* Count both the lobby crew's own rows AND anyone covering the Lobby
+       from another crew (marked 'LOBBY' on their home row, e.g. a Laundry
+       attendant pulled onto the Lobby that day) — see _schedLobbyCoverNames.
+       Without that second term a real cover read as "no coverage", Carlos's
+       real report about Vanesa on Thu/Fri. */
+    var amTotal=_schedSubsetTotal(SCH,ds,'lobby',amRows,true)+_schedLobbyCoverNames(SCH,ds,'am').length;
+    var pmTotal=_schedSubsetTotal(SCH,ds,'lobby',pmRows,true)+_schedLobbyCoverNames(SCH,ds,'pm').length;
+    if(amRows.length&&amTotal===0){
       out.push('Lobby AM has no coverage on '+dLabel);
     }
-    if(pmRows.length&&_schedSubsetTotal(SCH,ds,'lobby',pmRows,true)===0){
+    if(pmRows.length&&pmTotal===0){
       out.push('Lobby PM has no coverage on '+dLabel);
     }
   });
