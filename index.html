@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.87.0"/>
+<meta name="app-version" content="7.88.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4612,6 +4612,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.88.0', date:'2026-10-23',
+    fixes:['A Labor Effectiveness note for one position could get silently erased by someone else saving a DIFFERENT position\'s note for the same week from another device. Carlos\'s real report (confirmed in the audit log): he added a Room Attendant note on his work PC, and by the next morning it was gone — Rebeca had saved Turndown\'s note from her own device in between, and since every save used to push the WHOLE week\'s notes as one blob, her copy (which hadn\'t yet picked up his edit) silently overwrote the cloud record and erased it. Fixed the same way an identical bug was already fixed for Training: a save now fetches the current remote copy and merges it in first, so it can only add or update notes, never erase one it doesn\'t even know about.']
+  },
+  {
     v:'7.87.0', date:'2026-10-21',
     fixes:['Clearing a Departures box (a deliberate "I don\'t know this day") never actually reached other devices — the clear only ever took effect on the device that made it, so a different device kept showing its own R106 number, reading as data "disappearing" rather than a deliberate call. Carlos\'s real report: his work PC correctly stayed blank on two real days, but his laptop — which never touched that field — kept showing the real figure, with no amount of syncing reconciling the two. Fixed: a cleared day now pushes explicitly, so every device learns the same deliberate decision.',
     'Hardened the cloud pull (supaGetAll) to fetch in explicit pages instead of one unbounded request — the sync data table has already grown past 1,000 rows. A safety net against a REST layer silently capping results as the app\'s data keeps growing, regardless of whether that was the exact cause of the above.']
@@ -7959,6 +7963,26 @@ function _monthPushShadow(mk){ try{return JSON.parse(localStorage.getItem('hk_mo
    relative to any real edit today, so a genuine edit always supersedes it,
    and every ts the server compares is a valid ISO string. */
 function _dsFallbackTs(ds){ try{return new Date(ds+'T00:00:00.000Z').toISOString();}catch(e){return '1970-01-01T00:00:00.000Z';} }
+function _tsRank(ts){ var n=Date.parse(ts); return isNaN(n)?0:n; }
+/* Per-position newest-wins merge for Labor Effectiveness notes
+   (hk_laboreff_notes_<weekKey>) — shared by the pull path
+   (_syncFromSheetsPull) and saveWeeklyEffNote's push-side merge below, so
+   there is exactly one merge implementation to keep correct, the same
+   principle trMergeLists already follows for Training. */
+function _mergeLaborEffNotes(local,remote){
+  local=local||{}; remote=remote||{};
+  var merged={notes:Object.assign({},local.notes),notesUpdatedAt:Object.assign({},local.notesUpdatedAt)};
+  var remoteNotes=remote.notes||{}, remoteTimes=remote.notesUpdatedAt||{};
+  Object.keys(remoteTimes).forEach(function(pos){
+    var rt=_tsRank(remoteTimes[pos]);
+    var lt=merged.notesUpdatedAt[pos]?_tsRank(merged.notesUpdatedAt[pos]):0;
+    if(rt>=lt){
+      if(remoteNotes[pos])merged.notes[pos]=remoteNotes[pos];else delete merged.notes[pos];
+      merged.notesUpdatedAt[pos]=remoteTimes[pos];
+    }
+  });
+  return merged;
+}
 function _dayTs(data,ds){ return (data.daysUpdatedAt&&data.daysUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _roomTs(data,ds){ return (data.roomsUpdatedAt&&data.roomsUpdatedAt[ds])||_dsFallbackTs(ds); }
 function _depTs(data,ds){ return (data.departuresUpdatedAt&&data.departuresUpdatedAt[ds])||_dsFallbackTs(ds); }
@@ -8680,17 +8704,7 @@ function _syncFromSheetsPull(){
              means a delete on one device propagates as a delete here too,
              not just "no update". */
           if(remoteLEN&&typeof remoteLEN==='object'){
-            var localLEN=_loadLaborEffNotes(wkLEN);
-            var mergedLEN={notes:Object.assign({},localLEN.notes),notesUpdatedAt:Object.assign({},localLEN.notesUpdatedAt)};
-            var remoteNotesN=remoteLEN.notes||{}, remoteNotesT=remoteLEN.notesUpdatedAt||{};
-            Object.keys(remoteNotesT).forEach(function(pos){
-              var rt=_tsRank(remoteNotesT[pos]);
-              var lt=mergedLEN.notesUpdatedAt[pos]?_tsRank(mergedLEN.notesUpdatedAt[pos]):0;
-              if(rt>=lt){
-                if(remoteNotesN[pos])mergedLEN.notes[pos]=remoteNotesN[pos];else delete mergedLEN.notes[pos];
-                mergedLEN.notesUpdatedAt[pos]=remoteNotesT[pos];
-              }
-            });
+            var mergedLEN=_mergeLaborEffNotes(_loadLaborEffNotes(wkLEN),remoteLEN);
             safeSetItem('hk_laboreff_notes_'+wkLEN,JSON.stringify(mergedLEN));
             updated=true;
           }
@@ -16489,6 +16503,24 @@ function getWeeklyEffNote(weekKey,pos){
   var data=_loadLaborEffNotes(weekKey);
   return (data.notes&&data.notes[pos])||'';
 }
+/* Carlos's real report, 2026-10-23: his Room Attendant note for the week
+   of 10-17 "disappeared" overnight — he'd typed it on his work PC, and by
+   the next morning on his laptop it was gone, with no error shown on
+   either device. Root cause, confirmed via the audit log: Rebeca saved a
+   DIFFERENT position's note for the SAME week from her own device a few
+   hours later — syncLaborEffNotesToSheets pushed her local
+   hk_laboreff_notes_2026-10-17 as one whole blob (supaPut is a raw
+   overwrite, no server-side merge), and her local copy hadn't picked up
+   Carlos's Room Attendant edit yet (no pull had landed in between), so
+   her save silently replaced the cloud record and erased it — the exact
+   same whole-blob-clobber class already fixed for month data, the
+   Schedule Draft, and Training, just never applied here. Fixed the same
+   way Training was (saveTrainingsMerged): fetch the CURRENT remote copy
+   right before pushing and merge it in first via _mergeLaborEffNotes (the
+   same per-position newest-`at` merge the pull path already uses), so a
+   save can only ADD/update notes this device already knew about plus
+   whatever remote has newer, never silently erase a different position's
+   note another device saved in between. */
 function saveWeeklyEffNote(weekKey,pos,text){
   var data=_loadLaborEffNotes(weekKey);
   if(!data.notes)data.notes={};
@@ -16497,10 +16529,39 @@ function saveWeeklyEffNote(weekKey,pos,text){
   if(t)data.notes[pos]=t;else delete data.notes[pos];
   data.notesUpdatedAt[pos]=new Date().toISOString();
   safeSetItem('hk_laboreff_notes_'+weekKey,JSON.stringify(data));
-  syncLaborEffNotesToSheets(weekKey,data);
+  syncLaborEffNotesToSheets(weekKey);
 }
-function syncLaborEffNotesToSheets(weekKey,data){
-  supaPut('laboreffnotes_'+weekKey,data);
+function _fetchRemoteLaborEffNotes(weekKey){
+  var url=SUPA_URL+"/rest/v1/labor_data?select=value&key=eq.laboreffnotes_"+weekKey;
+  function go(){ return authedFetch(url,{method:"GET"}); }
+  return go().then(function(r){
+    if(r.status===401){
+      return _authRefresh().then(function(ok){
+        if(!ok){ var e=new Error('session-expired'); throw e; }
+        return go();
+      });
+    }
+    return r;
+  }).then(function(r){
+    if(!r.ok)throw new Error('fetch-failed: '+r.status);
+    return r.json();
+  }).then(function(rows){
+    try{ return (rows&&rows[0])?JSON.parse(rows[0].value):null; }catch(e){ return null; }
+  });
+}
+function syncLaborEffNotesToSheets(weekKey){
+  _fetchRemoteLaborEffNotes(weekKey).then(function(remote){
+    var merged=_mergeLaborEffNotes(_loadLaborEffNotes(weekKey),remote);
+    safeSetItem('hk_laboreff_notes_'+weekKey,JSON.stringify(merged));
+    supaPut('laboreffnotes_'+weekKey,merged);
+  }).catch(function(){
+    /* Could not confirm remote's current state (offline, or a session
+       that's genuinely dead, not just momentarily stale) — push local
+       anyway rather than losing this edit outright. The next successful
+       pull-merge (syncFromSheets) reconciles whatever this push
+       couldn't see. */
+    try{supaPut('laboreffnotes_'+weekKey,_loadLaborEffNotes(weekKey));}catch(e){}
+  });
 }
 /* The Notes column's textarea auto-saves on blur — no expand/edit/Save
    step, per Carlos's ask that it live inline in the row rather than as a

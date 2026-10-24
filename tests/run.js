@@ -132,6 +132,7 @@ const cases = [
   require('./cases/roster-stale-sync-guard'),
   require('./cases/recap-standard-toggle'),
   require('./cases/departures-clear-pushes-tombstone'),
+  require('./cases/labor-effectiveness-notes-push-merge'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
