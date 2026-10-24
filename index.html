@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.88.0"/>
+<meta name="app-version" content="7.89.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4611,6 +4611,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.89.0', date:'2026-10-23',
+    fixes:['Fixed a cross-crew sync gap that could show Maria Aguilar as working TWO positions the same day — Carlos\'s real report/screenshots: her PM Turndown cell correctly read TRAINING, but her AM Room Attendant cell sat on a plain, uncorrected "1" right alongside it. Root cause: TRAINING isn\'t treated as a day off, so when nobody had edited either cell yet, the sync picked Room Attendant\'s bare "1" as the "real" position by default — it correctly protected Turndown\'s TRAINING from being overwritten, but never fixed the other side to match. A TRAINING day now counts as just as authoritative a "this is where she really is" as a plain "1" (more so — it\'s a deliberate commitment), so Room Attendant correctly relabels to TURNDOWN on the very first pass, the same way it already did once training ended.']
+  },
   {
     v:'7.88.0', date:'2026-10-23',
     fixes:['A Labor Effectiveness note for one position could get silently erased by someone else saving a DIFFERENT position\'s note for the same week from another device. Carlos\'s real report (confirmed in the audit log): he added a Room Attendant note on his work PC, and by the next morning it was gone — Rebeca had saved Turndown\'s note from her own device in between, and since every save used to push the WHOLE week\'s notes as one blob, her copy (which hadn\'t yet picked up his edit) silently overwrote the cloud record and erased it. Fixed the same way an identical bug was already fixed for Training: a save now fetches the current remote copy and merges it in first, so it can only add or update notes, never erase one it doesn\'t even know about.']
@@ -25070,6 +25074,29 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
     }
     if(!source){
       entries.forEach(function(e){ if(!source&&_schedIsUnavailable(String(e.row[1]||'').trim()))source=e; });
+    }
+    /* Carlos's real report, 2026-10-23: Maria Aguilar's PM Turndown cell
+       correctly read TRAINING for several days, but her Room Attendant
+       cell sat on a plain '1' right alongside it the whole time — as if
+       she were working both at once. TRAINING is exempt from the absence
+       check just above (it isn't a rest day), so it fell all the way
+       through to the plain-'1' fallback below, where Room Attendant's
+       literal '1' won source every time — the sync then correctly
+       protected her TRAINING cell from being overwritten (the relabel
+       loop's own TRAINING exemption, unchanged), but never once ran the
+       OTHER direction: nothing ever corrected Room Attendant's '1' to
+       reflect that she was actually training on Turndown that day. Once
+       Room Attendant is later redirected (e.g. it comes to read
+       TURNDOWN), the redirect scan above already picks TRAINING up
+       correctly as source — this only covers that FIRST reconciliation
+       pass, while the other crew still shows a bare, never-yet-corrected
+       '1'. A TRAINING cell is exactly as authoritative a "this is really
+       where she is today" signal as a plain '1' — more so, since it's a
+       deliberate commitment, not a default nobody's touched — so it wins
+       source over an untouched '1' elsewhere, same priority a redirect or
+       absence already gets. */
+    if(!source){
+      entries.forEach(function(e){ if(!source&&schedStatusIs(String(e.row[1]||'').trim(),'TRAINING'))source=e; });
     }
     if(!source){
       entries.forEach(function(e){ if(!source&&String(e.row[1]||'').trim()==='1')source=e; });

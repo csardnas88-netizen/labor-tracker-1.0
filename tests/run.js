@@ -133,6 +133,7 @@ const cases = [
   require('./cases/recap-standard-toggle'),
   require('./cases/departures-clear-pushes-tombstone'),
   require('./cases/labor-effectiveness-notes-push-merge'),
+  require('./cases/schedule-training-wins-source-over-bare-1'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
