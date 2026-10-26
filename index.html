@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.92.0"/>
+<meta name="app-version" content="7.93.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -2287,12 +2287,22 @@ Supervisor 3</textarea>
 <!-- Labor Focus Sprint — floating bubble + panel, kept outside every
      page-X wrapper so its position:fixed isn't defeated by an ancestor's
      display:none. renderLaborSprint() shows/hides both based on whether
-     the Labor page is the one currently on screen. -->
-<div id="laborSprintBubble" onclick="laborSprintPanelToggle()" style="display:none;position:fixed;right:18px;bottom:18px;z-index:280;width:58px;height:58px;border-radius:50%;background:var(--navy);box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer;flex-direction:column;align-items:center;justify-content:center;user-select:none;">
+     the Labor page is the one currently on screen.
+
+     bottom offset sits well above 0 on purpose: #versionBanner (below)
+     is a FULL-WIDTH bar pinned to bottom:0 with z-index:9999 that shows
+     whenever a new build is waiting to activate — it would otherwise
+     sit directly on top of this bubble and hide it completely. Carlos's
+     real report: he couldn't find the checklist at all, and that
+     banner was up on his device at the time. Keep this offset taller
+     than the banner's own height (~70px with its safe-area padding) no
+     matter how either one's exact size changes later. -->
+
+<div id="laborSprintBubble" onclick="laborSprintPanelToggle()" style="display:none;position:fixed;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:280;width:58px;height:58px;border-radius:50%;background:var(--navy);box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer;flex-direction:column;align-items:center;justify-content:center;user-select:none;">
   <div style="font-size:16px;line-height:1;">&#128203;</div>
   <div id="laborSprintBubbleCount" style="font-size:10px;font-weight:800;color:#fff;margin-top:2px;line-height:1;"></div>
 </div>
-<div id="laborSprintPanel" style="display:none;position:fixed;right:18px;bottom:84px;z-index:280;width:340px;max-width:calc(100vw - 36px);max-height:70vh;background:var(--white);border-radius:var(--radius);box-shadow:0 14px 36px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column;">
+<div id="laborSprintPanel" style="display:none;position:fixed;right:18px;bottom:calc(154px + env(safe-area-inset-bottom));z-index:280;width:340px;max-width:calc(100vw - 36px);max-height:60vh;background:var(--white);border-radius:var(--radius);box-shadow:0 14px 36px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column;">
   <div style="background:var(--navy);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;">
     <div><div style="font-size:13px;font-weight:700;color:#fff;">&#128203; Labor Focus Sprint</div>
     <div id="laborSprintPanelDate" style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px;"></div></div>
@@ -4641,6 +4651,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.93.0', date:'2026-10-26',
+    fixes:['Fixed the new Labor Focus Sprint bubble being invisible whenever the "New version available" banner was showing — that banner is a full-width bar pinned to the very bottom of the screen with a higher priority than anything else, and it sat directly on top of the bubble\'s old bottom-right spot, hiding it completely. Carlos\'s real report: he couldn\'t find the checklist at all after it shipped. Moved the bubble (and its panel) up clear of where that banner sits, however tall it ends up being on a given phone\'s safe area. Also caught in the same pass: the last 3 deploys (7.90.0-7.92.0) forgot to bump the service worker\'s own CACHE_VERSION, so some devices could still have been stuck on an old cached build independent of this bug — bumped it now and will keep bumping it going forward.']
+  },
   {
     v:'7.92.0', date:'2026-10-26',
     features:['New Labor Focus Sprint checklist — turns Carlos\'s printed daily routine (Paychex time cards, uploading the Labor Distribution Report, downloading/uploading the R106, updating DNDs, analyzing Weekly Labor Pace, reviewing OT/Under Hours) into an on-screen checklist that follows whichever day is selected on the Labor page, so a manager who has to step away can come back and see exactly what\'s left. Lives as a small floating bubble in the bottom-right corner (shows "done/total", tap to open the full list) rather than a full card in the page — Carlos\'s call, the first version ate too much space at the top of the page. Shared across every manager, same as the Daily Lineup\'s per-day state. Steps that are real in-app actions (uploading the Labor Distribution Report, uploading R106 to OCC, saving the DND list) check themselves off automatically from the same data the rest of the dashboard already reads — never their own stored flag, so they can\'t drift from reality. Paychex and the R106 download itself stay manual: those happen in other systems the app has no way to see.']
