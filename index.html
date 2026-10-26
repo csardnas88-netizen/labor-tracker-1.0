@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.89.0"/>
+<meta name="app-version" content="7.90.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1370,6 +1370,9 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   <div class="nav-item" id="nav-assignments" onclick="showPage('assignments')">
     <span class="nav-icon">&#128194;</span> Assignments
   </div>
+  <div class="nav-item" id="nav-sectionrotation" onclick="showPage('sectionrotation')">
+    <span class="nav-icon">&#128260;</span> Section Rotation
+  </div>
 
   <div class="nav-section-label">Management</div>
   <div class="nav-item" id="nav-staffing" onclick="showPage('staffing')">
@@ -1678,6 +1681,16 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div class="page-sub">Tomorrow's shift, drafted from the schedule</div>
       </div>
       <div id="dailyLineupContent"></div>
+    </div>
+
+    <!-- ══ SECTION ROTATION ══ -->
+    <div id="page-sectionrotation" style="display:none;">
+      <button class="back-to-hub" onclick="showPage('dashboard')">&#8592; Dashboard</button>
+      <div class="page-header">
+        <div class="page-title">&#128260; Section Rotation</div>
+        <div class="page-sub">Who covers which floor band, and when it rotates next</div>
+      </div>
+      <div id="sectionRotationContent"></div>
     </div>
 
     <!-- ══ DNDs ══ -->
@@ -4612,6 +4625,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.90.0', date:'2026-10-26',
+    features:['New Section Rotation page (Operations): Houseman, Supervisor, and Turndown floor-band coverage all rotate every 4 months — Supervisors step up a band each rotation (18th-22nd wraps back down to 2nd-5th); Housemen and Turndown Attendants step down (2nd-5th wraps up to 18th-22nd) — confirmed by Carlos as the mirror of each other, and that Turndown follows the same pattern as Houseman. Turndown keeps its own floor ranges (6th-10th, 10th-14th, 14th-18th), which don\'t line up with Houseman/Supervisor\'s. Also added a "Fixed roles" card for the Floater/PM/ON/Laundry Lead names that DON\'T rotate (Carlos confirmed), editable but with no 4-month math applied. The page shows the current and next rotation for all three roles and lets him correct any of it whenever reality changes; everything after that advances on its own. A read-only reference card now also shows on the Daily Lineup for whichever date is open, so it\'s visible while he fills in Floors — but it only informs that field, never writes into it: Floors stays his own per-day call, same as before.']
+  },
+  {
     v:'7.89.0', date:'2026-10-23',
     fixes:['Fixed a cross-crew sync gap that could show Maria Aguilar as working TWO positions the same day — Carlos\'s real report/screenshots: her PM Turndown cell correctly read TRAINING, but her AM Room Attendant cell sat on a plain, uncorrected "1" right alongside it. Root cause: TRAINING isn\'t treated as a day off, so when nobody had edited either cell yet, the sync picked Room Attendant\'s bare "1" as the "real" position by default — it correctly protected Turndown\'s TRAINING from being overwritten, but never fixed the other side to match. A TRAINING day now counts as just as authoritative a "this is where she really is" as a plain "1" (more so — it\'s a deliberate commitment), so Room Attendant correctly relabels to TURNDOWN on the very first pass, the same way it already did once training ended.']
   },
@@ -7440,7 +7457,7 @@ var KEY_LABELS={
   'projects_data':'Projects','projects_deleted_ids':'Projects',
   'calloffs_data':'Call-Offs','calloffs_deleted_ids':'Call-Offs',
   'hk_roster_overrides':'Roster','hk_trainings':'Trainings',
-  'hk_labor_model':'Labor Model','hk_staffing_actual':'Staffing',
+  'hk_labor_model':'Labor Model','hk_section_rotation':'Section Rotation','hk_staffing_actual':'Staffing',
   'hk_staffing_input':'Staffing','hk_emp_dates':'Employee Dates',
   'hk_poscheck_notes':'Position Check',
   'hk_section_pin':'Section PIN',
@@ -8807,6 +8824,13 @@ function _syncFromSheetsPull(){
             updated=true;
           }
         }
+        if(key==="hk_section_rotation"){
+          var remoteSR=all[key];
+          if(remoteSR&&remoteSR.roles){
+            safeSetItem('hk_section_rotation',JSON.stringify(remoteSR));
+            updated=true;
+          }
+        }
         if(key==="hk_paychex_report"){
           var remotePR=all[key];
           if(remotePR&&remotePR.byPos){
@@ -8877,6 +8901,7 @@ function _syncFromSheetsPull(){
       if(typeof currentPage!=='undefined'&&currentPage==='schedule'){try{renderSchedule();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='reqnotebook'){try{renderReqNotebook();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='dailylineup'){try{renderDailyLineup();}catch(e){}}
+      if(typeof currentPage!=='undefined'&&currentPage==='sectionrotation'){try{renderSectionRotation();}catch(e){}}
       try{updateTrainingBadge();}catch(e){}
     }
   });
@@ -8893,7 +8918,8 @@ function forceSyncToSupabase(){
   var SINGLETONS=['projects_deleted_ids','calloffs_deleted_ids',
     'project_entries_deleted_keys','hk_roster_overrides','hk_labor_model',
     'hk_staffing_actual','hk_staffing_input','hk_trainings','hk_emp_dates',
-    'hk_section_pin','hk_poscheck_notes','hk_paychex_report','hk_wtc_report'];
+    'hk_section_pin','hk_poscheck_notes','hk_paychex_report','hk_wtc_report',
+    'hk_section_rotation'];
   Object.keys(localStorage).forEach(function(k){
     try{
       if(k.indexOf("hk_month_")===0){
@@ -11535,7 +11561,7 @@ function toggleSidebarSmart(){
 }
 
 /* ── Navigation ── */
-var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','latedep','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','reqnotebook','dailylineup','assignments','settings'];
+var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','latedep','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','reqnotebook','dailylineup','assignments','sectionrotation','settings'];
 var _pinGateBypass=false;
 var pendingGatePage=null;
 var PIN_GATED_PAGES=['labormodel','pnl','settings'];
@@ -11569,6 +11595,7 @@ function showPage(page){
   if(page==='schedule')renderSchedule();
   if(page==='reqnotebook')renderReqNotebook();
   if(page==='dailylineup')renderDailyLineup();
+  if(page==='sectionrotation')renderSectionRotation();
   if(page==='labormodel')renderLaborModel();
   if(page==='pnl'){renderPnl();renderPaychexRecon();}
   if(page==='staffing')renderStaffing();
@@ -21972,6 +21999,246 @@ function dlFetchTemplate(){
 function dlLoadDay(ds){ try{var s=localStorage.getItem('hk_dl_day_'+ds);return s?JSON.parse(s):null;}catch(e){return null;} }
 function dlSaveDay(ds,o){ safeSetItem('hk_dl_day_'+ds,JSON.stringify(o)); try{supaPut('dl_day_'+ds,o);}catch(e){} }
 
+/* ── Section Rotation (Houseman / Supervisor floor bands) ──
+   Every periodMonths (4, by Carlos's standing schedule), the crew
+   rotates through 5 fixed floor bands. Supervisors step UP a band each
+   rotation — whoever is on the top band (18th-22nd) wraps back down to
+   the bottom one; Housemen step DOWN a band — whoever is on the bottom
+   wraps up to the top. Opposite directions for the two roles, confirmed
+   by Carlos. This is deliberately separate from the Daily Lineup's own
+   "Floors" field (dlFloorsRoleBlock): that one stays Carlos's own
+   per-day call, counted after he knows the day's real rooms. Section
+   Rotation only answers "whose turn is it this 4-month block," shown as
+   a reference he can check while filling Floors by hand. */
+/* Three roles, each with its OWN band list — Turndown's floor ranges
+   (6-10, 10-14, 14-18) overlap at the edges and don't line up with
+   Houseman/Supervisor's clean 2-5/6-9/10-13/14-17/18-22 split, so bands
+   can't be a single shared array across roles. dir is the per-role
+   rotation direction: -1 means "step UP a band each period, top wraps
+   down to bottom" (Supervisor); +1 means "step DOWN a band each period,
+   bottom wraps up to top" (Houseman, and Turndown — Carlos: the
+   Turndown Attendants mirror the Houseman pattern). */
+var SECTION_ROTATION_ROLE_KEYS=['hm','sup','td'];
+var SECTION_ROTATION_ROLE_LABELS={hm:'Houseman',sup:'Supervisor',td:'Turndown'};
+/* Slots that do NOT rotate — Carlos confirmed these are fixed people,
+   shown for reference only, no 4-month math applied. Straight off the
+   Excel's own "Floater"/"PM"/"ON"/"Laundry Lead" rows, which sit below
+   the rotating Section block on each side of that sheet. */
+var SECTION_ROTATION_FIXED_DEFAULTS={
+  hm: [{label:'Floater',name:''},{label:'PM',name:'Yesenia'},{label:'ON (Overnight)',name:''}],
+  sup:[{label:'Floater',name:''},{label:'Laundry Lead',name:'Isabel D'},{label:'PM',name:'Yanira'},{label:'ON (Overnight)',name:''}],
+  td: [{label:'Floater',name:'Andrea'},{label:'Floater 2',name:''}]
+};
+var SECTION_ROTATION_DEFAULTS={
+  anchor:'2026-10-01',
+  periodMonths:4,
+  roles:{
+    hm:{dir:1,  bands:['2nd - 5th','6th - 9th','10th - 13th','14th - 17th','18th - 22nd'],  order:['Vanessa','Elmer','David','Jorge','Diana']},
+    sup:{dir:-1,bands:['2nd - 5th','6th - 9th','10th - 13th','14th - 17th','18th - 22nd'],  order:['Rolando','Rubidia','Jose','Susan','Maria']},
+    td:{dir:1,  bands:['2nd - 5th','6th - 10th','10th - 14th','14th - 18th','18th - 22nd'], order:['Jazmin','Lorena','Paty','Lupe','Aura']}
+  },
+  fixed:JSON.parse(JSON.stringify(SECTION_ROTATION_FIXED_DEFAULTS))
+};
+function loadSectionRotation(){
+  try{
+    var s=localStorage.getItem('hk_section_rotation');
+    if(s){
+      var r=JSON.parse(s);
+      var ok=r&&r.anchor&&r.roles&&SECTION_ROTATION_ROLE_KEYS.every(function(k){
+        var rr=r.roles[k]; return rr&&Array.isArray(rr.bands)&&Array.isArray(rr.order);
+      });
+      if(ok){
+        /* Older saved configs (from before Fixed roles existed) won't
+           have r.fixed — backfill from defaults rather than breaking. */
+        if(!r.fixed)r.fixed=JSON.parse(JSON.stringify(SECTION_ROTATION_FIXED_DEFAULTS));
+        SECTION_ROTATION_ROLE_KEYS.forEach(function(k){ if(!Array.isArray(r.fixed[k]))r.fixed[k]=JSON.parse(JSON.stringify(SECTION_ROTATION_FIXED_DEFAULTS[k]||[])); });
+        return r;
+      }
+    }
+  }catch(e){}
+  return JSON.parse(JSON.stringify(SECTION_ROTATION_DEFAULTS));
+}
+function saveSectionRotation(cfg){
+  safeSetItem('hk_section_rotation',JSON.stringify(cfg));
+  if(typeof supaPut==='function'){try{supaPut('hk_section_rotation',cfg);}catch(_){}}
+}
+/* Whole rotation periods elapsed between the anchor date and ds. A date
+   landing exactly on a rotation's start counts as that period, not the
+   one before it. */
+function sectionRotationPeriodIndex(cfg,ds){
+  var a=parseLocalDate(cfg.anchor), d=parseLocalDate(ds);
+  var months=(d.getFullYear()-a.getFullYear())*12+(d.getMonth()-a.getMonth());
+  if(d.getDate()<a.getDate())months--;
+  return Math.floor(months/(cfg.periodMonths||4));
+}
+function sectionRotationDateForPeriod(cfg,k){
+  var a=parseLocalDate(cfg.anchor);
+  return dateStr(new Date(a.getFullYear(),a.getMonth()+k*(cfg.periodMonths||4),a.getDate()));
+}
+/* Band i's occupant on a given date, for role 'hm'/'sup'/'td'. */
+function sectionRotationAssignment(cfg,ds,role){
+  var r=(cfg.roles||{})[role];
+  if(!r)return [];
+  var order=r.order||[], bands=r.bands||[], n=order.length;
+  var k=sectionRotationPeriodIndex(cfg,ds);
+  var step=r.dir||1;
+  return bands.map(function(band,i){
+    var name=n?order[((i+step*k)%n+n)%n]:'';
+    return {band:band,name:name||''};
+  });
+}
+/* name -> band label on a given date, for any role. Used by nothing in
+   the Daily Lineup today (Floors stays manual, by Carlos's choice) —
+   kept here as the one place that answers "where is so-and-so right
+   now" if something needs it later. */
+function sectionRotationLookupBand(cfg,ds,role,name){
+  var norm=(name||'').trim().toLowerCase();
+  if(!norm)return '';
+  var hit=sectionRotationAssignment(cfg,ds,role).filter(function(r){return r.name.trim().toLowerCase()===norm;})[0];
+  return hit?hit.band:'';
+}
+function renderSectionRotation(){
+  var el=document.getElementById('sectionRotationContent');
+  if(!el)return;
+  var cfg=loadSectionRotation();
+  var today=dateStr(new Date());
+  var curK=sectionRotationPeriodIndex(cfg,today);
+  var nextDate=sectionRotationDateForPeriod(cfg,curK+1);
+  var nextD=parseLocalDate(nextDate);
+  var html='';
+
+  function roleTable(role,k){
+    var rows=sectionRotationAssignment(cfg,sectionRotationDateForPeriod(cfg,k),role);
+    var body=rows.map(function(r){
+      return '<tr><td style="padding:5px 10px;font-weight:700;color:var(--text1);border-top:1px solid var(--border);">'+escHtml(r.band)+'</td>'
+        +'<td style="padding:5px 10px;border-top:1px solid var(--border);">'+escHtml(r.name||'—')+'</td></tr>';
+    }).join('');
+    return '<div style="margin-top:10px;">'
+      +'<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;">'+escHtml(SECTION_ROTATION_ROLE_LABELS[role])+'</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px;">'+body+'</table></div>';
+  }
+
+  function periodBlock(title,k,dateLabel){
+    var body=SECTION_ROTATION_ROLE_KEYS.map(function(role){return roleTable(role,k);}).join('');
+    return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">'
+      +'<div style="background:var(--navy);padding:10px 16px;display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">'
+      +'<div style="font-size:13px;font-weight:700;color:#fff;">'+escHtml(title)+'</div>'
+      +'<div style="font-size:11px;color:rgba(255,255,255,.7);">'+escHtml(dateLabel)+'</div></div>'
+      +'<div style="padding:4px 16px 12px;">'+body+'</div></div>';
+  }
+
+  html+=periodBlock('Current rotation',curK,'Since '+parseLocalDate(sectionRotationDateForPeriod(cfg,curK)).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}));
+  html+=periodBlock('Next rotation',curK+1,'Starts '+nextD.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}));
+
+  /* Fixed roles don't rotate, so there's no Current/Next split for
+     them — one card, same value every period, until someone edits it
+     below. */
+  html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+  html+='<div style="background:var(--navy);padding:10px 16px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:#fff;">Fixed roles</div>';
+  html+='<div style="font-size:11px;color:rgba(255,255,255,.7);">Don\'t rotate — same person every period until corrected below</div></div>';
+  html+='<div style="padding:4px 16px 12px;">';
+  SECTION_ROTATION_ROLE_KEYS.forEach(function(role){
+    var slots=cfg.fixed[role]||[];
+    if(!slots.length)return;
+    var body=slots.map(function(s){
+      return '<tr><td style="padding:5px 10px;font-weight:700;color:var(--text1);border-top:1px solid var(--border);">'+escHtml(s.label)+'</td>'
+        +'<td style="padding:5px 10px;border-top:1px solid var(--border);">'+escHtml(s.name||'—')+'</td></tr>';
+    }).join('');
+    html+='<div style="margin-top:10px;">'
+      +'<div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;">'+escHtml(SECTION_ROTATION_ROLE_LABELS[role])+'</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px;">'+body+'</table></div>';
+  });
+  html+='</div></div>';
+
+  html+='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:10px;">Edit rotation order</div>';
+  html+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">';
+  html+='<label style="font-size:11px;color:var(--text2);">Rotation anchor (start of the current block)<br>'
+    +'<input type="date" id="srAnchor" value="'+escHtml(cfg.anchor)+'" style="margin-top:3px;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:inherit;"></label>';
+  html+='<label style="font-size:11px;color:var(--text2);">Rotates every<br>'
+    +'<input type="number" id="srPeriodMonths" min="1" value="'+escHtml(cfg.periodMonths)+'" style="margin-top:3px;width:70px;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:inherit;"> months</label>';
+  html+='</div>';
+
+  SECTION_ROTATION_ROLE_KEYS.forEach(function(role){
+    var r=cfg.roles[role];
+    html+='<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 6px;">'+escHtml(SECTION_ROTATION_ROLE_LABELS[role])+'</div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px;">';
+    html+='<tr><th style="padding:4px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);">Band</th>'
+      +'<th style="padding:4px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);">Name</th></tr>';
+    r.bands.forEach(function(band,i){
+      html+='<tr><td style="padding:4px 8px;border-top:1px solid var(--border);">'
+        +'<input type="text" data-sr-band="'+role+'-'+i+'" value="'+escHtml(band)+'" style="width:100%;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:inherit;"></td>'
+        +'<td style="padding:4px 8px;border-top:1px solid var(--border);">'
+        +'<input type="text" data-sr-name="'+role+'-'+i+'" value="'+escHtml(r.order[i]||'')+'" style="width:100%;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:inherit;"></td></tr>';
+    });
+    html+='</table>';
+    var fixedSlots=cfg.fixed[role]||[];
+    if(fixedSlots.length){
+      html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px;">';
+      fixedSlots.forEach(function(s,i){
+        html+='<tr><td style="padding:4px 8px;border-top:1px solid var(--border);width:38%;color:var(--text2);">'+escHtml(s.label)+' (fixed)</td>'
+          +'<td style="padding:4px 8px;border-top:1px solid var(--border);">'
+          +'<input type="text" data-sr-fixed="'+role+'-'+i+'" value="'+escHtml(s.name||'')+'" style="width:100%;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:inherit;"></td></tr>';
+      });
+      html+='</table>';
+    }
+  });
+
+  html+='<div style="font-size:11px;color:var(--text3);margin:6px 0 12px;line-height:1.5;">These rows describe the CURRENT block for each role (same as "Current rotation" above). Correct them here any time the order itself changes — the rotation keeps advancing on its own every '+escHtml(cfg.periodMonths)+' months after that. The "(fixed)" rows below each role don\'t rotate — they\'re just names you can correct directly.</div>';
+  html+='<button class="btn btn-gold" onclick="saveSectionRotationFromUI()">Save rotation</button>';
+  html+='</div>';
+
+  el.innerHTML=html;
+}
+function saveSectionRotationFromUI(){
+  var cfg=loadSectionRotation();
+  var anchorEl=document.getElementById('srAnchor'), pmEl=document.getElementById('srPeriodMonths');
+  var anchor=anchorEl&&anchorEl.value?anchorEl.value:cfg.anchor;
+  var periodMonths=pmEl&&parseInt(pmEl.value,10)>0?parseInt(pmEl.value,10):cfg.periodMonths;
+  var roles={}, fixed={};
+  SECTION_ROTATION_ROLE_KEYS.forEach(function(role){
+    var r=cfg.roles[role];
+    var bands=[],order=[];
+    r.bands.forEach(function(_,i){
+      var b=document.querySelector('[data-sr-band="'+role+'-'+i+'"]');
+      var n=document.querySelector('[data-sr-name="'+role+'-'+i+'"]');
+      bands.push(b?b.value.trim():r.bands[i]);
+      order.push(n?n.value.trim():(r.order[i]||''));
+    });
+    roles[role]={dir:r.dir,bands:bands,order:order};
+    fixed[role]=(cfg.fixed[role]||[]).map(function(s,i){
+      var f=document.querySelector('[data-sr-fixed="'+role+'-'+i+'"]');
+      return {label:s.label,name:f?f.value.trim():(s.name||'')};
+    });
+  });
+  var next={anchor:anchor,periodMonths:periodMonths,roles:roles,fixed:fixed};
+  saveSectionRotation(next);
+  showToast('Section rotation saved');
+  renderSectionRotation();
+}
+/* Read-only reference card for the Daily Lineup page — shows whose turn
+   it is for the lineup's own date, right above the roles it's relevant
+   to, so Carlos has it in view while typing Floors by hand. Never
+   writes into floorsByName; Floors stays his own call. */
+function dlSectionRotationCard(ds){
+  var cfg=loadSectionRotation();
+  var lines=SECTION_ROTATION_ROLE_KEYS.map(function(role){
+    var rows=sectionRotationAssignment(cfg,ds,role);
+    var parts=rows.map(function(r){return '<span style="white-space:nowrap;">'+escHtml(r.band)+': '+escHtml(r.name||'—')+'</span>';}).join('<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>');
+    var fixedSlots=(cfg.fixed&&cfg.fixed[role])||[];
+    if(fixedSlots.length){
+      var fixedParts=fixedSlots.map(function(s){return '<span style="white-space:nowrap;">'+escHtml(s.label)+': '+escHtml(s.name||'—')+'</span>';}).join('<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>');
+      parts+='<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>'+fixedParts;
+    }
+    return '<div style="margin-top:2px;"><b>'+escHtml(SECTION_ROTATION_ROLE_LABELS[role])+':</b> '+parts+'</div>';
+  }).join('');
+  return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;">'
+    +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
+    +'<span style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Section rotation &middot; full list at Section Rotation</span></div>'
+    +'<div style="font-size:11px;color:var(--text1);margin-top:3px;line-height:1.6;">'+lines+'</div></div>';
+}
+
 /* ── parsing: Section assignment ── */
 function dlParseSections(wb){
   function grid(name){
@@ -27914,6 +28181,8 @@ function renderDailyLineup(){
   html+='</div>';
   html+='<button onclick="dlShiftDate(1)" aria-label="Next day" style="padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">&rarr;</button>';
   html+='</div>';
+
+  html+=dlSectionRotationCard(ds);
 
   var P=dlBuildPlan(ds);
   if(!P){
