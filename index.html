@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.93.0"/>
+<meta name="app-version" content="7.94.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.94.0', date:'2026-10-26',
+    features:['Labor Focus Sprint checklist gets a Start button and a running clock — tap Start and it times how long today\'s routine takes, start to finish, shown live on the panel and shared with every manager the same way the checklist itself already is. Finishing the last item (by hand or automatically) now also throws a little celebration: confetti plus the housekeeper mascot\'s existing happy dance (bounce, wave, sparkles — the same character already used on the Overtime card, not a new one), with the final time shown as "Finished in MM:SS." Fires once per day no matter how many times something gets checked and unchecked afterward.']
+  },
   {
     v:'7.93.0', date:'2026-10-26',
     fixes:['Fixed the new Labor Focus Sprint bubble being invisible whenever the "New version available" banner was showing — that banner is a full-width bar pinned to the very bottom of the screen with a higher priority than anything else, and it sat directly on top of the bubble\'s old bottom-right spot, hiding it completely. Carlos\'s real report: he couldn\'t find the checklist at all after it shipped. Moved the bubble (and its panel) up clear of where that banner sits, however tall it ends up being on a given phone\'s safe area. Also caught in the same pass: the last 3 deploys (7.90.0-7.92.0) forgot to bump the service worker\'s own CACHE_VERSION, so some devices could still have been stuck on an old cached build independent of this bug — bumped it now and will keep bumping it going forward.']
@@ -13953,6 +13957,66 @@ function laborSprintPanelToggle(){
   localStorage.setItem('hk_ls_panel_open',cur?'0':'1');
   renderLaborSprint();
 }
+/* Carlos's ask: a Start button + a running clock for how long today's
+   routine takes, start to finish. Stored on the SAME per-date state
+   blob the checkbox answers already live on (_startedAt/_finishedAt —
+   underscore-prefixed so they can never collide with a real item id
+   like 'p1' or 'u2'), so it's shared/synced for free through the
+   existing laborSprintSave plumbing. */
+function laborSprintStart(ds){
+  var state=laborSprintLoad(ds);
+  state._startedAt=Date.now();
+  laborSprintSave(ds,state);
+  renderLaborSprint();
+}
+function laborSprintFmtElapsed(ms){
+  var s=Math.max(0,Math.floor(ms/1000));
+  var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;
+  function pad(n){return (n<10?'0':'')+n;}
+  return (h>0?h+':'+pad(m):m)+':'+pad(sec);
+}
+var _laborSprintTickHandle=null;
+function laborSprintStopTick(){
+  if(_laborSprintTickHandle){ clearInterval(_laborSprintTickHandle); _laborSprintTickHandle=null; }
+}
+/* Only ticks a small text node directly — never re-runs the full
+   renderLaborSprint() every second, which would rebuild the whole
+   panel's HTML (checkbox list and all) just to update a clock. */
+function laborSprintStartTick(startedAt){
+  laborSprintStopTick();
+  function tick(){
+    var el=document.getElementById('laborSprintTimerText');
+    if(!el){ laborSprintStopTick(); return; }
+    el.textContent=laborSprintFmtElapsed(Date.now()-startedAt);
+  }
+  tick();
+  _laborSprintTickHandle=setInterval(tick,1000);
+}
+/* Confetti + the housekeeper mascot's existing "happy" state (bounce,
+   wave, sparkle, confetti bits — see .owm-happy / _laborOtMascotPartsHTML,
+   built originally for the Overtime card) reused as-is for "dancing,"
+   rather than inventing a whole new animation just for this. Shown as
+   a dismissable full-screen overlay, auto-clears itself after a few
+   seconds either way. */
+function laborSprintCelebrate(){
+  try{ fireConfetti(); }catch(e){}
+  try{
+    var old=document.getElementById('laborSprintCelebrateOverlay');
+    if(old)old.remove();
+    var ov=document.createElement('div');
+    ov.id='laborSprintCelebrateOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;background:rgba(15,37,68,.4);cursor:pointer;';
+    ov.onclick=function(){ ov.remove(); };
+    ov.innerHTML='<div style="background:var(--white);border-radius:20px;padding:34px 30px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);max-width:280px;">'
+      +'<div style="transform:scale(2.6);transform-origin:top center;height:30px;margin-bottom:28px;display:flex;justify-content:center;">'
+      +'<div class="owm-char-box" style="position:static;"><div class="owm-char owm-happy">'+_laborOtMascotPartsHTML('happy')+'</div></div>'
+      +'</div>'
+      +'<div style="font-size:16px;font-weight:800;color:var(--navy);">Labor Focus Sprint complete! &#127881;</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">Nice work today.</div></div>';
+    document.body.appendChild(ov);
+    setTimeout(function(){ if(ov&&ov.parentNode)ov.remove(); },5000);
+  }catch(e){}
+}
 /* Carlos: the full card ate too much space at the top of the page —
    wants "something small on the right." Lives as a fixed bubble
    (collapsed) that expands into a floating panel on tap, instead of
@@ -13970,6 +14034,7 @@ function renderLaborSprint(){
   if(!onLaborPage||!dashSelectedDate){
     bubble.style.display='none';
     panel.style.display='none';
+    laborSprintStopTick();
     return;
   }
   var ds=dateStr(dashSelectedDate);
@@ -13983,15 +14048,41 @@ function renderLaborSprint(){
   LABOR_SPRINT_STEPS.forEach(function(step){ step.items.forEach(function(it){ total++; if(isChecked(it))done++; }); });
   var allDone=(done===total);
 
+  /* Finish detection has to happen here, BEFORE the panel-closed early
+     return below — the last item can get checked (or auto-complete via
+     a background sync) while the panel is closed, and the celebration
+     still has to fire. _finishedAt itself is the one-shot gate: once
+     set it's never cleared, so unchecking something afterward and
+     re-finishing later won't refire the celebration or restart the
+     clock. */
+  if(allDone&&!manual._finishedAt){
+    manual._finishedAt=Date.now();
+    laborSprintSave(ds,manual);
+    laborSprintCelebrate();
+  }
+
   bubble.style.display='flex';
   bubble.style.background=allDone?'var(--green)':'var(--navy)';
   document.getElementById('laborSprintBubbleCount').textContent=allDone?'✓':(done+'/'+total);
 
   panel.style.display=open?'flex':'none';
-  if(!open)return;
+  if(!open){ laborSprintStopTick(); return; }
   document.getElementById('laborSprintPanelDate').textContent=dayLabel;
 
-  var html='';
+  var timerHtml;
+  if(manual._finishedAt){
+    laborSprintStopTick();
+    timerHtml=manual._startedAt
+      ? '<div style="margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:8px;font-size:12px;font-weight:700;color:var(--green);">&#9989; Finished in '+laborSprintFmtElapsed(manual._finishedAt-manual._startedAt)+'</div>'
+      : '<div style="margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:8px;font-size:12px;font-weight:700;color:var(--green);">&#127881; All done!</div>';
+  }else if(manual._startedAt){
+    timerHtml='<div style="margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:8px;font-size:13px;font-weight:700;color:var(--text1);display:flex;align-items:center;gap:6px;">&#9201; <span id="laborSprintTimerText">00:00</span></div>';
+  }else{
+    laborSprintStopTick();
+    timerHtml='<button onclick="laborSprintStart(\''+ds+'\')" class="btn btn-gold" style="margin-top:8px;width:100%;">&#9654; Start</button>';
+  }
+
+  var html=timerHtml;
   LABOR_SPRINT_STEPS.forEach(function(step){
     var stepDone=step.items.every(isChecked);
     html+='<div style="margin-top:14px;">';
@@ -14012,6 +14103,7 @@ function renderLaborSprint(){
   });
   html+='<div style="font-size:10px;color:var(--text3);margin-top:12px;line-height:1.5;">&#9889; Auto-checked items reflect real data already in the app. Paychex and Opera steps always need a manual check — there\'s no way for the app to see those systems.</div>';
   document.getElementById('laborSprintPanelBody').innerHTML=html;
+  if(manual._startedAt&&!manual._finishedAt)laborSprintStartTick(manual._startedAt);
 }
 
 /* The six HK positions, in the order every weekly view (Weekly Labor Pace,
