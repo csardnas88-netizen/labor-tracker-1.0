@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.91.0"/>
+<meta name="app-version" content="7.92.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -2282,6 +2282,23 @@ Supervisor 3</textarea>
     </div>
     <button class="btn btn-navy" style="margin-top:16px;width:100%;" onclick="wtc_hideHelp()">Got it</button>
   </div>
+</div>
+
+<!-- Labor Focus Sprint — floating bubble + panel, kept outside every
+     page-X wrapper so its position:fixed isn't defeated by an ancestor's
+     display:none. renderLaborSprint() shows/hides both based on whether
+     the Labor page is the one currently on screen. -->
+<div id="laborSprintBubble" onclick="laborSprintPanelToggle()" style="display:none;position:fixed;right:18px;bottom:18px;z-index:280;width:58px;height:58px;border-radius:50%;background:var(--navy);box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer;flex-direction:column;align-items:center;justify-content:center;user-select:none;">
+  <div style="font-size:16px;line-height:1;">&#128203;</div>
+  <div id="laborSprintBubbleCount" style="font-size:10px;font-weight:800;color:#fff;margin-top:2px;line-height:1;"></div>
+</div>
+<div id="laborSprintPanel" style="display:none;position:fixed;right:18px;bottom:84px;z-index:280;width:340px;max-width:calc(100vw - 36px);max-height:70vh;background:var(--white);border-radius:var(--radius);box-shadow:0 14px 36px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column;">
+  <div style="background:var(--navy);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;">
+    <div><div style="font-size:13px;font-weight:700;color:#fff;">&#128203; Labor Focus Sprint</div>
+    <div id="laborSprintPanelDate" style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px;"></div></div>
+    <button onclick="laborSprintPanelToggle()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#fff;line-height:1;flex-shrink:0;">&#215;</button>
+  </div>
+  <div id="laborSprintPanelBody" style="padding:4px 14px 14px;overflow-y:auto;"></div>
 </div>
 
 <div class="modal-overlay" id="pinGateOverlay" style="display:none;" onclick="if(event.target===this)cancelPinGate()">
@@ -4624,6 +4641,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.92.0', date:'2026-10-26',
+    features:['New Labor Focus Sprint checklist — turns Carlos\'s printed daily routine (Paychex time cards, uploading the Labor Distribution Report, downloading/uploading the R106, updating DNDs, analyzing Weekly Labor Pace, reviewing OT/Under Hours) into an on-screen checklist that follows whichever day is selected on the Labor page, so a manager who has to step away can come back and see exactly what\'s left. Lives as a small floating bubble in the bottom-right corner (shows "done/total", tap to open the full list) rather than a full card in the page — Carlos\'s call, the first version ate too much space at the top of the page. Shared across every manager, same as the Daily Lineup\'s per-day state. Steps that are real in-app actions (uploading the Labor Distribution Report, uploading R106 to OCC, saving the DND list) check themselves off automatically from the same data the rest of the dashboard already reads — never their own stored flag, so they can\'t drift from reality. Paychex and the R106 download itself stay manual: those happen in other systems the app has no way to see.']
+  },
   {
     v:'7.91.0', date:'2026-10-26',
     fixes:['The Daily Lineup\'s Floor Supervisors / House Attendants / Turndown lists now sort low-floor-to-high using the Section Rotation band, instead of whatever order the Section assignment file happened to list names in. Carlos\'s real report: he read "José, María, Rolando" as if that order meant floor order, and concluded Rolando was on the upper floors when he\'s actually on 2nd-5th — the list order never meant anything floor-related at all, which is exactly what made it misleading. Anyone the rotation doesn\'t recognize (a sub, a floater, a name typed differently) still shows, just at the end rather than breaking the sort.']
@@ -7474,6 +7495,7 @@ function _friendlyKeyLabel(key){
   if(key==='dl_schedule')return 'Schedule Draft';
   if(key==='dl_schedule_snapshot')return 'Daily Lineup schedule (frozen)';
   if(key.indexOf('dl_day_')===0)return 'Daily Lineup';
+  if(key.indexOf('laborsprint_')===0)return 'Labor Focus Sprint';
   if(key.indexOf('occfc_')===0)return 'Occupancy forecast';
   if(key.indexOf('occhist_')===0)return 'Occupancy history';
   if(key.indexOf('r106_')===0)return 'OCC';
@@ -8652,6 +8674,9 @@ function _syncFromSheetsPull(){
         if(key.indexOf('dl_day_')===0&&all[key]&&typeof all[key]==='object'){
           safeSetItem('hk_'+key,JSON.stringify(all[key])); updated=true;
         }
+        if(key.indexOf('laborsprint_')===0&&all[key]&&typeof all[key]==='object'){
+          safeSetItem('hk_'+key,JSON.stringify(all[key])); updated=true;
+        }
         if(key.indexOf("occfc_")===0){
           var wkFC=key.replace("occfc_","");
           var remoteFC=all[key];
@@ -8934,6 +8959,9 @@ function forceSyncToSupabase(){
       else if(k==="hk_dl_schedule_snapshot"){ pairs.push(["dl_schedule_snapshot", JSON.parse(localStorage[k])]); }
       else if(k.indexOf("hk_dl_day_")===0){
         pairs.push(["dl_day_"+k.replace("hk_dl_day_",""), JSON.parse(localStorage[k])]);
+      }
+      else if(k.indexOf("hk_laborsprint_")===0){
+        pairs.push(["laborsprint_"+k.replace("hk_laborsprint_",""), JSON.parse(localStorage[k])]);
       }
       else if(k.indexOf("hk_occfc_")===0){
         pairs.push(["occfc_"+k.replace("hk_occfc_",""), JSON.parse(localStorage[k])]);
@@ -11583,6 +11611,11 @@ function showPage(page){
     if(nav)nav.classList.toggle('active',p===page);
   });
   currentPage=page;
+  /* Hides the Labor Focus Sprint bubble/panel immediately on navigating
+     away — page!=='labor' doesn't call renderLaborDash() below, so
+     without this the floating bubble could stay stuck on screen over
+     whatever page comes next. */
+  try{renderLaborSprint();}catch(e){}
   closeSidebar();
   window.scrollTo({top:0,behavior:'smooth'});
   if(page==='dashboard')renderDashHub();
@@ -13804,6 +13837,167 @@ function renderLaborDash(){
 
   /* Day analysis */
   renderDashDayAnalysis(days,rooms,today,wk);
+  renderLaborSprint();
+}
+
+/* ── Labor Focus Sprint ──
+   Carlos's printed "Labor Focus Sprint" PDF, turned into a checklist
+   that follows whichever day is selected on the Labor dashboard
+   (dashSelectedDate) so a manager who has to step away can come back
+   and see exactly what's left for TODAY's labor routine. Shared across
+   every manager (synced like the Daily Lineup's per-day state) since
+   the whole point is "whoever picks it back up can see where it's at,"
+   not a private per-device to-do list.
+
+   Paychex and Opera steps are genuinely outside this app — no data
+   signal exists for "did someone approve the time cards in Paychex,"
+   so those stay manual checkboxes, same as Carlos asked. The three
+   steps that ARE real in-app actions (upload the Labor Distribution
+   Report, upload R106 to OCC, save the DND list) auto-check themselves
+   from the same data the rest of the dashboard already reads — never
+   stored as their own flag, always recomputed, so they can't drift
+   from reality. */
+var LABOR_SPRINT_STEPS=[
+  {id:'paychex',n:1,title:'Paychex: Time Cards and Report',source:'PAYCHEX',items:[
+    {id:'p1',text:'Review the time cards for the day being evaluated.'},
+    {id:'p2',text:'Run the Labor Distribution Report for that day.'},
+    {id:'p3',text:'Breaks: every employee took their break.',sub:"Compare against that day's schedule."},
+    {id:'p4',text:'Position: everyone is clocked in under the correct position.'},
+    {id:'p5',text:"Hours worked: each employee's hours match their scheduled shift."},
+    {id:'p6',text:"Correct anything that doesn't match."},
+    {id:'p7',text:'Approve the time cards.'}
+  ]},
+  {id:'uploadlabor',n:2,title:'Upload the Labor Distribution Report',source:'LABOR APP',items:[
+    {id:'u1',text:'Open the Labor App and click Upload PDF.',auto:'paychex'},
+    {id:'u2',text:'Under REPORT DATE, select the month, day and year of the report.',auto:'paychex'},
+    {id:'u3',text:'Tap "Tap to choose PDF file" and select the report.',auto:'paychex'}
+  ]},
+  {id:'opera',n:3,title:'Download the R106',source:'OPERA',items:[
+    {id:'o1',text:'Download the R106 using its default settings.'}
+  ]},
+  {id:'uploadocc',n:4,title:'Upload the R106 to OCC',source:'LABOR APP',items:[
+    {id:'c1',text:'Click OCC and upload the R106.',auto:'occ'},
+    {id:'c2',text:'Confirm the button shows OCC ✓ and ROOMS shows rooms sold with the hours budget in green.',auto:'occ'}
+  ]},
+  {id:'dnds',n:5,title:"Update the Previous Day's DNDs",source:'LABOR APP',items:[
+    {id:'d1',text:'Copy the DND room list from the Shift Notes.'},
+    {id:'d2',text:'Open View / edit DND room list, paste one room per line and click Save.',auto:'dnd'},
+    {id:'d3',text:'Confirm the DNDS total matches the Shift Notes.'}
+  ]},
+  {id:'pace',n:6,title:'Analyze the Weekly Labor Pace',source:'LABOR APP',items:[
+    {id:'w1',text:"For each position, review the day's column: Actual, Standard and Var."},
+    {id:'w2',text:'Check the DND box (count and % of stayovers).'},
+    {id:'w3',text:'Write in + Note whenever there is a valid comment to make.'}
+  ]},
+  {id:'ot',n:7,title:'Review Overtime and Under Hours',source:'LABOR APP',items:[
+    {id:'t1',text:'In OT: who is already over 40 hours for the week.'},
+    {id:'t2',text:'Approaching OT: who is close and could go over with their remaining shifts.'},
+    {id:'t3',text:'Under hours: who is below their expected hours.'},
+    {id:'t4',text:'Compare with the schedule for the remaining days and adjust if needed.'}
+  ]}
+];
+/* Same data every other part of the Labor dashboard already reads —
+   see renderDashDayAnalysis's R106 lookup (hasR106Month) and
+   saveDNDRoomsForDate's dndRoomsUpdatedAt convention. Nothing here is
+   its own source of truth. */
+function laborSprintAutoChecks(ds){
+  var mData=loadMonthData(monthKey(parseLocalDate(ds)));
+  var paychex=!!(mData&&mData.days&&mData.days[ds]);
+
+  var nightDs=prevDateStr(ds);
+  function r106Net(mk){
+    try{
+      var raw=localStorage.getItem('hk_r106_'+mk);
+      if(!raw)return 0;
+      var entry=JSON.parse(raw)[nightDs];
+      return (entry&&typeof entry==='object')?(entry.net||0):(entry||0);
+    }catch(e){ return 0; }
+  }
+  var occ=(r106Net(monthKey(parseLocalDate(nightDs)))>0)||(r106Net(monthKey(parseLocalDate(ds)))>0);
+
+  var dnd=!!(mData&&mData.dndRoomsUpdatedAt&&mData.dndRoomsUpdatedAt[ds]!==undefined);
+
+  return {paychex:paychex,occ:occ,dnd:dnd};
+}
+function laborSprintLoad(ds){ try{var s=localStorage.getItem('hk_laborsprint_'+ds);return s?JSON.parse(s):{};}catch(e){return {};} }
+function laborSprintSave(ds,state){
+  safeSetItem('hk_laborsprint_'+ds,JSON.stringify(state));
+  if(typeof supaPut==='function'){try{supaPut('laborsprint_'+ds,state);}catch(_){}}
+}
+function laborSprintToggle(ds,itemId){
+  var state=laborSprintLoad(ds);
+  state[itemId]=!state[itemId];
+  laborSprintSave(ds,state);
+  renderLaborSprint();
+}
+/* Open/closed is a local display preference (does anyone want the
+   panel up right now), not shared progress — deliberately NOT synced,
+   and deliberately NOT prefixed hk_laborsprint_ so it can't get swept
+   into the per-date sync loop alongside it. */
+function laborSprintPanelToggle(){
+  var cur=localStorage.getItem('hk_ls_panel_open')==='1';
+  localStorage.setItem('hk_ls_panel_open',cur?'0':'1');
+  renderLaborSprint();
+}
+/* Carlos: the full card ate too much space at the top of the page —
+   wants "something small on the right." Lives as a fixed bubble
+   (collapsed) that expands into a floating panel on tap, instead of
+   taking up room in the normal page flow. Only shown while the Labor
+   page itself is on screen — renderLaborDash() can run in the
+   background from a sync pull even when some other page is showing
+   (see the unconditional renderLaborDash() call after a sync), so
+   without this check the bubble could pop up over whatever page the
+   manager actually has open. */
+function renderLaborSprint(){
+  var bubble=document.getElementById('laborSprintBubble');
+  var panel=document.getElementById('laborSprintPanel');
+  if(!bubble||!panel)return;
+  var onLaborPage=(typeof currentPage!=='undefined'&&currentPage==='labor');
+  if(!onLaborPage||!dashSelectedDate){
+    bubble.style.display='none';
+    panel.style.display='none';
+    return;
+  }
+  var ds=dateStr(dashSelectedDate);
+  var auto=laborSprintAutoChecks(ds);
+  var manual=laborSprintLoad(ds);
+  var dayLabel=dashSelectedDate.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  var open=localStorage.getItem('hk_ls_panel_open')==='1';
+
+  function isChecked(it){ return it.auto?!!auto[it.auto]:!!manual[it.id]; }
+  var total=0,done=0;
+  LABOR_SPRINT_STEPS.forEach(function(step){ step.items.forEach(function(it){ total++; if(isChecked(it))done++; }); });
+  var allDone=(done===total);
+
+  bubble.style.display='flex';
+  bubble.style.background=allDone?'var(--green)':'var(--navy)';
+  document.getElementById('laborSprintBubbleCount').textContent=allDone?'✓':(done+'/'+total);
+
+  panel.style.display=open?'flex':'none';
+  if(!open)return;
+  document.getElementById('laborSprintPanelDate').textContent=dayLabel;
+
+  var html='';
+  LABOR_SPRINT_STEPS.forEach(function(step){
+    var stepDone=step.items.every(isChecked);
+    html+='<div style="margin-top:14px;">';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+      +'<span style="width:18px;height:18px;border-radius:50%;background:'+(stepDone?'var(--green)':'var(--navy)')+';color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(stepDone?'&#10003;':step.n)+'</span>'
+      +'<span style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">'+escHtml(step.source)+'</span></div>';
+    html+='<div style="font-size:12px;font-weight:700;color:var(--text1);margin:0 0 6px 26px;">'+escHtml(step.title)+'</div>';
+    step.items.forEach(function(it){
+      var isAuto=!!it.auto, checked=isChecked(it);
+      html+='<div style="display:flex;align-items:flex-start;gap:8px;margin:0 0 6px 26px;'+(isAuto?'':'cursor:pointer;')+'"'
+        +(isAuto?'':' onclick="laborSprintToggle(\''+ds+'\',\''+it.id+'\')"')+'>';
+      html+='<input type="checkbox" '+(checked?'checked':'')+' '+(isAuto?'disabled title="Marked automatically from app data"':'')
+        +' style="margin-top:2px;width:15px;height:15px;accent-color:var(--gold);flex-shrink:0;'+(isAuto?'':'cursor:pointer;')+'">';
+      html+='<div style="flex:1;"><div style="font-size:12px;color:'+(checked?'var(--text3);text-decoration:line-through;':'var(--text1);')+'">'+escHtml(it.text)+(isAuto?' <span style="font-size:9px;color:var(--gold);font-weight:700;">&#9889;auto</span>':'')+'</div>'
+        +(it.sub?'<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+escHtml(it.sub)+'</div>':'')+'</div></div>';
+    });
+    html+='</div>';
+  });
+  html+='<div style="font-size:10px;color:var(--text3);margin-top:12px;line-height:1.5;">&#9889; Auto-checked items reflect real data already in the app. Paychex and Opera steps always need a manual check — there\'s no way for the app to see those systems.</div>';
+  document.getElementById('laborSprintPanelBody').innerHTML=html;
 }
 
 /* The six HK positions, in the order every weekly view (Weekly Labor Pace,
