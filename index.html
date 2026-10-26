@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.90.0"/>
+<meta name="app-version" content="7.91.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4624,6 +4624,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.91.0', date:'2026-10-26',
+    fixes:['The Daily Lineup\'s Floor Supervisors / House Attendants / Turndown lists now sort low-floor-to-high using the Section Rotation band, instead of whatever order the Section assignment file happened to list names in. Carlos\'s real report: he read "José, María, Rolando" as if that order meant floor order, and concluded Rolando was on the upper floors when he\'s actually on 2nd-5th — the list order never meant anything floor-related at all, which is exactly what made it misleading. Anyone the rotation doesn\'t recognize (a sub, a floater, a name typed differently) still shows, just at the end rather than breaking the sort.']
+  },
   {
     v:'7.90.0', date:'2026-10-26',
     features:['New Section Rotation page (Operations): Houseman, Supervisor, and Turndown floor-band coverage all rotate every 4 months — Supervisors step up a band each rotation (18th-22nd wraps back down to 2nd-5th); Housemen and Turndown Attendants step down (2nd-5th wraps up to 18th-22nd) — confirmed by Carlos as the mirror of each other, and that Turndown follows the same pattern as Houseman. Turndown keeps its own floor ranges (6th-10th, 10th-14th, 14th-18th), which don\'t line up with Houseman/Supervisor\'s. Also added a "Fixed roles" card for the Floater/PM/ON/Laundry Lead names that DON\'T rotate (Carlos confirmed), editable but with no 4-month math applied. The page shows the current and next rotation for all three roles and lets him correct any of it whenever reality changes; everything after that advances on its own. A read-only reference card now also shows on the Daily Lineup for whichever date is open, so it\'s visible while he fills in Floors — but it only informs that field, never writes into it: Floors stays his own per-day call, same as before.']
@@ -22097,6 +22101,26 @@ function sectionRotationLookupBand(cfg,ds,role,name){
   var hit=sectionRotationAssignment(cfg,ds,role).filter(function(r){return r.name.trim().toLowerCase()===norm;})[0];
   return hit?hit.band:'';
 }
+/* Carlos's real confusion (Oct 2026): he read the Daily Lineup's
+   Floor Supervisors list order as if it meant floor order, when it was
+   really just whatever order the Section assignment file happened to
+   list people in — unrelated to floors. Sorting low-to-high by the
+   Section Rotation band makes the printed order actually mean
+   something. Anyone the rotation doesn't know (a floater, a sub, a
+   name typed differently than the rotation's order list) sorts to the
+   end rather than breaking the sort or disappearing. */
+function dlSortByRotationBand(names,ds,role){
+  var cfg=loadSectionRotation();
+  var bandIndex={};
+  sectionRotationAssignment(cfg,ds,role).forEach(function(r,i){
+    var k=r.name.trim().toLowerCase();
+    if(k)bandIndex[k]=i;
+  });
+  return names.map(function(n,origI){
+    var k=(n||'').trim().toLowerCase();
+    return {n:n,origI:origI,idx:bandIndex.hasOwnProperty(k)?bandIndex[k]:999};
+  }).sort(function(a,b){ return a.idx-b.idx || a.origI-b.origI; }).map(function(x){return x.n;});
+}
 function renderSectionRotation(){
   var el=document.getElementById('sectionRotationContent');
   if(!el)return;
@@ -22454,6 +22478,7 @@ function dlBuildPlan(ds){
   P.am_coord=day.mgr.filter(function(p){return _schedMgrIs(p[1],SCHED_MGR_AM);}).map(function(p){return p[0];});
   P.pm_coord=day.mgr.filter(function(p){return _schedMgrIs(p[1],SCHED_MGR_PM);}).map(function(p){return p[0];});
   P.sup=S.sup.filter(function(p){return dlIn(dlLook(day,'sup',p[1]));}).map(function(p){return p[1];});
+  P.sup=dlSortByRotationBand(P.sup,ds,'sup');
   P.sup_pm=(function(){var v=dlLook(day,'sup',S.sup_pm);return (v==='1'||v==='PM')?[S.sup_pm]:[];})();
   P.hm=S.hm.filter(function(p){return dlIn(dlLook(day,'hp',p[1]));}).map(function(p){return p[1];});
   if(dlIn(dlLook(day,'hp',S.hm_float)))P.hm.push(S.hm_float);
@@ -22464,6 +22489,7 @@ function dlBuildPlan(ds){
      never reading this one, so a covering RA never showed up in Houseman
      at all — Carlos's report, Julia Say on 2026-08-20. */
   day.gra.forEach(function(p){ if(p[1]==='HOUSEMAN')P.hm.push(p[0]); });
+  P.hm=dlSortByRotationBand(P.hm,ds,'hm');
   /* On-screen diagnosis for an empty House Attendants block — Carlos's
      ask after a long back-and-forth chasing this exact thing through the
      browser console: the page itself should say WHY it's empty, so a
@@ -22508,6 +22534,7 @@ function dlBuildPlan(ds){
   day.gra.forEach(function(p){ if(p[1]==='LOBBY')P.lobby_am.push(p[0]); });
   P.night=day.night.filter(function(p){return dlIn(p[1]);}).map(function(p){return p[0];});
   P.td=S.td.filter(function(p){return dlIn(dlLook(day,'td',p[1]));}).map(function(p){return p[1];});
+  P.td=dlSortByRotationBand(P.td,ds,'td');
   var placed={},uncovered=[];
   DL_FLOORS.forEach(function(fl){
     var owner=S.gra[fl];
