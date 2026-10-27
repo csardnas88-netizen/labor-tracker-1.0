@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.94.0"/>
+<meta name="app-version" content="7.95.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.95.0', date:'2026-10-27',
+    fixes:['Fixed a cover day silently disappearing for ANYONE covering Laundry or Lobby — Carlos\'s real report (Jorge Gonzalez/Laundry): he marked Jorge covering Laundry on a Tuesday, then later just filled in a routine value going down the rest of the Houseman crew, landed on Jorge\'s own cell again, and his whole Laundry day vanished with no warning (and never showed up on the exported Excel). Root cause: the moment someone\'s own home-crew cell stops reading the away-label (LAUNDRY on Houseman, LOBBY on Laundry/anywhere else), the app deleted their cover row outright, with no way to tell "Carlos meant to release her" from "Carlos\'s routine click just happened to land on this cell." It now asks first — "[Name] is marked covering [Laundry/Lobby] on [date]. Changing this cell will remove that day. Continue?" — same explicit confirmation Clear Schedule and Undo already ask for before discarding something real. The render-time self-heal that used to clean up a stale cover row on its own (no way to ask anything mid-render) now only ever removes one that\'s still blank — a real, confirmed day only ever goes away through the live edit above, with the confirmation attached. Applies to every employee this can happen to (Laundry: Jorge; Lobby: Sandra S, Vanesa, anyone covering it), not a name-specific patch. Doesn\'t touch someone genuinely added to a crew as a second home (Sandra S/Vanesa\'s own permanent rows) — that\'s a different, already-correct mechanism.']
+  },
   {
     v:'7.94.0', date:'2026-10-26',
     features:['Labor Focus Sprint checklist gets a Start button and a running clock — tap Start and it times how long today\'s routine takes, start to finish, shown live on the panel and shared with every manager the same way the checklist itself already is. Finishing the last item (by hand or automatically) now also throws a little celebration: confetti plus the housekeeper mascot\'s existing happy dance (bounce, wave, sparkles — the same character already used on the Overtime card, not a new one), with the final time shown as "Finished in MM:SS." Fires once per day no matter how many times something gets checked and unchecked afterward.']
@@ -23498,10 +23502,38 @@ function schedUndo(){
   showToast('&#10003; Undone');
   renderSchedule();
 }
+/* Carlos's real report: he marked Jorge covering Laundry on a Tuesday
+   (LAUNDRY on his own Houseman cell), then later just filled in a
+   routine value going through the rest of the Houseman crew — landing
+   on Jorge's own cell again — and his whole Laundry day vanished with
+   no warning. Root cause: schedSyncLaundryCoverRow deletes the 'cover'
+   row the instant the home cell stops reading its away-label, with no
+   way to tell "Carlos meant to release this" from "Carlos's routine
+   click just happened to land here." A cover row Carlos actually
+   confirmed working ('1', not still blank) is real data, same as any
+   other day he's entered — so losing it needs the same explicit
+   confirmation clearSchedule/schedUndo already ask for, not a silent
+   side effect. Generalized so EVERY employee covering EITHER crew this
+   same way gets the same protection, not just Jorge/Laundry — Lobby's
+   cover rows (Sandra S, Vanesa, Andrea) are built identically
+   (schedSyncAllLobbyCoverRows) and were just as exposed. */
+function schedWarnBeforeCoverRelease(SCH,ds,bk,name,oldVal,newVal,crewKey,awayLabel){
+  if(bk===crewKey)return true;
+  if(!schedStatusIs(oldVal,awayLabel)||schedStatusIs(newVal,awayLabel))return true;
+  var day=SCH.days&&SCH.days[ds];
+  var cRow=day&&(day[crewKey]||[]).filter(function(r){ return dlNormAlias(r[0])===dlNormAlias(name); })[0];
+  if(cRow&&cRow[2]==='cover'&&String(cRow[1]||'').trim()==='1'){
+    var crewLabel=(SCHED_BLOCKS.filter(function(b){ return b.key===crewKey; })[0]||{}).label||crewKey;
+    return confirm(name+' is marked covering '+crewLabel+' on '+ds+'. Changing this cell will remove that day. Continue?');
+  }
+  return true;
+}
 function schedSetCell(bk,idx,name,ds,val,el){
   var SCH=dlLoadSchedule();
   var row=_schedRow(SCH,ds,bk,idx,name);
   if(!row)return;
+  if(!schedWarnBeforeCoverRelease(SCH,ds,bk,name,row[1],val,'laundry','LAUNDRY'))return;
+  if(!schedWarnBeforeCoverRelease(SCH,ds,bk,name,row[1],val,'lobby','LOBBY'))return;
   _schedStashForUndo('the cell edit for '+name+' on '+ds,[ds]);
   row[1]=String(val==null?'':val).trim();
   /* Editing someone's cell on a crew is Carlos saying she works there —
@@ -23555,6 +23587,10 @@ function schedSetCell(bk,idx,name,ds,val,el){
      LAUNDRY word left on her home crew's cell — same day, live, not
      just on the next render. */
   var laundryReleaseChanged=(bk==='laundry')&&schedReleaseStaleLaundryLabels(SCH,ds);
+  /* The LOBBY-direction twin — same live add-or-release reaction, now
+     that schedWarnBeforeCoverRelease above is what decides whether this
+     release is even allowed to go through. */
+  var lobbyRowChanged=schedSyncLobbyCoverRow(SCH,ds,bk,name,row[1]);
   /* Carlos's real report: Gabriela Cuevas (Room Attendant) and Gabriela
      (Lobby) are the same real person, listed independently on both
      crews — she can't be resting on one and working the other the same
@@ -23570,7 +23606,7 @@ function schedSetCell(bk,idx,name,ds,val,el){
   var crossCrewSynced=schedApplyCrossCrewSyncForDate(SCH,ds,{crew:bk,name:name});
   SCH.savedAt=new Date().toISOString();
   dlSaveSchedule(SCH);
-  if(chainMember||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||linkedMember||patyFromYesSynced||patyPmhmSynced||crossCrewSynced){
+  if(chainMember||isSarahiLobbyEdit||laundryRowChanged||laundryReleaseChanged||lobbyRowChanged||linkedMember||patyFromYesSynced||patyPmhmSynced||crossCrewSynced){
     /* The chain/mirror reaction can change a DIFFERENT cell (or crew
        card) on this same day — that needs the full grid repainted so
        it actually shows, unlike the single-cell case below. */
@@ -25184,6 +25220,35 @@ function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
   }
   return false;
 }
+/* The LOBBY-direction twin of schedSyncLaundryCoverRow above, same
+   add-or-release shape — needed so a release Carlos actually confirms
+   (via schedWarnBeforeCoverRelease) has somewhere to go live, rather
+   than leaving the 'cover' row orphaned at '1' forever now that the
+   passive render-time sweep (schedSyncAllLobbyCoverRows) no longer
+   deletes a row holding a real value on its own. */
+function schedSyncLobbyCoverRow(SCH,ds,bk,name,val){
+  if(bk==='lobby')return false;
+  var day=SCH.days[ds]; if(!day)return false;
+  if(!day.lobby)day.lobby=[];
+  var idx=-1;
+  for(var i=0;i<day.lobby.length;i++) if(dlNormAlias(day.lobby[i][0])===dlNormAlias(name)){idx=i;break;}
+  if(schedStatusIs(val,'LOBBY')){
+    if(idx===-1){
+      var lobbySpelling=_schedCrewSpellingFor(SCH,'lobby',name);
+      schedSetRetired(SCH,'lobby',name,false);
+      schedSetRetired(SCH,'lobby',lobbySpelling,false);
+      day.lobby.push([lobbySpelling,'1','cover']);
+      return true;
+    }
+    if(String(day.lobby[idx][1]||'').trim()===''){ day.lobby[idx][1]='1'; return true; }
+    return false;
+  }
+  if(idx!==-1&&day.lobby[idx][2]==='cover'){
+    day.lobby.splice(idx,1);
+    return true;
+  }
+  return false;
+}
 /* Retroactive version of the sync above — that one only reacts to a
    LIVE single-cell edit (schedSetCell), so a LAUNDRY mark that arrived
    any other way (typed into an Excel upload before it's parsed in,
@@ -25273,10 +25338,21 @@ function schedSyncAllLobbyCoverRows(SCH,dates){
       day.lobby.push([coverers[k],'1','cover']);
       changed=true;
     });
-    /* Drop any stale lobby 'cover' row whose source cell no longer reads
-       LOBBY — never touches a real (non-cover) row. */
+    /* Drop a stale lobby 'cover' row whose source cell no longer reads
+       LOBBY — but ONLY while it's still blank, i.e. nobody ever actually
+       confirmed her working that day. Carlos's real report (the same bug
+       already fixed for Jorge/Laundry, same shape here): this used to
+       delete the row outright the instant the source label changed, even
+       when it held a real confirmed '1' — silently discarding a real day
+       as a passive side effect of some unrelated edit on a render nobody
+       asked to clean this up during. A row that's already '1' now needs
+       the same explicit confirmation schedWarnBeforeCoverRelease asks
+       for on the live edit that actually moved her off Lobby — this
+       passive sweep never removes real data, only a still-blank
+       placeholder nobody ever gave a value. */
     for(var i=day.lobby.length-1;i>=0;i--){
       if(day.lobby[i][2]!=='cover')continue;
+      if(String(day.lobby[i][1]||'').trim()!=='')continue;
       if(!coverers[dlNormAlias(day.lobby[i][0])]){ day.lobby.splice(i,1); changed=true; }
     }
   });
