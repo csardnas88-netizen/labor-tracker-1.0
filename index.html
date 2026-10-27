@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.95.0"/>
+<meta name="app-version" content="7.96.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.96.0', date:'2026-10-27',
+    features:['The Labor Focus Sprint panel now names who finished it — Carlos\'s ask: the green bubble already tells every manager the checklist is done, but if something turns out wrong afterward he needs to know which manager to ask. The moment the last item completes, it stamps the signed-in email right there under "Finished in MM:SS" (or "All done!" if nobody pressed Start), the same signed-in identity every other per-device check in the app already reads. Stamped once, same one-shot rule the finish time itself already follows — someone else unchecking and re-finishing it later can\'t quietly relabel who actually did it. Nothing shown if whoever finished it wasn\'t signed in (offline, or finished before this shipped) rather than a confusing blank name.']
+  },
   {
     v:'7.95.0', date:'2026-10-27',
     fixes:['Fixed a cover day silently disappearing for ANYONE covering Laundry or Lobby — Carlos\'s real report (Jorge Gonzalez/Laundry): he marked Jorge covering Laundry on a Tuesday, then later just filled in a routine value going down the rest of the Houseman crew, landed on Jorge\'s own cell again, and his whole Laundry day vanished with no warning (and never showed up on the exported Excel). Root cause: the moment someone\'s own home-crew cell stops reading the away-label (LAUNDRY on Houseman, LOBBY on Laundry/anywhere else), the app deleted their cover row outright, with no way to tell "Carlos meant to release her" from "Carlos\'s routine click just happened to land on this cell." It now asks first — "[Name] is marked covering [Laundry/Lobby] on [date]. Changing this cell will remove that day. Continue?" — same explicit confirmation Clear Schedule and Undo already ask for before discarding something real. The render-time self-heal that used to clean up a stale cover row on its own (no way to ask anything mid-render) now only ever removes one that\'s still blank — a real, confirmed day only ever goes away through the live edit above, with the confirmation attached. Applies to every employee this can happen to (Laundry: Jorge; Lobby: Sandra S, Vanesa, anyone covering it), not a name-specific patch. Doesn\'t touch someone genuinely added to a crew as a second home (Sandra S/Vanesa\'s own permanent rows) — that\'s a different, already-correct mechanism.']
@@ -14061,6 +14065,15 @@ function renderLaborSprint(){
      clock. */
   if(allDone&&!manual._finishedAt){
     manual._finishedAt=Date.now();
+    /* Carlos's ask: the green bubble already tells every manager the
+       checklist is done — if something turns out wrong later, he needs
+       to know WHICH manager to ask about it. Same signed-in email every
+       other per-device identity check in this app already reads
+       (getSignedInEmail), stamped once at the moment it's finished —
+       never touched again, same one-shot rule _finishedAt itself
+       follows, so a later uncheck/recheck by someone else can't quietly
+       relabel who actually finished it that day. */
+    manual._finishedBy=(typeof getSignedInEmail==='function'&&getSignedInEmail())||'';
     laborSprintSave(ds,manual);
     laborSprintCelebrate();
   }
@@ -14076,9 +14089,15 @@ function renderLaborSprint(){
   var timerHtml;
   if(manual._finishedAt){
     laborSprintStopTick();
-    timerHtml=manual._startedAt
-      ? '<div style="margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:8px;font-size:12px;font-weight:700;color:var(--green);">&#9989; Finished in '+laborSprintFmtElapsed(manual._finishedAt-manual._startedAt)+'</div>'
-      : '<div style="margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:8px;font-size:12px;font-weight:700;color:var(--green);">&#127881; All done!</div>';
+    var finishedLine=manual._startedAt
+      ? '&#9989; Finished in '+laborSprintFmtElapsed(manual._finishedAt-manual._startedAt)
+      : '&#127881; All done!';
+    /* Blank for anyone who finished it before this shipped, or offline
+       with no signed-in session — shown with no "by" line rather than
+       a confusing blank name. */
+    var byLine=manual._finishedBy?'<div style="font-size:10px;color:var(--text3);margin-top:2px;">by '+escHtml(manual._finishedBy)+'</div>':'';
+    timerHtml='<div style="margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:8px;">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--green);">'+finishedLine+'</div>'+byLine+'</div>';
   }else if(manual._startedAt){
     timerHtml='<div style="margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:8px;font-size:13px;font-weight:700;color:var(--text1);display:flex;align-items:center;gap:6px;">&#9201; <span id="laborSprintTimerText">00:00</span></div>';
   }else{
