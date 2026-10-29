@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.98.0"/>
+<meta name="app-version" content="7.99.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.99.0', date:'2026-10-28',
+    fixes:['Fixed the Labor Focus Sprint checklist showing up already finished the next morning, with no Start button — Carlos\'s real report: the PM manager uploads the Labor Distribution Report at the end of the day so the AM manager has an up-to-date OT section first thing, but that\'s exactly what caused it. Root cause: the checklist used to follow whichever day the Day Analysis picker had selected, and that picker auto-jumps to "the last day this week with data" the moment nothing\'s selected yet — with yesterday\'s upload in and today still empty, a fresh page load the next morning landed on YESTERDAY, an already-completed checklist, not today\'s blank one. The checklist now always reads the real current date directly, independent of whatever day Day Analysis happens to be showing — so each morning starts fresh, Start button included, and the AM manager\'s own Labor Distribution upload is what checks it off for THAT day.']
+  },
   {
     v:'7.98.0', date:'2026-10-27',
     fixes:['Fixed the Daily Lineup\'s Turndown sort for Guadalupe — same spelling-drift class as Vanessa in 7.97.0, confirmed with Carlos: the Section assignment sheet spells her "Guadalupe", the Section Rotation order list spells her "Lupe", so she fell to the end instead of her real 10th-14th slot. Given her own alias table (DL_ROTATION_ALIAS), kept separate from the shared DL_ALIAS table so it can\'t affect dlLook\'s "is she working today" match elsewhere on this page — that one already resolves her correctly today and didn\'t need touching. Double-checked Supervisors against the real Section assignment data at the same time: all 5 names already match exactly, nothing to fix there.']
@@ -13876,9 +13880,10 @@ function renderLaborDash(){
 
 /* ── Labor Focus Sprint ──
    Carlos's printed "Labor Focus Sprint" PDF, turned into a checklist
-   that follows whichever day is selected on the Labor dashboard
-   (dashSelectedDate) so a manager who has to step away can come back
-   and see exactly what's left for TODAY's labor routine. Shared across
+   for the real current date (not whichever day the Day Analysis picker
+   happens to be on — see renderLaborSprint's own note on why that
+   matters) so a manager who has to step away can come back and see
+   exactly what's left for TODAY's labor routine. Shared across
    every manager (synced like the Daily Lineup's per-day state) since
    the whole point is "whoever picks it back up can see where it's at,"
    not a private per-device to-do list.
@@ -14047,16 +14052,32 @@ function renderLaborSprint(){
   var panel=document.getElementById('laborSprintPanel');
   if(!bubble||!panel)return;
   var onLaborPage=(typeof currentPage!=='undefined'&&currentPage==='labor');
-  if(!onLaborPage||!dashSelectedDate){
+  if(!onLaborPage){
     bubble.style.display='none';
     panel.style.display='none';
     laborSprintStopTick();
     return;
   }
-  var ds=dateStr(dashSelectedDate);
+  /* Carlos's real report, 2026-10-28: the PM manager uploads the Labor
+     Distribution Report at the end of the day so the AM manager has an
+     up-to-date OT section to work from first thing — but that upload is
+     exactly what made TOMORROW's checklist show up already finished,
+     with no Start button, before the AM manager had touched anything.
+     Root cause: this used to follow dashSelectedDate, the SAME date the
+     Day Analysis picker uses — and that picker auto-jumps to "the last
+     day this week with data" the moment it has no selection yet (see
+     its own comment a few hundred lines up). The night's upload gives
+     yesterday data while today still has none, so a fresh page load the
+     next morning auto-selected YESTERDAY — an already-completed
+     checklist, not today's blank one. The Labor Focus Sprint was only
+     ever meant to be "today's opening checklist for whoever is on right
+     now," never a historical view, so it now always reads the real
+     current date directly instead of borrowing Day Analysis's pick. */
+  var today=new Date();
+  var ds=dateStr(today);
   var auto=laborSprintAutoChecks(ds);
   var manual=laborSprintLoad(ds);
-  var dayLabel=dashSelectedDate.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  var dayLabel=today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
   var open=localStorage.getItem('hk_ls_panel_open')==='1';
 
   function isChecked(it){ return it.auto?!!auto[it.auto]:!!manual[it.id]; }
