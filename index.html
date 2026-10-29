@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.96.0"/>
+<meta name="app-version" content="7.97.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.97.0', date:'2026-10-27',
+    fixes:['Fixed the Daily Lineup\'s House Attendants sorting Vanessa LAST instead of first — Carlos\'s real report, screenshot in hand: the Section Rotation card correctly showed her 2nd-5th, but the printed lineup had her at the bottom under Diana. Root cause: the sort compared names with a bare lowercase/trim, no spelling-drift bridging, while the Section assignment sheet spells her "Vane" and the rotation\'s own order list spells her "Vanessa" — those never matched, so she fell into the "rotation doesn\'t recognize this name" bucket and sorted to the end. Now routed through the same DL_ALIAS table the rest of the Daily Lineup already uses to resolve this exact kind of spelling drift (Floor Supervisors and Turndown get the same fix, not just Houseman, since they share this one sort function).']
+  },
   {
     v:'7.96.0', date:'2026-10-27',
     features:['The Labor Focus Sprint panel now names who finished it — Carlos\'s ask: the green bubble already tells every manager the checklist is done, but if something turns out wrong afterward he needs to know which manager to ask. The moment the last item completes, it stamps the signed-in email right there under "Finished in MM:SS" (or "All done!" if nobody pressed Start), the same signed-in identity every other per-device check in the app already reads. Stamped once, same one-shot rule the finish time itself already follows — someone else unchecking and re-finishing it later can\'t quietly relabel who actually did it. Nothing shown if whoever finished it wasn\'t signed in (offline, or finished before this shipped) rather than a confusing blank name.']
@@ -22431,16 +22435,26 @@ function sectionRotationLookupBand(cfg,ds,role,name){
    Section Rotation band makes the printed order actually mean
    something. Anyone the rotation doesn't know (a floater, a sub, a
    name typed differently than the rotation's order list) sorts to the
-   end rather than breaking the sort or disappearing. */
+   end rather than breaking the sort or disappearing.
+   Carlos's real report, 2026-10-27: Vanessa printed LAST instead of
+   first, even though the rotation card correctly shows her 2nd-5th.
+   Root cause — this compared names with a bare trim+lowercase, no alias
+   bridging, while the Section assignment sheet spells her "Vane" and
+   the rotation's own order list spells her "Vanessa"; those never
+   matched, so she fell into the "rotation doesn't know this name"
+   bucket and sorted to the end. Routed through the exact same DL_ALIAS
+   table dlLook already uses to resolve this same spelling drift
+   elsewhere on this page, instead of inventing a second alias list. */
 function dlSortByRotationBand(names,ds,role){
   var cfg=loadSectionRotation();
   var bandIndex={};
+  function key(n){ var k=dlNorm(n); return DL_ALIAS[k]?dlNorm(DL_ALIAS[k]):k; }
   sectionRotationAssignment(cfg,ds,role).forEach(function(r,i){
-    var k=r.name.trim().toLowerCase();
+    var k=key(r.name);
     if(k)bandIndex[k]=i;
   });
   return names.map(function(n,origI){
-    var k=(n||'').trim().toLowerCase();
+    var k=key(n);
     return {n:n,origI:origI,idx:bandIndex.hasOwnProperty(k)?bandIndex[k]:999};
   }).sort(function(a,b){ return a.idx-b.idx || a.origI-b.origI; }).map(function(x){return x.n;});
 }
