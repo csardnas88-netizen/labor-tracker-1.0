@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.99.0"/>
+<meta name="app-version" content="7.100.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.100.0', date:'2026-10-31',
+    fixes:['The Schedule\'s Departures box now also picks up a LATER R106 upload that shows higher departures for a day it\'s already filled in — Carlos\'s real report: he hand-typed 178 departures for Friday 11/6 on 10/26, R106 was re-uploaded on 10/31 with a real increase to 189, and the box never moved. OCC already had this "take the higher number" rule since 7.55.0 (2026-10-10); Departures only ever filled a BLANK box and then protected it forever, even from a genuine increase. Now Departures follows the exact same rule as OCC: only counts upward (a lower re-upload never pulls a filled box back down), and applies whether the box got its number from auto-fill or from Carlos typing it in himself.']
+  },
   {
     v:'7.99.0', date:'2026-10-28',
     fixes:['Fixed the Labor Focus Sprint checklist showing up already finished the next morning, with no Start button — Carlos\'s real report: the PM manager uploads the Labor Distribution Report at the end of the day so the AM manager has an up-to-date OT section first thing, but that\'s exactly what caused it. Root cause: the checklist used to follow whichever day the Day Analysis picker had selected, and that picker auto-jumps to "the last day this week with data" the moment nothing\'s selected yet — with yesterday\'s upload in and today still empty, a fresh page load the next morning landed on YESTERDAY, an already-completed checklist, not today\'s blank one. The checklist now always reads the real current date directly, independent of whatever day Day Analysis happens to be showing — so each morning starts fresh, Start button included, and the AM manager\'s own Labor Distribution upload is what checks it off for THAT day.']
@@ -23820,6 +23824,15 @@ function schedBackfillOccFromR106(SCH){
       if(isNaN(curOcc)||nightRec.occ>curOcc){ day.occ=String(nightRec.occ); dayFilled=true; }
     }
     if(depBlank&&dayRec&&dayRec.dep>0){ day.dep=String(dayRec.dep); day.depAuto=true; dayFilled=true; }
+    else if(!depBlank&&dayRec&&dayRec.dep>0){
+      /* Same upward-only rule as OCC above, Carlos's real report:
+         a day already filled (auto or by his own hand) with 178
+         departures should pick up a later R106 re-upload showing a
+         real increase to 189 without retyping — never pulls a
+         higher box back down on a lower re-upload. */
+      var curDep=parseInt(day.dep,10);
+      if(isNaN(curDep)||dayRec.dep>curDep){ day.dep=String(dayRec.dep); dayFilled=true; }
+    }
     if(dayFilled)filled++;
   });
   return filled;
