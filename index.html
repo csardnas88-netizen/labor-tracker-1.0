@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.100.0"/>
+<meta name="app-version" content="7.101.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.101.0', date:'2026-10-31',
+    features:['New Call-Off now has an optional "Time Notified" field, and auto-flags an Improper Call-Off when the associate notified less than 2 hours before her scheduled shift start — Carlos\'s written policy, his own example: a Turndown shift at 8:15, called at 8:00, only 15 minutes\' notice. The scheduled start time comes from the Schedule Draft, the exact same lookup Tardiness already relies on. Leaving the field blank — logging the absence without noting the exact call time — never guesses at a classification either way.',
+      'Late Arrivals\' auto-detect threshold moved from "more than 10 minutes late" to "more than 7" — Carlos\'s written tardiness policy. The Overtime card\'s separate early-clock-in tolerance (a different question: how much an early punch plausibly explains an OT overage) was quietly riding the same number before this, so it was split into its own constant and left at 10 rather than tightening alongside the tardiness policy.']
+  },
   {
     v:'7.100.0', date:'2026-10-31',
     fixes:['The Schedule\'s Departures box now also picks up a LATER R106 upload that shows higher departures for a day it\'s already filled in — Carlos\'s real report: he hand-typed 178 departures for Friday 11/6 on 10/26, R106 was re-uploaded on 10/31 with a real increase to 189, and the box never moved. OCC already had this "take the higher number" rule since 7.55.0 (2026-10-10); Departures only ever filled a BLANK box and then protected it forever, even from a genuine increase. Now Departures follows the exact same rule as OCC: only counts upward (a lower re-upload never pulls a filled box back down), and applies whether the box got its number from auto-fill or from Carlos typing it in himself.']
@@ -13030,8 +13035,20 @@ function wtc_hideHelp(){var o=document.getElementById('wtcHelpOverlay');if(o)o.s
    with Carlos: auto-logged straight into Late Arrivals on every
    upload, no review step — wtcAutoLogLateArrivals is idempotent (skips
    anyone already logged for that exact empId+date) so re-uploading the
-   same or a corrected report never double-logs. */
-var WTC_LATE_THRESHOLD_MIN=10;
+   same or a corrected report never double-logs.
+
+   2026-10-31 update: Carlos's official tardiness policy is "more than
+   7 minutes after the scheduled start" (he had been using a rounder
+   10-minute tolerance here before this was spelled out), so this moved
+   to 7. The Overtime card's separate early-clock-in explanation
+   (_laborEarlyClockInMinutes below) used to mirror this same number
+   just to avoid inventing a new one — that's a different question
+   (how much early clock-in plausibly explains OT) with no stated
+   policy change, so it now has its own constant
+   (WTC_EARLY_CLOCKIN_TOLERANCE_MIN) pinned at the old value of 10
+   rather than silently tightening alongside the tardiness policy. */
+var WTC_LATE_THRESHOLD_MIN=7;
+var WTC_EARLY_CLOCKIN_TOLERANCE_MIN=10;
 function wtcLateArrivalCandidates(report){
   var out=[];
   if(!report||!report.byId)return out;
@@ -15192,9 +15209,12 @@ function _laborBreakShortfallMinutes(ds,emp){
    the break check, this genuinely needs the Weekly Time Card Report —
    it's the only source with a real punch time (workStartTime), vs the
    Schedule Draft's own scheduled start (schedScheduledStartTimeReason,
-   the same lookup Late Arrivals already uses). Same
-   WTC_LATE_THRESHOLD_MIN tolerance as Late Arrivals, just mirrored to
-   the early side instead of a brand new number. Separately tracks
+   the same lookup Late Arrivals already uses). Uses its own
+   WTC_EARLY_CLOCKIN_TOLERANCE_MIN, kept at the old 10-minute value even
+   after Late Arrivals' own tardiness threshold moved to 7 (2026-10-31)
+   — explaining part of an OT overage via an early clock-in is a
+   different question from the tardiness policy, with no ask to change
+   it. Separately tracks
    which of her real worked days this week have NO Weekly Time Card row
    at all yet (missingDays) — not because she necessarily clocked in
    early those days, but because there's genuinely no way to know
@@ -15218,7 +15238,7 @@ function _laborEarlyClockInMinutes(ds,emp){
     var schedMin=_timeTextToMinutes(schedResult.time),arrMin=_timeTextToMinutes(d.workStartTime);
     if(schedMin==null||arrMin==null)return;
     var diff=arrMin-schedMin;
-    if(diff<-WTC_LATE_THRESHOLD_MIN){ total+=(-diff); days.push(wds); }
+    if(diff<-WTC_EARLY_CLOCKIN_TOLERANCE_MIN){ total+=(-diff); days.push(wds); }
   });
   return {minutes:total,days:days,missingDays:missingDays};
 }
@@ -20513,6 +20533,16 @@ var DOW_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Satu
 function dowName(ds){
   try{var d=parseLocalDate(ds);return DOW_NAMES[d.getDay()];}catch(e){return'';}
 }
+/* Carlos's policy, 2026-10-31: a call-off is "improper" when the associate
+   notifies less than 2 hours before her scheduled shift start (his
+   example: a Turndown shift at 8:15, called at 8:00 — only 15 minutes'
+   notice). Computed the moment the Time Notified field is filled in,
+   using the exact same Schedule Draft lookup (schedScheduledStartTimeReason)
+   Tardiness already relies on for "what time was she supposed to start" —
+   if that lookup can't resolve a scheduled time, the call-off is simply
+   left unclassified rather than guessed at, same as a Tardiness record
+   whose scheduled time couldn't be found. */
+var CALLOFF_IMPROPER_NOTICE_MIN=120;
 function loadCallOffs(){
   try{var s=localStorage.getItem('calloffs_data');if(s)return JSON.parse(s);}catch(e){}
   return [];
@@ -20756,6 +20786,7 @@ function renderCallOffs(){
       html+='<div style="font-size:13px;font-weight:700;color:var(--text1);">'+escHtml(c.empName)+'</div>';
       if(c.pos)html+='<div style="font-size:11px;color:var(--text3);margin-bottom:2px;">'+escHtml(c.pos)+'</div>';
       html+='<div style="font-size:12.5px;color:var(--text2);margin-top:2px;">'+escHtml(c.reason)+'</div>';
+      if(c.improper)html+='<div style="display:inline-block;margin-top:4px;padding:2px 8px;background:var(--red-bg);color:var(--red);border-radius:99px;font-size:10px;font-weight:800;">&#9888; Improper Call-Off &mdash; '+c.minutesNotice+' min notice</div>';
       html+='</div>';
       html+='<button onclick="deleteCallOff('+c.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px;flex-shrink:0;" title="Delete">&#128465;</button>';
       html+='</div>';
@@ -20872,6 +20903,11 @@ function showNewCallOffModal(){
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Reason *</label>'
     +'<input id="coReason" placeholder="e.g. Sick, family emergency..." style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
     +'</div>'
+    +'<div>'
+    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Time notified (optional)</label>'
+    +'<input id="coNotified" type="time" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
+    +'<div style="font-size:11px;color:var(--text3);margin-top:5px;">What time she actually called. Flags an Improper Call-Off automatically if that\'s less than 2 hours before her scheduled start (pulled from the Schedule Draft).</div>'
+    +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
     +'<button onclick="document.getElementById(\'callOffModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
@@ -20952,6 +20988,22 @@ function saveNewCallOff(){
   var parts=empVal.split('|');
   var empId=parts[0],empName=parts[1]||'',pos=parts[2]||'';
   var rec={id:Date.now(),date:date,empId:empId,empName:empName,pos:pos,reason:reason,created:new Date().toISOString()};
+  var notifiedRaw=(document.getElementById('coNotified').value||'').trim();
+  var improperNote='';
+  if(notifiedRaw){
+    var notifiedMin=_hhmmToMinutes(notifiedRaw);
+    var notifiedTime=_minutesToTimeText(notifiedMin);
+    var schedResult=schedScheduledStartTimeReason(date,empName,pos);
+    var scheduledTime=schedResult.time;
+    var schedMin=scheduledTime?_timeTextToMinutes(scheduledTime):null;
+    var minutesNotice=(schedMin!=null&&notifiedMin!=null)?(schedMin-notifiedMin):null;
+    rec.notifiedTime=notifiedTime;
+    rec.scheduledTime=scheduledTime;
+    rec.scheduledTimeReason=scheduledTime?null:schedResult.reason;
+    rec.minutesNotice=minutesNotice;
+    rec.improper=(minutesNotice!=null&&minutesNotice<CALLOFF_IMPROPER_NOTICE_MIN);
+    if(rec.improper)improperNote=' — flagged as an Improper Call-Off ('+minutesNotice+' min notice)';
+  }
   var sched=null;
   if(typeof schedApplyCallOff==='function'){try{sched=schedApplyCallOff(date,empName,pos);}catch(e){}}
   if(sched){rec.schedCrew=sched.crew;rec.schedName=sched.name;rec.schedPrevVal=sched.prevVal;}
@@ -20960,7 +21012,7 @@ function saveNewCallOff(){
   saveCallOffs(list);
   document.getElementById('callOffModal').remove();
   renderCallOffs();
-  showToast(sched?'&#10003; Call-off logged and marked on the Schedule':'&#10003; Call-off logged — mark it on the Schedule too, couldn\'t match it automatically');
+  showToast((sched?'&#10003; Call-off logged and marked on the Schedule':'&#10003; Call-off logged — mark it on the Schedule too, couldn\'t match it automatically')+improperNote);
 }
 
 function deleteCallOff(id){

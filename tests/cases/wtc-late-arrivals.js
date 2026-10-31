@@ -25,11 +25,16 @@
    Part 2 below uses its own synthetic employees/Schedule Draft rather
    than Maria/Susan's real production roster position, so the fixture
    isn't at the mercy of their real Housekeeping Supervisor/Room
-   Attendant shift times defined elsewhere in the app. */
+   Attendant shift times defined elsewhere in the app.
+
+   2026-10-31 update: Carlos's official tardiness policy is "more than
+   7 minutes late", spelled out directly (previous threshold of 10 was
+   just a round number, never a stated policy) — WTC_LATE_THRESHOLD_MIN
+   moved from 10 to 7, Part 2's boundary fixtures moved with it. */
 const { loadApp, fakeSession } = require('../_harness');
 
 module.exports = {
-  name: 'Weekly Time Card Report: Scheduled/Work Start columns parse correctly (Part 1), and a 10+ minute late arrival — scheduled time from the Schedule Draft, arrival from Work Start — auto-logs itself (idempotently) (Part 2)',
+  name: 'Weekly Time Card Report: Scheduled/Work Start columns parse correctly (Part 1), and a 7+ minute late arrival — scheduled time from the Schedule Draft, arrival from Work Start — auto-logs itself (idempotently) (Part 2)',
   async run(t) {
     const seed = Object.assign(fakeSession(), {
       // Part 2's Schedule Draft: Monday 2026-10-05 is a weekday, so the
@@ -101,11 +106,11 @@ module.exports = {
     const report2 = {
       byId: {
         '91001': { id: '91001', name: 'Edge Ten', days: {
-          // gra's weekday start is 8:15 AM; 8:25 AM is exactly 10 late.
-          '2026-10-05': { workStartTime: '8:25 AM' },
+          // gra's weekday start is 8:15 AM; 8:22 AM is exactly 7 late.
+          '2026-10-05': { workStartTime: '8:22 AM' },
         }},
         '91002': { id: '91002', name: 'Edge Eleven', days: {
-          '2026-10-05': { workStartTime: '8:26 AM' },
+          '2026-10-05': { workStartTime: '8:23 AM' },
         }},
         '91003': { id: '91003', name: 'Nina Torres', days: {
           '2026-10-05': { workStartTime: '8:50 AM' },
@@ -117,13 +122,13 @@ module.exports = {
       },
     };
 
-    // ── Threshold is "more than 10", not "10 or more" ──
+    // ── Threshold is "more than 7", not "7 or more" ──
     const candidates = win.wtcLateArrivalCandidates(report2);
-    t.eq(candidates.length, 2, 'Edge Ten (exactly 10 late) is excluded; Edge Eleven (11 late) and Nina (35 late on 10-05) qualify — Nina\'s unresolvable 10-06 day is skipped entirely');
+    t.eq(candidates.length, 2, 'Edge Ten (exactly 7 late) is excluded; Edge Eleven (8 late) and Nina (35 late on 10-05) qualify — Nina\'s unresolvable 10-06 day is skipped entirely');
     const byName = Object.fromEntries(candidates.map((c) => [c.empName, c]));
-    t.assert(!byName['Edge Ten'], 'exactly 10 minutes late does not qualify — Carlos said "more than 10"');
-    t.assert(!!byName['Edge Eleven'], '11 minutes late does qualify');
-    t.eq(byName['Edge Eleven'].minutesLate, 11, 'with the exact minute count');
+    t.assert(!byName['Edge Ten'], 'exactly 7 minutes late does not qualify — Carlos said "more than 7"');
+    t.assert(!!byName['Edge Eleven'], '8 minutes late does qualify');
+    t.eq(byName['Edge Eleven'].minutesLate, 8, 'with the exact minute count');
     t.eq(byName['Edge Eleven'].scheduledTime, '8:15 AM', "the scheduled time comes from the Schedule Draft's gra weekday start, not any Paychex column");
 
     const nina = candidates.find((c) => c.empId === '91003');
