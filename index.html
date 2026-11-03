@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.101.0"/>
+<meta name="app-version" content="7.102.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.102.0', date:'2026-10-31',
+    fixes:['The Upload Paychex Report date picker now defaults smartly instead of always to yesterday — Carlos\'s real context: two Labor Distribution Reports go up every day, one in the afternoon for THAT SAME day, then another the next morning for the PREVIOUS day (Paychex\'s corrected final figures). The old always-yesterday default only ever matched the second one; his real report (Manny\'s afternoon upload landing undetected) was the first case slipping in under the wrong date with no visual cue. Now: before noon defaults to yesterday (the morning catch-up upload), noon or later defaults to today (the afternoon same-day upload) — re-applied every time the upload modal opens, not just once when the page first loads, so it\'s still right even if the tab was left open across the noon line.']
+  },
   {
     v:'7.101.0', date:'2026-10-31',
     features:['New Call-Off now has an optional "Time Notified" field, and auto-flags an Improper Call-Off when the associate notified less than 2 hours before her scheduled shift start — Carlos\'s written policy, his own example: a Turndown shift at 8:15, called at 8:00, only 15 minutes\' notice. The scheduled start time comes from the Schedule Draft, the exact same lookup Tardiness already relies on. Leaving the field blank — logging the absence without noting the exact call time — never guesses at a classification either way.',
@@ -11732,7 +11736,36 @@ function cancelPinGate(){
 }
 
 /* ── Upload modal ── */
-function showUploadModal(){document.getElementById('uploadOverlay').style.display='flex';}
+/* Carlos's real routine, 2026-10-31: two Labor Distribution Reports go up
+   every day — one in the afternoon for THAT SAME day, then another the
+   next morning covering the PREVIOUS day (Paychex's corrected final
+   figures). A single always-yesterday default only ever matched the
+   second one; his real report (Manny uploading an afternoon report that
+   never got detected) is exactly the first case landing under the wrong
+   date with nobody noticing, since the picker gave no visual cue it had
+   picked the "usual" day rather than today.
+
+   Picks between the two using the clock, same noon split the Good
+   afternoon/evening greeting already uses: before noon, default to
+   YESTERDAY (the morning catch-up upload); noon or later, default to
+   TODAY (the afternoon same-day upload). Still just a default — he can
+   always change it by hand — but now it starts on the day that matches
+   whichever of his two daily uploads he's actually doing. */
+function _applySmartUploadDateDefault(){
+  var target=new Date();
+  if(target.getHours()<12)target.setDate(target.getDate()-1);
+  var pm=document.getElementById('pickMonth');
+  var py=document.getElementById('pickYear');
+  if(pm)pm.value=target.getMonth()+1;
+  if(py)py.value=target.getFullYear();
+  populateDays();
+  var pd=document.getElementById('pickDay');
+  if(pd)pd.value=target.getDate();
+}
+function showUploadModal(){
+  try{_applySmartUploadDateDefault();}catch(e){}
+  document.getElementById('uploadOverlay').style.display='flex';
+}
 function hideUploadModal(){document.getElementById('uploadOverlay').style.display='none';}
 
 /* ── Greeting ── */
@@ -21841,25 +21874,19 @@ window.addEventListener('load',function(){
   /* App is rendered underneath — fade the splash out (min-display guard inside). */
   try{hideLaborLoader();}catch(e){}
 
-  /* Date picker defaults to yesterday */
-  var yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
-  var pm=document.getElementById('pickMonth');
-  var py=document.getElementById('pickYear');
-  if(pm)pm.value=yesterday.getMonth()+1;
-  if(py)py.value=yesterday.getFullYear();
-  populateDays();
-  var pd=document.getElementById('pickDay');
-  if(pd)pd.value=yesterday.getDate();
+  try{_applySmartUploadDateDefault();}catch(e){}
 
   /* Repopulate days when month/year changes */
-  if(pm){
-    pm.addEventListener('change',function(){
+  var pickMonthEl=document.getElementById('pickMonth');
+  var pickYearEl=document.getElementById('pickYear');
+  if(pickMonthEl){
+    pickMonthEl.addEventListener('change',function(){
       console.log('[DATE-PICKER] Mes cambió, actualizando días...');
       populateDays();
     });
   }
-  if(py){
-    py.addEventListener('change',function(){
+  if(pickYearEl){
+    pickYearEl.addEventListener('change',function(){
       console.log('[DATE-PICKER] Año cambió, actualizando días...');
       populateDays();
     });
