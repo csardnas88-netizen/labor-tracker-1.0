@@ -136,6 +136,7 @@ const cases = [
   require('./cases/schedule-training-wins-source-over-bare-1'),
   require('./cases/call-off-improper'),
   require('./cases/upload-smart-date-default'),
+  require('./cases/labor-sprint-am-review-detection'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
