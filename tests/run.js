@@ -136,6 +136,8 @@ const cases = [
   require('./cases/schedule-training-wins-source-over-bare-1'),
   require('./cases/call-off-improper'),
   require('./cases/schedule-cover-release-guard'),
+  require('./cases/training-delete-resurrection'),
+  require('./cases/daily-lineup-cover-label-case'),
   require('./cases/upload-smart-date-default'),
   require('./cases/labor-sprint-am-review-detection'),
 ];
