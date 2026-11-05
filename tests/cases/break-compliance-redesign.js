@@ -48,6 +48,12 @@ module.exports = {
     t.assert(cells[0].off === true, 'Sat (no entry) renders as off');
 
     /* ── rendering ── */
+        /* Pin the page's month picker to the fixture's month. Without this
+       the page renders whatever month the machine's clock says, so this
+       assertion only held during the real July 2026 — it had been
+       failing silently ever since. Found 2026-11-05 while auditing why
+       the suite had 8 standing failures. */
+    win.bcViewMonth=new Date(2026,6,1);
     win.showPage('breaks');
     let html = win.document.getElementById('breaksPageContent').innerHTML;
     t.assert(html.indexOf('Heidy Ajsoc') > -1, 'Heidy appears');

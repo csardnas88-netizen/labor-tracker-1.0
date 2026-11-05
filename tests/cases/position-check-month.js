@@ -68,6 +68,12 @@ module.exports = {
     t.assert(!issues.some(r => r.id === '99999902'), 'an outside contractor with no HK primary position is excluded (Other Depts\' job, not this page\'s)');
 
     /* ── rendering, before anything has been reviewed ── */
+        /* Pin the page's month picker to the fixture's month. Without this
+       the page renders whatever month the machine's clock says, so this
+       assertion only held during the real July 2026 — it had been
+       failing silently ever since. Found 2026-11-05 while auditing why
+       the suite had 8 standing failures. */
+    win.posCheckViewMonth=new Date(2026,6,1);
     win.showPage('position');
     const html = win.document.getElementById('positionContent').innerHTML;
     t.assert(html.indexOf('Susan Karina Aguilar Ambrocio') > -1, 'Susan appears in the rendered page');

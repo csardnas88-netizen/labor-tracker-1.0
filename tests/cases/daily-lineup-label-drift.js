@@ -90,6 +90,29 @@ module.exports = {
   name: "Daily Lineup: Houseman still resolves through a case/spacing-drifted label, and an empty block explains why",
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
+
+    /* Pin the Section Rotation the lineup sorts by. Since 7.91.0 the
+       House Attendant / Supervisor / Turndown lists are ordered by the
+       rotation's band for that date, not by the order the Section
+       assignment sheet happens to list people in — so without a pinned
+       config this assertion silently depended on the production default
+       anchor (2026-10-01) AND on how far today's real date sits from it.
+       It had been failing since the sort shipped. Anchored here to the
+       fixture's own period so the expected order is derived from the
+       test's own data: Mauricia 2nd-5th, David 14th-17th, and Diana —
+       the floater, deliberately not a rotation slot — last. */
+    win.localStorage.setItem('hk_section_rotation', JSON.stringify({
+      anchor: '2026-08-01', periodMonths: 4,
+      roles: {
+        hm:  { dir: 1,  bands: ['2nd - 5th','6th - 9th','10th - 13th','14th - 17th','18th - 22nd'],
+               order: ['Mauricia','Vanessa','Elmer','David','Jorge'] },
+        sup: { dir: -1, bands: ['2nd - 5th','6th - 9th','10th - 13th','14th - 17th','18th - 22nd'],
+               order: ['Rubidia','Jose','Susan','Maria','Rolando'] },
+        td:  { dir: 1,  bands: ['2nd - 5th','6th - 10th','10th - 14th','14th - 18th','18th - 22nd'],
+               order: ['Aura','Paty','Lupe','Veronica','Jazmin'] }
+      }
+    }));
+
     await new Promise((r) => setTimeout(r, 60));
     win.XLSX.utils.sheet_to_json = (ws) => ws._rows;
 

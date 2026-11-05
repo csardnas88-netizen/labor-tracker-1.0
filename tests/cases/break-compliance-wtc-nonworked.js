@@ -80,6 +80,12 @@ module.exports = {
     t.eq(realExceptionCells.length, 2, 'Jul 1 and Jul 6 are the two real exception cells');
     t.assert(realExceptionCells.every(c => c.status === 'none' && !c.nonworked), 'both of those genuinely show as No Break — only the Holiday/Vacation days get the nonworked treatment');
 
+        /* Pin the page's month picker to the fixture's month. Without this
+       the page renders whatever month the machine's clock says, so this
+       assertion only held during the real July 2026 — it had been
+       failing silently ever since. Found 2026-11-05 while auditing why
+       the suite had 8 standing failures. */
+    win.bcViewMonth=new Date(2026,6,1);
     win.showPage('breaks');
     win.bcToggleEmp('26100005');
     const html = win.document.getElementById('breaksPageContent').innerHTML;

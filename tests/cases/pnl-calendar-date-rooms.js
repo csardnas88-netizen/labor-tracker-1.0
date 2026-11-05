@@ -36,6 +36,12 @@ module.exports = {
 
     // P&L must sum each day's OWN date — 50 (Jul 1) + 70 (Jul 2) = 120 — and
     // must NOT pull in Jun 30's 200 the way getRoomsForDay would.
+        /* Pin the page's month picker to the fixture's month. Without this
+       the page renders whatever month the machine's clock says, so this
+       assertion only held during the real July 2026 — it had been
+       failing silently ever since. Found 2026-11-05 while auditing why
+       the suite had 8 standing failures. */
+    win.viewMonth=new Date(2026,6,1);
     win.showPage('pnl');
     win.renderPnl();
     const roomsBarHtml = win.document.getElementById('pnlRoomsBar').innerHTML;

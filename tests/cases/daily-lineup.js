@@ -169,6 +169,29 @@ module.exports = {
   name: "Daily Lineup: blocks found by label not row, names resolved within their own block, and an uncovered section is never quietly filled",
   async run(t) {
     const { win } = await loadApp({ seed: Object.assign(fakeSession(), { 'hk_rooms_migrated_v2': '1' }) });
+
+    /* Pin the Section Rotation the lineup sorts by. Since 7.91.0 the
+       House Attendant / Supervisor / Turndown lists are ordered by the
+       rotation's band for that date, not by the order the Section
+       assignment sheet happens to list people in — so without a pinned
+       config this assertion silently depended on the production default
+       anchor (2026-10-01) AND on how far today's real date sits from it.
+       It had been failing since the sort shipped. Anchored here to the
+       fixture's own period so the expected order is derived from the
+       test's own data: Mauricia 2nd-5th, David 14th-17th, and Diana —
+       the floater, deliberately not a rotation slot — last. */
+    win.localStorage.setItem('hk_section_rotation', JSON.stringify({
+      anchor: '2026-08-01', periodMonths: 4,
+      roles: {
+        hm:  { dir: 1,  bands: ['2nd - 5th','6th - 9th','10th - 13th','14th - 17th','18th - 22nd'],
+               order: ['Mauricia','Vanessa','Elmer','David','Jorge'] },
+        sup: { dir: -1, bands: ['2nd - 5th','6th - 9th','10th - 13th','14th - 17th','18th - 22nd'],
+               order: ['Rubidia','Jose','Susan','Maria','Rolando'] },
+        td:  { dir: 1,  bands: ['2nd - 5th','6th - 10th','10th - 14th','14th - 18th','18th - 22nd'],
+               order: ['Aura','Paty','Lupe','Veronica','Jazmin'] }
+      }
+    }));
+
     await new Promise((r) => setTimeout(r, 60));
 
     // The harness stubs XLSX (no real parser in jsdom); hand sheet_to_json

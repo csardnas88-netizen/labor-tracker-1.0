@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.105.0"/>
+<meta name="app-version" content="7.106.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.106.0', date:'2026-11-05',
+    fixes:['Fixed a bug introduced by 7.95.0\'s own cover-row fix: a Lobby "cover" row — the temporary row that appears on the Lobby card when someone from another crew is marked LOBBY that day — could no longer be removed by anything, ever. 7.95.0 added a rule saying "only clear this row if it\'s still blank", but a cover row is always created holding a 1, so it is never blank and the cleanup became unreachable. The visible effect: if the LOBBY mark went away through any route other than editing that cell by hand — a workbook re-upload, a sync from another device, Auto-fill — the person kept showing as working a Lobby shift she was no longer assigned to. The protection 7.95.0 was actually after (never deleting a confirmed cover as a silent side effect of editing an unrelated cell) is untouched and still asks first; that is a different code path, and it now has its own test so the two can\'t be traded for each other again.'],
+    improvements:['The automated test suite is passing fully again — 137 checks, 0 failures. Eight of them had been failing for about four months: five were written in July and silently depended on the real calendar still being July (they rendered whatever month the computer\'s clock said, found nothing, and failed), two predated the 2026-10-26 change that sorts the Daily Lineup by floor band, and the last one is the real Lobby bug above. A suite that is always a little bit red stops being able to warn about anything, which is exactly what happened here.']
+  },
   {
     v:'7.105.0', date:'2026-11-05',
     fixes:['Every "Export PDF" button in the app (Call-Offs, Tardiness, Training, Training Summary, Projects) was producing a page with an INVISIBLE header band and invisible table column headers — white text on white paper. These reports are written into a separate browser window, which does not inherit the app\'s own color definitions, so every color in their stylesheet silently resolved to nothing: the navy band behind the hotel name and report title, and the navy strip behind DATE / EMPLOYEE / POSITION, both came out blank while the white text stayed white. Measured directly rather than guessed at. All five now carry their own colors, and are also told to actually print background colors — browsers drop them by default, which would have kept the header unreadable on paper even after the colors were fixed.',
@@ -25591,20 +25596,30 @@ function schedSyncAllLobbyCoverRows(SCH,dates){
       changed=true;
     });
     /* Drop a stale lobby 'cover' row whose source cell no longer reads
-       LOBBY — but ONLY while it's still blank, i.e. nobody ever actually
-       confirmed her working that day. Carlos's real report (the same bug
-       already fixed for Jorge/Laundry, same shape here): this used to
-       delete the row outright the instant the source label changed, even
-       when it held a real confirmed '1' — silently discarding a real day
-       as a passive side effect of some unrelated edit on a render nobody
-       asked to clean this up during. A row that's already '1' now needs
-       the same explicit confirmation schedWarnBeforeCoverRelease asks
-       for on the live edit that actually moved her off Lobby — this
-       passive sweep never removes real data, only a still-blank
-       placeholder nobody ever gave a value. */
+       LOBBY.
+
+       7.95.0 added a guard here that skipped this cleanup unless the row
+       was still blank, copying the confirm-before-deleting rule that was
+       right for the Laundry cover row. It was wrong twice over, found
+       2026-11-05 while auditing why the suite had standing failures.
+       First, it was DEAD CODE: a cover row is created three lines above
+       with a hard-coded '1', so it is never blank, so the guard always
+       fired and a lobby cover row could no longer be removed by anything
+       — once created, permanent. Second, the rule itself doesn't belong
+       here. A 'cover' row is DERIVED data, regenerated from the LOBBY
+       mark on her home crew; it is not a thing Carlos typed, so removing
+       it when that mark is gone discards nothing. The real bug 7.95.0
+       was chasing is a deletion that happens as a side effect of editing
+       an UNRELATED cell, and that is already guarded where it belongs —
+       schedWarnBeforeCoverRelease, on the live edit in schedSetCell,
+       which asks before releasing a confirmed cover and only then lets
+       schedSyncLobbyCoverRow remove the row. This pass is the other
+       half: when the underlying mark genuinely went away (a workbook
+       re-upload, a pull from another device, Auto-fill), the derived row
+       has to go with it, or she keeps showing as working a Lobby shift
+       she is no longer assigned to. */
     for(var i=day.lobby.length-1;i>=0;i--){
       if(day.lobby[i][2]!=='cover')continue;
-      if(String(day.lobby[i][1]||'').trim()!=='')continue;
       if(!coverers[dlNormAlias(day.lobby[i][0])]){ day.lobby.splice(i,1); changed=true; }
     }
   });

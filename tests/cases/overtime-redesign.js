@@ -90,6 +90,12 @@ module.exports = {
     t.eq(susanWeeks[0].cells[3].ot, 3, 'and carries her 3h OT');
 
     /* ── rendering ── */
+        /* Pin the page's month picker to the fixture's month. Without this
+       the page renders whatever month the machine's clock says, so this
+       assertion only held during the real July 2026 — it had been
+       failing silently ever since. Found 2026-11-05 while auditing why
+       the suite had 8 standing failures. */
+    win.otViewMonth=new Date(2026,6,1);
     win.showPage('overtime');
     let html = win.document.getElementById('overtimeContent').innerHTML;
     t.assert(html.indexOf('Susan Karina Aguilar Ambrocio') > -1, 'Susan (top of the ranking) appears');
