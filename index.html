@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.104.0"/>
+<meta name="app-version" content="7.105.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4651,6 +4651,13 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.105.0', date:'2026-11-05',
+    fixes:['Every "Export PDF" button in the app (Call-Offs, Tardiness, Training, Training Summary, Projects) was producing a page with an INVISIBLE header band and invisible table column headers — white text on white paper. These reports are written into a separate browser window, which does not inherit the app\'s own color definitions, so every color in their stylesheet silently resolved to nothing: the navy band behind the hotel name and report title, and the navy strip behind DATE / EMPLOYEE / POSITION, both came out blank while the white text stayed white. Measured directly rather than guessed at. All five now carry their own colors, and are also told to actually print background colors — browsers drop them by default, which would have kept the header unreadable on paper even after the colors were fixed.',
+      'The Schedule\'s "Export Excel" now states US Letter inside the file itself. It never did before, so Excel fell back to whatever the machine\'s DEFAULT PRINTER reports — and since paper width is what every "fit to one page wide" calculation divides by, the same file could legitimately come out with a different page count on a different computer, with nothing in the file to explain why. Every font in the sheet is now named outright too (they were nameless, left for Excel to resolve through the theme, which Excel for Mac, Windows and Online do not all resolve identically — and the resolved font decides where "8:15 AM - 4:45 PM" wraps, which decides the page count).',
+      'The Daily Lineup Excel had the same problem plus a worse one: the shipped template carries saved configurations from three specific hotel printers, and those say LANDSCAPE while the sheet\'s own settings say portrait — a straight contradiction, resolved differently depending on whether the computer opening it happens to have that printer installed. The export now ignores the embedded printer settings entirely and states Letter/portrait itself. Verified by opening the exported file in Excel: one page, US Letter, formulas intact.',
+      'The Daily Lineup print view asked the browser for "whatever paper you like"; it now asks for Letter specifically, the size its one-page layout was actually measured against.']
+  },
   {
     v:'7.104.0', date:'2026-10-31',
     fixes:['Fixed two real problems with the same root cause, after Carlos spelled out the full daily routine: the PM manager uploads a Labor Distribution Report every afternoon FOR THAT SAME day; the next morning, the AM manager reviews everything again and re-uploads — but that OVERWRITES THE SAME PREVIOUS DAY\'s report, not a new one. (1) 7.103.0\'s "smart" picker default checked whether yesterday has ANY saved report — but in steady state it always does (that\'s yesterday\'s own afternoon upload), whether or not today\'s morning review has actually happened, so it barely differed from always defaulting to today. (2) This is also the real bug behind Manny\'s report ("subió el labor distribution y el checklist no lo detectó") — the checklist\'s own "upload Labor Distribution Report" step only ever checked whether TODAY has a fresh snapshot of its own, which his correct, real action (re-saving YESTERDAY\'s) can never satisfy. Both now key off the one signal that actually marks the morning review done: whether yesterday\'s report was RE-SAVED today specifically, not merely whether it has data at all.']
@@ -18913,6 +18920,37 @@ function applyBulkMark(tid){
   showToast('&#10003; '+n+' marcados Complete — guardado');
 }
 
+/* ── Shared stylesheet preamble for every "Export PDF" popup ──
+   Carlos's 2026-11-05 ask ("print the same on every computer") turned up
+   a bug none of these five exports had ever been checked for: they are
+   written into a window.open('') document, which does NOT inherit the
+   app's :root, so every var(--navy)/var(--bg)/var(--text1) in their CSS
+   resolved to NOTHING. Measured, not assumed: in that popup .header and
+   every <th> computed to background rgba(0,0,0,0) with color #fff —
+   white on white. The hotel name, the report title and every table
+   column header were invisible, on screen and on paper.
+
+   Three separate things have to be stated here for the output to be
+   both correct and identical everywhere:
+   1. :root — the real palette values, so the vars resolve at all.
+   2. @page size — a fixed Letter page. With no @page the browser picks
+      the paper from the default printer, which is exactly the
+      machine-to-machine drift this round is meant to kill.
+   3. print-color-adjust — browsers drop background colors when printing
+      by default, so even a CORRECT navy header would come out of the
+      printer white-on-white again. This forces it to print.
+   color-scheme:light pins it against a device in dark mode inverting
+   the page, the same failure already fixed once for the Daily Lineup
+   print view. */
+function _pdfPopupBaseCSS(){
+  return '@page{size:letter portrait;margin:12mm;}'
+    +':root{color-scheme:light;'
+    +'--navy:#1E2D4A;--bg:#F2F0EA;--s3:#EDE9E0;--border:#E4DDD1;'
+    +'--text1:#1A1714;--text2:#5C5652;--text3:#8C8680;'
+    +'--green:#2D9E45;--yellow:#E67E22;--yellow-bg:#FDF5EA;--yellow-border:#F2C79B;}'
+    +'html,body{background:#fff;}'
+    +'*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}';
+}
 function exportTrainingPDF(tid){
   var list=loadTrainings();
   var t=list.filter(function(x){return x.id===tid;})[0];
@@ -18946,7 +18984,7 @@ function exportTrainingPDF(tid){
   }).join('')||'<tr><td colspan="3" style="padding:10px 12px;font-size:12px;color:var(--green);">Todos completaron</td></tr>';
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
-    +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
+    +'<style>'+_pdfPopupBaseCSS()+'body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
     +'.header{background:var(--navy);color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
     +'.hotel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px;}'
     +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}'
@@ -19592,7 +19630,7 @@ function exportTrainingSummaryPDF(){
   }).join('');
   var range=(s.minStart&&s.maxEnd)?(s.minStart+' → '+s.maxEnd):'—';
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
-    +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
+    +'<style>'+_pdfPopupBaseCSS()+'body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
     +'.header{background:var(--navy);color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
     +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}.sub{font-size:12px;color:rgba(255,255,255,.55);}'
     +'.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px;}'
@@ -20539,7 +20577,7 @@ function exportProjectPDF(projIdx, scope){
   var periodLbl=scopeLabel(scope);
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
-    +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
+    +'<style>'+_pdfPopupBaseCSS()+'body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
     +'.header{background:var(--navy);color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
     +'.hotel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px;}'
     +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}'
@@ -20916,7 +20954,7 @@ function exportCallOffsPDF(){
   var title=isSingleEmp?escHtml(empName):'All Employees';
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
-    +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
+    +'<style>'+_pdfPopupBaseCSS()+'body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
     +'.header{background:var(--navy);color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
     +'.hotel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px;}'
     +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}'
@@ -21497,7 +21535,7 @@ function exportLateArrivalsPDF(){
   var title=isSingleEmp?escHtml(empName):'All Employees';
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
-    +'<style>body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
+    +'<style>'+_pdfPopupBaseCSS()+'body{font-family:Georgia,serif;margin:0;padding:40px;color:var(--text1);}'
     +'.header{background:var(--navy);color:#fff;padding:28px 32px;margin:-40px -40px 32px;}'
     +'.hotel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px;}'
     +'.title{font-size:22px;font-weight:700;margin-bottom:4px;}'
@@ -26377,6 +26415,19 @@ function schedAutoFill(){
    for the states both apps share (working/PM/OFF/R-OFF); the
    cross-department cover labels get their own accent, same idea as
    Schedule Builder's "sc-special". */
+/* Every font in the exported sheet names this explicitly, rather than
+   leaving the name off and letting Excel resolve it from the theme.
+   Second half of the 2026-11-05 "print the same on every computer" fix:
+   a font record with no name resolves through the theme's minor font,
+   which Excel for Mac, Excel for Windows and Excel Online do not all
+   resolve identically — and the resolved font's metrics decide where a
+   two-line cell like "8:15 AM - 4:45 PM" wraps, which decides row
+   overflow, which decides the page count. Column widths compound it:
+   OOXML stores them in CHARACTER units of the workbook's default font,
+   so an unnamed font makes the physical column width machine-dependent
+   too. Calibri ships with Office on both platforms, so naming it is
+   safe and makes the layout a property of the file. */
+var SCHED_XLS_FONT='Calibri';
 var SCHED_XLS_COLORS={
   '1':      {bg:'FFEBF5FB',font:'FF1B2B4B'},
   'PM':     {bg:'FFEBF5FB',font:'FF1A5276'},
@@ -26589,8 +26640,26 @@ async function schedExportExcel(){
      margins claw back a bit more per page on top of that. */
   ws.pageSetup={
     orientation:'portrait', /* Carlos's ask, switched back from landscape */
+    /* Carlos's ask, 2026-11-05: "make sure it prints the same on every
+       computer." THIS LINE is the main reason it didn't. With no
+       paperSize, Excel falls back to whatever the machine's DEFAULT
+       PRINTER reports — Letter on one PC, A4 on another, and a generic
+       fallback on a machine with no printer installed at all. Paper
+       width is the divisor in every fitToWidth calculation, so the same
+       file legitimately re-flowed to a different page count per machine,
+       with nothing in the file to blame. 1 = US Letter, stated
+       explicitly so the layout is a property of the FILE, not of
+       whoever opens it. */
+    paperSize:1,
     fitToPage:true, fitToWidth:1, fitToHeight:0,
-    margins:{left:0.25,right:0.25,top:0.4,bottom:0.4,header:0.2,footer:0.2},
+    /* Fourth print-compacting round, 2026-11-04: real printout came out
+       4 pages again (verified in his own Excel) — not a broken fitToPage,
+       the roster simply grew past what the third round was tuned for.
+       top/bottom margin matched down to the already-tight 0.25 left/right
+       has; header/footer margin dropped to 0 since nothing here ever sets
+       a header/footer string — that 0.2in+0.2in was pure reserved dead
+       space on every single page for no reason. */
+    margins:{left:0.25,right:0.25,top:0.25,bottom:0.25,header:0,footer:0},
     horizontalCentered:true
   };
   /* Day columns were widened from 13 to 19 at one point — a shift-time
@@ -26613,21 +26682,21 @@ async function schedExportExcel(){
   var thin={style:'thin',color:{argb:'FF000000'}};
   var cellBorder={top:thin,left:thin,bottom:thin,right:thin};
 
-  ws.addRow(['','','','','Weekly Schedule']).getCell(5).font={bold:true,size:16};
-  ws.addRow(['','','','','Housekeeping']).getCell(5).font={bold:true,size:12};
+  var titleRow=ws.addRow(['','','','','Weekly Schedule']); titleRow.getCell(5).font={name:SCHED_XLS_FONT,bold:true,size:16}; titleRow.height=20;
+  var subtitleRow=ws.addRow(['','','','','Housekeeping']); subtitleRow.getCell(5).font={name:SCHED_XLS_FONT,bold:true,size:12}; subtitleRow.height=16;
 
   var start=parseLocalDate(dates[0]),end=parseLocalDate(dates[6]);
   var fmt=function(d){return (d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();};
-  ws.addRow(['','From '+fmt(start)+'-'+fmt(end)]).getCell(2).font={bold:true};
+  var rangeRow=ws.addRow(['','From '+fmt(start)+'-'+fmt(end)]); rangeRow.getCell(2).font={name:SCHED_XLS_FONT,bold:true}; rangeRow.height=16;
 
   var headerRow=ws.addRow(['','Employee Name'].concat(dates.map(function(ds,i){return SCHED_DAYNAMES[i].slice(0,3);})));
   var dateRow=ws.addRow(['',''].concat(dates.map(function(ds){var d=parseLocalDate(ds);return (d.getMonth()+1)+'/'+d.getDate();})));
-  headerRow.height=30; dateRow.height=24; /* trimmed alongside deptRow, same print-compacting round */
+  headerRow.height=26; dateRow.height=20; /* fourth print-compacting round, 2026-11-04 */
   [headerRow,dateRow].forEach(function(row){
     for(var c=2;c<=9;c++){
       var cell=row.getCell(c);
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF243660'}};
-      cell.font={color:{argb:'FFFFFFFF'},bold:true,size:12};
+      cell.font={name:SCHED_XLS_FONT,color:{argb:'FFFFFFFF'},bold:true,size:12};
       cell.alignment={horizontal:'center',vertical:'middle'};
       cell.border=cellBorder;
     }
@@ -26670,13 +26739,14 @@ async function schedExportExcel(){
        — every band on the sheet stacks up vertically and each one adds
        to the printed page count, unlike column width (already capped to
        1 page wide by pageSetup's fitToWidth, so narrowing columns further
-       wouldn't actually save a page). Matches the already-compact 26 the
-       repeated Room Attendant sub-header below already uses. */
-    deptRow.height=26;
+       wouldn't actually save a page). Matches the already-compact 20 the
+       repeated Room Attendant sub-header below already uses (both trimmed
+       again, 2026-11-04 fourth round). */
+    deptRow.height=20;
     for(var c=2;c<=9;c++){
       var cell=deptRow.getCell(c);
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2C4270'}};
-      cell.font={color:{argb:'FFE8C96B'},bold:true,size:13};
+      cell.font={name:SCHED_XLS_FONT,color:{argb:'FFE8C96B'},bold:true,size:13};
       cell.alignment={vertical:'middle',horizontal:'center'};
       cell.border=cellBorder;
     }
@@ -26694,12 +26764,12 @@ async function schedExportExcel(){
     if(b.key==='gra'){
       var deptHeaderRow=ws.addRow(['','Employee Name'].concat(dates.map(function(ds,i){return SCHED_DAYNAMES[i].slice(0,3);})));
       var deptDateRow=ws.addRow(['',''].concat(dates.map(function(ds){var d=parseLocalDate(ds);return (d.getMonth()+1)+'/'+d.getDate();})));
-      deptHeaderRow.height=26; deptDateRow.height=22;
+      deptHeaderRow.height=20; deptDateRow.height=18;
       [deptHeaderRow,deptDateRow].forEach(function(row){
         for(var c=2;c<=9;c++){
           var cell=row.getCell(c);
           cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF243660'}};
-          cell.font={color:{argb:'FFFFFFFF'},bold:true,size:10};
+          cell.font={name:SCHED_XLS_FONT,color:{argb:'FFFFFFFF'},bold:true,size:10};
           cell.alignment={horizontal:'center',vertical:'middle'};
           cell.border=cellBorder;
         }
@@ -26729,17 +26799,18 @@ async function schedExportExcel(){
       });
       /* Row height history: 36 originally (Carlos's report: too cramped
          to read on a printed page) -> 72 (too tall, forced extra pages)
-         -> 54 (the settled compromise) -> 40 now, third print-compacting
-         round, 2026-09-19 — knowingly close to the original 36 he found
-         cramped. Flagged to him directly before making this change: a
-         2-line wrapped shift-time string at size 13 could come out tight
-         at 40, the same class of risk column width 13 hit on his work
-         computer once already. First thing to raise back if a printed
-         page looks cramped again. */
+         -> 54 (the settled compromise) -> 40 (third round, 2026-09-19) ->
+         37 now, fourth round, 2026-11-04 — deliberately stopped 1pt above
+         the 36 he once found cramped, not AT it, since this is the
+         highest-row-count lever on the sheet (60+ rows) and the real
+         printed page count (verified in his own Excel) is the thing that
+         actually needs to move, not this number specifically. If a
+         printed page still looks cramped at 37, this is the first thing
+         to raise back — don't push it lower than 37 without asking him. */
       var row=ws.addRow(['',nm].concat(displayData));
-      row.height=40;
+      row.height=37;
       var nameCell=row.getCell(2);
-      nameCell.font={size:13};
+      nameCell.font={name:SCHED_XLS_FONT,size:13};
       nameCell.alignment={vertical:'middle',horizontal:'left'};
       nameCell.border=cellBorder;
       rawData.forEach(function(v,i){
@@ -26749,9 +26820,9 @@ async function schedExportExcel(){
         var colors=SCHED_XLS_COLORS[v];
         if(colors){
           cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:colors.bg}};
-          cell.font={color:{argb:colors.font},size:13};
+          cell.font={name:SCHED_XLS_FONT,color:{argb:colors.font},size:13};
         } else {
-          cell.font={size:13};
+          cell.font={name:SCHED_XLS_FONT,size:13};
         }
       });
     });
@@ -29211,7 +29282,12 @@ function dlPrint(){
      nothing removed or reordered), since "same format" ruled out
      dropping sections or columns to make it fit. */
   var h='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Daily Lineup '+ds+'</title><style>'
-    +'@page{size:auto;margin:8mm;}'
+    /* size was `auto` until 2026-11-05, which hands the paper choice to
+       whatever the browser's default printer reports — the same
+       machine-dependence being removed from the Excel exports this
+       round. The one-page tuning below was measured on US Letter, so
+       Letter is now stated outright rather than hoped for. */
+    +'@page{size:letter portrait;margin:8mm;}'
     +'*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
     +'html{color-scheme:light;}'
     +'body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1A1714;background:#fff;}'
@@ -29399,6 +29475,32 @@ function dlExportExcel(){
         Object.keys(DL_GRA_CELL).forEach(function(fl){ S(DL_GRA_CELL[fl],dlShortName(floors[fl])); });
         fill(DL_FLOATER_CELL,dlUnplacedFloaters(P).map(dlShortName));
         DL_EXTRA_FIELDS.forEach(function(f){ S(f.cell,P.extras[f.key]||''); });
+
+        /* ── Pin the printed page to the FILE, not to the machine ──
+           Carlos's 2026-11-05 ask. The shipped template carries a
+           printerSettings part per sheet — a binary DEVMODE blob saved
+           from three specific hotel printers ("Housekeeping Printer",
+           "HSKP Office Printer 2", "PRTHOUDJAYS01"), referenced from
+           <pageSetup r:id>. Read back, those blobs say LANDSCAPE while
+           the sheet's own XML says portrait: a direct contradiction,
+           resolved differently depending on whether the machine opening
+           the file happens to have that printer installed. That is
+           precisely "it prints differently on different computers."
+           Dropping r:id leaves nothing machine-local to consult, and
+           paperSize is then stated outright instead of inherited from
+           the default printer.
+
+           Deliberately minimal: the attribute is removed, the .bin and
+           the .rels entry are left alone (an unreferenced relationship
+           is inert). This template was corrupted once before by a tool
+           that rewrote more of it than it needed to — see the 7.17.0
+           changelog — so nothing here touches bytes it doesn't have to. */
+        var _ps=doc.getElementsByTagNameNS(DL_XNS,'pageSetup')[0];
+        if(_ps){
+          try{ _ps.removeAttributeNS(DL_RNS,'id'); }catch(e){}
+          _ps.setAttribute('paperSize','1'); /* 1 = US Letter */
+          _ps.setAttribute('orientation','portrait');
+        }
 
         /* Cached formula results are stale now; make Excel recalculate. */
         var calc=wbDoc.getElementsByTagNameNS(DL_XNS,'calcPr')[0];
