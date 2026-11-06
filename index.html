@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.107.0"/>
+<meta name="app-version" content="7.108.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -763,6 +763,21 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .day-prog-card.no-report{background:var(--yellow-bg);border-color:var(--yellow-border);}
 .day-prog-card.today-empty{background:var(--s2);border-color:var(--navy3);}
 .day-prog-card.future{opacity:.3;pointer-events:none;}
+/* Carlos's real report, 2026-11-05: on a phone, today's own card could
+   sit sliced in half at the right edge of the screen with no way to
+   reach it. Root cause was worse than "needs a scroll": #dashDayProgression
+   is a 7-column CSS grid with plain 1fr tracks (no minmax(0,...)), so on a
+   narrow screen the row doesn't shrink to fit — it overflows — and since
+   body/.pages-wrap both set overflow-x:hidden for the app shell, that
+   overflow was clipped and UNREACHABLE, not just hidden behind a swipe.
+   Below 640px this switches to the same fixed-width horizontally-scrolling
+   strip pattern .wp-day-strip already uses, and dashScrollToToday (called
+   right after every render) brings today into view automatically so no
+   one has to discover the swipe at all. */
+@media(max-width:640px){
+  #dashDayProgression{display:flex!important;overflow-x:auto;scroll-snap-type:x proximity;}
+  #dashDayProgression .day-prog-card{flex:0 0 72px;scroll-snap-align:center;}
+}
 .dpc-badge{position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-size:8px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;}
 .dpc-badge.navy{background:var(--navy);color:#fff;}
 .dpc-badge.yellow{background:var(--yellow);color:#fff;}
@@ -4656,6 +4671,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.108.0', date:'2026-11-06',
+    fixes:['The Labor page\'s week strip could put TODAY\'s own card half off the right edge of a phone screen on some days of the week (worst on a Friday, the last day of the Sat\u2013Fri week) \u2014 and it was worse than just needing a swipe: the strip had no horizontal scrolling at all, so that card was genuinely unreachable, not just hidden off-screen. It now scrolls on a narrow screen, and opens already centered on today, every time, on every day of the week.']
+  },
   {
     v:'7.107.0', date:'2026-11-05',
     fixes:['Break Compliance notes and "Marked as fixed" flags were being saved to the cloud but never read back down. There was no code to receive them, so a note written on one computer stayed on that computer forever while every other manager saw nothing — and worse, each computer\'s save overwrote whatever the others had written up there. Notes now arrive on every device, and a save merges with what is already on the server instead of replacing it.',
@@ -13866,6 +13885,18 @@ function renderStaffing(){
 try{if(stf_loadInput())STF_STATE.calculated=true;}catch(e){}
 try{stf_loadActual();}catch(e){}
 
+/* Only actually scrolls anything on the narrow (<640px) layout where
+   #dashDayProgression becomes a horizontally-scrolling strip — on a
+   desktop-width screen the 7 columns already all fit, so this is a
+   harmless no-op there. inline:'center' rather than 'nearest' so today
+   isn't just barely reachable at the very edge, the same complaint that
+   started this: it lands centered, already fully visible. */
+function dashScrollToToday(container){
+  try{
+    var todayCard=container&&container.querySelector('[data-today="1"]');
+    if(todayCard)todayCard.scrollIntoView({inline:'center',block:'nearest'});
+  }catch(e){}
+}
 function renderLaborDash(){
   /* Standard toggle lives at the top of the page now (Carlos's request —
      pick Current/Unifocus before looking at anything below), not inside
@@ -13942,7 +13973,7 @@ function renderLaborDash(){
     if(!snap&&!isFuture)cls+=' no-report';
     if(isToday&&!snap)cls+=' today-empty';
 
-    html+='<div class="'+cls+'" data-ds="'+ds+'" onclick="selectDashDay(this.dataset.ds)">';
+    html+='<div class="'+cls+'" data-ds="'+ds+'"'+(isToday?' data-today="1"':'')+' onclick="selectDashDay(this.dataset.ds)">';
     if(isToday)html+='<div class="dpc-badge navy">Today</div>';
     else if(isSelected&&!isToday)html+='<div class="dpc-badge navy">Viewing</div>';
     if(!snap&&!isFuture&&!isToday)html+='<div class="dpc-badge yellow">No Report</div>';
@@ -13978,6 +14009,7 @@ function renderLaborDash(){
     html+='</div>';
   });
   progEl.innerHTML=html;
+  dashScrollToToday(progEl);
 
   /* Missing days alert for previous weeks */
   var missEl=document.getElementById('dashMissingAlert');
