@@ -140,6 +140,7 @@ const cases = [
   require('./cases/daily-lineup-cover-label-case'),
   require('./cases/upload-smart-date-default'),
   require('./cases/labor-sprint-am-review-detection'),
+  require('./cases/sidebar-nav-groups'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
