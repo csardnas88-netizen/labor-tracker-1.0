@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.109.0"/>
+<meta name="app-version" content="7.110.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -555,6 +555,12 @@ tbody tr:hover td{background:var(--surface);}
 .sidebar-sub{font-size:10px;color:rgba(255,255,255,.45);margin-top:2px;}
 .sidebar-footer{margin-top:auto;padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);}
 .nav-section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.3);padding:12px 18px 4px;}
+.nav-section-label.collapsible{cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding-right:16px;user-select:none;}
+.nav-section-label.collapsible:hover{color:rgba(255,255,255,.55);}
+.nav-group-chev{display:inline-block;font-size:8px;transition:transform .2s ease;}
+.nav-section-label.collapsible[data-open="false"] .nav-group-chev{transform:rotate(-90deg);}
+.nav-group-body{overflow:hidden;max-height:0;transition:max-height .25s ease;}
+.nav-group-body[data-open="true"]{max-height:600px;}
 .nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;font-weight:500;color:rgba(255,255,255,.65);cursor:pointer;transition:.15s;position:relative;}
 .nav-item:hover{background:rgba(255,255,255,.08);color:#fff;}
 .nav-item.active{background:var(--gold-soft);color:var(--gold-text);font-weight:700;border-left:3px solid var(--gold);padding-left:15px;}
@@ -1324,7 +1330,8 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     </div>
   </div>
 
-  <div class="nav-section-label">Main</div>
+  <div class="nav-section-label collapsible" data-group="main" data-open="true" onclick="toggleNavGroup(this)">Main <span class="nav-group-chev">&#9662;</span></div>
+  <div class="nav-group-body" data-open="true">
   <div class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')">
     <span class="nav-icon">&#128202;</span> Dashboard
   </div>
@@ -1349,8 +1356,10 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   <div class="nav-item" id="nav-roster" onclick="showPage('roster')">
     <span class="nav-icon">&#128101;</span> Roster
   </div>
+  </div>
 
-  <div class="nav-section-label">Reports</div>
+  <div class="nav-section-label collapsible" data-group="reports" data-open="false" onclick="toggleNavGroup(this)">Reports <span class="nav-group-chev">&#9662;</span></div>
+  <div class="nav-group-body" data-open="false">
   <div class="nav-item" id="nav-recap" onclick="showPage('recap')">
     <span class="nav-icon">&#128203;</span> Monthly Recap
   </div>
@@ -1363,16 +1372,20 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   <div class="nav-item" id="nav-latedep" onclick="showPage('latedep')">
     <span class="nav-icon">&#128715;</span> Room Assignment Analysis
   </div>
+  </div>
 
-  <div class="nav-section-label">Finance</div>
+  <div class="nav-section-label collapsible" data-group="finance" data-open="false" onclick="toggleNavGroup(this)">Finance <span class="nav-group-chev">&#9662;</span></div>
+  <div class="nav-group-body" data-open="false">
   <div class="nav-item" id="nav-labormodel" onclick="showPage('labormodel')">
     <span class="nav-icon">&#128208;</span> Labor Model
   </div>
   <div class="nav-item" id="nav-pnl" onclick="showPage('pnl')">
     <span class="nav-icon">&#128176;</span> P&amp;L
   </div>
+  </div>
 
-  <div class="nav-section-label">Operations</div>
+  <div class="nav-section-label collapsible" data-group="operations" data-open="false" onclick="toggleNavGroup(this)">Operations <span class="nav-group-chev">&#9662;</span></div>
+  <div class="nav-group-body" data-open="false">
   <div class="nav-item" id="nav-schedule" onclick="showPage('schedule')">
     <span class="nav-icon">&#128197;</span> Schedule
   </div>
@@ -1388,8 +1401,10 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   <div class="nav-item" id="nav-sectionrotation" onclick="showPage('sectionrotation')">
     <span class="nav-icon">&#128260;</span> Section Rotation
   </div>
+  </div>
 
-  <div class="nav-section-label">Management</div>
+  <div class="nav-section-label collapsible" data-group="management" data-open="false" onclick="toggleNavGroup(this)">Management <span class="nav-group-chev">&#9662;</span></div>
+  <div class="nav-group-body" data-open="false">
   <div class="nav-item" id="nav-staffing" onclick="showPage('staffing')">
     <span class="nav-icon">&#129489;&#8205;&#128188;</span> Staffing
   </div>
@@ -1409,10 +1424,13 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     <span class="nav-icon">&#128222;</span> Call-Offs
     <span class="nav-badge" id="navCallOffsBadge" style="display:none;">0</span>
   </div>
+  </div>
 
-  <div class="nav-section-label">System</div>
+  <div class="nav-section-label collapsible" data-group="system" data-open="false" onclick="toggleNavGroup(this)">System <span class="nav-group-chev">&#9662;</span></div>
+  <div class="nav-group-body" data-open="false">
   <div class="nav-item" id="nav-settings" onclick="showPage('settings')">
     <span class="nav-icon">&#9881;</span> Settings
+  </div>
   </div>
 
   <div class="sidebar-footer">
@@ -4672,6 +4690,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.110.0', date:'2026-11-07',
+    improvements:['The sidebar menu showed all 24 destinations open at once — Carlos\'s real complaint that the app feels overwhelming on first open. Reports, Finance, Operations, Management and System are now collapsible groups, collapsed by default; only Main (Dashboard, Labor, Time Card Check, Break Compliance, Overtime, Position Check, Roster — the daily-use pages) stays open. Tap a group title to expand it; which groups you leave open is remembered on that device. Navigating straight to a page inside a collapsed group (a cross-link from elsewhere in the app) opens that group automatically so the highlighted item is never hidden.']
+  },
+  {
     v:'7.109.0', date:'2026-11-06',
     improvements:['Schedule Checks separated into two groups instead of one flat list \u2014 Carlos\'s real complaint, with a real week loaded this had grown to 40 lines, 5\u201312 of them "0/1 days off THIS WEEK" (costs real overtime, genuinely actionable right now) buried under 28 "hasn\'t had a full weekend off in N weeks" (a rolling, weeks-old pattern). The this-week ones now stay open always; the rolling ones start collapsed behind a single "Show 28 full-weekend-off reminders" line. Nothing about what\'s checked or how changed \u2014 only how it\'s shown.']
   },
@@ -7528,6 +7550,7 @@ function renderAuditLog(rows){
    access control), so go straight to the auth check. */
 window.addEventListener('load',function(){
   var po=document.getElementById('pinOverlay');if(po)po.style.display='none';
+  initNavGroups();
   /* A password-reset email link takes over the whole screen — skip the
      normal signed-in/signed-out check until that flow is done. */
   if(_checkRecoveryLink())return;
@@ -11738,6 +11761,47 @@ function toggleSidebarSmart(){
   }
 }
 
+/* Collapsible nav groups: "Main" opens by default, the rest start closed so
+   the first screen shows ~7 items instead of all 24. Remembered per device. */
+function toggleNavGroup(label){
+  var open=label.getAttribute('data-open')==='true';
+  label.setAttribute('data-open',open?'false':'true');
+  label.nextElementSibling.setAttribute('data-open',open?'false':'true');
+  saveNavGroupState();
+}
+function saveNavGroupState(){
+  var state={};
+  document.querySelectorAll('.nav-section-label.collapsible').forEach(function(l){
+    state[l.getAttribute('data-group')]=l.getAttribute('data-open')==='true';
+  });
+  safeSetItem('hk_navgroups_open',JSON.stringify(state));
+}
+function initNavGroups(){
+  var saved={};
+  try{saved=JSON.parse(localStorage.getItem('hk_navgroups_open')||'{}');}catch(e){}
+  document.querySelectorAll('.nav-section-label.collapsible').forEach(function(l){
+    var g=l.getAttribute('data-group');
+    var open=saved.hasOwnProperty(g)?!!saved[g]:(l.getAttribute('data-open')==='true');
+    l.setAttribute('data-open',open?'true':'false');
+    l.nextElementSibling.setAttribute('data-open',open?'true':'false');
+  });
+}
+/* If navigation lands on a page whose group is collapsed (e.g. a cross-link
+   from another page), open that group so the highlighted item is visible
+   instead of highlighting something hidden under a closed section. */
+function _revealNavGroupFor(page){
+  var item=document.getElementById('nav-'+page);
+  if(!item)return;
+  var body=item.closest('.nav-group-body');
+  if(!body||body.getAttribute('data-open')==='true')return;
+  body.setAttribute('data-open','true');
+  var lbl=body.previousElementSibling;
+  if(lbl&&lbl.classList.contains('collapsible')){
+    lbl.setAttribute('data-open','true');
+    saveNavGroupState();
+  }
+}
+
 /* ── Navigation ── */
 var PAGES=['dashboard','labor','wtc','daily','breaks','overtime','position','roster','recap','occupancy','dnds','latedep','labormodel','pnl','staffing','projects','trainhours','training','calloffs','schedule','reqnotebook','dailylineup','assignments','sectionrotation','settings'];
 var _pinGateBypass=false;
@@ -11757,6 +11821,7 @@ function showPage(page){
     if(nav)nav.classList.toggle('active',p===page);
   });
   currentPage=page;
+  try{_revealNavGroupFor(page);}catch(e){}
   /* Hides the Labor Focus Sprint bubble/panel immediately on navigating
      away — page!=='labor' doesn't call renderLaborDash() below, so
      without this the floating bubble could stay stuck on screen over
