@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.112.0"/>
+<meta name="app-version" content="7.112.1"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -52,15 +52,17 @@
      LIGHT fill in a dark theme, so its label must be dark. Flipping it
      with the surfaces is what dropped these buttons to 1.02 contrast. */
   --on-accent:#17210A;
-  /* Navy stays a raised SURFACE: on a #0F1420 page the old #1E2D4A still
-     reads as a lifted card, so the hero cards keep their identity. */
-  --navy:#1E2D4A;--navy2:#253656;--navy3:#16223A;
+  /* Carlos, 2026-11-09: no navy blue in the dark theme. These are now
+     neutral slate — the same family as the menu — so raised cards read as
+     lifted without a blue cast. The PDF popups define their OWN --navy
+     locally, so printed reports keep the navy header on white. */
+  --navy:#1B2230;--navy2:#242D3E;--navy3:#151B26;
   /* --navy wears two hats: a dark SURFACE (sidebar, hero cards) and dark
      TEXT on a light ground. They move in OPPOSITE directions in dark —
      the surface stays dark, the text goes light. That is the whole
      reason this token exists separately. */
   --ink-strong:#DCE3F0;
-  --nvy:#1E2D4A;--nvy2:#16223A;--nvy3:#253656;
+  --nvy:#1B2230;--nvy2:#151B26;--nvy3:#242D3E;
   /* Surfaces — dark theme. --white is a surface (73 backgrounds, 0 text
      uses), so despite the name it darkens with the rest. */
   --bg:#0F1420;--white:#161D2B;--sur:#161D2B;
@@ -608,7 +610,8 @@ tbody tr:hover td{background:var(--surface);}
 .nav-section-label.collapsible{cursor:pointer;display:flex;align-items:center;
   padding:9px 22px;margin:1px 0;font-size:13.5px;font-weight:500;letter-spacing:0;
   text-transform:none;color:#A8B2C2;user-select:none;transition:color .15s;}
-.nav-section-label.collapsible:hover{color:var(--sb-ink-bright);}
+.nav-section-label.collapsible:hover{color:var(--sb-ink-bright);background:rgba(255,255,255,.045);}
+.nav-section-label.collapsible[data-open="true"]:hover{background:none;}
 /* Count of what's hidden inside, so a closed group says how much it holds. */
 .nav-group-count{margin-left:auto;font-size:10.5px;font-weight:500;color:var(--sb-ink-faint);
   font-variant-numeric:tabular-nums;transition:opacity .15s;}
@@ -639,9 +642,15 @@ tbody tr:hover td{background:var(--surface);}
    accent when active. Animating height keeps the rail continuous. */
 .nav-item::before{content:"";position:absolute;left:21.5px;top:50%;transform:translateY(-50%);
   width:2px;height:0;background:var(--sb-ink-faint);border-radius:1px;transition:height .18s ease,background .15s;}
-.nav-item:hover{color:var(--sb-ink-bright);}
+/* background is declared explicitly on all three states, even where the Rail
+   design wants none. An earlier block still carries
+   .nav-item:hover{background:var(--text1)} and .nav-item.active{…} from the
+   old filled-block menu; --text1 is near-white in the dark theme, so leaving
+   background undeclared here let a white slab through and swallowed the
+   label. Same specificity means the later rule only wins per-property. */
+.nav-item:hover{color:var(--sb-ink-bright);background:rgba(255,255,255,.045);}
 .nav-item:hover::before{height:14px;}
-.nav-item.active{color:var(--sb-accent);font-weight:600;}
+.nav-item.active{color:var(--sb-accent);font-weight:600;background:none;}
 .nav-item.active::before{height:20px;background:var(--sb-accent);}
 .nav-badge{margin-left:auto;background:#2A3346;color:#C3CCDC;font-size:9.5px;padding:1px 7px;
   border-radius:99px;font-weight:700;}
@@ -927,7 +936,14 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .hub-hero{background:var(--navy);border-radius:18px;padding:24px 26px;box-shadow:var(--sh2);cursor:pointer;transition:.18s;position:relative;overflow:hidden;margin-bottom:16px;color:var(--on-fill);}
 .hub-hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:linear-gradient(90deg,var(--gold),transparent);}
 .hub-hero:hover{transform:translateY(-2px);box-shadow:var(--sh3);}
-.hub-hero-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;}
+/* justify-content was space-between to split the icon (left) from the
+   arrow (right). With the icon hidden, this row holds only the arrow —
+   space-between then has nothing to space BETWEEN, so it falls back to
+   flex-start and strands the arrow on the left with dead space beside it
+   instead of at the corner where it reads as a card affordance. flex-end
+   plus a smaller margin (the row no longer needs to clear a 46px icon)
+   closes that gap. */
+.hub-hero-top{display:flex;align-items:flex-start;justify-content:flex-end;margin-bottom:6px;}
 .hub-hero-icon{width:46px;height:46px;border-radius:13px;background:rgba(201,168,76,.2);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px solid rgba(201,168,76,.3);}
 .hub-arrow{color:rgba(255,255,255,.5);font-size:20px;transition:.18s;}
 .hub-hero:hover .hub-arrow{color:var(--gold);transform:translateX(3px);}
@@ -943,7 +959,13 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .hub-row3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
 .hub-card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:var(--sh1);cursor:pointer;transition:.18s;display:flex;flex-direction:column;min-height:150px;}
 .hub-card:hover{box-shadow:var(--sh3);transform:translateY(-2px);border-color:var(--gold);}
-.hub-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;}
+/* Same fix as .hub-hero-top: this row is icon+arrow only, so hiding the
+   icon leaves the arrow as the sole flex child. space-between has nothing
+   to space between then and strands it on the left — not visible on
+   today's empty-state cards, but it will surface the moment any of these
+   has real content (an active training, a call-off this month, a live
+   project), which is the icon+arrow header this rule controls. */
+.hub-card-top{display:flex;align-items:flex-start;justify-content:flex-end;margin-bottom:4px;}
 .hub-card-icon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;}
 .hub-card-arrow{color:var(--text3);font-size:16px;transition:.18s;}
 .hub-card:hover .hub-card-arrow{color:var(--gold);transform:translateX(3px);}
@@ -1018,6 +1040,13 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .hub-assign-icon{width:44px;height:44px;border-radius:12px;background:rgba(201,168,76,.18);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
 .hub-assign-title{font-family:var(--serif);font-size:17px;font-weight:700;color:var(--on-fill);margin-bottom:3px;}
 .hub-assign-sub{font-size:12px;color:rgba(255,255,255,.55);}
+/* Carlos's call, 2026-11-09: no icons on the Dashboard hero, the hub cards,
+   or the Room Assignments banner, matching the iconless menu. Must sit
+   AFTER each icon class's own rule (.hub-hero-icon is up at line ~940) —
+   they all declare their own `display`, and at equal specificity the later
+   declaration wins per-property. The markup is untouched, so deleting this
+   one rule brings every icon back. */
+.hub-card-icon,.hub-zero-ico,.hub-assign-icon,.hub-hero-icon{display:none;}
 .hub-assign-arrow{color:var(--gold);font-size:22px;transition:.18s;flex-shrink:0;}
 .hub-assign-banner:hover .hub-assign-arrow{transform:translateX(4px);}
 
@@ -1027,7 +1056,13 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
    get a slow pulse so they read as "act on this now" without being
    obnoxious; the confetti burst (fireConfetti, once per day) is the
    actual celebratory moment — this pill just marks who it was for. */
-.hub-bday-banner{position:relative;background:linear-gradient(135deg,#E0855B 0%,#D4537E 60%,#993556 100%);border-radius:16px;padding:22px 26px;margin-top:14px;box-shadow:var(--sh2);border:1px solid rgba(255,255,255,.25);overflow:hidden;}
+/* The orange-to-pink gradient was the loudest thing on a near-black page and
+   read as a leftover from the cream theme (Carlos, 2026-11-09). A deep
+   violet keeps it distinct from every other card — birthdays should still
+   feel like their own thing — while staying in the dark family, and the
+   lime hairline below ties it to the accent the rest of the app uses. */
+.hub-bday-banner{position:relative;background:linear-gradient(135deg,#1C2030 0%,#21203A 60%,#262242 100%);border-radius:16px;padding:22px 26px;margin-top:14px;box-shadow:var(--sh2);border:1px solid rgba(201,239,107,.14);overflow:hidden;}
+.hub-bday-banner::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,var(--gold),transparent);}
 .hub-bday-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
 .hub-bday-title{font-family:var(--serif);font-size:20px;font-weight:700;color:var(--on-fill);display:flex;align-items:center;gap:10px;}
 .hub-bday-nav{display:flex;align-items:center;gap:8px;}
@@ -4768,6 +4803,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.112.1', date:'2026-11-09',
+    fixes:['Hovering over the menu briefly turned a section white and swallowed its label — a leftover rule from the old menu style that the dark theme exposed. Fixed, along with the matching problem on whichever page was currently selected.',
+      'No more navy blue anywhere in the dark theme — the Dashboard hero card and every other navy surface now use a neutral dark grey instead. Printed reports are unaffected; they still use navy on white.',
+      'Icons removed from the Dashboard hero and from the Training, Call-Offs, Projects and Room Assignments cards, to match the iconless menu. The birthday mascot stays.',
+      'The birthday card is a quieter dark purple instead of the bright orange-pink gradient, with a thin lime line to mark it as something worth noticing.',
+      'Removing those icons left the arrow in the top corner of those cards floating with empty space around it. Fixed on the hero and pre-emptively on the three smaller cards too, so it will not show up later the first time one of them has real content.']
+  },
   {
     v:'7.112.0', date:'2026-11-09',
     fixes:['The whole app is dark now, matching the menu. Cards sit on a near-black page, text is light, and the accent is the same lime the menu uses. Nothing moved — every page is laid out exactly where it was, only the colours changed.',
