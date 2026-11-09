@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.111.1"/>
+<meta name="app-version" content="7.111.2"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -43,6 +43,11 @@
   --gold-soft:rgba(201,168,76,.14);--gold-text:#F5ECD4;
   /* Navy (primary) */
   --navy:#1E2D4A;--navy2:#253656;--navy3:#16223A;
+  /* --navy wears two hats: a dark SURFACE (sidebar, hero cards) and dark
+     TEXT on a light ground. They must move in opposite directions when the
+     app goes dark, so the text role lives in its own token. Same value
+     today — this split is deliberately a no-op until the theme flips. */
+  --ink-strong:#1E2D4A;
   --nvy:#1E2D4A;--nvy2:#16223A;--nvy3:#253656;
   /* Surfaces — cream theme */
   --bg:#F2F0EA;--white:#FFFFFF;--sur:#FFFFFF;
@@ -157,7 +162,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .alert-strip-title{font-weight:700;color:var(--yellow);margin-bottom:4px;}
 .alert-item{display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(217,119,6,.1);font-size:12px;color:var(--text2);}
 .alert-item:last-child{border-bottom:none;padding-bottom:0;}
-.alert-action{font-size:11px;font-weight:700;color:var(--navy);cursor:pointer;white-space:nowrap;margin-left:10px;}
+.alert-action{font-size:11px;font-weight:700;color:var(--ink-strong);cursor:pointer;white-space:nowrap;margin-left:10px;}
 
 /* ── KPI CARDS ── */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
@@ -265,7 +270,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .detail-actions{display:flex;gap:8px;padding:12px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .daction{flex:1;min-width:100px;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);text-align:center;transition:.15s;}
 .daction:hover{background:var(--border);}
-.daction.primary{background:var(--navy);color:var(--on-fill);border-color:var(--navy);}
+.daction.primary{background:var(--navy);color:var(--on-fill);border-color:var(--ink-strong);}
 .detail-pos-wrap{padding:14px 20px;}
 
 /* ── TABLES ── */
@@ -281,12 +286,12 @@ tbody tr:hover td{background:var(--surface);}
 .b-yellow{background:var(--yellow-bg);color:var(--yellow);}
 .b-green{background:var(--green-bg);color:var(--green);}
 .b-gray{background:var(--s3);color:var(--text2);}
-.b-navy{background:var(--s3);color:var(--navy);}
+.b-navy{background:var(--s3);color:var(--ink-strong);}
 
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);font-size:12.5px;font-weight:600;cursor:pointer;border:none;min-height:40px;transition:.15s;}
 .btn:active{opacity:.75;}
-.btn-gold{background:var(--gold);color:var(--navy);font-weight:700;}
+.btn-gold{background:var(--gold);color:var(--ink-strong);font-weight:700;}
 .btn-gold:hover{background:var(--gl);}
 .btn-navy{background:var(--navy);color:var(--on-fill);}
 .btn-navy:hover{background:var(--navy2);}
@@ -315,7 +320,7 @@ tbody tr:hover td{background:var(--surface);}
 .field{display:flex;flex-direction:column;gap:5px;}
 .field label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);}
 .field input,.field select,.field textarea{padding:10px 12px;border:1.5px solid var(--border2);border-radius:var(--radius-xs);font-size:14px;color:var(--text1);background:var(--white);width:100%;min-height:44px;}
-.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--navy);}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--ink-strong);}
 
 /* ── UPLOAD MODAL ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;}
@@ -324,7 +329,7 @@ tbody tr:hover td{background:var(--surface);}
 .modal-sub{font-size:12px;color:var(--text3);margin-bottom:18px;}
 .date-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:16px;}
 .upload-drop{border:2px dashed var(--border2);border-radius:var(--radius-sm);padding:28px 20px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:14px;}
-.upload-drop:hover,.upload-drop.drag{border-color:var(--navy);background:var(--surface);}
+.upload-drop:hover,.upload-drop.drag{border-color:var(--ink-strong);background:var(--surface);}
 .upload-drop-icon{font-size:32px;margin-bottom:8px;}
 .upload-drop h3{font-size:14px;font-weight:700;color:var(--text1);margin-bottom:4px;}
 .upload-drop p{font-size:12px;color:var(--text3);}
@@ -351,13 +356,13 @@ tbody tr:hover td{background:var(--surface);}
 .filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
 .fbtn{padding:5px 13px;border-radius:99px;border:1.5px solid var(--border);background:var(--white);font-size:11.5px;font-weight:600;cursor:pointer;color:var(--text2);transition:.15s;}
 .fbtn:hover{background:var(--surface);}
-.fbtn.on{background:var(--navy);color:var(--on-fill);border-color:var(--navy);}
+.fbtn.on{background:var(--navy);color:var(--on-fill);border-color:var(--ink-strong);}
 
 /* ── INFO BOX ── */
 .info-box{border-radius:var(--radius-xs);padding:10px 14px;font-size:12.5px;margin-bottom:14px;}
 .info-yellow{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border);}
 .info-red{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);}
-.info-navy{background:var(--s3);color:var(--navy);border:1px solid var(--s3);}
+.info-navy{background:var(--s3);color:var(--ink-strong);border:1px solid var(--s3);}
 
 /* ── ROSTER CARDS ── */
 .roster-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;}
@@ -634,7 +639,7 @@ tbody tr:hover td{background:var(--surface);}
 /* Collapsible sidebar on large screens (iPad/desktop) */
 body.sb-collapsed .sidebar{transform:translateX(-100%);}
 body.sb-collapsed .main-wrap{margin-left:0;width:100%;}
-.notif-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--gold);color:var(--navy);border:none;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:40px;gap:7px;white-space:nowrap;box-shadow:0 2px 6px rgba(30,45,74,.15);transition:.18s;}
+.notif-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--gold);color:var(--ink-strong);border:none;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:40px;gap:7px;white-space:nowrap;box-shadow:0 2px 6px rgba(30,45,74,.15);transition:.18s;}
 .notif-btn:hover{background:var(--gl);transform:translateY(-1px);box-shadow:0 4px 10px rgba(30,45,74,.2);}
 .notif-btn:active{transform:scale(.97);}
 @media(max-width:480px){.notif-btn{padding:8px 12px;font-size:13px;min-height:36px;}.upload-text{display:none;}}
@@ -659,18 +664,18 @@ tbody tr:hover td{background:var(--offwhite);}
 .b-amber{background:var(--amber2);color:var(--amber);}
 .b-yellow{background:var(--yellow-bg);color:var(--yellow);}
 .b-green{background:var(--green2);color:var(--green);}
-.b-navy{background:var(--s3);color:var(--navy);}
+.b-navy{background:var(--s3);color:var(--ink-strong);}
 .b-gold{background:var(--gt);color:var(--gd);}
 .b-gray{background:var(--s3);color:var(--text2);}
 .b-purple{background:var(--purple-bg);color:var(--purple);}
 .filter-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
 .filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
 .fbtn{padding:7px 15px;border-radius:99px;border:1.5px solid var(--border2);background:var(--white);font-size:12px;cursor:pointer;font-weight:600;color:var(--text2);min-height:34px;transition:.15s;}
-.fbtn:hover{border-color:var(--navy);color:var(--navy);}
-.fbtn.on{background:var(--navy);color:var(--on-fill);border-color:var(--navy);}
+.fbtn:hover{border-color:var(--ink-strong);color:var(--ink-strong);}
+.fbtn.on{background:var(--navy);color:var(--on-fill);border-color:var(--ink-strong);}
 .modal-overlay{position:fixed;inset:0;background:rgba(15,37,68,.55);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;}
 .modal-box{background:var(--sur);border-radius:16px;padding:24px;width:100%;max-width:480px;box-shadow:0 8px 40px rgba(0,0,0,.25);max-height:92vh;overflow-y:auto;}
-.modal-title{font-family:var(--serif);font-size:19px;font-weight:600;color:var(--navy);margin-bottom:4px;}
+.modal-title{font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink-strong);margin-bottom:4px;}
 .modal-sub{font-size:12px;color:var(--text3);}
 .break-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .break-row:last-child{border-bottom:none;}
@@ -711,7 +716,7 @@ tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent
 .scope-badge{font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:4px 9px;border-radius:99px;background:rgba(201,162,39,.2);color:var(--gold-text);white-space:nowrap;flex-shrink:0;border:1px solid rgba(201,162,39,.3);}
 .scope-badge.pos{background:rgba(201,162,39,.2);color:var(--gold-text);}
 .tr-count{font-size:13px;font-weight:700;color:var(--text2);}
-.tr-count b{color:var(--navy);}
+.tr-count b{color:var(--ink-strong);}
 .tr-sub{font-size:11px;color:var(--yellow);font-weight:700;margin-top:9px;}
 .dl-row{display:flex;gap:8px;margin:12px 18px 0;}
 .dl-chip{flex:1;border-radius:9px;padding:9px 11px;border:1.5px solid var(--border);background:var(--offwhite);}
@@ -737,7 +742,7 @@ tr.newhire-row{background:linear-gradient(90deg,rgba(212,175,55,.08),transparent
 .tr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
 .tr-view-switch{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:3px;gap:2px;}
 .tr-view-btn{background:none;border:none;padding:7px 10px;border-radius:6px;cursor:pointer;color:var(--text3);display:flex;align-items:center;}
-.tr-view-btn.active{background:var(--white);color:var(--navy);box-shadow:0 1px 2px rgba(0,0,0,.08);}
+.tr-view-btn.active{background:var(--white);color:var(--ink-strong);box-shadow:0 1px 2px rgba(0,0,0,.08);}
 
 /* Large view — a progress ring instead of a thin bar */
 .tr-body-lg{padding:18px;display:flex;gap:18px;align-items:center;}
@@ -804,13 +809,13 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 .toast.show{opacity:1;}
 .tabs{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--offwhite);border-bottom:1px solid var(--border);}
 .tab{padding:11px 16px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--text3);border-bottom:3px solid transparent;margin-bottom:-1px;transition:.15s;}
-.tab:hover{color:var(--navy);}
-.tab.active{color:var(--navy);border-bottom-color:var(--navy);background:var(--sur);}
+.tab:hover{color:var(--ink-strong);}
+.tab.active{color:var(--ink-strong);border-bottom-color:var(--ink-strong);background:var(--sur);}
 .tab-body{padding:16px;display:none;}
 .tab-body.active{display:block;}
 .info-box{border-radius:8px;padding:12px 14px;font-size:12.5px;font-weight:500;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px;}
 .info-amber{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border);}
-.info-navy{background:var(--s3);color:var(--navy);border:1px solid var(--border2);}
+.info-navy{background:var(--s3);color:var(--ink-strong);border:1px solid var(--border2);}
 /* .analysis-2col / .day-summary-card / .dsc-* lived here until v6.97.0 —
    they styled the "By Position" card and the 2-column row that held it
    beside Occupancy. Both were removed as redundant with Weekly Labor
@@ -820,7 +825,7 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
    per position now), so the old height left them mostly empty. */
 .day-prog-card{background:var(--white);border:1.5px solid var(--border);border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;transition:.15s;position:relative;min-height:78px;}
 .day-prog-card:hover{border-color:var(--border2);box-shadow:0 2px 8px rgba(0,0,0,.06);}
-.day-prog-card.selected{border-color:var(--navy);border-width:2px;box-shadow:0 0 0 3px rgba(15,37,68,.08);}
+.day-prog-card.selected{border-color:var(--ink-strong);border-width:2px;box-shadow:0 0 0 3px rgba(15,37,68,.08);}
 .day-prog-card.over{border-top:3px solid var(--red);}
 .day-prog-card.under{border-top:3px solid var(--green);}
 .day-prog-card.no-report{background:var(--yellow-bg);border-color:var(--yellow-border);}
@@ -1075,7 +1080,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .lm-table .lm-rate{color:var(--green);width:70px;}
 .mini-badge{font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;padding:2px 7px;border-radius:99px;}
 .mini-badge.pct{background:var(--gt);color:var(--gd);}
-.mini-badge.fixed{background:#e8edf5;color:var(--navy);}
+.mini-badge.fixed{background:#e8edf5;color:var(--ink-strong);}
 .lm-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 
 /* ===== P&L ===== */
@@ -1096,7 +1101,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .pnl-table tfoot td:first-child{text-align:left;}
 .month-sel{display:inline-flex;align-items:center;gap:6px;background:var(--white);border:1px solid var(--border);border-radius:9px;padding:5px 8px;font-size:13px;font-weight:600;box-shadow:var(--sh1);color:var(--text1);}
 .month-sel button{background:none;border:none;cursor:pointer;font-size:15px;color:var(--text2);padding:2px 6px;border-radius:6px;line-height:1;}
-.month-sel button:hover{background:var(--surface);color:var(--navy);}
+.month-sel button:hover{background:var(--surface);color:var(--ink-strong);}
 .month-sel .ms-label{min-width:104px;text-align:center;}
 
 /* ── PIN / Auth overlays ─────────────────────────────── */
@@ -1119,7 +1124,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .auth-field label{display:block;font-size:10px;color:rgba(255,255,255,.45);margin-bottom:5px;letter-spacing:.5px;text-transform:uppercase;}
 .auth-field input{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:var(--on-fill);font-size:16px;padding:12px 14px;outline:none;-webkit-appearance:none;}
 .auth-field input:focus{border-color:var(--gl);}
-.auth-btn{width:100%;background:var(--gl);border:none;border-radius:12px;color:var(--navy);font-size:15px;font-weight:700;padding:14px;cursor:pointer;margin-top:6px;letter-spacing:.3px;-webkit-tap-highlight-color:transparent;}
+.auth-btn{width:100%;background:var(--gl);border:none;border-radius:12px;color:var(--ink-strong);font-size:15px;font-weight:700;padding:14px;cursor:pointer;margin-top:6px;letter-spacing:.3px;-webkit-tap-highlight-color:transparent;}
 .auth-btn:active{opacity:.82;}
 .auth-btn:disabled{opacity:.5;cursor:default;}
 .auth-err{font-size:12px;color:#ef9a9a;min-height:16px;margin-top:10px;text-align:center;line-height:1.4;}
@@ -1348,7 +1353,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 
 <!-- ── Version banner ── -->
-<div id="versionBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:var(--gl);color:var(--navy);text-align:center;padding:14px 16px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.3px;box-shadow:0 -2px 8px rgba(0,0,0,.25);padding-bottom:max(14px,env(safe-area-inset-bottom));">
+<div id="versionBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:var(--gl);color:var(--ink-strong);text-align:center;padding:14px 16px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.3px;box-shadow:0 -2px 8px rgba(0,0,0,.25);padding-bottom:max(14px,env(safe-area-inset-bottom));">
   🔄 New version available — tap to update
 </div>
 <script>
@@ -2011,7 +2016,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
         <div style="padding:14px 16px 4px;">
           <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px;">
             <span style="font-size:12px;color:var(--text2);font-weight:600;">Used on this device</span>
-            <span id="storageMeterLabel" style="font-size:12.5px;font-weight:700;color:var(--navy);">—</span>
+            <span id="storageMeterLabel" style="font-size:12.5px;font-weight:700;color:var(--ink-strong);">—</span>
           </div>
           <div style="height:9px;background:var(--surface);border-radius:99px;overflow:hidden;">
             <div id="storageMeterBar" style="height:100%;width:0%;background:var(--green);border-radius:99px;transition:width .3s;"></div>
@@ -2136,12 +2141,12 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
           <div style="background:var(--surface);border-radius:12px;padding:14px;border:1.5px solid var(--border);">
             <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">&#129529; Housemen</div>
             <input type="number" id="assign-housemanCount" min="1" value="4"
-              style="width:100%;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:22px;font-weight:800;text-align:center;background:var(--white);color:var(--navy);"/>
+              style="width:100%;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:22px;font-weight:800;text-align:center;background:var(--white);color:var(--ink-strong);"/>
           </div>
           <div style="background:var(--surface);border-radius:12px;padding:14px;border:1.5px solid var(--border);">
             <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">&#128119; Supervisors</div>
             <input type="number" id="assign-supervisorCount" min="1" value="3"
-              style="width:100%;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:22px;font-weight:800;text-align:center;background:var(--white);color:var(--navy);"/>
+              style="width:100%;padding:10px 12px;border:1.5px solid var(--border2);border-radius:8px;font-size:22px;font-weight:800;text-align:center;background:var(--white);color:var(--ink-strong);"/>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
@@ -2343,7 +2348,7 @@ Supervisor 3</textarea>
   Staff/day:        23      183 ÷ 8h shift, rounded up
   Total staff-days: 161     sum of staff across all 7 days
                             (here 23 × 7)
-  <span style="color:var(--navy);font-weight:700;">FTEs needed:      32.2    total staff-days ÷ 5</span></div>
+  <span style="color:var(--ink-strong);font-weight:700;">FTEs needed:      32.2    total staff-days ÷ 5</span></div>
     <div style="font-size:12.5px;color:var(--text2);line-height:1.6;margin-top:14px;">
       <b style="color:var(--text1);">What is an FTE?</b> A <b>Full-Time Equivalent</b> is one employee who works a full schedule of <b>5 days a week</b>. Because the hotel runs <b>7 days</b> but each person only works 5, you need more people on the roster than you schedule on any single day — the extra cover days off, vacation and call-offs.
       <br><br>
@@ -2475,7 +2480,7 @@ Supervisor 3</textarea>
          ondragleave="this.style.borderColor='var(--border2)';this.style.background='var(--surface)';"
          ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='var(--surface)';var f=event.dataTransfer.files[0];if(f)go(f);">
       <div style="font-size:36px;margin-bottom:10px;">&#128196;</div>
-      <div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:4px;">Tap to choose PDF file</div>
+      <div style="font-size:15px;font-weight:700;color:var(--ink-strong);margin-bottom:4px;">Tap to choose PDF file</div>
       <div style="font-size:12px;color:var(--text3);">or drag and drop your Paychex report here</div>
     </div>
 
@@ -2895,7 +2900,7 @@ function maybePromptInactive(){
   overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
     +'<span style="font-size:22px;">&#9888;&#65039;</span>'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);">Inactive Employees</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);">Inactive Employees</div>'
     +'</div>'
     +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+list.length+' employee'+(list.length>1?'s have':' has')+' 90+ days without activity. Were they terminated?</div>'
     +'<div id="inactRowsWrap">'+rows+'</div>'
@@ -3522,10 +3527,10 @@ function renderLaborSummary(){
     var t=d.totals;
     var breakEx=DATA.emps.filter(function(e){return e.pos===d.name&&isBreakException(e);}).length;
     html+='<div style="background:var(--offwhite);border:1px solid var(--border);border-radius:var(--radius-xs);padding:10px 12px;border-left:4px solid var(--navy2);">'
-      +'<div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:6px;">'+d.name+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--ink-strong);margin-bottom:6px;">'+d.name+'</div>'
       +'<div style="display:flex;gap:12px;flex-wrap:wrap;">'
-      +'<span><strong style="font-size:18px;font-weight:800;color:var(--navy);">'+t.paid.toFixed(2)+'</strong><br><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">Paid Hrs</span></span>'
-      +'<span><strong style="font-size:18px;font-weight:800;color:'+(t.ot1>0?"var(--amber)":"var(--navy)")+';">'+t.ot1.toFixed(2)+'</strong><br><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">OT</span></span>'
+      +'<span><strong style="font-size:18px;font-weight:800;color:var(--ink-strong);">'+t.paid.toFixed(2)+'</strong><br><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">Paid Hrs</span></span>'
+      +'<span><strong style="font-size:18px;font-weight:800;color:'+(t.ot1>0?"var(--amber)":"var(--ink-strong)")+';">'+t.ot1.toFixed(2)+'</strong><br><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">OT</span></span>'
       +'<span><strong style="font-size:18px;font-weight:800;color:'+(breakEx>0?"var(--red)":"var(--green)")+';">'+breakEx+'</strong><br><span style="font-size:9px;color:var(--text3);text-transform:uppercase;">Break Exc.</span></span>'
       +'</div>'
       +'</div>';
@@ -3593,8 +3598,8 @@ function renderLabor(){
       +'<span style="font-size:11px;opacity:.65;">'+cnt+' employee'+(cnt===1?'':'s')+'</span>'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:repeat(3,1fr);">'
-      +'<div style="padding:14px 10px;border-right:1px solid var(--border);text-align:center;"><div style="font-size:22px;font-weight:800;color:var(--navy);">'+t.paid.toFixed(2)+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">Total Paid Hrs</div></div>'
-      +'<div style="padding:14px 10px;border-right:1px solid var(--border);text-align:center;"><div style="font-size:22px;font-weight:800;color:'+(t.ot1>0?'var(--amber)':'var(--navy)')+';">'+t.ot1.toFixed(2)+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">OT Hours</div></div>'
+      +'<div style="padding:14px 10px;border-right:1px solid var(--border);text-align:center;"><div style="font-size:22px;font-weight:800;color:var(--ink-strong);">'+t.paid.toFixed(2)+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">Total Paid Hrs</div></div>'
+      +'<div style="padding:14px 10px;border-right:1px solid var(--border);text-align:center;"><div style="font-size:22px;font-weight:800;color:'+(t.ot1>0?'var(--amber)':'var(--ink-strong)')+';">'+t.ot1.toFixed(2)+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">OT Hours</div></div>'
       +'<div style="padding:14px 10px;text-align:center;"><div style="font-size:22px;font-weight:800;color:'+(breakEx>0?'var(--red)':'var(--green)')+';">'+breakEx+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">Break Exc.</div></div>'
       +'</div></div>';
   });
@@ -3763,7 +3768,7 @@ function otCalendarHtml(weeks){
         +(hasOt?'background:rgba(30,45,74,.09);border:1px solid var(--navy);':'background:var(--white);border:1px solid var(--border);')+'">'
         +'<div style="font-size:8px;color:var(--text3);">'+DOW[i]+' '+c.date+'</div>'
         +'<div style="font-size:10.5px;font-weight:700;color:var(--text1);">'+c.paid.toFixed(2)+'h</div>'
-        +(hasOt?'<div style="font-size:8px;font-weight:700;color:var(--navy);">&#9201;+'+c.ot.toFixed(2)+'</div>':'')
+        +(hasOt?'<div style="font-size:8px;font-weight:700;color:var(--ink-strong);">&#9201;+'+c.ot.toFixed(2)+'</div>':'')
         +'</div>';
     });
     return '<div style="margin-top:8px;">'
@@ -3863,10 +3868,10 @@ function renderOvertime(){
       +'<div style="font-size:22px;font-weight:800;color:var(--gl);">'+(anyRate?pnl_fmtUsd(data.totalCost):'—')+'</div>'
       +'<div style="font-size:10.5px;font-weight:700;color:rgba(255,255,255,.75);">OT COST — '+MONTH_NAMES[otViewMonth.getMonth()].toUpperCase()+'</div></div>'
     +'<div style="background:var(--white);border-radius:10px;padding:12px 14px;">'
-      +'<div style="font-size:22px;font-weight:800;color:var(--navy);">'+data.totalHours.toFixed(2)+'h</div>'
+      +'<div style="font-size:22px;font-weight:800;color:var(--ink-strong);">'+data.totalHours.toFixed(2)+'h</div>'
       +'<div style="font-size:10.5px;font-weight:700;color:var(--text2);">OT HOURS — '+MONTH_NAMES[otViewMonth.getMonth()].toUpperCase()+'</div></div>'
     +'<div style="background:var(--white);border-radius:10px;padding:12px 14px;">'
-      +'<div style="font-size:15px;font-weight:800;color:var(--navy);line-height:1.25;">'+escHtml(topPos)+'</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--ink-strong);line-height:1.25;">'+escHtml(topPos)+'</div>'
       +'<div style="font-size:10.5px;font-weight:700;color:var(--text2);">TOP POSITION · '+data.byPos[topPos].hours.toFixed(2)+'h</div></div>'
     +'</div>';
 
@@ -3885,7 +3890,7 @@ function renderOvertime(){
         +'<div style="display:grid;grid-template-columns:1fr 90px 70px 16px;align-items:center;gap:10px;cursor:pointer;" onclick="otToggleEmp(\''+safeId+'\')">'
         +'<div><div style="font-size:12.5px;font-weight:700;color:var(--text1);">'+escHtml(e.name)+'</div><div style="font-size:10px;color:var(--text3);">'+escHtml(e.pos)+'</div>'
         +'<div style="background:var(--surface);border-radius:99px;height:8px;margin-top:4px;"><div style="width:'+pct+'%;height:8px;border-radius:99px;background:var(--navy);"></div></div></div>'
-        +'<div style="text-align:right;font-size:13px;font-weight:800;color:var(--navy);">'+e.hours.toFixed(2)+'h</div>'
+        +'<div style="text-align:right;font-size:13px;font-weight:800;color:var(--ink-strong);">'+e.hours.toFixed(2)+'h</div>'
         +'<div style="text-align:right;font-size:11.5px;color:var(--text2);">'+(e.cost>0?pnl_fmtUsd(e.cost):'—')+'</div>'
         +'<div style="text-align:center;color:var(--text3);font-size:11px;transform:rotate('+(expanded?90:0)+'deg);transition:transform .15s;">▸</div>'
         +'</div>';
@@ -4531,7 +4536,7 @@ function showSeniorityImportReview(matched,unmatchedRows){
   ov.id='senReviewModal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">Import hire dates</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:4px;">Import hire dates</div>'
     +'<div style="font-size:12px;color:var(--text3);margin-bottom:16px;">'
       +matched.length+' matched the roster &middot; '+changed.length+' will change'
     +'</div>'
@@ -6520,11 +6525,11 @@ function showChangelogModal(){
   var body=CHANGELOG.map(function(e,idx){
     return '<div style="padding:16px 0;'+(idx>0?'border-top:1px solid var(--border);':'')+'">'
       +'<div style="display:flex;align-items:baseline;gap:10px;">'
-      +'<span style="font-size:16px;font-weight:800;color:var(--navy);">v'+escHtml(e.v)+'</span>'
+      +'<span style="font-size:16px;font-weight:800;color:var(--ink-strong);">v'+escHtml(e.v)+'</span>'
       +(idx===0?'<span style="font-size:10px;font-weight:800;background:var(--green);color:var(--on-fill);padding:2px 8px;border-radius:99px;">LATEST</span>':'')
       +'<span style="font-size:11px;color:var(--text3);margin-left:auto;">'+escHtml(e.date||'')+'</span>'
       +'</div>'
-      +changelogSectionHTML('&#10024; New features','var(--navy)',e.features)
+      +changelogSectionHTML('&#10024; New features','var(--ink-strong)',e.features)
       +changelogSectionHTML('&#128295; Bug fixes','var(--green)',e.fixes)
       +changelogSectionHTML('&#9889; Improvements','#C9A84C',e.improvements)
       +'</div>';
@@ -6603,7 +6608,7 @@ function showEditModal(btn){
   ov.id='editModalOverlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:16px;">&#9998; Edit Employee</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:16px;">&#9998; Edit Employee</div>'
     +'<input type="hidden" id="editEmpId" value="'+eid.replace(/"/g,"&quot;")+'">'
     +'<input type="hidden" id="editOrigPos" value="'+(eorig||'').replace(/"/g,"&quot;")+'">'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
@@ -9969,7 +9974,7 @@ function renderDnds(){
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;">';
   function tile(val,label,color){
     return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;text-align:center;">'
-      +'<div style="font-size:22px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+      +'<div style="font-size:22px;font-weight:800;color:'+(color||'var(--ink-strong)')+';">'+val+'</div>'
       +'<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">'+label+'</div></div>';
   }
   html+=tile(days.length,'Days logged');
@@ -10013,7 +10018,7 @@ function renderDnds(){
   days.slice().reverse().forEach(function(d){
     html+='<div style="display:grid;grid-template-columns:1fr 60px 70px 1.4fr;gap:6px;padding:8px 16px;align-items:center;font-size:11px;border-top:1px solid var(--border);">';
     html+='<div style="font-weight:700;color:var(--text1);">'+_dndShortDate(d.ds)+'</div>';
-    html+='<div style="text-align:right;font-weight:700;color:var(--navy);">'+d.count+'</div>';
+    html+='<div style="text-align:right;font-weight:700;color:var(--ink-strong);">'+d.count+'</div>';
     html+='<div style="text-align:right;color:var(--gd);">'+(d.pct!==null?d.pct.toFixed(1)+'%':'&#8212;')+'</div>';
     html+='<div style="color:var(--text2);font-size:10px;word-break:break-word;">'+escHtml(d.rooms.join(', '))+'</div>';
     html+='</div>';
@@ -10640,7 +10645,7 @@ function renderLateDep(){
   html+='<div style="background:var(--white);border:2px solid var(--navy);border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;">';
   html+='<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700;">Latest logged day &middot; '+_dndShortDate(latest.ds)+'</div>';
   html+='<div style="display:flex;gap:28px;margin-top:6px;flex-wrap:wrap;">';
-  html+='<div><div style="font-size:26px;font-weight:800;color:var(--navy);">'+latest.total+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Departures</div></div>';
+  html+='<div><div style="font-size:26px;font-weight:800;color:var(--ink-strong);">'+latest.total+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Departures</div></div>';
   html+='<div><div style="font-size:26px;font-weight:800;color:var(--red);">'+latest.after11+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">At/after 11 AM</div></div>';
   html+='<div><div style="font-size:26px;font-weight:800;color:var(--gd);">'+(latest.pct!==null?latest.pct.toFixed(0)+'%':'&#8212;')+'</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">Late share</div></div>';
   html+='</div></div>';
@@ -10660,7 +10665,7 @@ function renderLateDep(){
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;">';
   function tile(val,label,color){
     return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;text-align:center;">'
-      +'<div style="font-size:22px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+      +'<div style="font-size:22px;font-weight:800;color:'+(color||'var(--ink-strong)')+';">'+val+'</div>'
       +'<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;">'+label+'</div></div>';
   }
   html+=tile(days.length,'Days logged');
@@ -10694,7 +10699,7 @@ function renderLateDep(){
     html+='<div style="border-top:1px solid var(--border);">';
     html+='<div onclick="toggleLateDepDay(\''+d.ds+'\')" style="display:grid;grid-template-columns:1.3fr 70px 90px;gap:6px;padding:8px 16px;align-items:center;font-size:11px;cursor:pointer;">';
     html+='<div style="font-weight:700;color:var(--text1);"><span style="display:inline-block;transition:transform .15s;transform:rotate('+(open?'90':'0')+'deg);margin-right:5px;color:var(--text3);">&#9656;</span>'+_dndShortDate(d.ds)+'</div>';
-    html+='<div style="text-align:right;font-weight:700;color:var(--navy);">'+d.total+'</div>';
+    html+='<div style="text-align:right;font-weight:700;color:var(--ink-strong);">'+d.total+'</div>';
     html+='<div style="text-align:right;color:'+(d.pct>=40?'var(--red)':'var(--gd)')+';font-weight:700;">'+(d.pct!==null?d.pct.toFixed(0)+'%':'&#8212;')+'</div>';
     html+='</div>';
     if(open){
@@ -10761,7 +10766,7 @@ function renderLateDep(){
           html+=tlRow('Wait for 1st vacant',a.rooms.length?(waitMin>0?waitMin+' min':'None'):'&#8212;');
           html+=tlRow('Scheduled shift',_ldFmtDur(shiftLen));
           html+=tlRow('Break',LATEDEP_BREAK_MIN+' min');
-          html+=tlRow('Est. workload',_ldFmtDur(a.assigned.totalMinutes),'var(--navy)');
+          html+=tlRow('Est. workload',_ldFmtDur(a.assigned.totalMinutes),'var(--ink-strong)');
           var finishVal=_ldFmtClock(finishMin)+(overMin>0?' &middot; +'+_ldFmtDur(overMin):(overMin<0?' &middot; '+_ldFmtDur(-overMin)+' to spare':''));
           html+=tlRow(overMin>0?'Finishes late':'Finishes on time',finishVal,overMin>0?'var(--red)':'var(--green)');
           html+='</div>';
@@ -12890,7 +12895,7 @@ function renderPnl(){
         +'<div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">'
         +(_tpTrain.total>0?('<div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gd);margin-bottom:6px;">&#127891; Training hours by position &middot; '+_tpTrain.total.toFixed(2)+'h total</div>'
           +'<div class="tbl-wrap"><table class="pnl-table"><tbody>'+trainRows+'</tbody></table></div></div>'):'')
-        +(_tpProj.total>0?('<div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--navy);margin-bottom:6px;">&#128203; Project hours by position &middot; '+_tpProj.total.toFixed(2)+'h total</div>'
+        +(_tpProj.total>0?('<div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-strong);margin-bottom:6px;">&#128203; Project hours by position &middot; '+_tpProj.total.toFixed(2)+'h total</div>'
           +'<div class="tbl-wrap"><table class="pnl-table"><tbody>'+projRows+'</tbody></table></div></div>'):'')
         +'</div>'
         +(_tpProj.projects.length>0?('<div style="padding:0 16px 16px;">'
@@ -13944,7 +13949,7 @@ function stf_renderResults(){
       var actualNum=parseFloat(actual);if(isNaN(actualNum))actualNum=0;
       tActual+=actualNum;tNeed+=r.ftes;
       body+='<tr><td>'+r.label+'</td><td>'+stf_fmtHrs(r.weekHrs)+'h</td>'
-        +'<td><b style="color:var(--navy);">'+r.ftes.toFixed(2)+'</b></td>'
+        +'<td><b style="color:var(--ink-strong);">'+r.ftes.toFixed(2)+'</b></td>'
         +'<td><input class="stf-actual-inp" data-i="'+idx+'" data-pos="'+r.pos+'" type="number" step="any" min="0" value="'+actual+'" oninput="stf_actualInput(this)" style="width:62px;text-align:right;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-weight:700;background:var(--sur);color:var(--text1);"></td>'
         +'<td id="stfGap-'+idx+'">'+stf_gapHtml(actualNum-r.ftes)+'</td></tr>';
     });
@@ -14373,7 +14378,7 @@ function laborSprintCelebrate(){
       +'<div style="transform:scale(2.6);transform-origin:top center;height:30px;margin-bottom:28px;display:flex;justify-content:center;">'
       +'<div class="owm-char-box" style="position:static;"><div class="owm-char owm-happy">'+_laborOtMascotPartsHTML('happy')+'</div></div>'
       +'</div>'
-      +'<div style="font-size:16px;font-weight:800;color:var(--navy);">Labor Focus Sprint complete! &#127881;</div>'
+      +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);">Labor Focus Sprint complete! &#127881;</div>'
       +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">Nice work today.</div></div>';
     document.body.appendChild(ov);
     setTimeout(function(){ if(ov&&ov.parentNode)ov.remove(); },5000);
@@ -14669,7 +14674,7 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
   html+='</div>';
   html+='<div style="display:flex;align-items:center;gap:8px;">';
   if(hasUpload)html+='<span style="font-size:9px;font-weight:800;color:var(--gd);background:var(--gold);padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;">&#10003; Uploaded</span>';
-  html+='<button onclick="document.getElementById(\'laborEffInput\').click();" style="padding:5px 11px;background:'+(hasUpload?'rgba(255,255,255,.15)':'#fff')+';color:'+(hasUpload?'#fff':'var(--navy)')+';border:none;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;">&#11014; '+(hasUpload?'Re-upload':'Upload PDF')+'</button>';
+  html+='<button onclick="document.getElementById(\'laborEffInput\').click();" style="padding:5px 11px;background:'+(hasUpload?'rgba(255,255,255,.15)':'#fff')+';color:'+(hasUpload?'#fff':'var(--ink-strong)')+';border:none;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;">&#11014; '+(hasUpload?'Re-upload':'Upload PDF')+'</button>';
   html+='<input type="file" id="laborEffInput" accept=".pdf" style="display:none;" onchange="handleLaborEffectivenessUpload(this)">';
   html+='</div></div>';
 
@@ -15118,7 +15123,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
     if(_pw.total>0){
       html+='<div style="background:var(--white);border:1px solid var(--border);border-left:3px solid var(--navy);border-radius:10px;overflow:hidden;margin-bottom:9px;">';
       html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid var(--border);background:var(--surface);">';
-      html+='<div style="font-size:10.5px;font-weight:700;color:var(--text2);"><span style="color:var(--navy);">&#128193;</span> Project Hours This Week</div>';
+      html+='<div style="font-size:10.5px;font-weight:700;color:var(--text2);"><span style="color:var(--ink-strong);">&#128193;</span> Project Hours This Week</div>';
       html+='<div style="font-size:9.5px;font-weight:800;padding:2px 9px;border-radius:99px;white-space:nowrap;background:var(--navy);color:var(--on-fill);">Total '+_pw.total.toFixed(2)+'h</div>';
       html+='</div><div style="padding:8px 11px;">';
       var _posGroups=_pacePosGroups(_pw);
@@ -15798,7 +15803,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     +'</div>'
     /* R106 button - prominent if no R106 loaded, subtle if loaded */
     +'<button onclick="document.getElementById(\'r106InputDash\').click();" '
-    +'style="padding:'+(hasR106Month?'4px 10px':'7px 14px')+';background:'+(hasR106Month?'rgba(15,37,68,.08)':'var(--navy)')+';color:'+(hasR106Month?'var(--navy)':'#fff')+';border:'+(hasR106Month?'1px solid var(--navy)':'none')+';border-radius:7px;font-size:'+(hasR106Month?'10px':'12px')+';font-weight:700;cursor:pointer;white-space:nowrap;">'
+    +'style="padding:'+(hasR106Month?'4px 10px':'7px 14px')+';background:'+(hasR106Month?'rgba(15,37,68,.08)':'var(--navy)')+';color:'+(hasR106Month?'var(--ink-strong)':'#fff')+';border:'+(hasR106Month?'1px solid var(--navy)':'none')+';border-radius:7px;font-size:'+(hasR106Month?'10px':'12px')+';font-weight:700;cursor:pointer;white-space:nowrap;">'
     +(hasR106Month?'📋 OCC ✓':'📋 Upload OCC')+'</button>'
     +'<input type="file" id="r106InputDash" accept=".pdf" style="display:none;" onchange="handleR106Upload(this)">'
     +'</div>'
@@ -16146,7 +16151,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         html+='<div style="padding:10px 16px;font-size:11px;color:var(--text3);'
           +'display:flex;justify-content:space-between;align-items:center;">'
           +'<span>'+(DATA.emps.length-totalProblems)+' employees clocked correctly</span>'
-          +'<span style="color:var(--navy);font-weight:600;cursor:pointer;" '
+          +'<span style="color:var(--ink-strong);font-weight:600;cursor:pointer;" '
           +'onclick="showPage(\'position\')">View all &#8594;</span></div>';
       }
       html+='</div>';
@@ -17666,10 +17671,10 @@ function buildOccForecastHTML(){
     html+='<div style="font-size:9.5px;color:var(--text3);font-weight:700;">&#127968; Rooms</div>';
     html+='<input type="number" min="0" inputmode="numeric" id="occfcUf_'+c.ds+'" value="'+(c.uf!==null?c.uf:'')+'" placeholder="&mdash;"'
       +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'uf\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
     html+='<input type="number" min="0" inputmode="numeric" id="occfcSched_'+c.ds+'" value="'+(c.sched!==null?c.sched:'')+'" placeholder="&mdash;"'
       +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'sched\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
     html+='<div style="text-align:center;color:var(--text2);">'+(c.ac>0?c.ac:'&mdash;')+'</div>';
     html+='<div id="occfcDiff_'+c.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(c)+'</div>';
     html+='</div>';
@@ -17678,10 +17683,10 @@ function buildOccForecastHTML(){
     html+='<div style="font-size:9.5px;color:var(--text3);font-weight:700;">&#129531; Dep</div>';
     html+='<input type="number" min="0" inputmode="numeric" id="depfcUf_'+dc.ds+'" value="'+(dc.uf!==null?dc.uf:'')+'" placeholder="&mdash;"'
       +' onchange="saveDepForecastDay(\''+dwd.weekKey+'\',\''+dc.ds+'\',\'depUf\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(dc.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(dc.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(dc.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(dc.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
     html+='<input type="number" min="0" inputmode="numeric" id="depfcSched_'+dc.ds+'" value="'+(dc.sched!==null?dc.sched:'')+'" placeholder="&mdash;"'
       +' onchange="saveDepForecastDay(\''+dwd.weekKey+'\',\''+dc.ds+'\',\'depSched\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '+(dc.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(dc.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(dc.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(dc.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
     html+='<div style="text-align:center;color:var(--text2);">'+(dc.ac>0?dc.ac:'&mdash;')+'</div>';
     html+='<div id="depfcDiff_'+dc.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(dc)+'</div>';
     html+='</div>';
@@ -18050,10 +18055,10 @@ function renderOccupancy(){
   /* Summary cards */
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;">';
   html+='<div style="background:var(--sur);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">'
-    +'<div style="font-size:22px;font-weight:800;color:var(--navy);">'+totalRooms.toLocaleString()+'</div>'
+    +'<div style="font-size:22px;font-weight:800;color:var(--ink-strong);">'+totalRooms.toLocaleString()+'</div>'
     +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-top:2px;">Total Rooms MTD</div></div>';
   html+='<div style="background:var(--sur);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">'
-    +'<div style="font-size:22px;font-weight:800;color:var(--navy);">'+avgRooms+'</div>'
+    +'<div style="font-size:22px;font-weight:800;color:var(--ink-strong);">'+avgRooms+'</div>'
     +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-top:2px;">Avg / Day</div></div>';
   html+='<div style="background:var(--sur);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">'
     +'<div style="font-size:22px;font-weight:800;color:var(--red);">'+peakRooms+'</div>'
@@ -18105,7 +18110,7 @@ function renderOccupancy(){
 
     /* Date + PDF indicator */
     html+='<div>';
-    html+='<div style="font-size:12px;font-weight:'+(isToday?'800':'600')+';color:'+(isToday?'var(--navy)':'var(--text1)')+';">'+dayObj.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>';
+    html+='<div style="font-size:12px;font-weight:'+(isToday?'800':'600')+';color:'+(isToday?'var(--ink-strong)':'var(--text1)')+';">'+dayObj.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>';
     if(dayObj.hasSnap)html+='<div style="font-size:9px;color:var(--green);font-weight:600;">✓ PDF</div>';
     html+='</div>';
 
@@ -18179,7 +18184,7 @@ function showOccupancyFixModal(ds,manual,r106){
     +'style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:8px;background:var(--sur);font-size:13px;font-weight:700;cursor:pointer;color:var(--text2);">Cancel</button>'
     +'</div>'
     +'<button onclick="(function(){saveOccupancyRoom(\''+ds+'\','+r106+');document.body.removeChild(document.getElementById(\'occFixModal\'));renderLaborDash();})()" '
-    +'style="width:100%;padding:10px;background:var(--s3);color:var(--navy);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📋 Use OCC value ('+r106+' rooms)</button>'
+    +'style="width:100%;padding:10px;background:var(--s3);color:var(--ink-strong);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📋 Use OCC value ('+r106+' rooms)</button>'
     +'</div>';
   modal.id='occFixModal';
   document.body.appendChild(modal);
@@ -18795,7 +18800,7 @@ function renderTraining(){
     trainings.forEach(function(t){
       var p=trProgress(t);
       var scope=trScopeLabel(t.scope);
-      var pctColor=p.pct>=100?'var(--green)':'var(--navy)';
+      var pctColor=p.pct>=100?'var(--green)':'var(--ink-strong)';
       var dl=_trUrgentDeadline(t);
       var dlInfo=dl?deadlineCountdown(dl):null;
       var metaParts=[escHtml(scope)];
@@ -18817,7 +18822,7 @@ function renderTraining(){
     html+='<div class="tr-grid">';
     trainings.forEach(function(t){
       var p=trProgress(t);
-      var ringColor=p.pct>=100?'var(--green)':'var(--navy)';
+      var ringColor=p.pct>=100?'var(--green)':'var(--ink-strong)';
       html+='<div class="tr-tile" onclick="openTrainingDetail(\''+t.id+'\')">'
         +'<div class="tr-tile-ring">'+_trRing(p.pct,52,6,ringColor)+'<div class="tr-tile-pct" style="color:'+ringColor+';">'+p.pct+'%</div></div>'
         +'<div class="tr-tile-name">'+escHtml(t.title)+'</div>'
@@ -18833,7 +18838,7 @@ function renderTraining(){
     var p=trProgress(t);
     var scope=trScopeLabel(t.scope);
     var scopeCls=(t.scope&&t.scope!=="all")?' pos':'';
-    var pctColor=p.pct>=100?'var(--green)':'var(--navy)';
+    var pctColor=p.pct>=100?'var(--green)':'var(--ink-strong)';
     var subText=p.pending>0
       ? p.pending+' employee'+(p.pending===1?'':'s')+' pending'
       : '&#10003; Everyone completed';
@@ -18943,7 +18948,7 @@ function showNewTrainingModal(editId){
   ov.id='newTrainingModal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:16px;">&#128218; '+(editing?'Edit Training':'New Training')+'</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:16px;">&#128218; '+(editing?'Edit Training':'New Training')+'</div>'
     +'<input type="hidden" id="editingTrainingId" value="'+(editing?editing.id:'')+'">'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Training / policy title</label>'
@@ -19108,7 +19113,7 @@ function showTrCompleteConfirm(tid, empId, sel){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2300;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
     +'<div style="font-size:30px;text-align:center;margin-bottom:8px;">&#10003;</div>'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);text-align:center;margin-bottom:8px;">Confirm completion</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);text-align:center;margin-bottom:8px;">Confirm completion</div>'
     +'<div style="font-size:13px;color:var(--text2);text-align:center;line-height:1.5;margin-bottom:20px;">'
     +'Are you sure you want to mark <b>'+escHtml(nm)+'</b> as <b>Complete</b> for <b>'+escHtml(title)+'</b>?</div>'
     +'<div style="display:flex;gap:8px;">'
@@ -19156,7 +19161,7 @@ function showBulkMarkModal(tid){
   ov.id='bulkMarkModal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#10003; Mark several complete</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:4px;">&#10003; Mark several complete</div>'
     +'<div style="font-size:12px;color:var(--text3);margin-bottom:14px;">'+escHtml(t.title)+'</div>'
     +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);">Date:</label>'
@@ -22069,7 +22074,7 @@ function showNewEmployeeModal(newEmps, pdfDate){
   var rows=newEmps.map(function(e,i){
     return '<div style="background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;" id="newEmpRow_'+i+'">'
       +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
-      +'<div style="background:var(--gl);color:var(--navy);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;">N</div>'
+      +'<div style="background:var(--gl);color:var(--ink-strong);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;">N</div>'
       +'<div style="flex:1;">'
       +'<div style="font-size:14px;font-weight:700;color:var(--text1);">'+escHtml(e.name)+'</div>'
       +'<div style="font-size:11px;color:var(--text3);">ID: '+e.id+' &nbsp;·&nbsp; PDF position: <strong>'+escHtml(e.pos)+'</strong> &nbsp;·&nbsp; Paid: '+e.paid.toFixed(2)+'h</div>'
@@ -22082,7 +22087,7 @@ function showNewEmployeeModal(newEmps, pdfDate){
       +'</select>'
       +'</div>'
       +'<div style="margin-top:11px;padding-top:11px;border-top:1px dashed var(--border);">'
-      +'<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--navy);cursor:pointer;">'
+      +'<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--ink-strong);cursor:pointer;">'
       +'<input type="checkbox" id="newEmpTrain_'+i+'" checked onchange="var d=document.getElementById(\'newEmpTrainDates_'+i+'\');if(d)d.style.display=this.checked?\'flex\':\'none\';" style="width:16px;height:16px;cursor:pointer;"> &#127891; Add to Training Hours</label>'
       +'<div id="newEmpTrainDates_'+i+'" style="display:flex;gap:8px;margin-top:9px;">'
       +'<div style="flex:1;"><label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:3px;">First training day</label>'
@@ -22103,7 +22108,7 @@ function showNewEmployeeModal(newEmps, pdfDate){
   overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:500px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
     +'<span style="font-size:22px;">🆕</span>'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);">New Employee'+(newEmps.length>1?'s':'')+' Detected</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);">New Employee'+(newEmps.length>1?'s':'')+' Detected</div>'
     +'</div>'
     +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+newEmps.length+' employee'+(newEmps.length>1?'s':'')+' found in this PDF that '+(newEmps.length>1?'are':'is')+' not in the roster. Confirm the correct position before adding.</div>'
     +rows
@@ -22308,7 +22313,7 @@ window.addEventListener('load',function(){
       document.querySelectorAll('#mainTabs .tab').forEach(function(t){
         t.style.color='var(--text3)';t.style.borderBottomColor='transparent';t.style.fontWeight='600';
       });
-      tab.style.color='var(--navy)';tab.style.borderBottomColor='var(--navy)';tab.style.fontWeight='700';
+      tab.style.color='var(--ink-strong)';tab.style.borderBottomColor='var(--navy)';tab.style.fontWeight='700';
       var t=tab.dataset.t;
       document.querySelectorAll('.tab-body').forEach(function(b){
         b.style.display='none';b.classList.remove('active');
@@ -27780,13 +27785,13 @@ function renderSchedule(){
    ['dep','Departures',null]
   ].forEach(function(f){
     html+='<div style="display:grid;grid-template-columns:'+COLS+';gap:3px;align-items:center;margin-bottom:4px;">';
-    html+='<div style="font-size:10.5px;font-weight:800;color:var(--navy);"'+(f[2]?' title="'+escHtml(f[2])+'"':'')+'>'+f[1]+'</div>';
+    html+='<div style="font-size:10.5px;font-weight:800;color:var(--ink-strong);"'+(f[2]?' title="'+escHtml(f[2])+'"':'')+'>'+f[1]+'</div>';
     dates.forEach(function(ds){
       var day=SCH.days[ds];
       if(!day){ html+='<div></div>'; return; }
       html+='<div>';
       html+='<input type="number" min="0" value="'+escHtml(day[f[0]]||'')+'" id="schedNumIn_'+ds+'_'+f[0]+'" onchange="schedSetNum(\''+ds+'\',\''+f[0]+'\',this.value)"'
-        +' style="width:100%;min-width:0;padding:3px 2px;font-size:11px;font-weight:800;text-align:center;color:var(--navy);'
+        +' style="width:100%;min-width:0;padding:3px 2px;font-size:11px;font-weight:800;text-align:center;color:var(--ink-strong);'
         +'border:1px solid var(--border);border-radius:5px;background:var(--sur);box-sizing:border-box;font-family:inherit;">';
       /* Carlos's ask, 2026-10-11, corrected same day after he tried the
          first version: he wasn't seeing either number actually MOVE — a
@@ -27839,9 +27844,9 @@ function renderSchedule(){
   var _tdLastDs=dates[dates.length-1];
   if(SCH.days[_tdLastDs]){
     html+='<div style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;padding-top:8px;border-top:1px dashed var(--border);">'
-      +'<div style="font-size:10.5px;font-weight:800;color:var(--navy);" title="Every other day\'s Turndown Rooms fills in automatically from the following day\'s OCC. '+SCHED_DAYNAMES[dates.length-1]+' has no following day inside this week, so it still needs its own number here — same as his old sheet\'s separate &quot;Turndown Friday OCC&quot; cell.">Turndown Rooms &mdash; '+SCHED_DAYNAMES[dates.length-1]+' only</div>'
+      +'<div style="font-size:10.5px;font-weight:800;color:var(--ink-strong);" title="Every other day\'s Turndown Rooms fills in automatically from the following day\'s OCC. '+SCHED_DAYNAMES[dates.length-1]+' has no following day inside this week, so it still needs its own number here — same as his old sheet\'s separate &quot;Turndown Friday OCC&quot; cell.">Turndown Rooms &mdash; '+SCHED_DAYNAMES[dates.length-1]+' only</div>'
       +'<input type="number" min="0" value="'+escHtml(SCH.days[_tdLastDs].tdOcc||'')+'" id="schedNumIn_'+_tdLastDs+'_tdOcc" onchange="schedSetNum(\''+_tdLastDs+'\',\'tdOcc\',this.value)"'
-      +' style="width:70px;padding:3px 2px;font-size:11px;font-weight:800;text-align:center;color:var(--navy);border:1px solid var(--border);border-radius:5px;background:var(--sur);box-sizing:border-box;font-family:inherit;">'
+      +' style="width:70px;padding:3px 2px;font-size:11px;font-weight:800;text-align:center;color:var(--ink-strong);border:1px solid var(--border);border-radius:5px;background:var(--sur);box-sizing:border-box;font-family:inherit;">'
       +'</div>';
   }
   html+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;">'
@@ -27965,13 +27970,13 @@ function renderSchedule(){
     if(_hdrRatio){
       var _hdrLabel=_hdrRatio.num==='dep'?'Departures':'Rooms';
       html+='<div style="display:grid;grid-template-columns:'+COLS_C+';gap:3px;align-items:center;margin-bottom:6px;">';
-      html+='<div style="font-size:9.5px;font-weight:800;color:var(--navy);">'+_hdrLabel+'</div>';
+      html+='<div style="font-size:9.5px;font-weight:800;color:var(--ink-strong);">'+_hdrLabel+'</div>';
       dates.forEach(function(ds){
         var day=SCH.days[ds];
         if(!day){ html+='<div></div>'; return; }
         var _v=day[_hdrRatio.num];
         html+='<div>';
-        html+='<div id="schedHdrRatio_'+b.key+'_'+ds+'" style="text-align:center;font-size:11px;font-weight:800;color:var(--navy);">'+(_v!=null&&_v!==''?escHtml(_v):'&middot;')+'</div>';
+        html+='<div id="schedHdrRatio_'+b.key+'_'+ds+'" style="text-align:center;font-size:11px;font-weight:800;color:var(--ink-strong);">'+(_v!=null&&_v!==''?escHtml(_v):'&middot;')+'</div>';
         /* Carlos's real follow-up report, 2026-10-11: dropping rooms to
            the next day changed nothing he could see down here — this
            row just mirrored the raw box above it. Same bold effective
@@ -28147,7 +28152,7 @@ function renderSchedule(){
     html+='<div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);">Total</div>';
     dates.forEach(function(ds,di){
       var tot=!SCH.days[ds]?0:lobbySub?_schedSubsetTotal(SCH,ds,b.key,cardRef,card.shift==='am'):schedDisplayTotal(SCH,ds,b.key);
-      html+='<div id="sct_'+domKey+'_'+di+'" style="text-align:center;font-size:11.5px;font-weight:800;color:var(--navy);">'+(tot?schedFmtTotal(tot):'')+'</div>';
+      html+='<div id="sct_'+domKey+'_'+di+'" style="text-align:center;font-size:11.5px;font-weight:800;color:var(--ink-strong);">'+(tot?schedFmtTotal(tot):'')+'</div>';
     });
     html+='</div>';
     (b.ratios||[]).forEach(function(rt,ri){
@@ -28444,7 +28449,7 @@ function rnTabsHtml(){
   var html='<div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;">';
   tabs.forEach(function(t){
     var active=(rnActiveTab===t[0]);
-    html+='<div onclick="rnSetTab(\''+t[0]+'\')" style="flex:1;text-align:center;padding:11px 6px;font-size:12.5px;font-weight:700;cursor:pointer;color:'+(active?'var(--navy)':'var(--text3)')+';border-bottom:2px solid '+(active?'var(--gold)':'transparent')+';">'+t[1]+'</div>';
+    html+='<div onclick="rnSetTab(\''+t[0]+'\')" style="flex:1;text-align:center;padding:11px 6px;font-size:12.5px;font-weight:700;cursor:pointer;color:'+(active?'var(--ink-strong)':'var(--text3)')+';border-bottom:2px solid '+(active?'var(--gold)':'transparent')+';">'+t[1]+'</div>';
   });
   html+='</div>';
   return html;
@@ -28463,7 +28468,7 @@ function rnRecordingAsHtml(){
   var html='<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 2px 14px;">';
   html+='<div style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:6px;">'
     +'<span style="width:6px;height:6px;border-radius:50%;background:var(--gold);display:inline-block;"></span>Recording as</div>';
-  html+='<select onchange="rnSetRecordingAs(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;color:var(--navy);background:var(--sur);">';
+  html+='<select onchange="rnSetRecordingAs(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;color:var(--ink-strong);background:var(--sur);">';
   names.forEach(function(n){
     html+='<option value="'+escHtml(n)+'"'+(n===rnRecordingAs?' selected':'')+'>'+escHtml(n)+'</option>';
   });
@@ -28557,8 +28562,8 @@ function rnTrendsMonthCalendarHtml(mk,entries){
   entries.forEach(function(o){ var d=parseLocalDate(o.ds); if(d)dowCount[d.getDay()]++; });
   var weekend=dowCount[0]+dowCount[6];
   var html='<div style="margin-bottom:14px;">'
-    +'<div style="font-size:11px;font-weight:800;color:var(--navy);margin-bottom:3px;">'+MONTH_NAMES[m]+' '+y+'</div>'
-    +'<div style="font-size:9.5px;color:var(--text3);margin-bottom:6px;">'+entries.length+' day'+(entries.length===1?'':'s')+' this month &middot; <b style="color:var(--navy);">'+weekend+' weekend</b> &middot; Mon '+dowCount[1]+' &middot; Tue '+dowCount[2]+' &middot; Wed '+dowCount[3]+' &middot; Thu '+dowCount[4]+' &middot; Fri '+dowCount[5]+'</div>';
+    +'<div style="font-size:11px;font-weight:800;color:var(--ink-strong);margin-bottom:3px;">'+MONTH_NAMES[m]+' '+y+'</div>'
+    +'<div style="font-size:9.5px;color:var(--text3);margin-bottom:6px;">'+entries.length+' day'+(entries.length===1?'':'s')+' this month &middot; <b style="color:var(--ink-strong);">'+weekend+' weekend</b> &middot; Mon '+dowCount[1]+' &middot; Tue '+dowCount[2]+' &middot; Wed '+dowCount[3]+' &middot; Thu '+dowCount[4]+' &middot; Fri '+dowCount[5]+'</div>';
   html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;max-width:270px;">';
   ['S','M','T','W','T','F','S'].forEach(function(d,i){
     html+='<div style="text-align:center;font-size:8px;font-weight:700;color:'+(i===0||i===6?'var(--gold)':'var(--text3)')+';">'+d+'</div>';
@@ -28567,7 +28572,7 @@ function rnTrendsMonthCalendarHtml(mk,entries){
   for(var day=1;day<=daysInMonth;day++){
     var d=new Date(y,m,day), ds=dateStr(d), hit=byDs[ds];
     var isWknd=(d.getDay()===0||d.getDay()===6);
-    html+='<div title="'+(hit?rnTrendsDateLabel(ds)+' — '+rnTypeLabel(hit.type):'')+'" style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:5px;font-size:10px;font-weight:'+(hit?'800':'400')+';background:'+(hit?'var(--gold)':'transparent')+';color:'+(hit?'var(--navy)':(isWknd?'var(--text2)':'var(--text3)'))+';">'+day+'</div>';
+    html+='<div title="'+(hit?rnTrendsDateLabel(ds)+' — '+rnTypeLabel(hit.type):'')+'" style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:5px;font-size:10px;font-weight:'+(hit?'800':'400')+';background:'+(hit?'var(--gold)':'transparent')+';color:'+(hit?'var(--ink-strong)':(isWknd?'var(--text2)':'var(--text3)'))+';">'+day+'</div>';
   }
   html+='</div></div>';
   return html;
@@ -28612,12 +28617,12 @@ function rnTrendsTableHtml(names,data){
     var nmJs=escHtml(schedJs(nm)), isOpen=(rnTrendsOpenName===nm);
     html+='<tr style="border-bottom:1px solid var(--border);">'
       +'<td style="padding:6px 8px;white-space:nowrap;">'
-        +'<button onclick="rnToggleTrendsName(\''+nmJs+'\')" title="Click to see the actual dates" style="border:none;background:transparent;font-weight:700;color:var(--navy);font-size:11.5px;cursor:pointer;padding:0;text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px;">'+escHtml(nm)+'</button>'
+        +'<button onclick="rnToggleTrendsName(\''+nmJs+'\')" title="Click to see the actual dates" style="border:none;background:transparent;font-weight:700;color:var(--ink-strong);font-size:11.5px;cursor:pointer;padding:0;text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:2px;">'+escHtml(nm)+'</button>'
       +'</td>';
     row.dow.forEach(function(c,i){
-      html+='<td style="text-align:center;padding:6px 4px;font-weight:'+(c?'800':'400')+';color:'+(c?(i<2?'var(--navy)':'var(--text1)'):'var(--border2)')+';">'+(c||'&middot;')+'</td>';
+      html+='<td style="text-align:center;padding:6px 4px;font-weight:'+(c?'800':'400')+';color:'+(c?(i<2?'var(--ink-strong)':'var(--text1)'):'var(--border2)')+';">'+(c||'&middot;')+'</td>';
     });
-    html+='<td style="text-align:center;padding:6px 8px;font-weight:800;color:var(--navy);background:rgba(21,101,192,.08);">'+wknd+'</td>'
+    html+='<td style="text-align:center;padding:6px 8px;font-weight:800;color:var(--ink-strong);background:rgba(21,101,192,.08);">'+wknd+'</td>'
       +'<td style="text-align:center;padding:6px 8px;font-weight:700;color:var(--text2);">'+row.total+'</td>'
       +'</tr>';
     if(isOpen){
@@ -28667,7 +28672,7 @@ function rnTrendsHtml(){
     });
     var blk=SCHED_BLOCKS.filter(function(b){return b.key===key;})[0];
     var label=blk?blk.label:(key||'Other');
-    html+='<div style="font-size:11px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin:'+(first?'0':'20px')+' 0 8px;">'+escHtml(label)+'</div>';
+    html+='<div style="font-size:11px;font-weight:800;color:var(--ink-strong);text-transform:uppercase;letter-spacing:.4px;margin:'+(first?'0':'20px')+' 0 8px;">'+escHtml(label)+'</div>';
     html+=rnTrendsTableHtml(list,data);
     first=false;
   });
@@ -28692,9 +28697,9 @@ function rnWeekBoardHtml(){
   var dates=rnWeekDates();
   var start=parseLocalDate(dates[0]), end=parseLocalDate(dates[6]);
   var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
-    +'<button onclick="rnChangeWeek(-1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:4px 10px;">&lsaquo;</button>'
+    +'<button onclick="rnChangeWeek(-1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--ink-strong);padding:4px 10px;">&lsaquo;</button>'
     +'<div style="font-size:13.5px;font-weight:800;color:var(--text1);">'+start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' &ndash; '+end.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>'
-    +'<button onclick="rnChangeWeek(1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:4px 10px;">&rsaquo;</button>'
+    +'<button onclick="rnChangeWeek(1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--ink-strong);padding:4px 10px;">&rsaquo;</button>'
     +'</div>';
   html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;overflow-x:auto;">';
   dates.forEach(function(ds,i){
@@ -28736,9 +28741,9 @@ function rnCalendarViewHtml(){
   var daysInMonth=new Date(rnBrowseCalYear,rnBrowseCalMonth+1,0).getDate();
   var todayDs=dateStr(new Date());
   var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
-    +'<button onclick="rnBrowseCalNav(-1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:4px 10px;">&lsaquo;</button>'
+    +'<button onclick="rnBrowseCalNav(-1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--ink-strong);padding:4px 10px;">&lsaquo;</button>'
     +'<div style="font-size:14.5px;font-weight:800;color:var(--text1);">'+MONTH_NAMES[rnBrowseCalMonth]+' '+rnBrowseCalYear+'</div>'
-    +'<button onclick="rnBrowseCalNav(1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:4px 10px;">&rsaquo;</button>'
+    +'<button onclick="rnBrowseCalNav(1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--ink-strong);padding:4px 10px;">&rsaquo;</button>'
     +'</div>';
   html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;">';
   ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(d){
@@ -28838,9 +28843,9 @@ function rnCalHtml(){
   var todayDs=dateStr(new Date());
   var html='<div style="border:1px solid var(--border);border-radius:10px;padding:10px;">';
   html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
-    +'<button type="button" onclick="rnCalNav(-1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:2px 10px;">&lsaquo;</button>'
+    +'<button type="button" onclick="rnCalNav(-1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--ink-strong);padding:2px 10px;">&lsaquo;</button>'
     +'<div style="font-size:12px;font-weight:800;color:var(--text1);">'+MONTH_NAMES[rnCalMonth]+' '+rnCalYear+'</div>'
-    +'<button type="button" onclick="rnCalNav(1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--navy);padding:2px 10px;">&rsaquo;</button>'
+    +'<button type="button" onclick="rnCalNav(1)" style="border:none;background:transparent;font-size:15px;cursor:pointer;color:var(--ink-strong);padding:2px 10px;">&rsaquo;</button>'
     +'</div>';
   html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:3px;">';
   ['Sat','Sun','Mon','Tue','Wed','Thu','Fri'].forEach(function(d){
@@ -29257,7 +29262,7 @@ function renderDailyLineup(){
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px;">';
   function dlTile(val,label,sub,color){
     return '<div style="background:var(--sur);border:1px solid var(--border);border-radius:10px;padding:11px 13px;">'
-      +'<div style="font-size:20px;font-weight:800;color:'+(color||'var(--navy)')+';">'+val+'</div>'
+      +'<div style="font-size:20px;font-weight:800;color:'+(color||'var(--ink-strong)')+';">'+val+'</div>'
       +'<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:2px;">'+label+'</div>'
       +(sub?'<div style="font-size:9.5px;color:var(--text3);margin-top:1px;">'+sub+'</div>':'')+'</div>';
   }
@@ -29295,7 +29300,7 @@ function renderDailyLineup(){
   function dlLadyBox(key,field,val){
     return '<input type="text" inputmode="numeric" value="'+escHtml(val||'')+'"'
       +' onchange="dlSetLady(\''+key+'\',\''+field+'\',this.value)"'
-      +' style="width:100%;min-width:0;padding:2px 1px;font-size:10.5px;font-weight:700;text-align:center;color:var(--navy);'
+      +' style="width:100%;min-width:0;padding:2px 1px;font-size:10.5px;font-weight:700;text-align:center;color:var(--ink-strong);'
       +'border:1px solid '+(val?'#C9A84C':'var(--border)')+';border-radius:4px;background:'+(val?'var(--gt)':'#fff')+';box-sizing:border-box;">';
   }
   /* The .XX in an average like "43.33 each" is not a real number anyone
@@ -29321,7 +29326,7 @@ function renderDailyLineup(){
   var occCols='84px 70px 16px 70px 16px 70px 70px';
   function numBox(key,val,gold,ttl){
     return '<input type="number" min="0" value="'+escHtml(val)+'" title="'+ttl+'" onchange="dlSetOcc(\''+key+'\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 3px;font-size:12px;font-weight:800;text-align:center;color:var(--navy);border:1px solid '
+      +' style="width:100%;min-width:0;padding:4px 3px;font-size:12px;font-weight:800;text-align:center;color:var(--ink-strong);border:1px solid '
       +(gold?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(gold?'var(--gt)':'#fff')+';box-sizing:border-box;">';
   }
   html+='<div style="padding:9px 16px;overflow-x:auto;">';
@@ -29336,7 +29341,7 @@ function renderDailyLineup(){
   html+=numBox('occ',P.occBase,P.occOverride!=null,'OCC before - the base figure');
   html+='<div style="text-align:center;font-size:12px;color:var(--text3);">&minus;</div>';
   html+=numBox('drop',P.drop,P.drop!==0,'HR/Next Day - rooms you push to tomorrow');
-  html+='<div style="text-align:center;font-size:15px;font-weight:800;color:var(--navy);">'+P.toClean+'</div>';
+  html+='<div style="text-align:center;font-size:15px;font-weight:800;color:var(--ink-strong);">'+P.toClean+'</div>';
   html+='</div>';
 
   html+='<div style="display:grid;grid-template-columns:'+occCols+';gap:4px;align-items:center;">';
@@ -29346,7 +29351,7 @@ function renderDailyLineup(){
   html+=numBox('dep',P.depBase,P.depOverride!=null,'Departures before');
   html+='<div style="text-align:center;font-size:12px;color:var(--text3);">&minus;</div>';
   html+=numBox('dropDep',P.dropDep,P.dropDep!==0,'Departures you push to tomorrow');
-  html+='<div style="text-align:center;font-size:15px;font-weight:800;color:var(--navy);">'+P.toCleanDep+'</div>';
+  html+='<div style="text-align:center;font-size:15px;font-weight:800;color:var(--ink-strong);">'+P.toCleanDep+'</div>';
   html+='</div>';
 
   var notes=[];
@@ -29385,7 +29390,7 @@ function renderDailyLineup(){
             +'<span style="font-size:12px;font-weight:600;color:var(--text1);">'+escHtml(n)+'</span>'
             +'<input type="text" value="'+escHtml(val)+'" placeholder="floors" title="Which floors '+escHtml(n)+' ends up covering"'
             +' onchange="dlSetFloors(\''+escHtml(n).replace(/'/g,"\\'")+'\',this.value)"'
-            +' style="width:110px;padding:2px 6px;font-size:11px;font-weight:700;text-align:center;color:var(--navy);border:1px solid '
+            +' style="width:110px;padding:2px 6px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '
             +(val?'#C9A84C':'var(--border2)')+';border-radius:5px;background:'+(val?'var(--gt)':'#fff')+';">'
             +'</div>';
         }).join('')
@@ -29414,7 +29419,7 @@ function renderDailyLineup(){
   html+=dlRoleBlock('Houseman',P.hm_pm);
   html+=dlRoleBlock('Turndown',P.td, P.td.length
     ? '<input type="number" min="0" value="'+escHtml(P.tdOcc)+'" title="Rooms occupied that night — turndown\'s own figure, not To Clean"'
-      +' onchange="dlSetOcc(\'tdOcc\',this.value)" style="width:56px;padding:2px 4px;font-size:11px;font-weight:800;text-align:center;color:var(--navy);border:1px solid '
+      +' onchange="dlSetOcc(\'tdOcc\',this.value)" style="width:56px;padding:2px 4px;font-size:11px;font-weight:800;text-align:center;color:var(--ink-strong);border:1px solid '
       +(P.tdOccAuto?'var(--border)':'#C9A84C')+';border-radius:5px;background:'+(P.tdOccAuto?'#fff':'var(--gt)')+';">'
       +' rooms &rarr; '+dlEach(P.tdOcc,P.td.length,'')
     : '');
