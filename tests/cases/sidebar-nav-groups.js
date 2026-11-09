@@ -67,10 +67,12 @@ module.exports = {
     t.eq(bodyOf(win, 'main').getAttribute('data-open'), 'true', "Main's body is open too, not just its label");
     t.eq(bodyOf(win, 'reports').getAttribute('data-open'), 'false', "a closed group's body is closed in step with its label");
 
-    // ── A CLOSED group must carry an icon and a count: with the pages
-    // hidden, these are the only cues about what is behind the row. ──
+    // ── A CLOSED group must carry a count: since v7.111.0 the sidebar is
+    // iconless (Carlos's call — hierarchy from size/weight/spacing), so the
+    // count is the only cue left about how much is behind the row. The icon
+    // spans still exist in the markup but are hidden by CSS, so asserting
+    // their presence would prove nothing about what the user sees. ──
     const mgmt = win.document.querySelector('.nav-section-label[data-group="management"]');
-    t.assert(mgmt.querySelector('.nav-group-icon'), 'a group row has an icon to anchor the eye, like every nav item does');
     t.eq(mgmt.querySelector('.nav-group-count').textContent, '5', "Management's count matches the 5 pages hidden inside it");
     t.eq(bodyOf(win, 'management').querySelectorAll('.nav-item').length, 5,
       'and that count is not a stale literal — it equals the real number of items in the body');
