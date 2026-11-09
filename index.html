@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.111.2"/>
+<meta name="app-version" content="7.112.0"/>
 <meta name="theme-color" content="#1E2D4A"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -37,48 +37,65 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
-  /* Ordering1.0 design system — cream + navy + warm gold */
-  /* Brand gold (accent) */
-  --gold:#C9A84C;--gl:#D4AF37;--gd:#8A6F20;--gt:#F5ECD4;
-  --gold-soft:rgba(201,168,76,.14);--gold-text:#F5ECD4;
-  /* Navy (primary) */
+  /* Dark theme — near-black ground, lime accent. Matches the sidebar.
+     Several tokens below are ALIASES of each other (--navy/--nvy,
+     --text1/--txt, --border/--bdr, --green/--grn …). They must be flipped
+     in lockstep: changing one and not its twin leaves half the app on the
+     old value with nothing to show which half. */
+  color-scheme:dark;
+  /* Brand accent — lime. --gt is a TINTED SURFACE (23 backgrounds vs 1
+     text use), so it darkens; --gold-text sits ON that tint, so it stays
+     light. --gd is the deep shade used for text on a light gold fill. */
+  --gold:#C9EF6B;--gl:#D8F887;--gd:#9FC455;--gt:#232D12;
+  --gold-soft:rgba(201,239,107,.14);--gold-text:#DCF79A;
+  /* Text ON a lime fill. Moves OPPOSITE to --ink-strong: the accent is a
+     LIGHT fill in a dark theme, so its label must be dark. Flipping it
+     with the surfaces is what dropped these buttons to 1.02 contrast. */
+  --on-accent:#17210A;
+  /* Navy stays a raised SURFACE: on a #0F1420 page the old #1E2D4A still
+     reads as a lifted card, so the hero cards keep their identity. */
   --navy:#1E2D4A;--navy2:#253656;--navy3:#16223A;
   /* --navy wears two hats: a dark SURFACE (sidebar, hero cards) and dark
-     TEXT on a light ground. They must move in opposite directions when the
-     app goes dark, so the text role lives in its own token. Same value
-     today — this split is deliberately a no-op until the theme flips. */
-  --ink-strong:#1E2D4A;
+     TEXT on a light ground. They move in OPPOSITE directions in dark —
+     the surface stays dark, the text goes light. That is the whole
+     reason this token exists separately. */
+  --ink-strong:#DCE3F0;
   --nvy:#1E2D4A;--nvy2:#16223A;--nvy3:#253656;
-  /* Surfaces — cream theme */
-  --bg:#F2F0EA;--white:#FFFFFF;--sur:#FFFFFF;
+  /* Surfaces — dark theme. --white is a surface (73 backgrounds, 0 text
+     uses), so despite the name it darkens with the rest. */
+  --bg:#0F1420;--white:#161D2B;--sur:#161D2B;
   /* Text that sits on a dark or coloured fill (navy buttons, badges,
      the sidebar). Stays near-white in every theme — unlike --sur, which
      is a SURFACE and flips dark. Keeping them apart is the whole point. */
-  --on-fill:#FFFFFF;--surface:#F7F4EF;--s2:#F7F4EF;--s3:#EDE9E0;
-  --border:#E4DDD1;--border2:#D6CCBC;--bdr:#E4DDD1;
-  /* Text — three greys */
-  --text1:#1A1714;--text2:#5C5652;--text3:#8C8680;
-  --txt:#1A1714;--ts:#5C5652;--tm:#8C8680;
-  /* State */
-  --red:#C0392B;--red-bg:#FCEFEF;--red-border:#E8B5AE;--rd:#FCEFEF;
-  --green:#2D9E45;--green-bg:#EFF7F2;--green-border:#A7D9B5;--grn:#2D9E45;--grd:#EFF7F2;
-  --yellow:#E67E22;--yellow-bg:#FDF5EA;--yellow-border:#F2C79B;--amb:#E67E22;--ad:#FDF5EA;
-  --maroon:#993C1D;
+  --on-fill:#FFFFFF;--surface:#1A2231;--s2:#1A2231;--s3:#222C3D;
+  --border:#2A3344;--border2:#38435A;--bdr:#2A3344;
+  /* Text — three greys, inverted */
+  --text1:#EFF2F7;--text2:#AEB7C6;--text3:#7C8594;
+  --txt:#EFF2F7;--ts:#AEB7C6;--tm:#7C8594;
+  /* State — brighter foregrounds, deep tinted backgrounds */
+  --red:#F2796B;--red-bg:#2A1A1C;--red-border:#5A2F2C;--rd:#2A1A1C;
+  --green:#7BD88F;--green-bg:#17271D;--green-border:#2F5538;--grn:#7BD88F;--grd:#17271D;
+  --yellow:#F0B45E;--yellow-bg:#2A2114;--yellow-border:#5A4526;--amb:#F0B45E;--ad:#2A2114;
+  --maroon:#E08A62;
   /* Layout */
   --sidebar-w:230px;
   --radius:12px;--radius-sm:8px;--radius-xs:6px;
   --r1:8px;--r2:12px;--r3:16px;--r4:18px;
-  --shadow:0 1px 3px rgba(30,45,74,.05),0 4px 16px rgba(30,45,74,.09);
-  --shadow-sm:0 1px 3px rgba(30,45,74,.05);
-  --sh1:0 1px 3px rgba(30,45,74,.05);--sh2:0 4px 16px rgba(30,45,74,.09);--sh3:0 8px 32px rgba(30,45,74,.13);
+  /* A navy-tinted shadow is invisible on a near-black ground; depth in a
+     dark theme comes from real black plus the surface being lighter than
+     the page behind it. */
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.5);
+  --shadow-sm:0 1px 3px rgba(0,0,0,.4);
+  --sh1:0 1px 3px rgba(0,0,0,.4);--sh2:0 4px 16px rgba(0,0,0,.5);--sh3:0 8px 32px rgba(0,0,0,.6);
   /* Spacing (8-pt scale) */
   --sp-xs:4px;--sp-sm:8px;--sp-md:12px;--sp-lg:16px;--sp-xl:24px;--sp-2xl:32px;
   /* Serif display font */
   --serif:'Cormorant Garamond',Georgia,serif;
-  /* Purple — Long Break state */
-  --purple:#5b21b6;--purple-bg:#ede9fe;
+  /* Purple — Long Break state. Foreground brightens, the pale tint it sits
+     on becomes a deep one, same as the red/green/yellow pairs above. */
+  --purple:#C4A8F5;--purple-bg:#241C33;
   /* Indigo — Part-time tag */
-  --indigo:#3730a3;--indigo-bg:#e0e7ff;
+  --indigo:#A8B6F5;--indigo-bg:#1A1F33;
 }
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text1);font-size:14px;min-height:100vh;display:flex;overflow-x:hidden;}
 
@@ -104,7 +121,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .nav-item.active{background:var(--text1);color:var(--surface);font-weight:600;}
 .nav-dot{width:5px;height:5px;border-radius:50%;background:var(--text2);flex-shrink:0;transition:.15s;}
 .nav-item.active .nav-dot{background:var(--surface);}
-.nav-badge{margin-left:auto;background:var(--yellow);color:var(--on-fill);font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;flex-shrink:0;}
+.nav-badge{margin-left:auto;background:var(--yellow);color:var(--on-accent);font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;flex-shrink:0;}
 .nav-badge.red{background:var(--red);}
 .sidebar-foot{padding:12px 14px;border-top:1px solid rgba(255,255,255,.06);}
 .prop-box{background:var(--text1);border-radius:var(--radius-sm);padding:10px 12px;}
@@ -291,7 +308,7 @@ tbody tr:hover td{background:var(--surface);}
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);font-size:12.5px;font-weight:600;cursor:pointer;border:none;min-height:40px;transition:.15s;}
 .btn:active{opacity:.75;}
-.btn-gold{background:var(--gold);color:var(--ink-strong);font-weight:700;}
+.btn-gold{background:var(--gold);color:var(--on-accent);font-weight:700;}
 .btn-gold:hover{background:var(--gl);}
 .btn-navy{background:var(--navy);color:var(--on-fill);}
 .btn-navy:hover{background:var(--navy2);}
@@ -309,7 +326,7 @@ tbody tr:hover td{background:var(--surface);}
 .settings-row-text{flex:1;min-width:0;}
 .settings-row-title{font-size:13px;font-weight:600;color:var(--text1);}
 .settings-row-desc{font-size:11.5px;color:var(--text3);margin-top:2px;line-height:1.4;}
-.settings-row-arrow{color:var(--border2);font-size:20px;flex-shrink:0;}
+.settings-row-arrow{color:var(--text3);font-size:20px;flex-shrink:0;}
 .settings-info-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;font-size:12.5px;border-bottom:1px solid var(--border);}
 .settings-info-row:last-child{border-bottom:none;}
 .settings-info-label{color:var(--text3);}
@@ -639,7 +656,7 @@ tbody tr:hover td{background:var(--surface);}
 /* Collapsible sidebar on large screens (iPad/desktop) */
 body.sb-collapsed .sidebar{transform:translateX(-100%);}
 body.sb-collapsed .main-wrap{margin-left:0;width:100%;}
-.notif-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--gold);color:var(--ink-strong);border:none;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:40px;gap:7px;white-space:nowrap;box-shadow:0 2px 6px rgba(30,45,74,.15);transition:.18s;}
+.notif-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--gold);color:var(--on-accent);border:none;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:40px;gap:7px;white-space:nowrap;box-shadow:0 2px 6px rgba(30,45,74,.15);transition:.18s;}
 .notif-btn:hover{background:var(--gl);transform:translateY(-1px);box-shadow:0 4px 10px rgba(30,45,74,.2);}
 .notif-btn:active{transform:scale(.97);}
 @media(max-width:480px){.notif-btn{padding:8px 12px;font-size:13px;min-height:36px;}.upload-text{display:none;}}
@@ -848,7 +865,7 @@ tr.newhire-row td:first-child{border-left:3px solid var(--gl);}
 }
 .dpc-badge{position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-size:8px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;}
 .dpc-badge.navy{background:var(--navy);color:var(--on-fill);}
-.dpc-badge.yellow{background:var(--yellow);color:var(--on-fill);}
+.dpc-badge.yellow{background:var(--yellow);color:var(--on-accent);}
 .dpc-name{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:3px;}
 .dpc-date{font-size:16px;font-weight:800;color:var(--text1);}
 .dpc-status{font-size:10px;color:var(--yellow);font-weight:600;margin-top:4px;}
@@ -1080,7 +1097,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .lm-table .lm-rate{color:var(--green);width:70px;}
 .mini-badge{font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;padding:2px 7px;border-radius:99px;}
 .mini-badge.pct{background:var(--gt);color:var(--gd);}
-.mini-badge.fixed{background:#e8edf5;color:var(--ink-strong);}
+.mini-badge.fixed{background:var(--s3);color:var(--ink-strong);}
 .lm-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 
 /* ===== P&L ===== */
@@ -1124,7 +1141,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .auth-field label{display:block;font-size:10px;color:rgba(255,255,255,.45);margin-bottom:5px;letter-spacing:.5px;text-transform:uppercase;}
 .auth-field input{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:var(--on-fill);font-size:16px;padding:12px 14px;outline:none;-webkit-appearance:none;}
 .auth-field input:focus{border-color:var(--gl);}
-.auth-btn{width:100%;background:var(--gl);border:none;border-radius:12px;color:var(--ink-strong);font-size:15px;font-weight:700;padding:14px;cursor:pointer;margin-top:6px;letter-spacing:.3px;-webkit-tap-highlight-color:transparent;}
+.auth-btn{width:100%;background:var(--gl);border:none;border-radius:12px;color:var(--on-accent);font-size:15px;font-weight:700;padding:14px;cursor:pointer;margin-top:6px;letter-spacing:.3px;-webkit-tap-highlight-color:transparent;}
 .auth-btn:active{opacity:.82;}
 .auth-btn:disabled{opacity:.5;cursor:default;}
 .auth-err{font-size:12px;color:#ef9a9a;min-height:16px;margin-top:10px;text-align:center;line-height:1.4;}
@@ -1353,7 +1370,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 </div>
 
 <!-- ── Version banner ── -->
-<div id="versionBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:var(--gl);color:var(--ink-strong);text-align:center;padding:14px 16px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.3px;box-shadow:0 -2px 8px rgba(0,0,0,.25);padding-bottom:max(14px,env(safe-area-inset-bottom));">
+<div id="versionBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:var(--gl);color:var(--on-accent);text-align:center;padding:14px 16px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.3px;box-shadow:0 -2px 8px rgba(0,0,0,.25);padding-bottom:max(14px,env(safe-area-inset-bottom));">
   🔄 New version available — tap to update
 </div>
 <script>
@@ -2220,7 +2237,7 @@ Supervisor 3</textarea>
       <div class="card" style="margin-top:18px;margin-bottom:0;border:1px solid var(--gold);">
         <div onclick="toggleUnifocusStd()" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;cursor:pointer;">
           <div>
-            <div style="font-weight:700;font-size:13px;color:var(--text1);">Unifocus Standard <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--gd);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Reference</span></div>
+            <div style="font-weight:700;font-size:13px;color:var(--text1);">Unifocus Standard <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--on-accent);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Reference</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px;">The standard Unifocus evaluates against &mdash; read-only, straight from their Labor Standards Report</div>
           </div>
           <span id="unifocusStdArrow" style="color:var(--gold);font-size:14px;transition:.18s;flex-shrink:0;">&#9662;</span>
@@ -2883,7 +2900,7 @@ function maybePromptInactive(){
     var sname=(e.name||'').replace(/"/g,"&quot;");
     return '<div style="background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;" id="inactRow_'+sid+'">'
       +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
-      +'<div style="background:var(--yellow);color:var(--on-fill);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">&#9888;</div>'
+      +'<div style="background:var(--yellow);color:var(--on-accent);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">&#9888;</div>'
       +'<div style="flex:1;min-width:0;">'
       +'<div style="font-size:14px;font-weight:700;color:var(--text1);">'+escHtml(e.name)+'</div>'
       +'<div style="font-size:11px;color:var(--text3);">'+escHtml(e.pos)+' &nbsp;\u00b7&nbsp; <strong style="color:var(--yellow);">'+e.days+' d\u00edas sin actividad</strong> &nbsp;\u00b7&nbsp; \u00daltimo: '+e.lastSeen+'</div>'
@@ -4208,7 +4225,7 @@ function renderRoster(){
       inactPanel.innerHTML="";
     } else {
       var ih='<div style="background:var(--gt);border:1.5px solid var(--yellow-border);border-radius:10px;overflow:hidden;">'
-        +'<div style="background:var(--yellow);color:var(--on-fill);padding:10px 14px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;">&#9888;&#65039; Inactivos \u2014 revisar <span style="background:rgba(255,255,255,.25);padding:1px 8px;border-radius:99px;font-size:11px;">'+inactList.length+'</span></div>'
+        +'<div style="background:var(--yellow);color:var(--on-accent);padding:10px 14px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;">&#9888;&#65039; Inactivos \u2014 revisar <span style="background:rgba(255,255,255,.25);padding:1px 8px;border-radius:99px;font-size:11px;">'+inactList.length+'</span></div>'
         +'<div style="padding:10px 14px;">'
         +'<div style="font-size:11px;color:var(--text2);margin-bottom:10px;">These employees have had no activity in Labor Distribution for 90+ days.</div>';
       inactList.forEach(function(e){
@@ -4751,6 +4768,12 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.112.0', date:'2026-11-09',
+    fixes:['The whole app is dark now, matching the menu. Cards sit on a near-black page, text is light, and the accent is the same lime the menu uses. Nothing moved — every page is laid out exactly where it was, only the colours changed.',
+      'Every page was checked for anything that became hard to read. Twenty-four problems were found and fixed before this went out: buttons whose label had turned the same shade as the button, rows that stayed white behind light text, the small arrows in Settings, and the separator dots in the Schedule.',
+      'Printing and the Export PDF buttons still come out on white paper with dark text, on purpose. A report you print or email should not depend on how the app looks on screen.']
+  },
   {
     v:'7.111.0', date:'2026-11-09',
     fixes:['The menu has a new look, picked from two options side by side. The emoji icons are gone — the names now stand on their own, with the spacing and weight doing the work the icons were doing. A thin line runs down the left of each open section, and the page you are on is marked by a short bright segment on that line instead of a filled block. Section titles sit quietly above their pages with a hairline rule running out to the right.',
@@ -6526,7 +6549,7 @@ function showChangelogModal(){
     return '<div style="padding:16px 0;'+(idx>0?'border-top:1px solid var(--border);':'')+'">'
       +'<div style="display:flex;align-items:baseline;gap:10px;">'
       +'<span style="font-size:16px;font-weight:800;color:var(--ink-strong);">v'+escHtml(e.v)+'</span>'
-      +(idx===0?'<span style="font-size:10px;font-weight:800;background:var(--green);color:var(--on-fill);padding:2px 8px;border-radius:99px;">LATEST</span>':'')
+      +(idx===0?'<span style="font-size:10px;font-weight:800;background:var(--green);color:var(--on-accent);padding:2px 8px;border-radius:99px;">LATEST</span>':'')
       +'<span style="font-size:11px;color:var(--text3);margin-left:auto;">'+escHtml(e.date||'')+'</span>'
       +'</div>'
       +changelogSectionHTML('&#10024; New features','var(--ink-strong)',e.features)
@@ -12753,9 +12776,9 @@ function renderPnl(){
     if(totalMonthRooms>0){
       rBar.style.display='flex';
       rBar.innerHTML='<span>&#127968; <b>Rooms sold:</b> '+totalMonthRooms.toLocaleString()+'</span>'
-        +'<span style="color:var(--border2);">|</span>'
+        +'<span style="color:var(--text3);">|</span>'
         +'<span><b>Average/night:</b> '+(totalMonthRooms/pnlEffectiveDays).toFixed(0)+'</span>'
-        +'<span style="color:var(--border2);">|</span>'
+        +'<span style="color:var(--text3);">|</span>'
         +'<span><b>Days loaded:</b> '+pnlEffectiveDays+' / '+daysInMonth+'</span>';
     } else { rBar.style.display='none'; }
   }
@@ -12799,7 +12822,7 @@ function renderPnl(){
       var _adjCIsOver=tAdjVarC>0.5,_adjCIsUnder=tAdjVarC<-0.5;
       adjSec.innerHTML='<div style="background:var(--white);border:1px solid var(--gold);box-shadow:inset 0 0 0 2px var(--gold);border-radius:var(--radius);overflow:hidden;margin-top:16px;">'
         +'<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
-        +'<div><div style="font-size:13px;font-weight:700;color:var(--on-fill);">&#128202; P&amp;L <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--gd);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Adjusted</span></div>'
+        +'<div><div style="font-size:13px;font-weight:700;color:var(--on-fill);">&#128202; P&amp;L <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--on-accent);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Adjusted</span></div>'
         +'<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'+MONTH_NAMES[mo2]+' '+yr2+' &nbsp;&middot;&nbsp; minus training &amp; project hours (regular hours only), by position</div></div>'
         +'<div style="text-align:right;">'
         +(anyRate?'<div style="font-size:16px;font-weight:800;color:'+(_adjCIsOver?'var(--red-border)':'var(--green-border)')+'">'+(tAdjVarC>=0?'+$':'−$')+Math.abs(tAdjVarC).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>':'')
@@ -14673,8 +14696,8 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
     +(hasUpload?' &nbsp;·  matched to Unifocus\'s own report':' &nbsp;·  Worked/Standard computed by this app')+'</div>';
   html+='</div>';
   html+='<div style="display:flex;align-items:center;gap:8px;">';
-  if(hasUpload)html+='<span style="font-size:9px;font-weight:800;color:var(--gd);background:var(--gold);padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;">&#10003; Uploaded</span>';
-  html+='<button onclick="document.getElementById(\'laborEffInput\').click();" style="padding:5px 11px;background:'+(hasUpload?'rgba(255,255,255,.15)':'#fff')+';color:'+(hasUpload?'#fff':'var(--ink-strong)')+';border:none;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;">&#11014; '+(hasUpload?'Re-upload':'Upload PDF')+'</button>';
+  if(hasUpload)html+='<span style="font-size:9px;font-weight:800;color:var(--on-accent);background:var(--gold);padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;">&#10003; Uploaded</span>';
+  html+='<button onclick="document.getElementById(\'laborEffInput\').click();" style="padding:5px 11px;background:'+(hasUpload?'rgba(255,255,255,.15)':'var(--sur)')+';color:'+(hasUpload?'#fff':'var(--ink-strong)')+';border:none;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;">&#11014; '+(hasUpload?'Re-upload':'Upload PDF')+'</button>';
   html+='<input type="file" id="laborEffInput" accept=".pdf" style="display:none;" onchange="handleLaborEffectivenessUpload(this)">';
   html+='</div></div>';
 
@@ -14744,7 +14767,7 @@ function buildLaborEffectivenessHTML(days,rooms,wk){
     html+='<div style="text-align:right;font-weight:700;color:'+pillColor+';">'+(variance!==null?(variance>=0?'+':'')+variance.toFixed(2):'&#8212;')+'</div>';
     html+='<div style="text-align:right;font-weight:700;color:'+pillColor+';">'+(pct!==null?(pct>=0?'+':'')+pct+'%':'&#8212;')+'</div>';
     html+='<div style="text-align:right;color:'+(ot>0?'var(--yellow)':'var(--text3)')+';">'+(ot>0?ot.toFixed(2):'&#8212;')+'</div>';
-    html+='<div><textarea class="wleNoteTextarea" placeholder="+ Note" oninput="_wleAutoGrow(this)" onblur="saveWLENoteInline(\''+weekKey+'\',\''+p.key+'\',this.value)" style="width:100%;min-height:32px;max-height:200px;padding:3px 5px;font-size:9px;font-family:inherit;line-height:1.3;color:var(--text1);border:1px solid '+(hasNote?'#E0C989':'var(--border)')+';border-radius:5px;resize:none;overflow-y:auto;box-sizing:border-box;background:'+(hasNote?'rgba(255,255,255,.7)':'#fff')+';">'+escHtml(note)+'</textarea></div>';
+    html+='<div><textarea class="wleNoteTextarea" placeholder="+ Note" oninput="_wleAutoGrow(this)" onblur="saveWLENoteInline(\''+weekKey+'\',\''+p.key+'\',this.value)" style="width:100%;min-height:32px;max-height:200px;padding:3px 5px;font-size:9px;font-family:inherit;line-height:1.3;color:var(--text1);border:1px solid '+(hasNote?'#E0C989':'var(--border)')+';border-radius:5px;resize:none;overflow-y:auto;box-sizing:border-box;background:'+(hasNote?'rgba(255,255,255,.7)':'var(--sur)')+';">'+escHtml(note)+'</textarea></div>';
     if(hasUpload){
       html+='<div style="text-align:right;color:var(--gd);">'+(repRow?repRow.scheduled.toFixed(2):'&#8212;')+'</div>';
       html+='<div style="text-align:right;color:var(--gd);">'+(repRow?repRow.projected.toFixed(2):'&#8212;')+'</div>';
@@ -15035,7 +15058,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       html+='<div style="background:var(--white);border:1px solid var(--gold);box-shadow:inset 0 0 0 2px var(--gold);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
       html+='<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
       html+='<div>';
-      html+='<div style="font-size:13px;font-weight:700;color:var(--on-fill);">&#128202; Weekly Labor Pace <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--gd);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Adjusted</span></div>';
+      html+='<div style="font-size:13px;font-weight:700;color:var(--on-fill);">&#128202; Weekly Labor Pace <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--on-accent);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Adjusted</span></div>';
       html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'
         +wk.start.toLocaleDateString('en-US',{month:'short',day:'numeric'})
         +' – '+wk.end.toLocaleDateString('en-US',{month:'short',day:'numeric'})
@@ -15838,7 +15861,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     html+='<div style="font-size:11px;color:var(--red);margin-top:2px;">Manual: <strong>'+r+' rooms</strong> &nbsp;·&nbsp; OCC: <strong>'+r106Val+' rooms</strong>'+(r106Comp>0?' ('+r106Occ+' occ − '+r106Comp+' comp)':'')+' &nbsp;·&nbsp; Diff: '+(r-r106Val>0?'+':'')+(r-r106Val)+'</div>';
     html+='</div>';
     html+='<button onclick="showOccupancyFixModal(\''+ds+'\','+r+','+r106Val+')" '
-      +'style="padding:8px 14px;background:var(--red);color:var(--on-fill);border:none;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer;">Fix Now →</button>';
+      +'style="padding:8px 14px;background:var(--red);color:var(--on-accent);border:none;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer;">Fix Now →</button>';
     html+='</div>';
   }
 
@@ -17671,10 +17694,10 @@ function buildOccForecastHTML(){
     html+='<div style="font-size:9.5px;color:var(--text3);font-weight:700;">&#127968; Rooms</div>';
     html+='<input type="number" min="0" inputmode="numeric" id="occfcUf_'+c.ds+'" value="'+(c.uf!==null?c.uf:'')+'" placeholder="&mdash;"'
       +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'uf\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'var(--sur)')+';box-sizing:border-box;">';
     html+='<input type="number" min="0" inputmode="numeric" id="occfcSched_'+c.ds+'" value="'+(c.sched!==null?c.sched:'')+'" placeholder="&mdash;"'
       +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'sched\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'var(--sur)')+';box-sizing:border-box;">';
     html+='<div style="text-align:center;color:var(--text2);">'+(c.ac>0?c.ac:'&mdash;')+'</div>';
     html+='<div id="occfcDiff_'+c.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(c)+'</div>';
     html+='</div>';
@@ -17683,10 +17706,10 @@ function buildOccForecastHTML(){
     html+='<div style="font-size:9.5px;color:var(--text3);font-weight:700;">&#129531; Dep</div>';
     html+='<input type="number" min="0" inputmode="numeric" id="depfcUf_'+dc.ds+'" value="'+(dc.uf!==null?dc.uf:'')+'" placeholder="&mdash;"'
       +' onchange="saveDepForecastDay(\''+dwd.weekKey+'\',\''+dc.ds+'\',\'depUf\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(dc.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(dc.uf!==null?'rgba(30,45,74,.07)':'#fff')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(dc.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(dc.uf!==null?'rgba(30,45,74,.07)':'var(--sur)')+';box-sizing:border-box;">';
     html+='<input type="number" min="0" inputmode="numeric" id="depfcSched_'+dc.ds+'" value="'+(dc.sched!==null?dc.sched:'')+'" placeholder="&mdash;"'
       +' onchange="saveDepForecastDay(\''+dwd.weekKey+'\',\''+dc.ds+'\',\'depSched\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(dc.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(dc.sched!==null?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(dc.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(dc.sched!==null?'var(--gt)':'var(--sur)')+';box-sizing:border-box;">';
     html+='<div style="text-align:center;color:var(--text2);">'+(dc.ac>0?dc.ac:'&mdash;')+'</div>';
     html+='<div id="depfcDiff_'+dc.ds+'" style="text-align:center;font-weight:700;">'+_occfcDiffHTML(dc)+'</div>';
     html+='</div>';
@@ -18100,7 +18123,7 @@ function renderOccupancy(){
     var bud=dayObj.rooms>0?dayBudget(dayObj.rooms):0;
     var roomPct=dayObj.rooms>0?Math.round((dayObj.rooms/384)*100):0;
     var barColor=dayObj.rooms>300?'var(--red)':dayObj.rooms>200?'var(--yellow)':'var(--green)';
-    var rowBg=dayObj.mismatch?'var(--ad)':isToday?'var(--s2)':'#fff';
+    var rowBg=dayObj.mismatch?'var(--ad)':isToday?'var(--s2)':'var(--sur)';
     var borderColor=dayObj.mismatch?'var(--yellow-border)':'var(--border)';
 
     html+='<div style="display:grid;grid-template-columns:'+colGrid+';align-items:center;padding:9px 14px;border-top:1px solid '+borderColor+';background:'+rowBg+';">';
@@ -18118,7 +18141,7 @@ function renderOccupancy(){
     html+='<div style="text-align:center;">';
     html+='<input type="number" min="0" max="384" value="'+(dayObj.rooms||'')+'" placeholder="—" '
       +'onchange="saveOccupancyRoom(\''+dayObj.ds+'\',parseInt(this.value)||0)" '
-      +'style="width:70px;text-align:center;padding:5px 8px;border:1.5px solid '+(dayObj.mismatch?'var(--yellow)':'var(--border)')+';border-radius:6px;font-size:13px;font-weight:700;background:'+(dayObj.mismatch?'var(--yellow-bg)':'#fff')+';color:var(--text1);">';
+      +'style="width:70px;text-align:center;padding:5px 8px;border:1.5px solid '+(dayObj.mismatch?'var(--yellow)':'var(--border)')+';border-radius:6px;font-size:13px;font-weight:700;background:'+(dayObj.mismatch?'var(--yellow-bg)':'var(--sur)')+';color:var(--text1);">';
     html+='</div>';
 
     if(hasR106){
@@ -18129,7 +18152,7 @@ function renderOccupancy(){
         if(dayObj.mismatch){
           html+='<div style="font-size:9px;color:var(--yellow);font-weight:700;">⚠ diff '+(dayObj.rooms-dayObj.r106>0?'+':'')+(dayObj.rooms-dayObj.r106)+'</div>';
           html+='<button onclick="saveOccupancyRoom(\''+dayObj.ds+'\','+dayObj.r106+')" '
-            +'style="font-size:9px;padding:2px 6px;background:var(--yellow);color:var(--on-fill);border:none;border-radius:4px;cursor:pointer;margin-top:2px;">Use OCC</button>';
+            +'style="font-size:9px;padding:2px 6px;background:var(--yellow);color:var(--on-accent);border:none;border-radius:4px;cursor:pointer;margin-top:2px;">Use OCC</button>';
         }
       }else{
         html+='<div style="font-size:12px;color:var(--text3);">—</div>';
@@ -19118,7 +19141,7 @@ function showTrCompleteConfirm(tid, empId, sel){
     +'Are you sure you want to mark <b>'+escHtml(nm)+'</b> as <b>Complete</b> for <b>'+escHtml(title)+'</b>?</div>'
     +'<div style="display:flex;gap:8px;">'
     +'<button id="trConfirmCancel" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button id="trConfirmOk" style="flex:2;padding:11px;background:var(--green);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">&#10003; Confirm</button>'
+    +'<button id="trConfirmOk" style="flex:2;padding:11px;background:var(--green);color:var(--on-accent);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">&#10003; Confirm</button>'
     +'</div></div>';
   document.body.appendChild(ov);
   function revert(){
@@ -19576,8 +19599,8 @@ function showHRImportReview(tid, matched, notFound){
   var ov=document.createElement('div');
   ov.id='hrReviewModal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2100;display:flex;align-items:center;justify-content:center;padding:20px;';
-  ov.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#8657; Import HR list</div>'
+  ov.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:460px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:4px;">&#8657; Import HR list</div>'
     +'<div style="font-size:12px;color:var(--text3);margin-bottom:16px;">'+matched.length+' employee'+(matched.length===1?'':'s')+' matched with your roster.</div>'
     +'<div style="flex:1;overflow-y:auto;">'
     +'<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--green);margin-bottom:6px;">&#10003; Emparejados ('+matched.length+')</div>'
@@ -19586,8 +19609,8 @@ function showHRImportReview(tid, matched, notFound){
     +'</div>'
     +'<div style="font-size:11px;color:var(--text3);margin-top:14px;margin-bottom:6px;">This marks matched employees as "HR pending" (&#9733;). It does not change your completion record.</div>'
     +'<div style="display:flex;gap:8px;">'
-    +'<button onclick="document.getElementById(\'hrReviewModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="applyHRImport()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;"'+(matched.length===0?' disabled':'')+'>Aplicar marcas RH</button>'
+    +'<button onclick="document.getElementById(\'hrReviewModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="applyHRImport()" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;"'+(matched.length===0?' disabled':'')+'>Aplicar marcas RH</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(ov);
@@ -19904,7 +19927,7 @@ function _paceChips(byPos){
 }
 function _paceRow(name, pos, hours, note, isFirst){
   var h='<div style="padding:6px 10px;border-left:2px solid var(--gold);'+(isFirst?'':'border-top:1px solid var(--border);')+'">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font-weight:700;font-size:10px;color:var(--text1);">'+escHtml(name)+'</span><strong style="font-size:10.5px;color:var(--navy);white-space:nowrap;">'+hours.toFixed(2)+'h</strong></div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font-weight:700;font-size:10px;color:var(--text1);">'+escHtml(name)+'</span><strong style="font-size:10.5px;color:var(--ink-strong);white-space:nowrap;">'+hours.toFixed(2)+'h</strong></div>';
   if(pos)h+='<div style="font-size:8px;color:var(--gd);font-weight:700;">'+escHtml(pos)+'</div>';
   if(note)h+='<div style="font-size:8.7px;color:var(--text2);line-height:1.45;margin-top:3px;">'+escHtml(note)+'</div>';
   h+='</div>';
@@ -19976,7 +19999,7 @@ function renderTrainingHours(){
   var trainees=loadTrainees();
   var html='<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px;">'
     +'<button onclick="exportTrainingSummaryPDF()" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;">&#128196; Summary PDF</button>'
-    +'<button onclick="showAddTraineeModal()" style="background:var(--gold);color:var(--navy);border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#43; Add Trainee</button>'
+    +'<button onclick="showAddTraineeModal()" style="background:var(--gold);color:var(--on-accent);border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#43; Add Trainee</button>'
     +'</div>';
   if(trainees.length===0){
     html+='<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
@@ -19992,23 +20015,23 @@ function renderTrainingHours(){
   var sum=getTrainingSummary();
   if(sum.weeks.length>0){
     html+='<div class="card" style="margin-bottom:16px;">';
-    html+='<div style="padding:14px 18px;border-bottom:1px solid var(--border);"><div style="font-size:13px;font-weight:800;color:var(--navy);">&#128202; Training hours by week &amp; position</div><div style="font-size:11px;color:var(--text3);margin-top:2px;">All trainees combined &middot; Sat&ndash;Fri hotel weeks</div></div>';
+    html+='<div style="padding:14px 18px;border-bottom:1px solid var(--border);"><div style="font-size:13px;font-weight:800;color:var(--ink-strong);">&#128202; Training hours by week &amp; position</div><div style="font-size:11px;color:var(--text3);margin-top:2px;">All trainees combined &middot; Sat&ndash;Fri hotel weeks</div></div>';
     html+='<div style="overflow-x:auto;padding:4px 4px 8px;">';
     html+='<table style="width:100%;border-collapse:collapse;min-width:'+(160+sum.positions.length*80+80)+'px;">';
     html+='<thead><tr style="background:var(--surface);">';
     html+='<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;position:sticky;left:0;background:var(--surface);">Week</th>';
     sum.positions.forEach(function(p){ html+='<th style="text-align:right;padding:9px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;">'+escHtml(p)+'</th>'; });
-    html+='<th style="text-align:right;padding:9px 14px;font-size:10px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;">Total</th></tr></thead><tbody>';
+    html+='<th style="text-align:right;padding:9px 14px;font-size:10px;font-weight:800;color:var(--ink-strong);text-transform:uppercase;letter-spacing:.5px;">Total</th></tr></thead><tbody>';
     sum.weeks.forEach(function(w){
       html+='<tr style="border-top:1px solid var(--border);">';
       html+='<td style="text-align:left;padding:9px 14px;font-size:12px;font-weight:600;color:var(--text1);white-space:nowrap;position:sticky;left:0;background:var(--white);">'+escHtml(w.label)+'</td>';
       sum.positions.forEach(function(p){ var v=w.byPos[p]; html+='<td style="text-align:right;padding:9px 12px;font-size:12px;color:'+(v?'var(--text1)':'var(--text3)')+';">'+(v?v.toFixed(2)+'h':'—')+'</td>'; });
-      html+='<td style="text-align:right;padding:9px 14px;font-size:13px;font-weight:800;color:var(--navy);">'+w.total.toFixed(2)+'h</td></tr>';
+      html+='<td style="text-align:right;padding:9px 14px;font-size:13px;font-weight:800;color:var(--ink-strong);">'+w.total.toFixed(2)+'h</td></tr>';
     });
     html+='<tr style="border-top:2px solid var(--border);background:var(--surface);">';
     html+='<td style="text-align:left;padding:10px 14px;font-size:12px;font-weight:800;color:var(--text1);position:sticky;left:0;background:var(--surface);">Total</td>';
-    sum.positions.forEach(function(p){ var v=sum.grandByPos[p]; html+='<td style="text-align:right;padding:10px 12px;font-size:12px;font-weight:700;color:var(--navy);">'+(v?v.toFixed(2)+'h':'—')+'</td>'; });
-    html+='<td style="text-align:right;padding:10px 14px;font-size:14px;font-weight:800;color:var(--navy);">'+sum.grandTotal.toFixed(2)+'h</td></tr>';
+    sum.positions.forEach(function(p){ var v=sum.grandByPos[p]; html+='<td style="text-align:right;padding:10px 12px;font-size:12px;font-weight:700;color:var(--ink-strong);">'+(v?v.toFixed(2)+'h':'—')+'</td>'; });
+    html+='<td style="text-align:right;padding:10px 14px;font-size:14px;font-weight:800;color:var(--ink-strong);">'+sum.grandTotal.toFixed(2)+'h</td></tr>';
     html+='</tbody></table></div></div>';
   }
   trainees.forEach(function(x){
@@ -20033,7 +20056,7 @@ function renderTrainingHours(){
     html+='<div style="padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">';
     html+='<span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Training hours</span>';
     if(pending>0)html+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--gt);color:var(--yellow);margin-left:6px;">&#9203; '+pending+' day'+(pending===1?'':'s')+' waiting for PDF</span>';
-    html+='<span style="font-size:18px;font-weight:800;color:var(--navy);margin-left:auto;">'+total.toFixed(2)+'h</span>';
+    html+='<span style="font-size:18px;font-weight:800;color:var(--ink-strong);margin-left:auto;">'+total.toFixed(2)+'h</span>';
     html+='</div>';
     var bd=getProjectBreakdown(log);
     if(bd.weeks.length>0){
@@ -20041,7 +20064,7 @@ function renderTrainingHours(){
       html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Hours by week (Sat&ndash;Fri)</div>';
       html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">';
       bd.weeks.forEach(function(w){
-        html+='<div style="background:var(--surface);border-radius:8px;padding:8px 10px;"><div style="font-size:10px;color:var(--text2);margin-bottom:2px;">'+escHtml(w.label)+'</div><div style="font-size:14px;font-weight:700;color:var(--navy);">'+w.hours.toFixed(2)+'h</div></div>';
+        html+='<div style="background:var(--surface);border-radius:8px;padding:8px 10px;"><div style="font-size:10px;color:var(--text2);margin-bottom:2px;">'+escHtml(w.label)+'</div><div style="font-size:14px;font-weight:700;color:var(--ink-strong);">'+w.hours.toFixed(2)+'h</div></div>';
       });
       html+='</div></div>';
     }
@@ -20062,7 +20085,7 @@ function renderTrainingHours(){
         html+='<div style="font-size:11px;font-weight:700;color:var(--yellow);text-align:right;">Pending</div>';
         actionCell='<button onclick="toggleTraineeDayOff('+idx+',\''+e.date+'\')" title="Mark this as a day off" style="background:none;border:1px solid var(--border);color:var(--text3);cursor:pointer;font-size:10px;padding:3px 6px;border-radius:6px;">Off</button>';
       } else {
-        html+='<div style="font-size:13px;font-weight:700;color:var(--navy);text-align:right;">'+(e.hours||0).toFixed(2)+'h</div>';
+        html+='<div style="font-size:13px;font-weight:700;color:var(--ink-strong);text-align:right;">'+(e.hours||0).toFixed(2)+'h</div>';
       }
       html+='<div style="text-align:right;">'+actionCell+'</div>';
       html+='</div>';
@@ -20077,11 +20100,11 @@ function showAddTraineeModal(){
   var overlay=document.createElement('div');
   overlay.id='traineeModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#127891; Add Trainee</div>'
+  overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:18px;">&#127891; Add Trainee</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee *</label>'
-    +'<select id="trEmp" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;"><option value="">Select an employee&hellip;</option>'+opts+'</select></div>'
+    +'<select id="trEmp" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--sur);"><option value="">Select an employee&hellip;</option>'+opts+'</select></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
     +'<div><label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">First training day *</label>'
     +'<input id="trStart" type="date" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;"/></div>'
@@ -20093,8 +20116,8 @@ function showAddTraineeModal(){
     +'<div style="font-size:11px;color:var(--text3);line-height:1.5;">Hours fill in automatically for each day in this range as you upload the daily Labor Distribution Report.</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
-    +'<button onclick="document.getElementById(\'traineeModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveNewTrainee()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Add Trainee</button>'
+    +'<button onclick="document.getElementById(\'traineeModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveNewTrainee()" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Add Trainee</button>'
     +'</div></div>';
   document.body.appendChild(overlay);
   var today=new Date(), wk=new Date(); wk.setDate(wk.getDate()+6);
@@ -20151,8 +20174,8 @@ function showEditTraineeModal(idx){
   var overlay=document.createElement('div');
   overlay.id='editTraineeModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#9998; Edit Training Dates</div>'
+  overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:4px;">&#9998; Edit Training Dates</div>'
     +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(t.name)+' &middot; '+escHtml(t.pos||'')+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
@@ -20166,8 +20189,8 @@ function showEditTraineeModal(idx){
     +'<div style="font-size:11px;color:var(--text3);line-height:1.5;">Days already filled from a report are kept. New days start as Pending and fill in when that day\'s report is uploaded.</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
-    +'<button onclick="document.getElementById(\'editTraineeModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveEditTrainee('+idx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save</button>'
+    +'<button onclick="document.getElementById(\'editTraineeModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveEditTrainee('+idx+')" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save</button>'
     +'</div></div>';
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
@@ -20329,7 +20352,7 @@ function renderProjects(){
 
   // New project button
   html+='<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
-    +'<button onclick="showNewProjectModal()" style="background:var(--gold);color:var(--navy);border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Project</button>'
+    +'<button onclick="showNewProjectModal()" style="background:var(--gold);color:var(--on-accent);border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Project</button>'
     +'</div>';
 
   /* Training-hours trainees live in this same array (kind:'training') but are
@@ -20366,7 +20389,7 @@ function renderProjects(){
       if(proj.notes){html+='<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+escHtml(proj.notes)+'</div>';}
       html+='</div>';
       html+='<div style="display:flex;gap:6px;flex-shrink:0;">';
-      html+='<button onclick="showAddEntryModal('+idx+')" style="background:var(--navy);color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;">+ Log Hours</button>';
+      html+='<button onclick="showAddEntryModal('+idx+')" style="background:var(--navy);color:var(--on-fill);border:none;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;">+ Log Hours</button>';
       html+='<button onclick="showExportPDFModal('+idx+')" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;">&#128196; PDF</button>';
       html+='<button onclick="showEditProjectModal('+idx+')" style="background:none;color:var(--text3);border:none;padding:7px 8px;font-size:14px;cursor:pointer;" title="Edit project (name &amp; dates)">&#9998;</button>';
       html+='<button onclick="deleteProject('+idx+')" style="background:none;color:var(--text3);border:none;padding:7px 8px;font-size:14px;cursor:pointer;" title="Delete project">&#128465;</button>';
@@ -20377,7 +20400,7 @@ function renderProjects(){
       html+='<div style="padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;">';
       html+='<span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Total Hours</span>';
       if(pendingCount>0){html+='<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--gt);color:var(--yellow);margin-left:6px;">⏳ '+pendingCount+' pending</span>';}
-      html+='<span style="font-size:18px;font-weight:800;color:var(--navy);margin-left:auto;">'+totalHours.toFixed(2)+'h</span>';
+      html+='<span style="font-size:18px;font-weight:800;color:var(--ink-strong);margin-left:auto;">'+totalHours.toFixed(2)+'h</span>';
       html+='</div>';
 
       // Hours by position
@@ -20394,7 +20417,7 @@ function renderProjects(){
         posList.forEach(function(p){
           html+='<div style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
           html+='<div style="font-size:10px;color:var(--text2);margin-bottom:2px;">'+escHtml(p)+'</div>';
-          html+='<div style="font-size:14px;font-weight:700;color:var(--navy);">'+byPos[p].toFixed(2)+'h</div>';
+          html+='<div style="font-size:14px;font-weight:700;color:var(--ink-strong);">'+byPos[p].toFixed(2)+'h</div>';
           html+='</div>';
         });
         html+='</div></div>';
@@ -20409,7 +20432,7 @@ function renderProjects(){
         breakdown.months.forEach(function(m){
           html+='<div style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
           html+='<div style="font-size:10px;color:var(--text2);margin-bottom:2px;">'+escHtml(m.label)+'</div>';
-          html+='<div style="font-size:14px;font-weight:700;color:var(--navy);">'+m.hours.toFixed(2)+'h</div>';
+          html+='<div style="font-size:14px;font-weight:700;color:var(--ink-strong);">'+m.hours.toFixed(2)+'h</div>';
           html+='</div>';
         });
         html+='</div></div>';
@@ -20421,7 +20444,7 @@ function renderProjects(){
         breakdown.weeks.forEach(function(w){
           html+='<div style="background:var(--surface);border-radius:8px;padding:8px 10px;">';
           html+='<div style="font-size:10px;color:var(--text2);margin-bottom:2px;">'+escHtml(w.label)+'</div>';
-          html+='<div style="font-size:14px;font-weight:700;color:var(--navy);">'+w.hours.toFixed(2)+'h</div>';
+          html+='<div style="font-size:14px;font-weight:700;color:var(--ink-strong);">'+w.hours.toFixed(2)+'h</div>';
           html+='</div>';
         });
         html+='</div></div>';
@@ -20449,7 +20472,7 @@ function renderProjects(){
           if(entry.pending){
             html+='<div style="font-size:12px;font-weight:700;color:var(--yellow);text-align:right;background:var(--gt);padding:2px 6px;border-radius:5px;">⏳ Pending</div>';
           }else{
-            html+='<div style="font-size:13px;font-weight:700;color:var(--navy);text-align:right;">'+entry.hours.toFixed(2)+'h</div>';
+            html+='<div style="font-size:13px;font-weight:700;color:var(--ink-strong);text-align:right;">'+entry.hours.toFixed(2)+'h</div>';
           }
           html+='<div style="display:flex;gap:2px;">'            +'<button onclick="showEditEntryModal('+idx+','+realIdx+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 4px;" title="Edit">&#9998;</button>'            +'<button onclick="deleteLogEntry('+idx+','+realIdx+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 4px;" title="Remove">&#215;</button>'            +'</div>';
           html+='</div>';
@@ -20470,8 +20493,8 @@ function showNewProjectModal(){
   var overlay=document.createElement('div');
   overlay.id='projectModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#128193; New Project</div>'
+  overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:18px;">&#128193; New Project</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Project Name *</label>'
@@ -20489,8 +20512,8 @@ function showNewProjectModal(){
     +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
-    +'<button onclick="document.getElementById(\'projectModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveNewProject()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Create Project</button>'
+    +'<button onclick="document.getElementById(\'projectModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveNewProject()" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Create Project</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(overlay);
@@ -20524,8 +20547,8 @@ function showEditProjectModal(projIdx){
   var overlay=document.createElement('div');
   overlay.id='projectEditModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#9998; Edit Project</div>'
+  overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:18px;">&#9998; Edit Project</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Project Name *</label>'
@@ -20543,8 +20566,8 @@ function showEditProjectModal(projIdx){
     +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
-    +'<button onclick="document.getElementById(\'projectEditModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveProjectEdits('+projIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'
+    +'<button onclick="document.getElementById(\'projectEditModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveProjectEdits('+projIdx+')" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(overlay);
@@ -20589,8 +20612,8 @@ function showAddEntryModal(projIdx){
   var overlay=document.createElement('div');
   overlay.id='entryModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">+ Log Hours</div>'
+  overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:4px;">+ Log Hours</div>'
     +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(proj.name)+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div>'
@@ -20599,7 +20622,7 @@ function showAddEntryModal(projIdx){
     +'</div>'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee *</label>'
-    +'<select id="entryEmp" onchange="autoFetchHours('+projIdx+')" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;">'
+    +'<select id="entryEmp" onchange="autoFetchHours('+projIdx+')" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--sur);">'
     +'<option value="">— Select employee —</option>'+empOptions
     +'</select>'
     +'</div>'
@@ -20615,8 +20638,8 @@ function showAddEntryModal(projIdx){
     +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
-    +'<button onclick="document.getElementById(\'entryModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveLogEntry('+projIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Entry</button>'
+    +'<button onclick="document.getElementById(\'entryModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveLogEntry('+projIdx+')" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Entry</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(overlay);
@@ -20651,15 +20674,15 @@ function autoFetchHours(projIdx){
     var html='<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;">This employee worked multiple positions today — select which applies:</div>';
     result.entries.forEach(function(e,i){
       html+='<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;cursor:pointer;margin-bottom:6px;font-size:13px;" onclick="selectPositionHours('+e.paid+',\''+e.pos+'\',this)">'
-        +'<input type="radio" name="posPick" value="'+e.paid+'" style="accent-color:var(--navy);">'
+        +'<input type="radio" name="posPick" value="'+e.paid+'" style="accent-color:var(--ink-strong);">'
         +'<span style="font-weight:600;flex:1;">'+e.pos+'</span>'
-        +'<span style="font-weight:700;color:var(--navy);">'+e.paid.toFixed(2)+'h</span>'
+        +'<span style="font-weight:700;color:var(--ink-strong);">'+e.paid.toFixed(2)+'h</span>'
         +'</label>';
     });
     html+='<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;cursor:pointer;margin-bottom:6px;font-size:13px;" onclick="selectPositionHours('+result.total+',\'All positions\',this)">'
-      +'<input type="radio" name="posPick" value="'+result.total+'" style="accent-color:var(--navy);">'
+      +'<input type="radio" name="posPick" value="'+result.total+'" style="accent-color:var(--ink-strong);">'
       +'<span style="font-weight:600;flex:1;color:var(--text3);">Total (all positions)</span>'
-      +'<span style="font-weight:700;color:var(--navy);">'+result.total.toFixed(2)+'h</span>'
+      +'<span style="font-weight:700;color:var(--ink-strong);">'+result.total.toFixed(2)+'h</span>'
       +'</label>';
     if(posPickEl)posPickEl.innerHTML=html;
   }
@@ -20739,7 +20762,7 @@ function showEditEntryModal(projIdx, entryIdx){
   var overlay=document.createElement('div');
   overlay.id='editEntryModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">&#9998; Edit Entry</div>'    +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(proj.name)+'</div>'    +'<div style="display:flex;flex-direction:column;gap:13px;">'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date</label>'    +'<input id="editEntryDate" type="date" value="'+entry.date+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee</label>'    +'<input id="editEntryEmp" value="'+escHtml(entry.empName)+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--surface);" readonly />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Hours '+(entry.pending?'<span style="color:var(--yellow);">⏳ Pending</span>':'')+' </label>'    +'<input id="editEntryHours" type="number" step="0.01" min="0" max="24" value="'+(entry.hours!==null&&entry.hours!==undefined?entry.hours:'')+'" placeholder="Leave empty to keep as pending" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +historyHtml    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'    +'<input id="editEntryNote" value="'+escHtml(entry.note||'')+'" placeholder="e.g. Deep cleaned floors 3-5" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'</div>'    +'<div style="display:flex;gap:8px;margin-top:20px;">'    +'<button onclick="closeEditEntryModal()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'    +'<button onclick="saveEditEntry('+projIdx+','+entryIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'    +'</div>'    +'</div>';
+  overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:4px;">&#9998; Edit Entry</div>'    +'<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">'+escHtml(proj.name)+'</div>'    +'<div style="display:flex;flex-direction:column;gap:13px;">'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date</label>'    +'<input id="editEntryDate" type="date" value="'+entry.date+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee</label>'    +'<input id="editEntryEmp" value="'+escHtml(entry.empName)+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--surface);" readonly />'    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Hours '+(entry.pending?'<span style="color:var(--yellow);">⏳ Pending</span>':'')+' </label>'    +'<input id="editEntryHours" type="number" step="0.01" min="0" max="24" value="'+(entry.hours!==null&&entry.hours!==undefined?entry.hours:'')+'" placeholder="Leave empty to keep as pending" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +historyHtml    +'</div>'    +'<div>'    +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Note (optional)</label>'    +'<input id="editEntryNote" value="'+escHtml(entry.note||'')+'" placeholder="e.g. Deep cleaned floors 3-5" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'    +'</div>'    +'</div>'    +'<div style="display:flex;gap:8px;margin-top:20px;">'    +'<button onclick="closeEditEntryModal()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'    +'<button onclick="saveEditEntry('+projIdx+','+entryIdx+')" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Changes</button>'    +'</div>'    +'</div>';
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
 }
@@ -20794,12 +20817,12 @@ function showExportPDFModal(projIdx){
   var overlay=document.createElement('div');
   overlay.id='exportPdfModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#128196; Export PDF Report</div>'
+  overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:18px;">&#128196; Export PDF Report</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Period</label>'
-    +'<select id="exportPdfScope" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;">'
+    +'<select id="exportPdfScope" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--sur);">'
     +'<option value="full">Full Project ('+proj.startDate+' → '+proj.endDate+')</option>'
     +(monthOpts?'<optgroup label="By Month">'+monthOpts+'</optgroup>':'')
     +(weekOpts?'<optgroup label="By Week (Sat–Fri)">'+weekOpts+'</optgroup>':'')
@@ -20807,8 +20830,8 @@ function showExportPDFModal(projIdx){
     +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
-    +'<button onclick="document.getElementById(\'exportPdfModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="confirmExportPDF('+projIdx+')" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Generate PDF</button>'
+    +'<button onclick="document.getElementById(\'exportPdfModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="confirmExportPDF('+projIdx+')" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Generate PDF</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(overlay);
@@ -21065,7 +21088,7 @@ function cofJumpToFilter(tab,key){
 function _buildCofTabsHTML(){
   function tabBtn(key,icon,label){
     var active=COF_TAB===key;
-    return '<button onclick="setCofTab(\''+key+'\')" style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:700;color:'+(active?'var(--navy)':'var(--text3)')+';border-bottom:2.5px solid '+(active?'var(--navy)':'transparent')+';">'+icon+' '+label+'</button>';
+    return '<button onclick="setCofTab(\''+key+'\')" style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:700;color:'+(active?'var(--ink-strong)':'var(--text3)')+';border-bottom:2.5px solid '+(active?'var(--navy)':'transparent')+';">'+icon+' '+label+'</button>';
   }
   return '<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--border);">'
     +tabBtn('calloffs','&#128222;','Call-Offs')
@@ -21093,7 +21116,7 @@ function renderCallOffs(){
 
   var html=tabsHtml;
   html+='<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
-    +'<button onclick="showNewCallOffModal()" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Call-Off</button>'
+    +'<button onclick="showNewCallOffModal()" style="background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Call-Off</button>'
     +'</div>';
 
   if(list.length===0){
@@ -21119,7 +21142,7 @@ function renderCallOffs(){
   html+='<div class="card" style="margin-bottom:14px;"><div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">';
   html+='<div style="flex:1;min-width:180px;">';
   html+='<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Filter by employee</label>';
-  html+='<select id="coFilterEmp" onchange="setCallOffFilter(this.value)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;">';
+  html+='<select id="coFilterEmp" onchange="setCallOffFilter(this.value)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--sur);">';
   html+='<option value="all"'+(COF_FILTER==='all'?' selected':'')+'>— All employees —</option>';
   empKeys.forEach(function(k){
     html+='<option value="'+escHtml(k)+'"'+(COF_FILTER===k?' selected':'')+'>'+escHtml(byEmp[k].empName)+' ('+byEmp[k].count+')</option>';
@@ -21143,7 +21166,7 @@ function renderCallOffs(){
     var barH=Math.round((dowCounts[i]/maxDow)*56)+6;
     var isPeak=dowCounts[i]>0&&dowCounts[i]===maxDow;
     html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'
-      +'<div style="font-size:11px;font-weight:800;color:'+(isPeak?'var(--red)':'var(--navy)')+';">'+dowCounts[i]+'</div>'
+      +'<div style="font-size:11px;font-weight:800;color:'+(isPeak?'var(--red)':'var(--ink-strong)')+';">'+dowCounts[i]+'</div>'
       +'<div style="width:100%;background:'+(isPeak?'var(--red)':'var(--navy)')+';opacity:'+(isPeak?'1':'.55')+';border-radius:4px;height:'+barH+'px;"></div>'
       +'<div style="font-size:9px;color:var(--text3);font-weight:700;">'+dn.substring(0,3)+'</div>'
       +'</div>';
@@ -21307,8 +21330,8 @@ function showNewCallOffModal(){
   var overlay=document.createElement('div');
   overlay.id='callOffModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#128222; New Call-Off</div>'
+  overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:18px;">&#128222; New Call-Off</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date *</label>'
@@ -21319,7 +21342,7 @@ function showNewCallOffModal(){
     +'<div style="position:relative;">'
     +'<input id="coEmpSearch" type="text" autocomplete="off" placeholder="&#128269; Search employee by name…" oninput="coEmpFilter()" onfocus="coEmpOpenList()" onblur="setTimeout(coEmpCloseList,150)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">'
     +'<input type="hidden" id="coEmp" value="">'
-    +'<div id="coEmpList" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.15);"></div>'
+    +'<div id="coEmpList" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--sur);border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.15);"></div>'
     +'</div>'
     +'</div>'
     +'<div>'
@@ -21333,8 +21356,8 @@ function showNewCallOffModal(){
     +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
-    +'<button onclick="document.getElementById(\'callOffModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveNewCallOff()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Call-Off</button>'
+    +'<button onclick="document.getElementById(\'callOffModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveNewCallOff()" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Call-Off</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(overlay);
@@ -21595,7 +21618,7 @@ function _buildLateArrivalsHTML(){
   _laKeyEmployees(list);
 
   var html='<div style="display:flex;justify-content:flex-end;margin-bottom:16px;">'
-    +'<button onclick="showNewLateArrivalModal()" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Tardiness</button>'
+    +'<button onclick="showNewLateArrivalModal()" style="background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;">&#43; New Tardiness</button>'
     +'</div>';
 
   if(list.length===0){
@@ -21619,7 +21642,7 @@ function _buildLateArrivalsHTML(){
   html+='<div class="card" style="margin-bottom:14px;"><div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">';
   html+='<div style="flex:1;min-width:180px;">';
   html+='<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Filter by employee</label>';
-  html+='<select id="laFilterEmp" onchange="setLaFilter(this.value)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:#fff;">';
+  html+='<select id="laFilterEmp" onchange="setLaFilter(this.value)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;background:var(--sur);">';
   html+='<option value="all"'+(LA_FILTER==='all'?' selected':'')+'>— All employees —</option>';
   empKeys.forEach(function(k){
     html+='<option value="'+escHtml(k)+'"'+(LA_FILTER===k?' selected':'')+'>'+escHtml(byEmp[k].empName)+' ('+byEmp[k].count+')</option>';
@@ -21639,7 +21662,7 @@ function _buildLateArrivalsHTML(){
     var barH=Math.round((dowCounts[i]/maxDow)*56)+6;
     var isPeak=dowCounts[i]>0&&dowCounts[i]===maxDow;
     html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'
-      +'<div style="font-size:11px;font-weight:800;color:'+(isPeak?'var(--red)':'var(--navy)')+';">'+dowCounts[i]+'</div>'
+      +'<div style="font-size:11px;font-weight:800;color:'+(isPeak?'var(--red)':'var(--ink-strong)')+';">'+dowCounts[i]+'</div>'
       +'<div style="width:100%;background:'+(isPeak?'var(--red)':'var(--navy)')+';opacity:'+(isPeak?'1':'.55')+';border-radius:4px;height:'+barH+'px;"></div>'
       +'<div style="font-size:9px;color:var(--text3);font-weight:700;">'+dn.substring(0,3)+'</div>'
       +'</div>';
@@ -21799,8 +21822,8 @@ function _buildCofOverviewHTML(){
       +'<td style="text-align:center;'+(e.laCount>0?'font-weight:800;color:var(--red);':'color:var(--text3);')+'">'+e.laCount+'</td>'
       +'<td style="text-align:center;">'+(avg!=null?avg:'—')+'</td>'
       +'<td style="white-space:nowrap;text-align:right;">'
-      +(e.coCount>0?'<button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--navy);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Call-Offs</button> ':'')
-      +(e.laCount>0?'<button onclick="cofJumpToFilter(\'latearrivals\',\''+keyJs+'\')" style="background:none;border:none;color:var(--navy);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Tardiness</button>':'')
+      +(e.coCount>0?'<button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--ink-strong);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Call-Offs</button> ':'')
+      +(e.laCount>0?'<button onclick="cofJumpToFilter(\'latearrivals\',\''+keyJs+'\')" style="background:none;border:none;color:var(--ink-strong);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Tardiness</button>':'')
       +'</td>'
       +'</tr>';
   });
@@ -21883,8 +21906,8 @@ function showNewLateArrivalModal(){
   var overlay=document.createElement('div');
   overlay.id='lateArrivalModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
-  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px;">&#9203; New Tardiness</div>'
+  overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:18px;">&#9203; New Tardiness</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date *</label>'
@@ -21895,7 +21918,7 @@ function showNewLateArrivalModal(){
     +'<div style="position:relative;">'
     +'<input id="laEmpSearch" type="text" autocomplete="off" placeholder="&#128269; Search employee by name…" oninput="laEmpFilter()" onfocus="laEmpOpenList()" onblur="setTimeout(laEmpCloseList,150)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">'
     +'<input type="hidden" id="laEmp" value="">'
-    +'<div id="laEmpList" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.15);"></div>'
+    +'<div id="laEmpList" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--sur);border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.15);"></div>'
     +'</div>'
     +'</div>'
     +'<div>'
@@ -21905,8 +21928,8 @@ function showNewLateArrivalModal(){
     +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
-    +'<button onclick="document.getElementById(\'lateArrivalModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveNewLateArrival()" style="flex:2;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Tardiness</button>'
+    +'<button onclick="document.getElementById(\'lateArrivalModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
+    +'<button onclick="saveNewLateArrival()" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Tardiness</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(overlay);
@@ -22074,7 +22097,7 @@ function showNewEmployeeModal(newEmps, pdfDate){
   var rows=newEmps.map(function(e,i){
     return '<div style="background:var(--surface);border:1.5px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;" id="newEmpRow_'+i+'">'
       +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
-      +'<div style="background:var(--gl);color:var(--ink-strong);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;">N</div>'
+      +'<div style="background:var(--gl);color:var(--on-accent);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;">N</div>'
       +'<div style="flex:1;">'
       +'<div style="font-size:14px;font-weight:700;color:var(--text1);">'+escHtml(e.name)+'</div>'
       +'<div style="font-size:11px;color:var(--text3);">ID: '+e.id+' &nbsp;·&nbsp; PDF position: <strong>'+escHtml(e.pos)+'</strong> &nbsp;·&nbsp; Paid: '+e.paid.toFixed(2)+'h</div>'
@@ -23101,11 +23124,11 @@ function dlSectionRotationCard(ds){
   var cfg=loadSectionRotation();
   var lines=SECTION_ROTATION_ROLE_KEYS.map(function(role){
     var rows=sectionRotationAssignment(cfg,ds,role);
-    var parts=rows.map(function(r){return '<span style="white-space:nowrap;">'+escHtml(r.band)+': '+escHtml(r.name||'—')+'</span>';}).join('<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>');
+    var parts=rows.map(function(r){return '<span style="white-space:nowrap;">'+escHtml(r.band)+': '+escHtml(r.name||'—')+'</span>';}).join('<span style="color:var(--text3);">&nbsp;&middot;&nbsp;</span>');
     var fixedSlots=(cfg.fixed&&cfg.fixed[role])||[];
     if(fixedSlots.length){
-      var fixedParts=fixedSlots.map(function(s){return '<span style="white-space:nowrap;">'+escHtml(s.label)+': '+escHtml(s.name||'—')+'</span>';}).join('<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>');
-      parts+='<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>'+fixedParts;
+      var fixedParts=fixedSlots.map(function(s){return '<span style="white-space:nowrap;">'+escHtml(s.label)+': '+escHtml(s.name||'—')+'</span>';}).join('<span style="color:var(--text3);">&nbsp;&middot;&nbsp;</span>');
+      parts+='<span style="color:var(--text3);">&nbsp;&middot;&nbsp;</span>'+fixedParts;
     }
     return '<div style="margin-top:2px;"><b>'+escHtml(SECTION_ROTATION_ROLE_LABELS[role])+':</b> '+parts+'</div>';
   }).join('');
@@ -27548,7 +27571,7 @@ function _schedUfCellHTML(SCH,ufPos,bk,ds){
   if(!SCH.days[ds])return '';
   var actual=schedDayTotal(SCH,ds,bk);
   var std=ufPos.shiftIndex==null?schedUfExpected(SCH,ufPos.label,ds):schedUfExpectedForShift(SCH,ufPos.label,ufPos.shiftIndex,ds);
-  if(std==null)return '<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>';
+  if(std==null)return '<div style="text-align:center;color:var(--text3);font-size:10px;">&middot;</div>';
   var diff=actual-std;
   var c=_ufDiffColor(diff);
   /* The word itself, not just the color — Carlos's ask, this is the row
@@ -27568,16 +27591,16 @@ function _schedUfCellHTML(SCH,ufPos,bk,ds){
    Supervisor over on the sup crew, where it has always been gold and
    Carlos didn't ask for that to change. */
 var SCHED_MGR_SHIFT_CSS={
-  'OPEN':'border:1px solid #0F766E;background:#E0F2F1;color:#0F766E;',
+  'OPEN':'border:1px solid #0F766E;background:var(--green-bg);color:#0F766E;',
   /* Deep, saturated blue — FLEX is also blue (#2E6DA4) and sits in this
      same dropdown, so AM is pushed darker to stay tellable apart. */
-  'AM'  :'border:1px solid #0D47A1;background:#DCE9F9;color:#0D47A1;',
+  'AM'  :'border:1px solid #0D47A1;background:var(--indigo-bg);color:#0D47A1;',
   'MID' :'border:1px solid var(--gold);background:var(--gt);color:var(--gd);',
   /* Deep rose, deliberately NOT var(--purple) — VAC already owns purple
      in this very same dropdown, and a PM manager reading the same color
      as a manager on vacation is exactly the confusion this feature is
      meant to remove. */
-  'PM'  :'border:1px solid #A21B57;background:#FCE7F0;color:#A21B57;'
+  'PM'  :'border:1px solid #A21B57;background:var(--purple-bg);color:#A21B57;'
 };
 function _schedCellCss(v,bk){
   var base='width:100%;min-width:0;padding:3px 2px;font-size:10.5px;font-weight:700;text-align:center;'
@@ -27590,7 +27613,7 @@ function _schedCellCss(v,bk){
   if(v==='OFF'||v==='off') return base+'border:1px solid var(--border);background:var(--s3);color:var(--text3);';
   if(v==='R-OFF')  return base+'border:1px solid var(--border2);background:var(--s3);color:var(--text2);';
   if(v==='CALL-OFF') return base+'border:1px solid var(--red-border);background:var(--red-bg);color:var(--red);';
-  if(v==='FLEX')   return base+'border:1px solid #2E6DA4;background:#EAF2FA;color:#2E6DA4;';
+  if(v==='FLEX')   return base+'border:1px solid #2E6DA4;background:var(--s3);color:#2E6DA4;';
   if(v==='VAC')    return base+'border:1px solid var(--purple);background:var(--purple-bg);color:var(--purple);';
   if(v==='')       return base+'border:1px dashed var(--border2);background:transparent;color:var(--text3);';
   /* Carlos's ask, 2026-10-11: a trainee on this crew — shown in her own
@@ -27831,7 +27854,7 @@ function renderSchedule(){
     var dropVal=day.drop||'';
     html+='<input type="number" min="0" value="'+escHtml(dropVal)+'" onchange="schedSetDrop(\''+ds+'\',this.value)"'
       +' style="width:100%;min-width:0;padding:3px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--text2);'
-      +'border:1px solid '+(dropVal?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(dropVal?'var(--gt)':'#fff')+';box-sizing:border-box;font-family:inherit;">';
+      +'border:1px solid '+(dropVal?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(dropVal?'var(--gt)':'var(--sur)')+';box-sizing:border-box;font-family:inherit;">';
   });
   html+='</div>';
   /* Carlos's ask: the rest of Turndown Rooms is now fully automatic
@@ -28120,7 +28143,7 @@ function renderSchedule(){
         var cell=day&&day[b.key]&&(day[b.key][idx]&&dlNormAlias(day[b.key][idx][0])===dlNormAlias(nm)
                  ? day[b.key][idx]
                  : day[b.key].filter(function(q){return dlNormAlias(q[0])===dlNormAlias(nm);})[0]);
-        if(!cell){ html+='<div style="text-align:center;color:var(--border2);font-size:10px;">&middot;</div>'; return; }
+        if(!cell){ html+='<div style="text-align:center;color:var(--text3);font-size:10px;">&middot;</div>'; return; }
         var v=String(cell[1]||'').trim();
         var opts=schedValuesFor(b.key).slice();
         if(v&&opts.indexOf(v)===-1)opts.push(v);
@@ -29075,7 +29098,7 @@ function renderReqNotebook(){
   ['roff','flex','vac'].forEach(function(t){
     var active=(rnSelectedType===t);
     var col=RN_TYPE_COLOR[t];
-    html+='<button type="button" onclick="rnSetType(\''+t+'\')" style="flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid '+(active?col.dot:'var(--border)')+';background:'+(active?col.bg:'#fff')+';color:'+(active?col.text:'var(--text1)')+';">'+rnTypeLabel(t)+'</button>';
+    html+='<button type="button" onclick="rnSetType(\''+t+'\')" style="flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid '+(active?col.dot:'var(--border)')+';background:'+(active?col.bg:'var(--sur)')+';color:'+(active?col.text:'var(--text1)')+';">'+rnTypeLabel(t)+'</button>';
   });
   html+='</div>';
 
@@ -29208,10 +29231,10 @@ function renderDailyLineup(){
     html+='</div>';
     function step(n,label,detail,ok,inputId){
       return '<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid var(--border);flex-wrap:wrap;">'
-        +'<div style="width:26px;height:26px;border-radius:50%;background:'+(ok?'var(--green)':'var(--navy)')+';color:var(--on-fill);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(ok?'&#10003;':n)+'</div>'
+        +'<div style="width:26px;height:26px;border-radius:50%;background:'+(ok?'var(--green)':'var(--navy)')+';color:'+(ok?'var(--on-accent)':'var(--on-fill)')+';font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(ok?'&#10003;':n)+'</div>'
         +'<div style="flex:1;min-width:140px;"><div style="font-size:13px;font-weight:700;color:var(--text1);">'+label+'</div>'
         +'<div style="font-size:11px;color:var(--text3);margin-top:1px;">'+detail+'</div></div>'
-        +'<button onclick="document.getElementById(\''+inputId+'\').click()" style="padding:8px 16px;background:'+(ok?'#fff':'var(--navy)')+';color:'+(ok?'var(--text1)':'#fff')+';border:1px solid '+(ok?'var(--border)':'var(--navy)')+';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">'+(ok?'Replace':'Choose file')+'</button></div>';
+        +'<button onclick="document.getElementById(\''+inputId+'\').click()" style="padding:8px 16px;background:'+(ok?'var(--sur)':'var(--navy)')+';color:'+(ok?'var(--text1)':'#fff')+';border:1px solid '+(ok?'var(--border)':'var(--navy)')+';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">'+(ok?'Replace':'Choose file')+'</button></div>';
     }
     html+=step(1,'Section assignment',
       S?Object.keys(S.gra).length+' floors loaded':'Who owns which floor. Changes only when sections rotate.',
@@ -29253,7 +29276,7 @@ function renderDailyLineup(){
   /* ── actions ── */
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
   html+='<button onclick="dlPrint()" style="padding:9px 16px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#128424; Print</button>';
-  html+='<button onclick="dlExportExcel()" style="padding:9px 16px;background:var(--gold);color:var(--on-fill);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#128196; Generate Excel</button>';
+  html+='<button onclick="dlExportExcel()" style="padding:9px 16px;background:var(--gold);color:var(--on-accent);border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#128196; Generate Excel</button>';
   html+='</div>';
 
   /* Summary tiles — same card language as every other page's headline
@@ -29301,7 +29324,7 @@ function renderDailyLineup(){
     return '<input type="text" inputmode="numeric" value="'+escHtml(val||'')+'"'
       +' onchange="dlSetLady(\''+key+'\',\''+field+'\',this.value)"'
       +' style="width:100%;min-width:0;padding:2px 1px;font-size:10.5px;font-weight:700;text-align:center;color:var(--ink-strong);'
-      +'border:1px solid '+(val?'#C9A84C':'var(--border)')+';border-radius:4px;background:'+(val?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+      +'border:1px solid '+(val?'#C9A84C':'var(--border)')+';border-radius:4px;background:'+(val?'var(--gt)':'var(--sur)')+';box-sizing:border-box;">';
   }
   /* The .XX in an average like "43.33 each" is not a real number anyone
      gets — it's what's left over after splitting evenly, and someone
@@ -29327,7 +29350,7 @@ function renderDailyLineup(){
   function numBox(key,val,gold,ttl){
     return '<input type="number" min="0" value="'+escHtml(val)+'" title="'+ttl+'" onchange="dlSetOcc(\''+key+'\',this.value)"'
       +' style="width:100%;min-width:0;padding:4px 3px;font-size:12px;font-weight:800;text-align:center;color:var(--ink-strong);border:1px solid '
-      +(gold?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(gold?'var(--gt)':'#fff')+';box-sizing:border-box;">';
+      +(gold?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(gold?'var(--gt)':'var(--sur)')+';box-sizing:border-box;">';
   }
   html+='<div style="padding:9px 16px;overflow-x:auto;">';
   html+='<div style="min-width:400px;">';
@@ -29367,7 +29390,7 @@ function renderDailyLineup(){
      on the Assignments page. ── */
   function dlRoleBlock(label,arr,each){
     var has=arr&&arr.length;
-    var names=has?arr.map(function(n,i){return '<span style="white-space:nowrap;">'+(i+1)+'. '+escHtml(n)+'</span>';}).join('<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>') : '<span style="color:var(--text3);font-style:italic;">nobody in</span>';
+    var names=has?arr.map(function(n,i){return '<span style="white-space:nowrap;">'+(i+1)+'. '+escHtml(n)+'</span>';}).join('<span style="color:var(--text3);">&nbsp;&middot;&nbsp;</span>') : '<span style="color:var(--text3);font-style:italic;">nobody in</span>';
     return '<div style="border-left:3px solid '+(has?'var(--gold)':'var(--border2)')+';background:'+(has?'var(--surface)':'transparent')+';border-radius:0 6px 6px 0;padding:6px 10px;margin-bottom:6px;">'
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;">'
       +'<span style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;">'+label+'</span>'
@@ -29391,7 +29414,7 @@ function renderDailyLineup(){
             +'<input type="text" value="'+escHtml(val)+'" placeholder="floors" title="Which floors '+escHtml(n)+' ends up covering"'
             +' onchange="dlSetFloors(\''+escHtml(n).replace(/'/g,"\\'")+'\',this.value)"'
             +' style="width:110px;padding:2px 6px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '
-            +(val?'#C9A84C':'var(--border2)')+';border-radius:5px;background:'+(val?'var(--gt)':'#fff')+';">'
+            +(val?'#C9A84C':'var(--border2)')+';border-radius:5px;background:'+(val?'var(--gt)':'var(--sur)')+';">'
             +'</div>';
         }).join('')
       : '<div style="color:var(--text3);font-style:italic;font-size:12px;margin-top:3px;">nobody in'
@@ -29420,7 +29443,7 @@ function renderDailyLineup(){
   html+=dlRoleBlock('Turndown',P.td, P.td.length
     ? '<input type="number" min="0" value="'+escHtml(P.tdOcc)+'" title="Rooms occupied that night — turndown\'s own figure, not To Clean"'
       +' onchange="dlSetOcc(\'tdOcc\',this.value)" style="width:56px;padding:2px 4px;font-size:11px;font-weight:800;text-align:center;color:var(--ink-strong);border:1px solid '
-      +(P.tdOccAuto?'var(--border)':'#C9A84C')+';border-radius:5px;background:'+(P.tdOccAuto?'#fff':'var(--gt)')+';">'
+      +(P.tdOccAuto?'var(--border)':'#C9A84C')+';border-radius:5px;background:'+(P.tdOccAuto?'var(--sur)':'var(--gt)')+';">'
       +' rooms &rarr; '+dlEach(P.tdOcc,P.td.length,'')
     : '');
   html+=dlRoleBlock('Overnight',P.night);
@@ -29432,7 +29455,7 @@ function renderDailyLineup(){
      loose wrap of chips. This is the one part of the page he'd recognize
      on sight, so it gets his own layout, not a reinvented one. ── */
   html+=dlBar('GRA Sections', ladies
-    ? dlEach(P.toClean,ladies,'rooms')+'<span style="color:var(--border2);">&nbsp;&middot;&nbsp;</span>'+dlEach(P.toCleanDep,ladies,'departures')
+    ? dlEach(P.toClean,ladies,'rooms')+'<span style="color:var(--text3);">&nbsp;&middot;&nbsp;</span>'+dlEach(P.toCleanDep,ladies,'departures')
     : '');
   var LEFT_FLOORS=DL_FLOORS.slice(0,11), RIGHT_FLOORS=DL_FLOORS.slice(11);
   var task=0, taskFor={};
@@ -29495,7 +29518,7 @@ function renderDailyLineup(){
       var cur=(P.assign||{})[f]||'';
       html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap;">';
       html+='<span style="font-size:12px;font-weight:700;color:var(--text1);min-width:80px;">'+escHtml(f)+'</span>';
-      html+='<select onchange="dlAssignFloater(\''+escHtml(f).replace(/'/g,"\\'")+'\',this.value)" style="padding:4px 8px;font-size:11px;font-family:inherit;border:1px solid '+(cur?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(cur?'var(--gt)':'#fff')+';color:var(--text1);">';
+      html+='<select onchange="dlAssignFloater(\''+escHtml(f).replace(/'/g,"\\'")+'\',this.value)" style="padding:4px 8px;font-size:11px;font-family:inherit;border:1px solid '+(cur?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(cur?'var(--gt)':'var(--sur)')+';color:var(--text1);">';
       html+='<option value="">— not placed —</option>';
       var opts=freeFloors.slice();
       if(cur&&opts.indexOf(cur)===-1)opts.push(cur);
@@ -29531,7 +29554,7 @@ function renderDailyLineup(){
     html+='<div><div style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;">'+f.label+'</div>'
       +'<input type="text" value="'+escHtml(val)+'" placeholder="1204, 1508&hellip;" onchange="dlSetExtra(\''+f.key+'\',this.value)"'
       +' style="width:100%;padding:5px 7px;font-size:11px;font-family:inherit;color:var(--text1);border:1px solid '
-      +(val?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(val?'var(--gt)':'#fff')+';box-sizing:border-box;"></div>';
+      +(val?'#C9A84C':'var(--border)')+';border-radius:6px;background:'+(val?'var(--gt)':'var(--sur)')+';box-sizing:border-box;"></div>';
   });
   html+='</div>';
   html+='</div>';
