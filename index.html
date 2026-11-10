@@ -6,8 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.112.1"/>
-<meta name="theme-color" content="#1E2D4A"/>
+<meta name="app-version" content="7.112.2"/>
+<meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
 <link rel="apple-touch-icon" href="./icon-180.png"/>
@@ -665,8 +665,8 @@ tbody tr:hover td{background:var(--surface);}
 /* Collapsible sidebar on large screens (iPad/desktop) */
 body.sb-collapsed .sidebar{transform:translateX(-100%);}
 body.sb-collapsed .main-wrap{margin-left:0;width:100%;}
-.notif-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--gold);color:var(--on-accent);border:none;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:40px;gap:7px;white-space:nowrap;box-shadow:0 2px 6px rgba(30,45,74,.15);transition:.18s;}
-.notif-btn:hover{background:var(--gl);transform:translateY(-1px);box-shadow:0 4px 10px rgba(30,45,74,.2);}
+.notif-btn{display:inline-flex;align-items:center;justify-content:center;background:var(--gold);color:var(--on-accent);border:none;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;min-height:40px;gap:7px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.35);transition:.18s;}
+.notif-btn:hover{background:var(--gl);transform:translateY(-1px);box-shadow:0 4px 10px rgba(0,0,0,.45);}
 .notif-btn:active{transform:scale(.97);}
 @media(max-width:480px){.notif-btn{padding:8px 12px;font-size:13px;min-height:36px;}.upload-text{display:none;}}
 .notif-wrap{position:relative;}
@@ -1094,12 +1094,12 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
 .bm-smile{position:absolute;width:8px;height:4px;border-bottom:1.5px solid #7f4a35;border-radius:50%;left:22px;top:32px;z-index:7;}
 .bm-hat{position:absolute;left:20px;top:-9px;width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-bottom:20px solid var(--gold);transform:rotate(8deg);z-index:8;}
 .bm-hat:after{content:"";position:absolute;top:-6px;left:-3px;width:6px;height:6px;border-radius:50%;background:var(--sur);}
-.bm-torso{position:absolute;width:32px;height:39px;left:14px;top:41px;background:#1E2D4A;border-radius:9px 9px 7px 7px;z-index:3;}
+.bm-torso{position:absolute;width:32px;height:39px;left:14px;top:41px;background:#232B3C;border-radius:9px 9px 7px 7px;z-index:3;}
 .bm-apron{position:absolute;width:33px;height:20px;left:13.5px;top:63px;background:#c9a56b;border-radius:2px 2px 7px 7px;z-index:4;}
 .bm-arm{position:absolute;width:8px;height:34px;background:#d99a6c;border-radius:6px;z-index:2;}
 .bm-arm.bm-back{left:9px;top:44px;transform:rotate(20deg);}
 .bm-arm.bm-front{left:39px;top:34px;transform-origin:4px 4px;transform:rotate(-150deg);animation:bm-wave 1.8s ease-in-out infinite;}
-.bm-leg{position:absolute;width:11px;height:29px;top:78px;background:#1E2D4A;border-radius:5px;z-index:2;}
+.bm-leg{position:absolute;width:11px;height:29px;top:78px;background:#232B3C;border-radius:5px;z-index:2;}
 .bm-leg.bm-left{left:17px;transform:rotate(5deg)}
 .bm-leg.bm-right{left:31px;transform:rotate(-4deg)}
 .bm-shoe{position:absolute;width:14px;height:6px;background:#1d1d1d;border-radius:5px 5px 2px 2px;top:104px;z-index:3;}
@@ -1190,7 +1190,13 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
      touch the rest of the app's styles. ══ -->
 <style id="hklLoaderStyle">
   #appLoader{
-    --hkl-navy:#1f3457; --hkl-navy-dark:#142642;
+    /* Carlos, 2026-11-09: no navy blue anywhere — including here. This
+       loader is its own isolated illustration (deliberately namespaced so
+       it never touches the app's real tokens), so swapping --navy in
+       :root a moment ago didn't reach it. Same neutral slate family as
+       the rest of the dark theme, not a literal copy of --navy — this is
+       a standalone SVG-style illustration, not a themed surface. */
+    --hkl-navy:#232B3C; --hkl-navy-dark:#161C28;
     --hkl-gold:#d7b25a; --hkl-gold-light:#f0cf7a;
     --hkl-skin:#d99a6c; --hkl-hair:#2c211c;
     position:fixed; inset:0; z-index:100000;
@@ -3817,7 +3823,7 @@ function otCalendarHtml(weeks){
       wkPaid+=c.paid;wkOt+=c.ot;
       var hasOt=c.ot>0;
       cells+='<div style="text-align:center;padding:4px 2px;border-radius:4px;'
-        +(hasOt?'background:rgba(30,45,74,.09);border:1px solid var(--navy);':'background:var(--white);border:1px solid var(--border);')+'">'
+        +(hasOt?'background:rgba(27,34,48,.22);border:1px solid var(--navy);':'background:var(--white);border:1px solid var(--border);')+'">'
         +'<div style="font-size:8px;color:var(--text3);">'+DOW[i]+' '+c.date+'</div>'
         +'<div style="font-size:10.5px;font-weight:700;color:var(--text1);">'+c.paid.toFixed(2)+'h</div>'
         +(hasOt?'<div style="font-size:8px;font-weight:700;color:var(--ink-strong);">&#9201;+'+c.ot.toFixed(2)+'</div>':'')
@@ -3875,8 +3881,8 @@ function renderOtTrendChart(){
       labels:points.map(function(w){return w.label;}),
       datasets:[{
         data:points.map(function(w){return +w.totalOT.toFixed(2);}),
-        borderColor:'#1E2D4A',backgroundColor:'rgba(30,45,74,0.08)',
-        fill:true,tension:.25,pointRadius:3,pointBackgroundColor:'#1E2D4A',borderWidth:2
+        borderColor:'#A8B6F5',backgroundColor:'rgba(168,182,245,0.08)',
+        fill:true,tension:.25,pointRadius:3,pointBackgroundColor:'#A8B6F5',borderWidth:2
       }]
     },
     options:{
@@ -4803,6 +4809,12 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.112.2', date:'2026-11-09',
+    fixes:['Three more places were still navy blue, missed by the last update because none of them use the app\'s real colour system: the loading animation shown when the app first opens, the little mascot on the birthday card, and the colour the phone\'s status bar turns when the app is open.',
+      'Every chart that used navy — the Overtime trend line, the "worst day" bars on Overtime and Position Check, the Occupancy forecast comparison — now uses a soft lavender-blue instead, the same colour already used elsewhere for Part-Time and Training. A couple of pale background tints that marked "this cell has data loaded" also moved off navy, and were made a bit more visible against the dark background in the process.',
+      'Two button shadows that were quietly tinted navy are plain dark shadows now, matching how every other shadow in the app already works.']
+  },
   {
     v:'7.112.1', date:'2026-11-09',
     fixes:['Hovering over the menu briefly turned a section white and swallowed its label — a leftover rule from the old menu style that the dark theme exposed. Fixed, along with the matching problem on whichever page was currently selected.',
@@ -10102,7 +10114,7 @@ function renderDnds(){
         labels:byDow.map(function(b){return b.name.slice(0,3);}),
         datasets:[{
           data:byDow.map(function(b){return +b.avg.toFixed(2);}),
-          backgroundColor:byDow.map(function(b){return (worst&&b.dow===worst.dow&&b.n>0)?'#C9A84C':'#1E2D4A';}),
+          backgroundColor:byDow.map(function(b){return (worst&&b.dow===worst.dow&&b.n>0)?'#C9A84C':'#A8B6F5';}),
           borderRadius:4,borderWidth:0
         }]
       },
@@ -10127,8 +10139,8 @@ function renderDnds(){
         labels:byWeek.map(function(w){return w.start.toLocaleDateString('en-US',{month:'short',day:'numeric'});}),
         datasets:[{
           data:byWeek.map(function(w){return w.total;}),
-          borderColor:'#1E2D4A',backgroundColor:'rgba(30,45,74,0.08)',
-          fill:true,tension:.25,pointRadius:3,pointBackgroundColor:'#1E2D4A',borderWidth:2
+          borderColor:'#A8B6F5',backgroundColor:'rgba(168,182,245,0.08)',
+          fill:true,tension:.25,pointRadius:3,pointBackgroundColor:'#A8B6F5',borderWidth:2
         }]
       },
       options:{
@@ -10882,7 +10894,7 @@ function renderLateDep(){
         labels:byDow.map(function(b){return b.name.slice(0,3);}),
         datasets:[{
           data:byDow.map(function(b){return +b.avgPct.toFixed(1);}),
-          backgroundColor:byDow.map(function(b){return (worst&&b.dow===worst.dow&&b.n>0)?'#C9A84C':'#1E2D4A';}),
+          backgroundColor:byDow.map(function(b){return (worst&&b.dow===worst.dow&&b.n>0)?'#C9A84C':'#A8B6F5';}),
           borderRadius:4,borderWidth:0
         }]
       },
@@ -17579,7 +17591,7 @@ function saveOccupancyRoom(ds,val){
    rather than a second, differently-coded thing. Opera gets navy — the
    darkest, most solid line, since it's the one number here that's ever
    actually happened rather than a plan. */
-var OCCFC_COLORS={uf:'#8FA3C7',sched:'#C9A84C',opera:'#1E2D4A'};
+var OCCFC_COLORS={uf:'#8FA3C7',sched:'#C9A84C',opera:'#A8B6F5'};
 var _occfcChartObjs={};
 
 /* ── Which week the card is showing ──
@@ -17737,7 +17749,7 @@ function buildOccForecastHTML(){
     html+='<div style="font-size:9.5px;color:var(--text3);font-weight:700;">&#127968; Rooms</div>';
     html+='<input type="number" min="0" inputmode="numeric" id="occfcUf_'+c.ds+'" value="'+(c.uf!==null?c.uf:'')+'" placeholder="&mdash;"'
       +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'uf\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(30,45,74,.07)':'var(--sur)')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(c.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(c.uf!==null?'rgba(27,34,48,.22)':'var(--sur)')+';box-sizing:border-box;">';
     html+='<input type="number" min="0" inputmode="numeric" id="occfcSched_'+c.ds+'" value="'+(c.sched!==null?c.sched:'')+'" placeholder="&mdash;"'
       +' onchange="saveOccForecastDay(\''+wd.weekKey+'\',\''+c.ds+'\',\'sched\',this.value)"'
       +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(c.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(c.sched!==null?'var(--gt)':'var(--sur)')+';box-sizing:border-box;">';
@@ -17749,7 +17761,7 @@ function buildOccForecastHTML(){
     html+='<div style="font-size:9.5px;color:var(--text3);font-weight:700;">&#129531; Dep</div>';
     html+='<input type="number" min="0" inputmode="numeric" id="depfcUf_'+dc.ds+'" value="'+(dc.uf!==null?dc.uf:'')+'" placeholder="&mdash;"'
       +' onchange="saveDepForecastDay(\''+dwd.weekKey+'\',\''+dc.ds+'\',\'depUf\',this.value)"'
-      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(dc.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(dc.uf!==null?'rgba(30,45,74,.07)':'var(--sur)')+';box-sizing:border-box;">';
+      +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(dc.uf!==null?'#8FA3C7':'var(--border)')+';border-radius:5px;background:'+(dc.uf!==null?'rgba(27,34,48,.22)':'var(--sur)')+';box-sizing:border-box;">';
     html+='<input type="number" min="0" inputmode="numeric" id="depfcSched_'+dc.ds+'" value="'+(dc.sched!==null?dc.sched:'')+'" placeholder="&mdash;"'
       +' onchange="saveDepForecastDay(\''+dwd.weekKey+'\',\''+dc.ds+'\',\'depSched\',this.value)"'
       +' style="width:100%;min-width:0;padding:4px 2px;font-size:11px;font-weight:700;text-align:center;color:var(--ink-strong);border:1px solid '+(dc.sched!==null?'#C9A84C':'var(--border)')+';border-radius:5px;background:'+(dc.sched!==null?'var(--gt)':'var(--sur)')+';box-sizing:border-box;">';
@@ -17864,7 +17876,7 @@ function _occfcRefreshWeek(weekKey){
     var ufEl=document.getElementById('occfcUf_'+c.ds);
     if(ufEl){
       ufEl.style.borderColor=(c.uf!==null?'#8FA3C7':'var(--border)');
-      ufEl.style.background=(c.uf!==null?'rgba(30,45,74,.07)':'#fff');
+      ufEl.style.background=(c.uf!==null?'rgba(27,34,48,.22)':'#fff');
     }
     var schedEl=document.getElementById('occfcSched_'+c.ds);
     if(schedEl){
@@ -17970,7 +17982,7 @@ function _depfcRefreshWeek(weekKey){
     var ufEl=document.getElementById('depfcUf_'+c.ds);
     if(ufEl){
       ufEl.style.borderColor=(c.uf!==null?'#8FA3C7':'var(--border)');
-      ufEl.style.background=(c.uf!==null?'rgba(30,45,74,.07)':'#fff');
+      ufEl.style.background=(c.uf!==null?'rgba(27,34,48,.22)':'#fff');
     }
     var schedEl=document.getElementById('depfcSched_'+c.ds);
     if(schedEl){
