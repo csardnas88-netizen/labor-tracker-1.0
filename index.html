@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.113.1"/>
+<meta name="app-version" content="7.113.2"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1207,7 +1207,16 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
     overflow:hidden;
     font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   }
-  #appLoader .hkl-scene{width:320px;height:330px;position:relative;transform:translateY(-10px);}
+  /* Carlos, 2026-11-10: the tow/hose cluster's lowest point (~y288) sat
+     ABOVE the LOADING row's own top edge (bottom:18 in a 330-tall scene
+     put it at ~y257) — a real vertical overlap, not just a crowded look,
+     which is why the vacuum visually "crashed into" the word LOADING as
+     the rig crossed center. Growing the scene taller (330→420) gives the
+     rig's TOP-anchored content ~90px of clear floor below it before
+     LOADING's own bottom-anchored row begins — detaching them for good,
+     at any horizontal position in the crossing, without having to
+     renumber every rig child's coordinate. */
+  #appLoader .hkl-scene{width:320px;height:420px;position:relative;transform:translateY(-10px);}
   /* Carlos, 2026-11-09 — v2: she now RIDES a cart labeled "LABOR" that
      crosses the whole screen, towing a small vacuum behind her instead of
      pushing it by hand. Chosen from three motion options (bounce, matched
@@ -1219,7 +1228,12 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
      clips at the real screen edge, so children are free to overshoot the
      scene box). .hkl-bob carries the bounce, nested inside so both
      transforms compose instead of fighting over the same property. */
-  #appLoader .hkl-rig{position:absolute;inset:0;animation:hkl-cross 2.6s linear infinite;}
+  /* Carlos, 2026-11-10: at least 50% slower — 2.6s → 5.5s (more than
+     double) for the same travel distance. Only the crossing speed
+     changes; bounce/wheel-spin/hose-sweep durations are untouched on
+     purpose, same as a real vehicle's wheels can spin fast while it
+     drives slowly. */
+  #appLoader .hkl-rig{position:absolute;inset:0;animation:hkl-cross 5.5s linear infinite;}
   #appLoader .hkl-bob{position:relative;width:100%;height:100%;animation:hkl-bounce .35s ease-in-out infinite;}
   #appLoader .hkl-character{position:absolute;left:62px;top:45px;width:120px;height:190px;}
   #appLoader .hkl-head{position:absolute;width:48px;height:54px;left:36px;top:0;background:var(--hkl-skin);border-radius:48% 48% 46% 46%;z-index:5;}
@@ -4838,6 +4852,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.113.2', date:'2026-11-10',
+    fixes:['Two more rounds on yesterday\'s loading animation, both from Carlos\'s own screenshot: the vacuum was visually crashing into the word LOADING as it crossed — there genuinely was no vertical gap between them, not just a crowded look — fixed by giving the scene more room below the cart rather than moving either piece by hand. And the crossing is now a little over twice as slow as it was.']
+  },
   {
     v:'7.113.1', date:'2026-11-09',
     fixes:['The Labor Focus Sprint checklist\'s "Update the Previous Day\'s DNDs" step — Carlos\'s report: it never checked itself off, even right after adding the rooms. It was looking for a DND save stamped against TODAY, when the step itself asks for YESTERDAY\'s. Same bug the "upload Labor Distribution Report" step had before (Manny\'s case) — found in the same function, just never fixed here too.']
