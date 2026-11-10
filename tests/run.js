@@ -140,6 +140,7 @@ const cases = [
   require('./cases/daily-lineup-cover-label-case'),
   require('./cases/upload-smart-date-default'),
   require('./cases/labor-sprint-am-review-detection'),
+  require('./cases/labor-sprint-dnd-previous-day'),
   require('./cases/sidebar-nav-groups'),
 ];
 

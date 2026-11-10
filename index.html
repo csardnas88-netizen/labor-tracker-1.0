@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.113.0"/>
+<meta name="app-version" content="7.113.1"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4838,6 +4838,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.113.1', date:'2026-11-09',
+    fixes:['The Labor Focus Sprint checklist\'s "Update the Previous Day\'s DNDs" step — Carlos\'s report: it never checked itself off, even right after adding the rooms. It was looking for a DND save stamped against TODAY, when the step itself asks for YESTERDAY\'s. Same bug the "upload Labor Distribution Report" step had before (Manny\'s case) — found in the same function, just never fixed here too.']
+  },
   {
     v:'7.113.0', date:'2026-11-09',
     fixes:['New loading animation: she now rides a little cart labeled "LABOR" that drives across the whole screen, towing a small vacuum behind her instead of pushing it by hand — picked from three motion styles shown side by side, then tuned twice more: the crossing speed slowed to match the calmer option, and the vacuum\'s hose moved from between its wheels (where it looked wrong) to trail off the back, bigger and easier to see, sweeping like it\'s actively cleaning the floor as it\'s dragged along.']
@@ -14411,7 +14415,17 @@ function laborSprintAutoChecks(ds){
   }
   var occ=(r106Net(monthKey(parseLocalDate(nightDs)))>0)||(r106Net(monthKey(parseLocalDate(ds)))>0);
 
-  var dnd=!!(mData&&mData.dndRoomsUpdatedAt&&mData.dndRoomsUpdatedAt[ds]!==undefined);
+  /* Same bug class as paychex above, found 2026-11-09 (Carlos: "agregué
+     los DnD y aun así no se completa el checklist"). The step's own title
+     is "Update the PREVIOUS DAY's DNDs" — he saves them from nightDs's
+     Occupancy card (saveDNDRoomsForDate stamps dndRoomsUpdatedAt under
+     THAT date), but this was checking dndRoomsUpdatedAt[ds] — today —
+     which a save for yesterday can never satisfy. Loads nightDs's own
+     month data rather than reusing ds's mData, the same way
+     getDNDRoomsForDay does, so a save on the last day of a month is
+     still found when ds has rolled into the next one. */
+  var nightMData=loadMonthData(monthKey(parseLocalDate(nightDs)));
+  var dnd=!!(nightMData&&nightMData.dndRoomsUpdatedAt&&nightMData.dndRoomsUpdatedAt[nightDs]!==undefined);
 
   return {paychex:paychex,occ:occ,dnd:dnd};
 }
