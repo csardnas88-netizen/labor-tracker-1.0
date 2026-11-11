@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.117.0"/>
+<meta name="app-version" content="7.118.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4879,6 +4879,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.118.0', date:'2026-11-11',
+    fixes:['The "Signed out after inactivity" message on the sign-in screen no longer renders in alarming red — it\'s routine, expected behavior, not a real sign-in error. Now a small lime dot next to plain muted text, picked by Carlos from 4 options. Real sign-in errors (wrong password, connection trouble) are untouched.']
+  },
+  {
     v:'7.117.0', date:'2026-11-10',
     fixes:['Call-Off, two more of Carlos\'s asks: a proper (non-improper) call-off with a notified time now shows a "Notified HH:MM" line too (previously only an Improper one showed anything at all), with its notice duration alongside whenever a scheduled start was found to measure it against. And fixing a logged call-off (wrong date, wrong employee, a typo) no longer means Delete + re-add — a new Edit button reopens the same form pre-filled, and saving moves the Schedule mark it made from the old day/person to the corrected one instead of leaving a stale CALL-OFF behind.']
   },
@@ -7506,7 +7510,25 @@ function _checkInactivity(){
   _clearSession();
   var ao=document.getElementById('authOverlay');if(ao)ao.style.display='flex';
   var er=document.getElementById('authError');
-  if(er){er.style.color='';er.textContent='Signed out after '+(AUTO_LOGOUT_MS/60000)+' minutes of inactivity, for security. Please sign in again.';}
+  /* Carlos's real report, 2026-11-11: this isn't a wrong-password/can't-
+     reach-the-server ERROR — it's routine, expected behavior (the same
+     10-minute timeout exists on purpose, see AUTO_LOGOUT_MS) — but it
+     rendered in the same alarming red #authError uses for a real sign-in
+     failure. First pass replaced it with a filled gold pill — Carlos
+     didn't like that either ("no luce bien"). Shown 4 options; he picked
+     this one: a small lime dot (not a filled background) next to plain
+     muted gray text, the same rgba(255,255,255,.5)-ish quiet tone the
+     rest of this screen's secondary text already uses, so it reads as a
+     passing note rather than either an error or a decorated callout.
+     Built as a styled child instead of plain text so its own color
+     wins over .auth-err's red. */
+  if(er){
+    er.style.color='';
+    er.innerHTML='<div style="display:flex;align-items:flex-start;gap:7px;font-size:11.5px;color:rgba(255,255,255,.5);line-height:1.4;text-align:left;">'
+      +'<span style="width:6px;height:6px;border-radius:50%;background:var(--gl);margin-top:5px;flex-shrink:0;"></span>'
+      +'<span>Signed out after '+(AUTO_LOGOUT_MS/60000)+' minutes of inactivity. Please sign in again.</span>'
+      +'</div>';
+  }
 }
 /* Coming back to the app after it was backgrounded (switched phone apps,
    alt-tabbed) is exactly when a stale realtime connection goes unnoticed —
