@@ -96,6 +96,44 @@ module.exports = {
     win.showPage('calloffs');
     const html = win.document.getElementById('calloffsContent').innerHTML;
     t.assert(/Improper Call-Off/.test(html), 'the Improper Call-Off badge renders for the flagged record');
-    t.assert(/10 min notice/.test(html), 'the badge shows the exact minutes of notice');
+    t.assert(/10m notice/.test(html), "the badge shows the notice as a duration (minutes under an hour, no 'h')");
+
+    // ── Carlos's real report, 2026-11-10 (Guadalupe Cruz): she called at
+    // 11:31 PM the evening BEFORE a 5:00 PM shift — genuinely ~17.5 hours'
+    // notice — but a bare clock-time subtraction against the SAME day
+    // (5:00 PM minus 11:31 PM) came out negative (-391) and still tripped
+    // the improper flag. The "called the day before" checkbox names which
+    // day the call happened on, adding a full day back before comparing. ──
+    win.showNewCallOffModal();
+    win.document.getElementById('coDate').value = ds;
+    win.document.getElementById('coEmp').value = '99|Marroquin|Public Area Attendant';
+    win.document.getElementById('coReason').value = 'Called the night before';
+    win.document.getElementById('coNotified').value = '23:31';
+    win.document.getElementById('coNotifiedPrevDay').checked = true;
+    win.saveNewCallOff();
+    list = win.loadCallOffs();
+    const nightBefore = list.find((c) => c.reason === 'Called the night before');
+    t.eq(nightBefore.notifiedPrevDay, true, 'the record remembers the call was placed the day before');
+    t.eq(nightBefore.minutesNotice, 449, '7:00 AM minus 11:31 PM the PRIOR day is 449 minutes (~7.5h), not a negative number');
+    t.eq(nightBefore.improper, false, 'genuinely ample notice — not improper');
+
+    // ── The checkbox left unchecked (the ordinary, same-day case) is
+    // completely unaffected — same negative-gap-stays-negative behavior
+    // as before this fix, since an unchecked box adds nothing. ──
+    win.showNewCallOffModal();
+    win.document.getElementById('coDate').value = ds;
+    win.document.getElementById('coEmp').value = '99|Marroquin|Public Area Attendant';
+    win.document.getElementById('coReason').value = 'Called late, same day, after shift start';
+    win.document.getElementById('coNotified').value = '09:00';
+    win.saveNewCallOff();
+    list = win.loadCallOffs();
+    const sameDayLate = list.find((c) => c.reason === 'Called late, same day, after shift start');
+    t.eq(sameDayLate.notifiedPrevDay, false, 'unchecked by default');
+    t.eq(sameDayLate.minutesNotice, -120, 'genuinely called 2 hours AFTER the 7:00 AM start — stays negative, not reinterpreted as the day before');
+    t.eq(sameDayLate.improper, true, 'a same-day call placed after the shift already started is correctly still flagged');
+
+    win.showPage('calloffs');
+    const html2 = win.document.getElementById('calloffsContent').innerHTML;
+    t.assert(/7h 29m notice/.test(html2), 'a non-improper record with a notified time shows the duration in hours/minutes too (not just improper ones)');
   },
 };

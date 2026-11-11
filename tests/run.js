@@ -54,6 +54,8 @@ const cases = [
   require('./cases/labor-model-unifocus-reference'),
   require('./cases/labor-effectiveness-parse'),
   require('./cases/labor-effectiveness-render'),
+  require('./cases/labor-dash-scroll-preserved'),
+  require('./cases/labor-sprint-panel-auto-collapse'),
   require('./cases/labor-effectiveness-sync'),
   require('./cases/labor-effectiveness-notes'),
   require('./cases/labor-effectiveness-notes-sync'),

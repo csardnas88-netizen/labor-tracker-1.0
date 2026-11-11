@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.115.0"/>
+<meta name="app-version" content="7.116.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4879,6 +4879,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.116.0', date:'2026-11-10',
+    fixes:['Four more real reports from Carlos: (1) Call-Off now has a "called the day before" checkbox, so logging that an associate notified the evening before a shift no longer computes a nonsense negative "notice" that incorrectly flagged it Improper (Guadalupe Cruz\'s real case); notice is now shown in hours/minutes instead of raw minutes too. (2) Clicking "+ Note" on a Weekly Labor Pace day card no longer jumps the page down toward Labor Effectiveness, and sitting scrolled down at Break Exceptions no longer snaps back to the top on its own after a few seconds — both were the same root cause, a background re-render losing your scroll position; a background sync pull also no longer silently re-renders Labor in the first place unless Labor is actually the page you have open. (3) The Labor Focus Sprint panel now auto-collapses to its small bubble the moment you tap anywhere else on the page, so it never sits on top of the hours you\'re trying to read or comment on.']
+  },
+  {
     v:'7.115.0', date:'2026-11-10',
     fixes:['Two real Schedule bugs Carlos reported: (1) Gabriela was being counted twice on the Lobby card, the Excel export, and the Daily Lineup — a disposable "Gabriela Cuevas" cover row was being created alongside her real "Gabriela" row because the two spellings weren\'t recognized as the same linked person; fixed, and any already-duplicated day self-heals the moment the Schedule, Excel export, or Daily Lineup is opened. (2) A day already corrected by hand (Débora\'s Tuesday, put back to working after she\'d originally requested it off) could silently revert back to Request Off later — her old request was still sitting in the Request Off Notebook, so a later re-sync reapplied it. Setting a cell to an actual working day now retires that date off any matching notebook request, so it can\'t come back once overridden.']
   },
@@ -9314,8 +9318,20 @@ function _syncFromSheetsPull(){
        genuinely new rather than merely not-yet-synced. */
     _rosterSyncedThisSession=true;
     if(updated){
-      try{renderLaborDash();}catch(e){}
-      try{renderDashHub();}catch(e){}
+      /* Carlos's real report, 2026-11-10: sitting on the Labor page
+         scrolled down to Break Exceptions snapped back to the top after
+         a few idle seconds — these two used to run unconditionally, on
+         EVERY remote change, regardless of which page was even open
+         (unlike every other render call right below, which already
+         checks currentPage first). A schedule edit from another device,
+         a training mark, anything at all — each one quietly rebuilt
+         Labor's whole Day Analysis block in the background. Scoped the
+         same way as the rest now; renderDashDayAnalysis's own scroll-
+         position restore (see its comment) covers the remaining case of
+         a real Labor-relevant update arriving while Carlos is actually
+         looking at the page. */
+      if(typeof currentPage!=='undefined'&&currentPage==='labor'){try{renderLaborDash();}catch(e){}}
+      if(typeof currentPage!=='undefined'&&currentPage==='dashboard'){try{renderDashHub();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='occupancy'){try{renderOccupancy();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='projects'){try{renderProjects();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='calloffs'){try{renderCallOffs();}catch(e){}}
@@ -14501,6 +14517,24 @@ function laborSprintPanelToggle(){
   localStorage.setItem('hk_ls_panel_open',cur?'0':'1');
   renderLaborSprint();
 }
+/* Carlos's real report, 2026-11-10: the open panel sits on top of the
+   Labor page (it's a floating overlay, not pushed-aside content), and
+   while adding a note or reading the hours underneath it, it blocked
+   exactly what he needed to see. His own preferred fix, picked over
+   a narrower panel or a draggable one: tapping anywhere ELSE on the
+   page auto-collapses it back to the small bubble, the same state the
+   explicit X already produces — he reopens it with one tap on the
+   bubble whenever he's ready to check something off again. A click
+   genuinely inside the panel (or on the bubble itself, which already
+   has its own toggle) is left alone. */
+document.addEventListener('click',function(e){
+  var panel=document.getElementById('laborSprintPanel');
+  var bubble=document.getElementById('laborSprintBubble');
+  if(!panel||panel.style.display==='none')return;
+  if(panel.contains(e.target)||(bubble&&bubble.contains(e.target)))return;
+  localStorage.setItem('hk_ls_panel_open','0');
+  renderLaborSprint();
+});
 /* Carlos's ask: a Start button + a running clock for how long today's
    routine takes, start to finish. Stored on the SAME per-date state
    blob the checkbox answers already live on (_startedAt/_finishedAt —
@@ -16335,8 +16369,29 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     }
   }
 
+  /* Carlos's real report, 2026-11-10: clicking "+ Note" on a Weekly Pace
+     day card jumped the page down near Labor Effectiveness, and simply
+     sitting scrolled down at Break Exceptions for a few seconds snapped
+     back up to the top on its own. Root cause, same for both: this one
+     function rebuilds Occupancy + Labor Effectiveness + Weekly Pace +
+     Break Exceptions together as a SINGLE el.innerHTML replacement —
+     every toggle/note-save inside any of them calls back up through
+     renderLaborDash to here, and a realtime pull from ANOTHER device
+     touching completely unrelated data (Schedule, Training, anything)
+     re-renders this same block too (see _syncFromSheetsPull's
+     unconditional renderLaborDash() call). Replacing a tall block's
+     innerHTML wholesale doesn't move window.scrollY itself, but the new
+     content is rarely the same height as the old, so whatever used to
+     sit at that exact pixel position is no longer the same thing — read
+     as "the page jumped" even though no explicit scroll command fired.
+     Recording the scroll position right before the replacement and
+     restoring it right after keeps Carlos exactly where he was looking,
+     regardless of what triggered the re-render or how much the content
+     above/below it grew or shrank. */
+  var _preScrollY=window.scrollY;
   el.innerHTML=html;
   try{_wleAutoGrowAll(el);}catch(e){}
+  window.scrollTo(0,_preScrollY);
 }
 
 /* ═══════════════════════════════════════════
@@ -21386,7 +21441,8 @@ function renderCallOffs(){
       html+='<div style="font-size:13px;font-weight:700;color:var(--text1);">'+escHtml(c.empName)+'</div>';
       if(c.pos)html+='<div style="font-size:11px;color:var(--text3);margin-bottom:2px;">'+escHtml(c.pos)+'</div>';
       html+='<div style="font-size:12.5px;color:var(--text2);margin-top:2px;">'+escHtml(c.reason)+'</div>';
-      if(c.improper)html+='<div style="display:inline-block;margin-top:4px;padding:2px 8px;background:var(--red-bg);color:var(--red);border-radius:99px;font-size:10px;font-weight:800;">&#9888; Improper Call-Off &mdash; '+c.minutesNotice+' min notice</div>';
+      if(c.improper)html+='<div style="display:inline-block;margin-top:4px;padding:2px 8px;background:var(--red-bg);color:var(--red);border-radius:99px;font-size:10px;font-weight:800;">&#9888; Improper Call-Off &mdash; '+_minsToDurationText(c.minutesNotice)+' notice</div>';
+      else if(c.notifiedTime&&c.minutesNotice!=null)html+='<div style="font-size:10.5px;color:var(--text3);margin-top:3px;">Notified '+escHtml(c.notifiedTime)+(c.notifiedPrevDay?' (the day before)':'')+' &mdash; '+_minsToDurationText(c.minutesNotice)+' notice</div>';
       html+='</div>';
       html+='<button onclick="deleteCallOff('+c.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px;flex-shrink:0;" title="Delete">&#128465;</button>';
       html+='</div>';
@@ -21506,6 +21562,7 @@ function showNewCallOffModal(){
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Time notified (optional)</label>'
     +'<input id="coNotified" type="time" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
+    +'<label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" id="coNotifiedPrevDay" style="width:15px;height:15px;cursor:pointer;"/> She called the evening/night BEFORE this shift, not the same day</label>'
     +'<div style="font-size:11px;color:var(--text3);margin-top:5px;">What time she actually called. Flags an Improper Call-Off automatically if that\'s less than 2 hours before her scheduled start (pulled from the Schedule Draft).</div>'
     +'</div>'
     +'</div>'
@@ -21592,17 +21649,31 @@ function saveNewCallOff(){
   var improperNote='';
   if(notifiedRaw){
     var notifiedMin=_hhmmToMinutes(notifiedRaw);
+    var notifiedPrevDay=!!document.getElementById('coNotifiedPrevDay').checked;
     var notifiedTime=_minutesToTimeText(notifiedMin);
     var schedResult=schedScheduledStartTimeReason(date,empName,pos);
     var scheduledTime=schedResult.time;
     var schedMin=scheduledTime?_timeTextToMinutes(scheduledTime):null;
-    var minutesNotice=(schedMin!=null&&notifiedMin!=null)?(schedMin-notifiedMin):null;
+    /* Carlos's real report, 2026-11-10 (Guadalupe Cruz): she called at
+       11:31 PM the evening BEFORE a 5:00 PM shift — genuinely ~17.5
+       hours' notice — but with no date on the "time notified" field,
+       the plain clock-time subtraction (5:00 PM minus 11:31 PM, same
+       day) came out to -391, a nonsense negative "notice" that still
+       tripped the improper-call-off flag. Rather than guess from the
+       sign alone (a same-day call placed well AFTER the shift already
+       started would also go negative, and SHOULD stay flagged), the
+       checkbox above names which day the call happened on — Carlos's
+       own knowledge, not something the clock can infer. Checked, this
+       adds a full day back before comparing, the same shape a
+       night-before OCC/Departures read already uses elsewhere. */
+    var minutesNotice=(schedMin!=null&&notifiedMin!=null)?(schedMin-notifiedMin+(notifiedPrevDay?1440:0)):null;
     rec.notifiedTime=notifiedTime;
+    rec.notifiedPrevDay=notifiedPrevDay;
     rec.scheduledTime=scheduledTime;
     rec.scheduledTimeReason=scheduledTime?null:schedResult.reason;
     rec.minutesNotice=minutesNotice;
     rec.improper=(minutesNotice!=null&&minutesNotice<CALLOFF_IMPROPER_NOTICE_MIN);
-    if(rec.improper)improperNote=' — flagged as an Improper Call-Off ('+minutesNotice+' min notice)';
+    if(rec.improper)improperNote=' — flagged as an Improper Call-Off ('+_minsToDurationText(minutesNotice)+' notice)';
   }
   var sched=null;
   if(typeof schedApplyCallOff==='function'){try{sched=schedApplyCallOff(date,empName,pos);}catch(e){}}
@@ -21764,6 +21835,15 @@ function _hhmmToMinutes(hhmm){
   var m=/^(\d{1,2}):(\d{2})$/.exec(String(hhmm||'').trim());
   if(!m)return null;
   return parseInt(m[1],10)*60+parseInt(m[2],10);
+}
+/* Carlos's ask, 2026-11-10: a raw minute count ("313 min notice") makes
+   him do the hours math in his head every time he reads it. Same
+   hour-rounding "Xh Ym" shape _hToHM already uses for worked hours,
+   just fed minutes directly instead of decimal hours. */
+function _minsToDurationText(mins){
+  var a=Math.round(Math.abs(mins||0));
+  var h=Math.floor(a/60),m=a%60;
+  return h>0?(h+'h '+m+'m'):(m+'m');
 }
 var LA_FILTER='all';
 function setLaFilter(val){ LA_FILTER=val; renderCallOffs(); }
