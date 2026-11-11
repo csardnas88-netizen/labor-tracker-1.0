@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.114.0"/>
+<meta name="app-version" content="7.115.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4878,6 +4878,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.115.0', date:'2026-11-10',
+    fixes:['Two real Schedule bugs Carlos reported: (1) Gabriela was being counted twice on the Lobby card, the Excel export, and the Daily Lineup — a disposable "Gabriela Cuevas" cover row was being created alongside her real "Gabriela" row because the two spellings weren\'t recognized as the same linked person; fixed, and any already-duplicated day self-heals the moment the Schedule, Excel export, or Daily Lineup is opened. (2) A day already corrected by hand (Débora\'s Tuesday, put back to working after she\'d originally requested it off) could silently revert back to Request Off later — her old request was still sitting in the Request Off Notebook, so a later re-sync reapplied it. Setting a cell to an actual working day now retires that date off any matching notebook request, so it can\'t come back once overridden.']
+  },
   {
     v:'7.114.0', date:'2026-11-10',
     fixes:['Four small touch-ups to the loading animation: the housekeeper\'s hands now actually rest on the cart instead of just fading into it, a soft contact shadow grounds both sets of wheels, a few quick gold trail-lines sell the motion now that the crossing is slower, and the dust being swept up is bigger and brighter against the dark background.']
@@ -24270,6 +24274,22 @@ function schedSetCell(bk,idx,name,ds,val,el){
      not at render time: opening a PAST week she really did work must
      never undo a removal he made for the weeks going forward. */
   schedSetRetired(SCH,bk,String(row[0]||name),false);
+  /* Carlos's real report, 2026-11-10: Débora's Tuesday — overridden by
+     hand back to a working day after she'd originally requested it off —
+     silently reverted back to R-OFF later the same day. Root cause,
+     confirmed against the real Request Off Notebook data: her original
+     request (captured 2026-11-02, covering that exact Tuesday) was still
+     sitting in the notebook, untouched, because editing the SCHEDULE cell
+     directly never told the NOTEBOOK the request was no longer current.
+     The notebook's own "Re-sync Request Off to this week" button (or
+     anyone clicking it for an unrelated, still-valid request that same
+     week) reapplies every stored entry touching the week, including that
+     stale one — silently overwriting the exact day Carlos had already
+     fixed. Same philosophy as the retirement-clearing line just above:
+     setting the cell to an actual working status is Carlos asserting a
+     new fact, so this date is stale on every matching notebook entry from
+     this moment on, not just on the cell itself. */
+  if(!_schedIsUnavailable(row[1])&&row[1]!=='')schedReleaseReqNotebookDate(bk,String(row[0]||name),ds);
   /* Marking Victoriano TAILOR (or back to '1') is itself the trigger for
      Jorge's Laundry cover, same relationship Auto-fill already knows —
      Carlos sets this by hand every week, not through Auto-fill, so it
@@ -25946,8 +25966,30 @@ function _schedCrewSpellingFor(SCH,bk,name){
   });
   return found||name;
 }
+/* Someone whose link to this target crew is already owned by
+   SCHED_LINKED_PEOPLE (Gabriela Cuevas → her own literal "Gabriela" row
+   on lobby) must be left alone here. That pair's own home-crew spelling
+   doesn't dlNormAlias-match its lobby spelling (the alias table maps
+   'gabriela cuevas' to a THIRD, payroll-only string, 'cuevas ibarra', not
+   to 'gabriela') — so this generic lookup never found her real lobby row
+   and pushed a brand-new disposable 'cover' row under her home-crew
+   spelling instead, leaving BOTH rows live and counted: the real
+   "Gabriela" (synced to '1' by the pair mechanism) and a second, phantom
+   "Gabriela Cuevas" cover row this function created. Carlos's real
+   report, 2026-11-10: she printed twice on the Lobby card, twice in the
+   Excel export, twice on the Daily Lineup's Lobby section. */
+function _schedLinkedTargetName(bk,name,targetCrew){
+  var hit=null;
+  SCHED_LINKED_PEOPLE.forEach(function(pair){
+    if(hit)return;
+    if(pair.a.crew===bk&&dlNorm(pair.a.name)===dlNorm(name)&&pair.b.crew===targetCrew)hit=pair.b.name;
+    else if(pair.b.crew===bk&&dlNorm(pair.b.name)===dlNorm(name)&&pair.a.crew===targetCrew)hit=pair.a.name;
+  });
+  return hit;
+}
 function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
   if(bk==='laundry')return false;
+  if(_schedLinkedTargetName(bk,name,'laundry'))return false;
   var day=SCH.days[ds]; if(!day)return false;
   if(!day.laundry)day.laundry=[];
   var idx=-1;
@@ -25982,6 +26024,7 @@ function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
    deletes a row holding a real value on its own. */
 function schedSyncLobbyCoverRow(SCH,ds,bk,name,val){
   if(bk==='lobby')return false;
+  if(_schedLinkedTargetName(bk,name,'lobby'))return false;
   var day=SCH.days[ds]; if(!day)return false;
   if(!day.lobby)day.lobby=[];
   var idx=-1;
@@ -26358,6 +26401,33 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
 function schedApplyLinkedPeople(SCH,dates){
   var changed=false;
   dates.forEach(function(ds){ if(schedApplyLinkedPeopleForDate(SCH,ds))changed=true; });
+  return changed;
+}
+/* Cleans up duplicate 'cover' rows that schedSyncLobbyCoverRow/
+   schedSyncLaundryCoverRow already created for someone BEFORE the
+   _schedLinkedTargetName guard above existed (or before this specific
+   pair was added) — a week already saved with the phantom row needs this
+   retroactive sweep, the guard alone only stops NEW ones from being
+   created. Gabriela Cuevas's real case: a disposable "Gabriela Cuevas"
+   cover row sitting in Lobby's day array alongside her real "Gabriela"
+   row, both counted as her working Lobby that day. Safe to run on every
+   render/export — a no-op once the phantom row is gone. */
+function _schedCleanupLinkedCoverRows(SCH,dates){
+  var changed=false;
+  dates.forEach(function(ds){
+    var day=SCH.days&&SCH.days[ds]; if(!day)return;
+    SCHED_LINKED_PEOPLE.forEach(function(pair){
+      [[pair.a,pair.b],[pair.b,pair.a]].forEach(function(sides){
+        var home=sides[0],target=sides[1];
+        var rows=day[target.crew]; if(!rows)return;
+        for(var i=rows.length-1;i>=0;i--){
+          if(rows[i][2]==='cover'&&dlNorm(rows[i][0])===dlNorm(home.name)){
+            rows.splice(i,1); changed=true;
+          }
+        }
+      });
+    });
+  });
   return changed;
 }
 /* Carlos's ask, 2026-09-07: generalizes the Gabriela Cuevas/Sandra S kind
@@ -27071,7 +27141,9 @@ function schedExportWarnings(SCH,dates){
      in this shape or when a render last happened to run. */
   var synced=false;
   if(schedApplyLinkedPeople(SCH,dates))synced=true;
+  if(_schedCleanupLinkedCoverRows(SCH,dates))synced=true;
   if(schedApplyCrossCrewSync(SCH,dates))synced=true;
+  if(schedPurgeDuplicateAliasRows(SCH))synced=true;
   if(synced){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
   var out=[];
   SCHED_BLOCKS.forEach(function(b){
@@ -27798,6 +27870,7 @@ function renderSchedule(){
      otherwise — Carlos's real report about Sandra's Room Attendant OFF
      not carrying over to Laundry. */
   if(SCH&&SCH.days&&schedApplyLinkedPeople(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
+  if(SCH&&SCH.days&&_schedCleanupLinkedCoverRows(SCH,schedWeekDates())){ try{ safeSetItem('hk_dl_schedule',JSON.stringify(SCH)); }catch(e){} }
   /* Same self-healing idea, generalized to every employee via
      schedApplyCrossCrewSync — Carlos's 2026-09-07 ask, so a week already
      saved (Fill Week, Excel upload, another device) repairs itself on
@@ -28545,6 +28618,29 @@ function _reqScheduleRow(day,crewKey,name){
     if(m)others.push({row:m,crew:b.key});
   });
   return others.length===1?others[0]:null;
+}
+/* Carlos's real report, 2026-11-10 (Débora) — see the call site in
+   schedSetCell. Drops ONE date out of every Request Off Notebook entry
+   for this person+crew, trimming the entry (or deleting it outright once
+   its dates run out) so neither a future manual "Re-sync Request Off to
+   this week" nor anyone else's resync click can ever reapply a request
+   Carlos has since overridden by hand. Matches by plain dlNorm, same as
+   the notebook's own name spelling convention (it runs on the Schedule
+   Draft's own short names, not the roster's full legal ones — no alias
+   bridging needed here). */
+function schedReleaseReqNotebookDate(bk,name,ds){
+  var list=loadReqNotebook();
+  var changed=false;
+  var kept=list.filter(function(r){
+    if(r.crewKey!==bk||dlNorm(r.name)!==dlNorm(name))return true;
+    var i=(r.dates||[]).indexOf(ds);
+    if(i===-1)return true;
+    r.dates=r.dates.slice(0,i).concat(r.dates.slice(i+1));
+    changed=true;
+    return r.dates.length>0;
+  });
+  if(changed)saveReqNotebook(kept);
+  return changed;
 }
 /* Writes the request's cell value onto this person's cell for every
    date that's actually part of a built/loaded week. A date the
@@ -29360,6 +29456,20 @@ function renderDailyLineup(){
      day count of) whatever dlBuildPlan actually reads, or "days loaded"
      could read a number the Lineup itself isn't using. */
   var S=dlLoadSections(), SCH=dlLoadSchedule();
+  /* This page reads dl_schedule directly and can be opened before the
+     Schedule page's own render ever runs this session — so its self-heal
+     (schedApplyLinkedPeople/_schedCleanupLinkedCoverRows) might not have
+     fired yet. Carlos's real report: Gabriela printed twice in Lobby's
+     section here even though the Schedule tab itself looked fine, same
+     reasoning schedExportWarnings already uses for the Excel export. */
+  if(SCH&&SCH.days){
+    var dlSynced=false;
+    var dlDates=Object.keys(SCH.days);
+    if(schedApplyLinkedPeople(SCH,dlDates))dlSynced=true;
+    if(_schedCleanupLinkedCoverRows(SCH,dlDates))dlSynced=true;
+    if(schedPurgeDuplicateAliasRows(SCH))dlSynced=true;
+    if(dlSynced){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
+  }
   var html='';
 
   /* Two hidden inputs, reachable from wherever the page needs them —
