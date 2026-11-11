@@ -139,6 +139,7 @@ const cases = [
   require('./cases/labor-effectiveness-notes-push-merge'),
   require('./cases/schedule-training-wins-source-over-bare-1'),
   require('./cases/call-off-improper'),
+  require('./cases/call-off-edit'),
   require('./cases/schedule-cover-release-guard'),
   require('./cases/training-delete-resurrection'),
   require('./cases/daily-lineup-cover-label-case'),

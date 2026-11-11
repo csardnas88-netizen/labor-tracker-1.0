@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.116.0"/>
+<meta name="app-version" content="7.117.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4878,6 +4878,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.117.0', date:'2026-11-10',
+    fixes:['Call-Off, two more of Carlos\'s asks: a proper (non-improper) call-off with a notified time now shows a "Notified HH:MM" line too (previously only an Improper one showed anything at all), with its notice duration alongside whenever a scheduled start was found to measure it against. And fixing a logged call-off (wrong date, wrong employee, a typo) no longer means Delete + re-add — a new Edit button reopens the same form pre-filled, and saving moves the Schedule mark it made from the old day/person to the corrected one instead of leaving a stale CALL-OFF behind.']
+  },
   {
     v:'7.116.0', date:'2026-11-10',
     fixes:['Four more real reports from Carlos: (1) Call-Off now has a "called the day before" checkbox, so logging that an associate notified the evening before a shift no longer computes a nonsense negative "notice" that incorrectly flagged it Improper (Guadalupe Cruz\'s real case); notice is now shown in hours/minutes instead of raw minutes too. (2) Clicking "+ Note" on a Weekly Labor Pace day card no longer jumps the page down toward Labor Effectiveness, and sitting scrolled down at Break Exceptions no longer snaps back to the top on its own after a few seconds — both were the same root cause, a background re-render losing your scroll position; a background sync pull also no longer silently re-renders Labor in the first place unless Labor is actually the page you have open. (3) The Labor Focus Sprint panel now auto-collapses to its small bubble the moment you tap anywhere else on the page, so it never sits on top of the hours you\'re trying to read or comment on.']
@@ -21441,10 +21445,26 @@ function renderCallOffs(){
       html+='<div style="font-size:13px;font-weight:700;color:var(--text1);">'+escHtml(c.empName)+'</div>';
       if(c.pos)html+='<div style="font-size:11px;color:var(--text3);margin-bottom:2px;">'+escHtml(c.pos)+'</div>';
       html+='<div style="font-size:12.5px;color:var(--text2);margin-top:2px;">'+escHtml(c.reason)+'</div>';
-      if(c.improper)html+='<div style="display:inline-block;margin-top:4px;padding:2px 8px;background:var(--red-bg);color:var(--red);border-radius:99px;font-size:10px;font-weight:800;">&#9888; Improper Call-Off &mdash; '+_minsToDurationText(c.minutesNotice)+' notice</div>';
-      else if(c.notifiedTime&&c.minutesNotice!=null)html+='<div style="font-size:10.5px;color:var(--text3);margin-top:3px;">Notified '+escHtml(c.notifiedTime)+(c.notifiedPrevDay?' (the day before)':'')+' &mdash; '+_minsToDurationText(c.minutesNotice)+' notice</div>';
+      /* Carlos's ask, 2026-11-10: the notified time/notice was only ever
+         shown for an Improper Call-Off — a proper one (plenty of notice,
+         or no scheduled start the Schedule Draft could resolve) silently
+         showed nothing at all, even when "Time notified" had genuinely
+         been filled in. Now shown either way: a red badge when it's
+         actually improper, a plain green note line whenever there's a
+         notified time to show at all (with a notice duration alongside
+         it whenever a scheduled start was found to measure against —
+         some weeks aren't loaded in the Schedule Draft, so that half can
+         legitimately be missing even though the call time itself isn't). */
+      if(c.improper){
+        html+='<div style="display:inline-block;margin-top:4px;padding:2px 8px;background:var(--red-bg);color:var(--red);border-radius:99px;font-size:10px;font-weight:800;">&#9888; Improper Call-Off &mdash; '+_minsToDurationText(c.minutesNotice)+' notice</div>';
+      }else if(c.notifiedTime){
+        html+='<div style="display:inline-block;margin-top:4px;padding:2px 8px;background:var(--green-bg);color:var(--green);border-radius:99px;font-size:10px;font-weight:800;">&#10003; Notified '+escHtml(c.notifiedTime)+(c.notifiedPrevDay?' (day before)':'')+(c.minutesNotice!=null?' &mdash; '+_minsToDurationText(c.minutesNotice)+' notice':'')+'</div>';
+      }
       html+='</div>';
-      html+='<button onclick="deleteCallOff('+c.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px;flex-shrink:0;" title="Delete">&#128465;</button>';
+      html+='<div style="display:flex;gap:2px;flex-shrink:0;">';
+      html+='<button onclick="showNewCallOffModal('+c.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px;" title="Edit">&#9998;</button>';
+      html+='<button onclick="deleteCallOff('+c.id+')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px;" title="Delete">&#128465;</button>';
+      html+='</div>';
       html+='</div>';
     });
     html+='</div>';
@@ -21528,51 +21548,67 @@ function exportCallOffsPDF(){
 }
 
 var _coEmpAll=[]; /* cached roster for the New Call-Off search box, set on modal open */
-function showNewCallOffModal(){
+/* Carlos's ask, 2026-11-10: fixing a mistake in a logged call-off (wrong
+   employee, wrong reason, a mistyped time) used to mean Delete + re-add
+   from scratch — "un poco cansón" in his own words. editId (optional)
+   reopens this SAME modal pre-filled from the existing record; saveNewCallOff
+   below updates that record in place instead of creating a new one when
+   editId is passed through. */
+function showNewCallOffModal(editId){
   /* Full active roster (+ anyone known only from a PDF), not just people
      with a paid>0 entry already reported this month — otherwise an
      employee with no hours logged yet this month (new month, report not
      uploaded yet, etc.) silently can't be picked for a call-off. */
   _coEmpAll=getProjectEmployeeOptions();
 
+  var editRec=editId?(loadCallOffs().filter(function(c){return c.id===editId;})[0]||null):null;
   var today=dateStr(new Date());
 
   var overlay=document.createElement('div');
   overlay.id='callOffModal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML='<div style="background:var(--sur);border-radius:14px;padding:24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.2);">'
-    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:18px;">&#128222; New Call-Off</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--ink-strong);margin-bottom:18px;">&#128222; '+(editRec?'Edit Call-Off':'New Call-Off')+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:13px;">'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date *</label>'
-    +'<input id="coDate" type="date" value="'+today+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
+    +'<input id="coDate" type="date" value="'+(editRec?editRec.date:today)+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
     +'</div>'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Employee *</label>'
     +'<div style="position:relative;">'
-    +'<input id="coEmpSearch" type="text" autocomplete="off" placeholder="&#128269; Search employee by name…" oninput="coEmpFilter()" onfocus="coEmpOpenList()" onblur="setTimeout(coEmpCloseList,150)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">'
-    +'<input type="hidden" id="coEmp" value="">'
+    +'<input id="coEmpSearch" type="text" autocomplete="off" value="'+(editRec?escHtml(editRec.empName+(editRec.pos?' ('+editRec.pos+')':'')):'')+'" placeholder="&#128269; Search employee by name…" oninput="coEmpFilter()" onfocus="coEmpOpenList()" onblur="setTimeout(coEmpCloseList,150)" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;box-sizing:border-box;">'
+    +'<input type="hidden" id="coEmp" value="'+(editRec?escHtml((editRec.empId||'')+'|'+editRec.empName+'|'+(editRec.pos||'')):'')+'">'
     +'<div id="coEmpList" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--sur);border:1.5px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.15);"></div>'
     +'</div>'
     +'</div>'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Reason *</label>'
-    +'<input id="coReason" placeholder="e.g. Sick, family emergency..." style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
+    +'<input id="coReason" value="'+(editRec?escHtml(editRec.reason):'')+'" placeholder="e.g. Sick, family emergency..." style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
     +'</div>'
     +'<div>'
     +'<label style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Time notified (optional)</label>'
-    +'<input id="coNotified" type="time" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
-    +'<label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" id="coNotifiedPrevDay" style="width:15px;height:15px;cursor:pointer;"/> She called the evening/night BEFORE this shift, not the same day</label>'
+    +'<input id="coNotified" type="time" value="'+(editRec&&editRec.notifiedTime?_timeTextTo24h(editRec.notifiedTime):'')+'" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;" />'
+    +'<label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" id="coNotifiedPrevDay" '+(editRec&&editRec.notifiedPrevDay?'checked':'')+' style="width:15px;height:15px;cursor:pointer;"/> She called the evening/night BEFORE this shift, not the same day</label>'
     +'<div style="font-size:11px;color:var(--text3);margin-top:5px;">What time she actually called. Flags an Improper Call-Off automatically if that\'s less than 2 hours before her scheduled start (pulled from the Schedule Draft).</div>'
     +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:20px;">'
     +'<button onclick="document.getElementById(\'callOffModal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);background:var(--sur);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);">Cancel</button>'
-    +'<button onclick="saveNewCallOff()" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save Call-Off</button>'
+    +'<button onclick="saveNewCallOff('+(editRec?editRec.id:'null')+')" style="flex:2;padding:11px;background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">'+(editRec?'Save Changes':'Save Call-Off')+'</button>'
     +'</div>'
     +'</div>';
   document.body.appendChild(overlay);
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+/* "5:00 PM" -> "17:00", the 24h shape the <input type="time"> element
+   itself needs to show a pre-filled value — the inverse of
+   _minutesToTimeText's 12h display, chained through _timeTextToMinutes. */
+function _timeTextTo24h(t){
+  var m=_timeTextToMinutes(t);
+  if(m==null)return '';
+  var h=Math.floor(m/60),mm=m%60;
+  return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm;
 }
 
 /* New Call-Off employee search box: type-to-filter combobox over _coEmpAll,
@@ -21634,7 +21670,36 @@ function _resolveEmpPickerValue(hiddenVal,searchVal,roster){
   var matches=(roster||[]).filter(function(e){return strip(e.name)===typedStripped;});
   return matches.length===1?(matches[0].id+'|'+matches[0].name+'|'+(matches[0].pos||'')):'';
 }
-function saveNewCallOff(){
+/* Shared by both the create and edit paths below — same notice/improper
+   math either way, just applied onto a brand-new rec vs. an existing one. */
+function _computeCallOffNotice(date,empName,pos,notifiedRaw){
+  if(!notifiedRaw)return {notifiedTime:undefined,notifiedPrevDay:undefined,scheduledTime:undefined,scheduledTimeReason:undefined,minutesNotice:undefined,improper:undefined};
+  var notifiedMin=_hhmmToMinutes(notifiedRaw);
+  var notifiedPrevDay=!!document.getElementById('coNotifiedPrevDay').checked;
+  var notifiedTime=_minutesToTimeText(notifiedMin);
+  var schedResult=schedScheduledStartTimeReason(date,empName,pos);
+  var scheduledTime=schedResult.time;
+  var schedMin=scheduledTime?_timeTextToMinutes(scheduledTime):null;
+  /* Carlos's real report, 2026-11-10 (Guadalupe Cruz): she called at
+     11:31 PM the evening BEFORE a 5:00 PM shift — genuinely ~17.5
+     hours' notice — but with no date on the "time notified" field,
+     the plain clock-time subtraction (5:00 PM minus 11:31 PM, same
+     day) came out to -391, a nonsense negative "notice" that still
+     tripped the improper-call-off flag. Rather than guess from the
+     sign alone (a same-day call placed well AFTER the shift already
+     started would also go negative, and SHOULD stay flagged), the
+     checkbox above names which day the call happened on — Carlos's
+     own knowledge, not something the clock can infer. Checked, this
+     adds a full day back before comparing, the same shape a
+     night-before OCC/Departures read already uses elsewhere. */
+  var minutesNotice=(schedMin!=null&&notifiedMin!=null)?(schedMin-notifiedMin+(notifiedPrevDay?1440:0)):null;
+  return {
+    notifiedTime:notifiedTime,notifiedPrevDay:notifiedPrevDay,
+    scheduledTime:scheduledTime,scheduledTimeReason:scheduledTime?null:schedResult.reason,
+    minutesNotice:minutesNotice,improper:(minutesNotice!=null&&minutesNotice<CALLOFF_IMPROPER_NOTICE_MIN)
+  };
+}
+function saveNewCallOff(editId){
   var date=(document.getElementById('coDate').value||'').trim();
   var empVal=_resolveEmpPickerValue(document.getElementById('coEmp').value||'',document.getElementById('coEmpSearch').value,_coEmpAll);
   var reason=(document.getElementById('coReason').value||'').trim();
@@ -21644,37 +21709,41 @@ function saveNewCallOff(){
   }
   var parts=empVal.split('|');
   var empId=parts[0],empName=parts[1]||'',pos=parts[2]||'';
-  var rec={id:Date.now(),date:date,empId:empId,empName:empName,pos:pos,reason:reason,created:new Date().toISOString()};
   var notifiedRaw=(document.getElementById('coNotified').value||'').trim();
-  var improperNote='';
-  if(notifiedRaw){
-    var notifiedMin=_hhmmToMinutes(notifiedRaw);
-    var notifiedPrevDay=!!document.getElementById('coNotifiedPrevDay').checked;
-    var notifiedTime=_minutesToTimeText(notifiedMin);
-    var schedResult=schedScheduledStartTimeReason(date,empName,pos);
-    var scheduledTime=schedResult.time;
-    var schedMin=scheduledTime?_timeTextToMinutes(scheduledTime):null;
-    /* Carlos's real report, 2026-11-10 (Guadalupe Cruz): she called at
-       11:31 PM the evening BEFORE a 5:00 PM shift — genuinely ~17.5
-       hours' notice — but with no date on the "time notified" field,
-       the plain clock-time subtraction (5:00 PM minus 11:31 PM, same
-       day) came out to -391, a nonsense negative "notice" that still
-       tripped the improper-call-off flag. Rather than guess from the
-       sign alone (a same-day call placed well AFTER the shift already
-       started would also go negative, and SHOULD stay flagged), the
-       checkbox above names which day the call happened on — Carlos's
-       own knowledge, not something the clock can infer. Checked, this
-       adds a full day back before comparing, the same shape a
-       night-before OCC/Departures read already uses elsewhere. */
-    var minutesNotice=(schedMin!=null&&notifiedMin!=null)?(schedMin-notifiedMin+(notifiedPrevDay?1440:0)):null;
-    rec.notifiedTime=notifiedTime;
-    rec.notifiedPrevDay=notifiedPrevDay;
-    rec.scheduledTime=scheduledTime;
-    rec.scheduledTimeReason=scheduledTime?null:schedResult.reason;
-    rec.minutesNotice=minutesNotice;
-    rec.improper=(minutesNotice!=null&&minutesNotice<CALLOFF_IMPROPER_NOTICE_MIN);
-    if(rec.improper)improperNote=' — flagged as an Improper Call-Off ('+_minsToDurationText(minutesNotice)+' notice)';
+  var notice=_computeCallOffNotice(date,empName,pos,notifiedRaw);
+  var improperNote=notice.improper?' — flagged as an Improper Call-Off ('+_minsToDurationText(notice.minutesNotice)+' notice)':'';
+
+  if(editId){
+    var list=loadCallOffs();
+    var rec=list.filter(function(c){return c.id===editId;})[0];
+    if(!rec){showToast('⚠ That call-off no longer exists.');document.getElementById('callOffModal').remove();return;}
+    /* Carlos's ask, 2026-11-10: fixing a mistake (wrong date/employee/
+       reason) used to mean Delete + re-add from scratch. Release
+       whatever the ORIGINAL save marked on the Schedule first — same
+       revert deleteCallOff already does — before applying a fresh mark
+       for whatever the edited date/employee/position now say, so a
+       correction never leaves a stale CALL-OFF sitting on the wrong
+       day or the wrong person's cell. */
+    if(rec.schedCrew&&rec.schedName&&typeof schedRevertCallOff==='function'){
+      try{schedRevertCallOff(rec.date,rec.schedCrew,rec.schedName,rec.schedPrevVal);}catch(e){}
+    }
+    rec.date=date;rec.empId=empId;rec.empName=empName;rec.pos=pos;rec.reason=reason;
+    rec.notifiedTime=notice.notifiedTime;rec.notifiedPrevDay=notice.notifiedPrevDay;
+    rec.scheduledTime=notice.scheduledTime;rec.scheduledTimeReason=notice.scheduledTimeReason;
+    rec.minutesNotice=notice.minutesNotice;rec.improper=notice.improper;
+    var sched2=null;
+    if(typeof schedApplyCallOff==='function'){try{sched2=schedApplyCallOff(date,empName,pos);}catch(e){}}
+    rec.schedCrew=sched2?sched2.crew:undefined;rec.schedName=sched2?sched2.name:undefined;rec.schedPrevVal=sched2?sched2.prevVal:undefined;
+    saveCallOffs(list);
+    document.getElementById('callOffModal').remove();
+    renderCallOffs();
+    showToast((sched2?'&#10003; Call-off updated and the Schedule mark moved with it':'&#10003; Call-off updated — mark it on the Schedule too, couldn\'t match it automatically')+improperNote);
+    return;
   }
+
+  var rec={id:Date.now(),date:date,empId:empId,empName:empName,pos:pos,reason:reason,created:new Date().toISOString(),
+    notifiedTime:notice.notifiedTime,notifiedPrevDay:notice.notifiedPrevDay,scheduledTime:notice.scheduledTime,
+    scheduledTimeReason:notice.scheduledTimeReason,minutesNotice:notice.minutesNotice,improper:notice.improper};
   var sched=null;
   if(typeof schedApplyCallOff==='function'){try{sched=schedApplyCallOff(date,empName,pos);}catch(e){}}
   if(sched){rec.schedCrew=sched.crew;rec.schedName=sched.name;rec.schedPrevVal=sched.prevVal;}
