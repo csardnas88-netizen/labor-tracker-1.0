@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.113.2"/>
+<meta name="app-version" content="7.114.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -1253,6 +1253,10 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   #appLoader .hkl-arm{position:absolute;width:18px;height:76px;background:var(--hkl-skin);border-radius:12px;z-index:2;}
   #appLoader .hkl-arm.hkl-back{left:17px;top:64px;transform:rotate(16deg);}
   #appLoader .hkl-arm.hkl-front{left:84px;top:65px;transform:rotate(-16deg);}
+  /* Carlos asked for her hands to actually read as gripping the cart
+     instead of the arms just fading into the torso — a small "fist"
+     at the sleeve's end, rotating with the arm it's attached to. */
+  #appLoader .hkl-arm:after{content:"";position:absolute;left:50%;bottom:-5px;width:16px;height:16px;border-radius:50%;background:var(--hkl-skin);transform:translateX(-50%);}
   /* The cart (was the gold "vacuum" box she used to push; now what she
      rides, and what carries the "LABOR" lettering Carlos asked for). */
   #appLoader .hkl-cart{position:absolute;left:66px;top:188px;width:112px;height:58px;border-radius:28px 28px 16px 16px;background:linear-gradient(145deg,var(--hkl-gold-light),#b98d35);box-shadow:0 10px 24px rgba(0,0,0,.22);}
@@ -1278,13 +1282,29 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   #appLoader .hkl-tow-wand{position:absolute;left:-44px;top:246px;width:9px;height:36px;background:#4A5872;border-radius:5px;transform-origin:50% 0%;animation:hkl-tow-sweep .5s ease-in-out infinite;}
   #appLoader .hkl-tow-nozzle{position:absolute;left:50%;bottom:-6px;width:32px;height:13px;background:#39455C;border-radius:7px;transform:translateX(-50%);}
   #appLoader .hkl-debris{position:absolute;left:-58px;top:240px;width:70px;height:45px;}
-  #appLoader .hkl-piece{position:absolute;background:var(--hkl-gold);animation:hkl-suck 2.4s linear infinite;opacity:0;}
-  #appLoader .hkl-p1{width:10px;height:10px;left:28px;top:24px;animation-delay:0s}
-  #appLoader .hkl-p2{width:7px;height:7px;left:44px;top:10px;animation-delay:.25s}
-  #appLoader .hkl-p3{width:12px;height:6px;left:8px;top:7px;animation-delay:.5s}
-  #appLoader .hkl-p4{width:6px;height:6px;left:-6px;top:30px;animation-delay:.75s}
-  #appLoader .hkl-p5{width:9px;height:9px;left:37px;top:34px;animation-delay:1s}
-  #appLoader .hkl-p6{width:6px;height:6px;left:19px;top:18px;animation-delay:1.25s}
+  /* Bigger + switched to the brighter gold so the sucked-up debris
+     actually pops against the dark navy instead of blending into it. */
+  #appLoader .hkl-piece{position:absolute;background:var(--hkl-gold-light);animation:hkl-suck 2.4s linear infinite;opacity:0;box-shadow:0 0 4px rgba(240,207,122,.6);}
+  #appLoader .hkl-p1{width:13px;height:13px;left:28px;top:24px;animation-delay:0s}
+  #appLoader .hkl-p2{width:9px;height:9px;left:44px;top:10px;animation-delay:.25s}
+  #appLoader .hkl-p3{width:16px;height:8px;left:8px;top:7px;animation-delay:.5s}
+  #appLoader .hkl-p4{width:8px;height:8px;left:-6px;top:30px;animation-delay:.75s}
+  #appLoader .hkl-p5{width:12px;height:12px;left:37px;top:34px;animation-delay:1s}
+  #appLoader .hkl-p6{width:8px;height:8px;left:19px;top:18px;animation-delay:1.25s}
+  /* Contact shadows under both wheel pairs — ties the cart/tow to a
+     "floor" instead of floating, without having to draw an actual floor
+     that would have to track the crossing. Painted first (DOM order)
+     so the wheels that sit on top of them stay visually on top. */
+  #appLoader .hkl-shadow{position:absolute;border-radius:50%;background:radial-gradient(ellipse at center,rgba(0,0,0,.45),transparent 70%);filter:blur(2px);}
+  #appLoader .hkl-shadow-cart{left:70px;top:248px;width:102px;height:16px;}
+  #appLoader .hkl-shadow-tow{left:-28px;top:245px;width:50px;height:12px;}
+  /* Speed-trail dashes off the rear (tow) end — at 5.5s/crossing the
+     wheel-spin alone reads too slow to sell "moving," so these pulse on
+     their own fast, independent cycle to suggest ground rushing by. */
+  #appLoader .hkl-speedline{position:absolute;height:3px;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(240,207,122,.55));animation:hkl-speed .5s linear infinite;}
+  #appLoader .hkl-sl1{left:-72px;top:234px;width:24px;animation-delay:0s}
+  #appLoader .hkl-sl2{left:-80px;top:242px;width:18px;animation-delay:.15s}
+  #appLoader .hkl-sl3{left:-68px;top:226px;width:14px;animation-delay:.3s}
   /* LOADING + dots are a sibling of .hkl-rig, not inside it — they stay
      put while everything else crosses the screen behind them. */
   #appLoader .hkl-loading{position:absolute;width:100%;bottom:18px;text-align:center;color:var(--hkl-gold-light);letter-spacing:.28em;font-size:18px;font-weight:600;}
@@ -1298,6 +1318,7 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   @keyframes hkl-wheel-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
   @keyframes hkl-tow-sweep{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(12deg)}}
   @keyframes hkl-suck{0%{opacity:0;transform:translate(0,0) scale(1) rotate(0)}15%{opacity:1}72%{opacity:1;transform:translate(-72px,-8px) scale(.55) rotate(180deg)}100%{opacity:0;transform:translate(-92px,-15px) scale(.1) rotate(270deg)}}
+  @keyframes hkl-speed{0%{opacity:0;transform:translateX(6px)}30%{opacity:.8}100%{opacity:0;transform:translateX(-14px)}}
   @keyframes hkl-dot{0%,100%{background:rgba(215,178,90,.25);transform:scale(.85)}50%{background:var(--hkl-gold-light);transform:scale(1.2)}}
   @media (prefers-reduced-motion: reduce){#appLoader *,#appLoader *:before,#appLoader *:after{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
@@ -1305,6 +1326,11 @@ select.note-sel{font-size:11px;border:1.5px solid var(--border2);border-radius:6
   <div class="hkl-scene">
     <div class="hkl-rig">
       <div class="hkl-bob">
+        <div class="hkl-shadow hkl-shadow-cart"></div>
+        <div class="hkl-shadow hkl-shadow-tow"></div>
+        <div class="hkl-speedline hkl-sl1"></div>
+        <div class="hkl-speedline hkl-sl2"></div>
+        <div class="hkl-speedline hkl-sl3"></div>
         <div class="hkl-debris">
           <span class="hkl-piece hkl-p1"></span>
           <span class="hkl-piece hkl-p2"></span>
@@ -4852,6 +4878,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.114.0', date:'2026-11-10',
+    fixes:['Four small touch-ups to the loading animation: the housekeeper\'s hands now actually rest on the cart instead of just fading into it, a soft contact shadow grounds both sets of wheels, a few quick gold trail-lines sell the motion now that the crossing is slower, and the dust being swept up is bigger and brighter against the dark background.']
+  },
   {
     v:'7.113.2', date:'2026-11-10',
     fixes:['Two more rounds on yesterday\'s loading animation, both from Carlos\'s own screenshot: the vacuum was visually crashing into the word LOADING as it crossed — there genuinely was no vertical gap between them, not just a crowded look — fixed by giving the scene more room below the cart rather than moving either piece by hand. And the crossing is now a little over twice as slow as it was.']
