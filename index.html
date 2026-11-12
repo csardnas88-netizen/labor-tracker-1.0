@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.120.0"/>
+<meta name="app-version" content="7.121.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4889,6 +4889,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.121.0', date:'2026-11-12',
+    fixes:['Overtime/Under Hours projection rows ("Option A" from the mockup Carlos picked): the actionable figure (how much over or under) now leads, bold, with the total projected hours it\'s computed from underneath as its own small line — instead of both numbers crammed into one string like "~48h 52m projected (8h 52m over)".']
+  },
   {
     v:'7.120.0', date:'2026-11-12',
     fixes:['Two more real scroll/close reports from today. (1) Checking off a Labor Focus Sprint item no longer closes the panel — it used to collapse on every single checkbox tap, forcing a re-open before the next one. (2) Expanding an Overtime row\'s weekly detail (or any other toggle deep in Day Analysis) no longer yanks the whole page back up to the day strip at the top — the day strip only adjusts its own scroll now, never the page\'s.']
@@ -16023,7 +16027,20 @@ function _laborPosCardHTML(opts){
         +(r.detail?' <span style="font-size:9px;color:var(--text3);">'+(openP?'&#9650;':'&#9660;')+'</span>':'')+'</div>'
         +(r.sub?'<div style="font-size:9px;color:var(--text3);margin-top:1px;">'+r.sub+'</div>':'')
         +(r.factorsNote?_laborFactorsNoteHTML(r.factorsNote):'')+'</div>'
-        +'<div style="font-size:11px;font-weight:700;color:'+r.valueColor+';white-space:nowrap;">'+r.value+'</div></div>';
+        /* Carlos's pick ("Option A") from a mockup, 2026-11-12: a
+           projection row used to read as one crammed string — "~48h 52m
+           projected (8h 52m over)" — forcing two numbers to be parsed out
+           of a single line. The actionable number (how much over/under)
+           now leads, bold; the total projected hours that number came
+           from sits underneath it, small and muted. r.valueSub is only
+           set by the two tiers that actually combine two numbers
+           (stillApproaching/underApproaching below) — every other tier's
+           single clean figure (real OT, already-over, already-under)
+           renders exactly as before. */
+        +'<div style="text-align:right;white-space:nowrap;">'
+        +'<div style="font-size:11px;font-weight:700;color:'+r.valueColor+';">'+r.value+'</div>'
+        +(r.valueSub?'<div style="font-size:9px;color:var(--text3);margin-top:2px;">'+r.valueSub+'</div>':'')
+        +'</div></div>';
       if(openP)html+='<div style="padding:0 16px 10px;">'+_laborOtDayStripHTML(opts.ds,r.detail)+'</div>';
     });
   });
@@ -16264,7 +16281,8 @@ function renderDashDayAnalysis(days,rooms,today,wk){
            to that one); this was specifically the orange. */
         otRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)',
-          value:'~'+_hToHM(p.projected)+' projected ('+_hToHM(overMin/60)+' over)',valueColor:'var(--text1)',detail:p,
+          value:'<span style="font-size:14px;font-weight:800;">'+_hToHM(overMin/60)+'</span> <span style="font-size:9px;font-weight:700;text-transform:uppercase;">over</span>',
+          valueColor:'var(--text1)',valueSub:'~'+_hToHM(p.projected)+' total projected',detail:p,
           otMin:overMin});
       });
       /* Carlos's ask, 2026-10-14, Option B of the 3 he was shown: a badge
@@ -16304,7 +16322,8 @@ function renderDashDayAnalysis(days,rooms,today,wk){
       underApproaching.forEach(function(p){
         underRows.push({id:p.id,name:p.name,pos:p.pos||'Unknown Position',
           sub:_hToHM(p.hoursSoFar)+' so far + '+p.remainingDays+' more day'+(p.remainingDays!==1?'s':'')+' scheduled (~'+p.shiftHours+'h each)',
-          value:'~'+_hToHM(p.projected)+' projected ('+_hToHM(40-p.projected)+' under)',valueColor:'var(--indigo)',detail:p,
+          value:'<span style="font-size:14px;font-weight:800;">'+_hToHM(40-p.projected)+'</span> <span style="font-size:9px;font-weight:700;text-transform:uppercase;">under</span>',
+          valueColor:'var(--indigo)',valueSub:'~'+_hToHM(p.projected)+' total projected',detail:p,
           lastDayBadge:_laborStayUntilBadge(ds,p)});
       });
 

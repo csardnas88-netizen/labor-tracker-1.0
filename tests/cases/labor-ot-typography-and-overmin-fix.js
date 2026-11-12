@@ -53,7 +53,7 @@ module.exports = {
     // ── Typography: name, value figure, and group header all match the
     // scale used elsewhere in Labor (11px/700, 11px/700, 9px/700). ──
     t.assert(/font-size:11px;font-weight:700;">Diana Martinez/.test(html), "the person name renders at 11px/700, matching Weekly Pace's position label (11.5px/700) and Labor Effectiveness's position cell (11px/700) — not the old 12px/600");
-    t.assert(/font-size:11px;font-weight:700;color:var\(--red\);white-space:nowrap;">8h 8m over 40h/.test(html), "the value figure renders at 11px/700 — not the old 13px/700");
+    t.assert(/font-size:11px;font-weight:700;color:var\(--red\);">8h 8m over 40h/.test(html), "the value figure renders at 11px/700 — not the old 13px/700");
 
     const groupHeaderIdx = html.indexOf('>Room Attendant<');
     t.assert(groupHeaderIdx !== -1, "Room Attendant's group header renders");

@@ -126,10 +126,15 @@ module.exports = {
     t.assert(/Olga Ramirez/.test(underHtml2), "expanding Room Attendant reveals Olga's row");
     t.assert(!/Juan Lopez/.test(underHtml2), "Laundry Attendant is still collapsed — Juan's row stays hidden");
     const olgaIdx = underHtml2.indexOf('Olga Ramirez');
-    const olgaRow = underHtml2.slice(olgaIdx, olgaIdx + 400);
+    const olgaRow = underHtml2.slice(olgaIdx, olgaIdx + 600);
     t.assert(/16h 0m so far \+ 1 more day scheduled \(~8h each\)/.test(olgaRow), "Olga's row shows the real math behind the estimate");
-    // 40 - 24h projected = 16h exactly short, now in h/m (not raw minutes)
-    t.assert(/~24h 0m projected \(16h 0m under\)/.test(olgaRow), 'and her projected total with the under-figure in h/m, not raw minutes');
+    // 40 - 24h projected = 16h exactly short, now in h/m (not raw minutes).
+    // Carlos's "Option A" pick, 2026-11-12: the actionable figure (16h 0m
+    // under) now leads, bold; the total it's computed from (~24h 0m) sits
+    // underneath as a separate, muted line rather than crammed into the
+    // same string.
+    t.assert(/16h 0m<\/span> <span[^>]*>under/.test(olgaRow), 'the under-figure leads, in h/m (not raw minutes)');
+    t.assert(/~24h 0m total projected/.test(olgaRow), 'and her projected total sits underneath it as its own line');
 
     // ── Expand Laundry Attendant too — Juan's row (the "already under",
     // no-days-left tier) appears, with the same h/m formatting fix ──
