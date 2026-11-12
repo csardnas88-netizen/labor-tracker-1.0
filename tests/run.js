@@ -148,6 +148,8 @@ const cases = [
   require('./cases/labor-sprint-dnd-previous-day'),
   require('./cases/sidebar-nav-groups'),
   require('./cases/labor-dash-break-mismatch-grid'),
+  require('./cases/labor-sprint-checkbox-click-stays-open'),
+  require('./cases/labor-dash-scroll-to-today-no-vertical-jump'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

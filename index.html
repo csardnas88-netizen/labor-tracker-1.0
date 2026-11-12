@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.119.0"/>
+<meta name="app-version" content="7.120.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4889,6 +4889,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.120.0', date:'2026-11-12',
+    fixes:['Two more real scroll/close reports from today. (1) Checking off a Labor Focus Sprint item no longer closes the panel — it used to collapse on every single checkbox tap, forcing a re-open before the next one. (2) Expanding an Overtime row\'s weekly detail (or any other toggle deep in Day Analysis) no longer yanks the whole page back up to the day strip at the top — the day strip only adjusts its own scroll now, never the page\'s.']
+  },
   {
     v:'7.119.0', date:'2026-11-11',
     fixes:['From today\'s labor-meeting feedback: on a wide monitor the Labor page is no longer capped at a narrow 1100px strip with empty space on both sides — the page now uses up to 1500px once the screen is wide enough (phones/tablets/laptops are unaffected). Break Exceptions and Position Mismatches now sit side by side when a day has both, instead of always stacking, so there\'s less to scroll past. The "Adjusted" badge on Weekly Labor Pace now has a hover explanation (what it subtracts and why) so it\'s not something you have to remember.']
@@ -14260,14 +14264,29 @@ try{stf_loadActual();}catch(e){}
 
 /* Only actually scrolls anything on the narrow (<640px) layout where
    #dashDayProgression becomes a horizontally-scrolling strip — on a
-   desktop-width screen the 7 columns already all fit, so this is a
-   harmless no-op there. inline:'center' rather than 'nearest' so today
-   isn't just barely reachable at the very edge, the same complaint that
-   started this: it lands centered, already fully visible. */
+   desktop-width screen the 7 columns already all fit, so this is meant
+   to be a no-op there.
+
+   Carlos's real report, 2026-11-12: expanding an Overtime row's weekly
+   detail (scrolled well down the page, reviewing Day Analysis) yanked
+   the whole page back up to this day strip. Root cause: this used to
+   call todayCard.scrollIntoView({inline:'center',block:'nearest'}) —
+   scrollIntoView's block option scrolls the page's OWN vertical scroll
+   if the container isn't "nearest"/visible on that axis, which it
+   usually isn't once you've scrolled down to Overtime. Every render of
+   renderLaborDash() calls this unconditionally (day strip rebuilds on
+   literally any Day Analysis interaction, not just a real day change),
+   so any expand/collapse toggle deep in the page re-triggered it. Now
+   moves only the container's OWN horizontal scroll position directly —
+   never touches document scroll on either axis, so there is nothing
+   left here for an unrelated click anywhere else on the page to disturb. */
 function dashScrollToToday(container){
   try{
-    var todayCard=container&&container.querySelector('[data-today="1"]');
-    if(todayCard)todayCard.scrollIntoView({inline:'center',block:'nearest'});
+    if(!container)return;
+    var todayCard=container.querySelector('[data-today="1"]');
+    if(!todayCard)return;
+    if(container.scrollWidth<=container.clientWidth)return;
+    container.scrollLeft=todayCard.offsetLeft-(container.clientWidth-todayCard.offsetWidth)/2;
   }catch(e){}
 }
 function renderLaborDash(){
@@ -14567,7 +14586,21 @@ function laborSprintPanelToggle(){
    explicit X already produces — he reopens it with one tap on the
    bubble whenever he's ready to check something off again. A click
    genuinely inside the panel (or on the bubble itself, which already
-   has its own toggle) is left alone. */
+   has its own toggle) is left alone.
+
+   Carlos's real report, 2026-11-12: checking an item closed the panel
+   immediately, forcing a re-tap on the bubble before he could check the
+   NEXT item — tedious on a list of a dozen checkboxes. Root cause: a
+   checkbox row's own onclick (laborSprintToggle) re-renders the panel
+   body SYNCHRONOUSLY, replacing e.target with a new node before this
+   listener ever saw the click — registered on the bubble phase, this
+   ran AFTER that replacement, so panel.contains(e.target) tested a node
+   already detached from the live tree and always came back false, i.e.
+   "looks like an outside click" on every single checkbox tap. Listening
+   on the CAPTURE phase instead runs this check before the checkbox's own
+   handler fires (capture always precedes a target's own listeners), so
+   e.target is still attached when it matters — genuine outside clicks
+   behave exactly as before, nothing here depends on bubble order. */
 document.addEventListener('click',function(e){
   var panel=document.getElementById('laborSprintPanel');
   var bubble=document.getElementById('laborSprintBubble');
@@ -14575,7 +14608,7 @@ document.addEventListener('click',function(e){
   if(panel.contains(e.target)||(bubble&&bubble.contains(e.target)))return;
   localStorage.setItem('hk_ls_panel_open','0');
   renderLaborSprint();
-});
+},true);
 /* Carlos's ask: a Start button + a running clock for how long today's
    routine takes, start to finish. Stored on the SAME per-date state
    blob the checkbox answers already live on (_startedAt/_finishedAt —
