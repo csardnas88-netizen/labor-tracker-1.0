@@ -147,6 +147,7 @@ const cases = [
   require('./cases/labor-sprint-am-review-detection'),
   require('./cases/labor-sprint-dnd-previous-day'),
   require('./cases/sidebar-nav-groups'),
+  require('./cases/labor-dash-break-mismatch-grid'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

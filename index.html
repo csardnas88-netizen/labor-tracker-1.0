@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.118.0"/>
+<meta name="app-version" content="7.119.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -577,6 +577,17 @@ tbody tr:hover td{background:var(--surface);}
    Without this the whole page — not just that one table — grows wider
    than the viewport instead of the table quietly scrolling on its own. */
 .pages-wrap{padding:var(--sp-xl);max-width:1100px;margin:0 auto;min-width:0;width:100%;overflow-x:hidden;}
+/* Carlos's ask, 2026-11-11, after a labor-meeting screenshot showed a wide
+   band of unused space on both sides of the Labor tables: the 1100px cap
+   above was sized for a laptop, not his wider monitor. Raised only past
+   1500px of actual viewport width (nothing below that point is affected,
+   so phones/tablets/laptops render exactly as before) — just enough to
+   let the flexible columns (Labor Effectiveness' Position column, the
+   Weekly Pace tables, the Break Exceptions/Position Mismatches pair)
+   breathe instead of sitting pinned to a narrow center strip. */
+@media(min-width:1500px){
+  .pages-wrap{max-width:1500px;}
+}
 /* ══ SIDEBAR — "Rail", Carlos's pick 2026-11-09 ══
    Iconless by request: hierarchy comes from size, weight and spacing
    instead of emoji. The active page is marked by a short accent segment
@@ -4878,6 +4889,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.119.0', date:'2026-11-11',
+    fixes:['From today\'s labor-meeting feedback: on a wide monitor the Labor page is no longer capped at a narrow 1100px strip with empty space on both sides — the page now uses up to 1500px once the screen is wide enough (phones/tablets/laptops are unaffected). Break Exceptions and Position Mismatches now sit side by side when a day has both, instead of always stacking, so there\'s less to scroll past. The "Adjusted" badge on Weekly Labor Pace now has a hover explanation (what it subtracts and why) so it\'s not something you have to remember.']
+  },
   {
     v:'7.118.0', date:'2026-11-11',
     fixes:['The "Signed out after inactivity" message on the sign-in screen no longer renders in alarming red — it\'s routine, expected behavior, not a real sign-in error. Now a small lime dot next to plain muted text, picked by Carlos from 4 options. Real sign-in errors (wrong password, connection trouble) are untouched.']
@@ -15272,7 +15287,7 @@ function buildWeeklyPaceHTML(days,rooms,wk){
       html+='<div style="background:var(--white);border:1px solid var(--gold);box-shadow:inset 0 0 0 2px var(--gold);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
       html+='<div style="background:var(--navy);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
       html+='<div>';
-      html+='<div style="font-size:13px;font-weight:700;color:var(--on-fill);">&#128202; Weekly Labor Pace <span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--on-accent);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;">Adjusted</span></div>';
+      html+='<div style="font-size:13px;font-weight:700;color:var(--on-fill);">&#128202; Weekly Labor Pace <span title="Same variance as Weekly Labor Pace above, with each position&#39;s own Training and Project hours subtracted — so a position that looks over budget can turn out under budget once that extra time is netted out. Only shown on weeks that had Training or Project hours." style="font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--on-accent);background:var(--gold);padding:3px 9px;border-radius:99px;margin-left:6px;text-transform:uppercase;vertical-align:middle;cursor:help;">Adjusted</span></div>';
       html+='<div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px;">'
         +wk.start.toLocaleDateString('en-US',{month:'short',day:'numeric'})
         +' – '+wk.end.toLocaleDateString('en-US',{month:'short',day:'numeric'})
@@ -16305,13 +16320,21 @@ function renderDashDayAnalysis(days,rooms,today,wk){
        reassurance case when there's truly nothing to flag. */
     var breakEmps=snapEmps.filter(function(e){return isBreakException(e);});
 
-    html+='<div class="card" style="margin-bottom:14px;">'
+    /* Built into its own string (not appended straight to html) so it can
+       sit side-by-side with Position Mismatches below on wide screens
+       instead of always stacking full-width — Carlos's 2026-11-11 ask to
+       put the freed-up side margins to work so there's less to scroll
+       past. Same optional-pairing pattern as otCardHtml/underCardHtml
+       above: wrapped in .ot-under-grid only when BOTH cards exist, so a
+       day with no mismatches still gets Break Exceptions at full width
+       rather than stranded in a half-width column alone. */
+    var breakCardHtml='<div class="card" style="margin-bottom:14px;">'
       +'<div class="card-head"><div class="card-title">&#9749; Break Exceptions</div>'
       +'<span class="badge '+(snapEmps.length?(breakEmps.length?'b-red':'b-green'):'b-amber')+'">'
       +(snapEmps.length?(breakEmps.length?breakEmps.length+' employees':'All breaks OK &#10003;'):'Re-upload PDF')+'</span></div>';
 
     if(!snapEmps.length){
-      html+='<div style="padding:14px;text-align:center;color:var(--text3);">'
+      breakCardHtml+='<div style="padding:14px;text-align:center;color:var(--text3);">'
         +'Re-upload this day\'s PDF to see employee break details</div>';
     }else if(breakEmps.length){
       /* Sort exceptions: No Break first, then by mins ascending */
@@ -16322,7 +16345,7 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         if(mb===0&&ma!==0)return 1;
         return ma-mb;
       });
-      html+='<div style="padding:0 14px 8px;">';
+      breakCardHtml+='<div style="padding:0 14px 8px;">';
 
       /* Exception rows */
       breakEmps.forEach(function(e){
@@ -16338,25 +16361,25 @@ function renderDashDayAnalysis(days,rooms,today,wk){
         var label=breakLabel(mins,e.pos||'',e.id);
         var tdBadge=isTurndown(e.pos)?'<span style="background:var(--indigo-bg);color:var(--indigo);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:5px;">Part-time</span>':'';
 
-        html+='<div style="margin:6px 0;border-radius:8px;background:var(--white);'
+        breakCardHtml+='<div style="margin:6px 0;border-radius:8px;background:var(--white);'
           +'border:1px solid var(--border);border-left:3px solid '+leftBar+';display:flex;align-items:center;'
           +'justify-content:space-between;padding:8px 11px;gap:10px;">';
-        html+='<div style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;">';
-        html+='<span style="font-size:15px;flex-shrink:0;">'+icon+'</span>';
-        html+='<div style="min-width:0;">';
-        html+='<div style="font-weight:700;color:var(--text1);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+'</div>';
-        html+='<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+pos+tdBadge+'</div>';
-        html+='</div></div>';
-        html+='<span style="flex-shrink:0;background:'+badgeBg+';color:'+badgeColor+';'
+        breakCardHtml+='<div style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;">';
+        breakCardHtml+='<span style="font-size:15px;flex-shrink:0;">'+icon+'</span>';
+        breakCardHtml+='<div style="min-width:0;">';
+        breakCardHtml+='<div style="font-weight:700;color:var(--text1);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+e.name+'</div>';
+        breakCardHtml+='<div style="font-size:10px;color:var(--text3);margin-top:1px;">'+pos+tdBadge+'</div>';
+        breakCardHtml+='</div></div>';
+        breakCardHtml+='<span style="flex-shrink:0;background:'+badgeBg+';color:'+badgeColor+';'
           +'font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;white-space:nowrap;">'+label+'</span>';
-        html+='</div>';
+        breakCardHtml+='</div>';
       });
 
-      html+='</div>';
+      breakCardHtml+='</div>';
     }else{
-      html+='<div style="padding:14px;text-align:center;color:var(--text3);">No break exceptions &#10003;</div>';
+      breakCardHtml+='<div style="padding:14px;text-align:center;color:var(--text3);">No break exceptions &#10003;</div>';
     }
-    html+='</div>';
+    breakCardHtml+='</div>';
 
     /* ── Position mismatches only ── */
     var mismatches=(DATA&&DATA.emps)?DATA.emps.filter(function(e){
@@ -16368,13 +16391,14 @@ function renderDashDayAnalysis(days,rooms,today,wk){
     }):[];
     var totalProblems=mismatches.length+unknowns.length;
 
+    var mismatchCardHtml='';
     if(totalProblems>0){
-      html+='<div class="card" style="margin-bottom:14px;">'
+      mismatchCardHtml+='<div class="card" style="margin-bottom:14px;">'
         +'<div class="card-head"><div class="card-title">&#128260; Position Mismatches</div>'
         +'<span class="badge b-red">'+totalProblems+' need correction</span></div>';
       mismatches.forEach(function(e){
         var pp=primaryPos(e.name,e.id);
-        html+='<div style="display:flex;align-items:center;padding:10px 16px;'
+        mismatchCardHtml+='<div style="display:flex;align-items:center;padding:10px 16px;'
           +'border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap;">'
           +'<div style="flex:1;min-width:140px;">'
           +'<div style="font-size:13px;font-weight:600;">'+e.name+'</div>'
@@ -16385,13 +16409,19 @@ function renderDashDayAnalysis(days,rooms,today,wk){
           +'<div style="font-size:13px;font-weight:700;">'+e.paid.toFixed(2)+'h</div></div>';
       });
       if((DATA.emps.length-totalProblems)>0){
-        html+='<div style="padding:10px 16px;font-size:11px;color:var(--text3);'
+        mismatchCardHtml+='<div style="padding:10px 16px;font-size:11px;color:var(--text3);'
           +'display:flex;justify-content:space-between;align-items:center;">'
           +'<span>'+(DATA.emps.length-totalProblems)+' employees clocked correctly</span>'
           +'<span style="color:var(--ink-strong);font-weight:600;cursor:pointer;" '
           +'onclick="showPage(\'position\')">View all &#8594;</span></div>';
       }
-      html+='</div>';
+      mismatchCardHtml+='</div>';
+    }
+
+    if(breakCardHtml&&mismatchCardHtml){
+      html+='<div class="ot-under-grid">'+breakCardHtml+mismatchCardHtml+'</div>';
+    }else{
+      html+=breakCardHtml+mismatchCardHtml;
     }
   }
 
