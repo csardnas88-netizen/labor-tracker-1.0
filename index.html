@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.121.0"/>
+<meta name="app-version" content="7.122.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4890,6 +4890,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.122.0', date:'2026-11-13',
+    fixes:['Fixed a real cross-device sync gap on the Schedule: an edit made on the phone can fail to ever reach other devices if the tab gets backgrounded (screen locked, app switched) before the save finishes pushing to the cloud — iOS can suspend or kill that in-flight request, and nothing used to retry it afterward. The app now remembers when a save hasn\'t been confirmed pushed yet and automatically retries it the next time any device (including the same phone) opens or comes back to the foreground, instead of waiting for another edit to happen to accidentally carry it along.']
+  },
+  {
     v:'7.121.0', date:'2026-11-12',
     fixes:['Overtime/Under Hours projection rows ("Option A" from the mockup Carlos picked): the actionable figure (how much over or under) now leads, bold, with the total projected hours it\'s computed from underneath as its own small line — instead of both numbers crammed into one string like "~48h 52m projected (8h 52m over)".']
   },
@@ -7339,6 +7343,7 @@ async function _authCheckAndProceed(){
        on every resume closes that gap regardless of realtime timing. */
     setTimeout(function(){try{syncFromSheets();}catch(e){}},400);
     setTimeout(function(){try{startRealtime();}catch(e){}},1500);
+    setTimeout(function(){try{_schedRetryPendingPush();}catch(e){}},2000);
     return;
   }
   if(tok&&_authExpired()){
@@ -7347,6 +7352,7 @@ async function _authCheckAndProceed(){
       _authUpdateUI();
       setTimeout(function(){try{syncFromSheets();}catch(e){}},400);
       setTimeout(function(){try{startRealtime();}catch(e){}},1500);
+      setTimeout(function(){try{_schedRetryPendingPush();}catch(e){}},2000);
       return;
     }
   }
@@ -7565,6 +7571,13 @@ function _onResumeForeground(){
   if(_authToken()&&!_authExpired()){
     try{syncFromSheets();}catch(e){}
     try{startRealtime();}catch(e){}
+    /* Carlos's real report, 2026-11-13: a Schedule edit made on his
+       phone never reached his laptop — see dlSaveSchedule's own note.
+       Coming back to THIS device (any device, including the one the
+       edit happened on) is exactly the moment to check whether an
+       earlier save on it was ever actually confirmed pushed, and retry
+       if not. Delayed slightly so the pull above lands first. */
+    setTimeout(function(){try{_schedRetryPendingPush();}catch(e){}},2000);
   }
 }
 document.addEventListener('visibilitychange',function(){ if(!document.hidden)_onResumeForeground(); });
@@ -23149,11 +23162,37 @@ function dlSaveSchedule(o){
     });
   }
   safeSetItem('hk_dl_schedule',JSON.stringify(o));
+  /* Carlos's real report, 2026-11-13: a Schedule edit on his iPhone never
+     reached his laptop. The local save above is synchronous and never
+     lost, but the push below is an async pull-merge-push chain — if the
+     phone's tab gets backgrounded (locked screen, switched apps) before
+     it settles, iOS can suspend or discard it mid-flight. Nothing used to
+     retry that: _onResumeForeground only pulls, and the existing 30s
+     failure-retry loop only fires once a failure is actually RECORDED,
+     which never happens if the JS simply never got to run. _savedat is
+     stamped here, unconditionally, before any of the async work; _pushedat
+     only once a push attempt (success OR a caught failure, both ends of
+     the chain below) actually ran to completion. _schedRetryPendingPush
+     compares the two on the next resume/load and retries if the save was
+     never actually confirmed pushed — same shadow-timestamp philosophy as
+     _monthPushShadow, just for this one record. */
+  try{localStorage.setItem('hk_dl_schedule_savedat',String(Date.now()));}catch(e){}
+  function _markPushed(){ try{localStorage.setItem('hk_dl_schedule_pushedat',String(Date.now()));}catch(e){} }
   _fetchRemoteSchedule().then(function(remote){
     var m=_schedMergeRecord(o,remote);
     if(m.changed)safeSetItem('hk_dl_schedule',JSON.stringify(m.rec));
-    try{supaPut('dl_schedule',m.rec);}catch(e){}
-  }).catch(function(){ try{supaPut('dl_schedule',o);}catch(e){} });
+    return supaPut('dl_schedule',m.rec);
+  }).then(_markPushed).catch(function(){ supaPut('dl_schedule',o).then(_markPushed,_markPushed); });
+}
+function _schedRetryPendingPush(){
+  try{
+    var saved=Number(localStorage.getItem('hk_dl_schedule_savedat')||0);
+    var pushed=Number(localStorage.getItem('hk_dl_schedule_pushedat')||0);
+    if(saved>pushed){
+      var raw=localStorage.getItem('hk_dl_schedule');
+      if(raw)dlSaveSchedule(JSON.parse(raw));
+    }
+  }catch(e){}
 }
 /* Same reactive-401-retry gap as _fetchRemoteTrainings (see its own
    comment) — authedFetch alone only refreshes proactively, before the

@@ -150,6 +150,7 @@ const cases = [
   require('./cases/labor-dash-break-mismatch-grid'),
   require('./cases/labor-sprint-checkbox-click-stays-open'),
   require('./cases/labor-dash-scroll-to-today-no-vertical-jump'),
+  require('./cases/schedule-retry-pending-push'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
