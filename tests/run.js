@@ -151,6 +151,8 @@ const cases = [
   require('./cases/labor-sprint-checkbox-click-stays-open'),
   require('./cases/labor-dash-scroll-to-today-no-vertical-jump'),
   require('./cases/schedule-retry-pending-push'),
+  require('./cases/schedule-linked-people-no-permanent-row'),
+  require('./cases/schedule-export-dailylineup-missing-cover-creation-pass'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

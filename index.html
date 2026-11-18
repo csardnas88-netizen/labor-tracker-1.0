@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.122.0"/>
+<meta name="app-version" content="7.123.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4889,6 +4889,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.123.0', date:'2026-11-17',
+    fixes:['Fixed Sandra unable to be marked LAUNDRY from her Room Attendant cell — Carlos\'s real report, "intenté con otros asociados y sí me deja." Root cause: the Nov 10 fix that stopped Gabriela Cuevas from getting a duplicate phantom row on Lobby (she already has a real one) also blocked, as a side effect, the ONLY way Sandra has ever gotten onto Laundry at all — she has no permanent row there, unlike Gabriela Cuevas. The guard now only blocks creating a row when a real one already exists elsewhere for that person; it no longer blocks creating the only row someone has. Two more gaps found in the code review that follows every fix now (none yet hit live): the real-row check is now spelling-drift-tolerant (same alias table as everywhere else, consolidated into one shared helper instead of three separately-written copies), and Export/Daily Lineup now run the same cover-row-creation passes the Schedule tab itself does before reading anything, closing a gap where opening either before the Schedule tab had rendered this session could miss a linked person\'s cover row entirely.']
+  },
   {
     v:'7.122.0', date:'2026-11-13',
     fixes:['Fixed a real cross-device sync gap on the Schedule: an edit made on the phone can fail to ever reach other devices if the tab gets backgrounded (screen locked, app switched) before the save finishes pushing to the cloud — iOS can suspend or kill that in-flight request, and nothing used to retry it afterward. The app now remembers when a save hasn\'t been confirmed pushed yet and automatically retries it the next time any device (including the same phone) opens or comes back to the foreground, instead of waiting for another edit to happen to accidentally carry it along.']
@@ -26279,11 +26283,38 @@ function _schedLinkedTargetName(bk,name,targetCrew){
   });
   return hit;
 }
+/* Shared by schedSyncLaundryCoverRow/schedSyncLobbyCoverRow (the forward
+   guard) and _schedCleanupLinkedCoverRows (the retroactive sweep) — one
+   definition of "does a REAL (non-'cover') row for this linked person
+   already exist on this crew", so a future fix to it only has one place
+   to land instead of three independently-written copies drifting apart.
+   dlNormAlias, not plain dlNorm: a linked pair's declared spelling can
+   itself be saved under an alias-drifted variant (the exact "Sandra S"
+   vs "Sandra S." class of bug this whole file has hit more than once) —
+   missing that would silently misjudge a real row as absent and recreate
+   a duplicate right alongside it. */
+function _schedLinkedRealRowExists(rows,linkedName){
+  return !!rows&&rows.some(function(r){return r[2]!=='cover'&&dlNormAlias(r[0])===dlNormAlias(linkedName);});
+}
 function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
   if(bk==='laundry')return false;
-  if(_schedLinkedTargetName(bk,name,'laundry'))return false;
   var day=SCH.days[ds]; if(!day)return false;
   if(!day.laundry)day.laundry=[];
+  /* Carlos's real report, 2026-11-17: marking Sandra's Room Attendant cell
+     LAUNDRY stopped doing anything at all — she has no permanent Laundry
+     row (see _schedCrewSpellingFor's own comment on this), only ever a
+     disposable 'cover' row this function creates on demand, exactly like
+     anyone else. The original _schedLinkedTargetName guard (added for
+     Gabriela Cuevas's phantom duplicate) bailed out unconditionally the
+     moment a linked pair existed for her — correct for Gabriela Cuevas,
+     who already has a REAL, non-'cover' "Gabriela" row sitting on Lobby
+     from the start, but wrong for Sandra, who has no real row here yet at
+     all: this function was the ONLY thing that ever created one. Now only
+     bails when a genuine (non-'cover') row under the pair's own declared
+     spelling already exists on this crew — that's the actual duplicate
+     case — and otherwise proceeds exactly as it would for anyone else. */
+  var linkedName=_schedLinkedTargetName(bk,name,'laundry');
+  if(linkedName&&_schedLinkedRealRowExists(day.laundry,linkedName))return false;
   var idx=-1;
   for(var i=0;i<day.laundry.length;i++) if(dlNormAlias(day.laundry[i][0])===dlNormAlias(name)){idx=i;break;}
   if(schedStatusIs(val,'LAUNDRY')){
@@ -26316,9 +26347,14 @@ function schedSyncLaundryCoverRow(SCH,ds,bk,name,val){
    deletes a row holding a real value on its own. */
 function schedSyncLobbyCoverRow(SCH,ds,bk,name,val){
   if(bk==='lobby')return false;
-  if(_schedLinkedTargetName(bk,name,'lobby'))return false;
   var day=SCH.days[ds]; if(!day)return false;
   if(!day.lobby)day.lobby=[];
+  /* Same fix as schedSyncLaundryCoverRow's own comment, 2026-11-17: only
+     bail when a REAL (non-'cover') row already exists under the pair's
+     own declared Lobby spelling — Gabriela Cuevas's actual case — not
+     unconditionally for anyone with a linked pair at all. */
+  var linkedName=_schedLinkedTargetName(bk,name,'lobby');
+  if(linkedName&&_schedLinkedRealRowExists(day.lobby,linkedName))return false;
   var idx=-1;
   for(var i=0;i<day.lobby.length;i++) if(dlNormAlias(day.lobby[i][0])===dlNormAlias(name)){idx=i;break;}
   if(schedStatusIs(val,'LOBBY')){
@@ -26712,6 +26748,19 @@ function _schedCleanupLinkedCoverRows(SCH,dates){
       [[pair.a,pair.b],[pair.b,pair.a]].forEach(function(sides){
         var home=sides[0],target=sides[1];
         var rows=day[target.crew]; if(!rows)return;
+        /* Carlos's real report, 2026-11-17 (Sandra, Laundry): this used to
+           delete ANY 'cover'-tagged row spelled as the pair's home name on
+           the target crew, unconditionally — correct when it's cleaning up
+           an actual duplicate sitting ALONGSIDE the person's real row
+           (Gabriela Cuevas, who has her own permanent non-'cover' row
+           spelled "Gabriela" on Lobby), but wrong for Sandra: she has NO
+           permanent Laundry row at all, only ever this same 'cover' row —
+           deleting it left her with nothing, right after
+           schedSyncLaundryCoverRow had just been fixed to allow creating
+           it. Only a genuine duplicate (a different, non-'cover' row under
+           the pair's own target spelling ALSO present) is actually a
+           phantom worth removing. */
+        if(!_schedLinkedRealRowExists(rows,target.name))return;
         for(var i=rows.length-1;i>=0;i--){
           if(rows[i][2]==='cover'&&dlNorm(rows[i][0])===dlNorm(home.name)){
             rows.splice(i,1); changed=true;
@@ -27427,11 +27476,23 @@ function schedExportWarnings(SCH,dates){
      since whatever last touched this data (another device, a direct
      dlSaveSchedule from Fill Week/Excel import, or simply no re-render
      having happened yet). Rather than trust SCH to already be fully
-     reconciled, force the exact same two passes renderSchedule's own
+     reconciled, force the exact same passes renderSchedule's own
      self-heal runs, right before reading anything — so this always
      checks the SETTLED state, never a stale one, no matter what put SCH
-     in this shape or when a render last happened to run. */
+     in this shape or when a render last happened to run.
+
+     Carlos's real report, 2026-11-17 (code review, not yet hit live):
+     this comment already claimed "the exact same passes" but was
+     actually missing schedSyncAllLaundryCoverRows/schedSyncAllLobbyCoverRows
+     — the two passes that create a linked person's cover row in the
+     first place (Sandra's Laundry row, Jorge's Laundry row, anyone's
+     Lobby cover). Exporting or checking warnings before the Schedule tab
+     has ever rendered this session (another device's data just pulled
+     in, straight to Export) could silently undercount her as not
+     covering that crew. Added, same order renderSchedule itself uses. */
   var synced=false;
+  if(schedSyncAllLaundryCoverRows(SCH,dates))synced=true;
+  if(schedSyncAllLobbyCoverRows(SCH,dates))synced=true;
   if(schedApplyLinkedPeople(SCH,dates))synced=true;
   if(_schedCleanupLinkedCoverRows(SCH,dates))synced=true;
   if(schedApplyCrossCrewSync(SCH,dates))synced=true;
@@ -29753,10 +29814,18 @@ function renderDailyLineup(){
      (schedApplyLinkedPeople/_schedCleanupLinkedCoverRows) might not have
      fired yet. Carlos's real report: Gabriela printed twice in Lobby's
      section here even though the Schedule tab itself looked fine, same
-     reasoning schedExportWarnings already uses for the Excel export. */
+     reasoning schedExportWarnings already uses for the Excel export.
+
+     Carlos's real report, 2026-11-17 (code review, not yet hit live):
+     missing the same two creation passes schedExportWarnings was just
+     found missing — without them, a linked person's cover row (Sandra's
+     Laundry row, a fresh Jorge/Lobby cover) might not exist yet for this
+     page to find, the same gap just fixed there. */
   if(SCH&&SCH.days){
     var dlSynced=false;
     var dlDates=Object.keys(SCH.days);
+    if(schedSyncAllLaundryCoverRows(SCH,dlDates))dlSynced=true;
+    if(schedSyncAllLobbyCoverRows(SCH,dlDates))dlSynced=true;
     if(schedApplyLinkedPeople(SCH,dlDates))dlSynced=true;
     if(_schedCleanupLinkedCoverRows(SCH,dlDates))dlSynced=true;
     if(schedPurgeDuplicateAliasRows(SCH))dlSynced=true;
