@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.123.0"/>
+<meta name="app-version" content="7.124.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4890,6 +4890,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.124.0', date:'2026-11-17',
+    features:['Added a "Move to Lobby AM/PM" option to the Lobby crew\'s per-person ⋮ menu — Carlos\'s ask, after moving Sandra Silva to Lobby landed her on AM with no way to say PM. Works for anyone, any time, not just at the moment someone\'s first added (the only way to choose a side before this). Never offered for a one-day "cover" row (someone borrowed from another crew just for that day) — the code review that follows every fix now caught that flipping it there would have set a permanent preference off a single day\'s borrowed coverage, plus a separate gap where the whole AM/PM preference was never actually reaching Supabase at all (device-local only, same "fixed here, still broken there" class already hit a few times before) — both fixed before this ever shipped.']
+  },
+  {
     v:'7.123.0', date:'2026-11-17',
     fixes:['Fixed Sandra unable to be marked LAUNDRY from her Room Attendant cell — Carlos\'s real report, "intenté con otros asociados y sí me deja." Root cause: the Nov 10 fix that stopped Gabriela Cuevas from getting a duplicate phantom row on Lobby (she already has a real one) also blocked, as a side effect, the ONLY way Sandra has ever gotten onto Laundry at all — she has no permanent row there, unlike Gabriela Cuevas. The guard now only blocks creating a row when a real one already exists elsewhere for that person; it no longer blocks creating the only row someone has. Two more gaps found in the code review that follows every fix now (none yet hit live): the real-row check is now spelling-drift-tolerant (same alias table as everywhere else, consolidated into one shared helper instead of three separately-written copies), and Export/Daily Lineup now run the same cover-row-creation passes the Schedule tab itself does before reading anything, closing a gap where opening either before the Schedule tab had rendered this session could miss a linked person\'s cover row entirely.']
   },
@@ -9283,6 +9287,20 @@ function _syncFromSheetsPull(){
             updated=true;
           }
         }
+        /* Code review, 2026-11-17: hk_dl_lobby_shift (who's Lobby AM vs
+           PM) was never pulled back either — same gap, same fix shape as
+           hk_poscheck_notes right below. Local wins a per-person conflict
+           (this device's own just-made choice), remote fills in anyone
+           this device hasn't set an opinion on. */
+        if(key==="hk_dl_lobby_shift"){
+          var remoteLS=all[key];
+          if(remoteLS&&typeof remoteLS==='object'){
+            var localLS=schedLobbyShiftMap();
+            var mergedLS=Object.assign({},remoteLS,localLS);
+            safeSetItem('hk_dl_lobby_shift',JSON.stringify(mergedLS));
+            updated=true;
+          }
+        }
         if(key==="hk_poscheck_notes"){
           var remotePC=all[key];
           if(remotePC&&typeof remotePC==='object'){
@@ -9439,7 +9457,7 @@ function forceSyncToSupabase(){
     'latearrivals_deleted_ids','req_notebook_deleted_ids','trainings_deleted_ids',
     'project_entries_deleted_keys','hk_roster_overrides','hk_labor_model',
     'hk_staffing_actual','hk_staffing_input','hk_trainings','hk_emp_dates',
-    'hk_section_pin','hk_poscheck_notes','hk_break_notes','hk_paychex_report','hk_wtc_report',
+    'hk_section_pin','hk_poscheck_notes','hk_break_notes','hk_paychex_report','hk_wtc_report','hk_dl_lobby_shift',
     'hk_section_rotation'];
   Object.keys(localStorage).forEach(function(k){
     try{
@@ -24071,17 +24089,50 @@ var SCHED_LOBBY_PM_DEFAULT=['Sarahi','Andrea'];
 function schedLobbyShiftMap(){
   try{ var s=localStorage.getItem('hk_dl_lobby_shift'); return s?JSON.parse(s):{}; }catch(e){ return {}; }
 }
+/* Code review, 2026-11-17: this used to write ONLY to localStorage — never
+   pushed to Supabase at all (absent from forceSyncToSupabase's key list and
+   from _syncFromSheetsPull), so a shift set on one device simply never
+   reached any other. Harmless while the only way to set it was the AM/PM
+   picker's own rare add-time choice; turned into exactly the "fixed here,
+   still broken there" bug class this app has hit repeatedly the moment
+   schedToggleLobbyShiftFor made it a one-tap, frequently-used action. Now
+   pushed immediately, same fire-and-forget pattern hk_section_pin/
+   hk_labor_model already use for a small flat settings blob. Also keyed by
+   dlNormAlias now, not plain dlNorm — the same spelling-drift tolerance
+   _schedLinkedRealRowExists needed a few hours earlier the same day,
+   for the same reason (a name landing under a slightly different spelling
+   on a different crew/day must not silently read back to the AM default). */
 function schedSetLobbyShift(name,shift){
   var m=schedLobbyShiftMap();
-  m[dlNorm(name)]=shift;
+  m[dlNormAlias(name)]=shift;
   try{ safeSetItem('hk_dl_lobby_shift',JSON.stringify(m)); }catch(e){}
+  if(typeof supaPut==='function'){try{supaPut('hk_dl_lobby_shift',m);}catch(_){}}
 }
 function schedLobbyShift(name){
-  var m=schedLobbyShiftMap(), n=dlNorm(name);
+  var m=schedLobbyShiftMap(), n=dlNormAlias(name);
   if(m[n])return m[n];
-  if(SCHED_LOBBY_AM_DEFAULT.some(function(x){return dlNorm(x)===n;}))return 'am';
-  if(SCHED_LOBBY_PM_DEFAULT.some(function(x){return dlNorm(x)===n;}))return 'pm';
+  if(SCHED_LOBBY_AM_DEFAULT.some(function(x){return dlNormAlias(x)===n;}))return 'am';
+  if(SCHED_LOBBY_PM_DEFAULT.some(function(x){return dlNormAlias(x)===n;}))return 'pm';
   return 'am';
+}
+/* Carlos's ask, 2026-11-17: a per-person way to move someone between
+   Lobby AM and Lobby PM any time, not just at the moment she's first
+   added through one sub-card's own picker — covers both a brand-new
+   person landing on the wrong side (she was marked LOBBY from another
+   crew's cell, which has no AM/PM concept at all) and simply changing
+   her mind about an existing one.
+
+   Deliberately NOT offered for a 'cover' row (see the menu's own gate in
+   renderSchedule) — code review, 2026-11-17: a cover row is someone from
+   a DIFFERENT crew filling in for Lobby for ONE day only, and this map is
+   a permanent, name-keyed, day-independent fact about the person ("which
+   shift is normally hers"), not a per-day choice. Applying it from a
+   cover row would silently set her "permanent" Lobby shift off one day's
+   coverage, then misclassify every unrelated future day she happens to
+   cover Lobby again. */
+function schedToggleLobbyShiftFor(name){
+  schedSetLobbyShift(name,schedLobbyShift(name)==='pm'?'am':'pm');
+  renderSchedule();
 }
 /* ── Unifocus standard, mapping a position to its crew(s) ──
    Confirmed with Carlos rather than assumed:
@@ -28710,6 +28761,25 @@ function renderSchedule(){
             html+='<button onclick="schedToggleDayOffPrefDay(\''+nmJs+'\','+dpi+')" style="border:1px solid '+(dpOn?'var(--gd)':'var(--border)')+';background:'+(dpOn?'var(--gd)':'transparent')+';color:'+(dpOn?'#fff':'var(--text1)')+';font-weight:700;font-size:10px;padding:3px 7px;border-radius:5px;cursor:pointer;">'+SCHED_DOW_ABBR[dpi]+'</button>';
           }
           html+='</div></div>';
+        }
+        /* Carlos's ask, 2026-11-17: moving someone onto Lobby (editing her
+           existing crew's cell to LOBBY, which auto-creates a cover row —
+           schedSyncLobbyCoverRow — or any other path besides the AM/PM
+           sub-card's own dedicated "+ Add someone" picker) always lands
+           her on AM by default, with no way to say PM at the moment it
+           happens. Rather than try to intercept every path that can put
+           someone onto Lobby and ask there, one toggle here covers all of
+           them at once — reuses schedSetLobbyShift, the exact same
+           storage the AM/PM picker already writes to, so this and that
+           can never disagree about where she actually is. */
+        /* Code review, 2026-11-17: never for a 'cover' row (see
+           schedToggleLobbyShiftFor's own comment on why — this would
+           otherwise treat one day's borrowed coverage as a permanent
+           shift assignment that then misjudges every later, unrelated
+           day she covers Lobby again). */
+        if(b.key==='lobby'&&p[2]!=='cover'){
+          var curLobbyShift=schedLobbyShift(nm);
+          html+=menuBtn(curLobbyShift==='pm'?'&#8645; Move to Lobby AM':'&#8645; Move to Lobby PM','schedToggleLobbyShiftFor(\''+nmJs+'\')',curLobbyShift==='pm');
         }
         html+=menuBtn('&times; Remove from crew, this week onward','schedRemovePerson(\''+b.key+'\',\''+nmJs+'\')');
         html+='</div>';

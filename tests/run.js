@@ -153,6 +153,7 @@ const cases = [
   require('./cases/schedule-retry-pending-push'),
   require('./cases/schedule-linked-people-no-permanent-row'),
   require('./cases/schedule-export-dailylineup-missing-cover-creation-pass'),
+  require('./cases/schedule-lobby-shift-toggle'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
