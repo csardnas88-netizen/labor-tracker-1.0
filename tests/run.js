@@ -156,6 +156,7 @@ const cases = [
   require('./cases/schedule-lobby-shift-toggle'),
   require('./cases/schedule-weekend-rotation'),
   require('./cases/schedule-weekend-gap-presence'),
+  require('./cases/schedule-weekend-rotation-months'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

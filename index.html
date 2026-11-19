@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.126.0"/>
+<meta name="app-version" content="7.128.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4889,6 +4889,14 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.128.0', date:'2026-11-19',
+    features:['Weekend Rotation now delimits the months right on screen — Carlos\'s ask, so a question like "how did she rest in November" reads at a glance instead of counting date headers by hand. Each month gets its own spanning label over the weeks it actually covers, with a divider where one month ends and the next begins.']
+  },
+  {
+    v:'7.127.0', date:'2026-11-19',
+    fixes:['Fixed Weekend Rotation\'s Sat/Sun cells showing confusing letters — Carlos\'s real report, "qué significa F, qué significa W, qué significa H." They were leftover internal labels (full/work/half-off) with no legend entry and no meaning on their own. The legend above already explains the same 4 states through color alone — the cells are now plain color blocks, nothing printed inside.']
+  },
   {
     v:'7.126.0', date:'2026-11-19',
     features:['Added "Weekend Rotation" to the Schedule page — Carlos\'s ask, a panoramic view of who\'s actually had Saturday and/or Sunday off, by crew, across several weeks at once (6/8/12), without flipping week to week to piece it together by hand. Individual Saturday and Sunday each show their own state (not just a full-weekend yes/no), and a quiet marker flags whoever\'s gone the longest without a full weekend, answering "whose turn is it" at a glance. Reads the saved schedule, not Request Off\'s logged asks — a deliberate distinction he asked for, since what someone requested isn\'t always what the schedule ended up showing. The code review that follows every fix now caught and fixed, before any of this shipped: a real pre-existing bug in the shared weekend-gap logic that could rank a brand-new hire as more "overdue" for a weekend off than someone with genuine longstanding history — which actually affects Auto-fill\'s own fairness decision for who gets the next weekend off, not just this new view — plus a narrower lookback that missed a real weekend sitting in the 11th or 12th column of the 12-week view, and a marker that shouldn\'t have been offered for Managers/Overnight (no days-off rule exists for either).']
@@ -25613,7 +25621,16 @@ function _schedWeekendRotationHalfHTML(state,isFull,label){
   };
   var bg=S[cls].bg,border=S[cls].border,color=S[cls].color;
   var style=cls==='none'?'border-style:dashed;':'';
-  return '<div title="'+label+'" style="flex:1;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;background:'+bg+';color:'+color+';border:1px solid '+border+';'+style+'">'+(cls==='none'?'&middot;':cls[0].toUpperCase())+'</div>';
+  /* Carlos's real report, 2026-11-19: "qué significa F, qué significa
+     W, qué significa H" — the cell used to show cls[0].toUpperCase(),
+     a letter straight off the internal state name (full/work/half-off)
+     with no legend entry explaining it and no obvious meaning on its
+     own. The legend above already conveys the same 4 states through
+     color alone (solid blue/light blue/outlined/dashed) — the letter
+     was redundant on top of that, not an aid. Plain color block now,
+     nothing printed inside; the title attribute still carries the
+     exact day + status for anyone who hovers or taps for detail. */
+  return '<div title="'+label+'" style="flex:1;height:20px;border-radius:4px;background:'+bg+';border:1px solid '+border+';'+style+'"></div>';
 }
 function _buildWeekendRotationHTML(SCH){
   var n=schedWeekendRotationWeeks;
@@ -25637,6 +25654,26 @@ function _buildWeekendRotationHTML(SCH){
     +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;border:1px dashed var(--border);"></span>No report</span>'
     +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--yellow);"></span>Longest since her last full weekend off</span>'
     +'</div>';
+
+  /* Carlos's ask, 2026-11-19: delimit the months right on screen, so he
+     can read "how did she rest in November" at a glance instead of
+     counting date headers by hand. A week is grouped by the month its
+     own Saturday falls in — the same single-day rule the rest of this
+     view already uses to anchor a "weekend" to one date. monthBoundaries
+     holds the week-INDEX each new month group starts at (always
+     includes 0); shared across every crew below since weekStarts is
+     the same list for all of them. */
+  var monthBoundaries=[];
+  (function(){
+    var lastKey=null;
+    weekStarts.forEach(function(w,wi){
+      var key=w.getFullYear()+'-'+w.getMonth();
+      if(key!==lastKey){monthBoundaries.push(wi);lastKey=key;}
+    });
+  })();
+  function _schedWeekendRotationMonthDivider(wi){
+    return (wi>0&&monthBoundaries.indexOf(wi)!==-1)?'border-left:1px solid var(--border2);':'';
+  }
 
   SCHED_BLOCKS.forEach(function(b){
     var people=_schedWeekendRotationPeople(SCH,b.key,weekStarts);
@@ -25689,11 +25726,25 @@ function _buildWeekendRotationHTML(SCH){
       +'<span style="font-size:10px;color:rgba(255,255,255,.5);">'+people.length+' people &#8201;'+(collapsed?'&#9656;':'&#9662;')+'</span></div>';
     if(!collapsed){
       html+='<div style="overflow-x:auto;"><div style="min-width:'+(170+n*58+100)+'px;">';
-      html+='<div style="display:grid;grid-template-columns:minmax(150px,1fr) repeat('+n+',56px) 92px;gap:4px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);">';
+
+      /* Month-group header row — spans each month's own columns via
+         grid-column, so "November"/"December" reads as one label over
+         the weeks it actually covers rather than repeated per week. */
+      html+='<div style="display:grid;grid-template-columns:minmax(150px,1fr) repeat('+n+',56px) 92px;gap:4px;padding:6px 14px 0;background:var(--surface);">';
       html+='<div></div>';
-      weekStarts.forEach(function(w){
+      monthBoundaries.forEach(function(startIdx,gi){
+        var endIdx=(gi+1<monthBoundaries.length)?monthBoundaries[gi+1]:n;
+        html+='<div style="grid-column:span '+(endIdx-startIdx)+';text-align:center;font-size:9px;font-weight:800;color:var(--gd);text-transform:uppercase;letter-spacing:.4px;padding-bottom:4px;'+_schedWeekendRotationMonthDivider(startIdx)+'">'
+          +weekStarts[startIdx].toLocaleDateString('en-US',{month:'long'})+'</div>';
+      });
+      html+='<div></div>';
+      html+='</div>';
+
+      html+='<div style="display:grid;grid-template-columns:minmax(150px,1fr) repeat('+n+',56px) 92px;gap:4px;padding:0 14px 8px;background:var(--surface);border-bottom:1px solid var(--border);">';
+      html+='<div></div>';
+      weekStarts.forEach(function(w,wi){
         var end=new Date(w); end.setDate(end.getDate()+1);
-        html+='<div style="text-align:center;"><div style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;">'
+        html+='<div style="text-align:center;'+_schedWeekendRotationMonthDivider(wi)+'"><div style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;">'
           +w.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>'
           +'<div style="display:flex;gap:2px;margin-top:2px;"><span style="flex:1;font-size:7.5px;font-weight:800;color:var(--text3);">SAT</span><span style="flex:1;font-size:7.5px;font-weight:800;color:var(--text3);">SUN</span></div></div>';
       });
@@ -25703,14 +25754,14 @@ function _buildWeekendRotationHTML(SCH){
       people.forEach(function(nm){
         var fullCount=0;
         var cellsHtml='';
-        weekStarts.forEach(function(w){
+        weekStarts.forEach(function(w,wi){
           var dates=_schedDatesForWeekStart(w);
           var satState=_schedWeekendRotationDayState(SCH,dates[0],b.key,nm);
           var sunState=_schedWeekendRotationDayState(SCH,dates[1],b.key,nm);
           var isFull=satState==='off'&&sunState==='off';
           if(isFull)fullCount++;
           var rangeLabel=w.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-          cellsHtml+='<div style="display:flex;gap:2px;">'
+          cellsHtml+='<div style="display:flex;gap:2px;'+_schedWeekendRotationMonthDivider(wi)+'padding-left:'+(_schedWeekendRotationMonthDivider(wi)?'3px;':'0;')+'">'
             +_schedWeekendRotationHalfHTML(satState,isFull,'Sat '+rangeLabel)
             +_schedWeekendRotationHalfHTML(sunState,isFull,'Sun '+rangeLabel)
             +'</div>';
