@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.124.0"/>
+<meta name="app-version" content="7.125.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4889,6 +4889,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.125.0', date:'2026-11-17',
+    fixes:['Fixed "Move to Lobby AM/PM" not appearing at all for Sandra S — Carlos\'s real report. v7.124.0\'s own code review had just excluded \'cover\' rows from the toggle (worried a one-day borrow would get a permanent preference) — but Sandra S has no OTHER kind of Lobby row; a \'cover\' row is the only way she\'s ever been on Lobby at all, the same shape plain Sandra has always had on Laundry. Excluding \'cover\' silently hid the button for the main real case it exists for. Reverted — the toggle now appears for anyone on the Lobby crew, \'cover\' row or not.']
+  },
   {
     v:'7.124.0', date:'2026-11-17',
     features:['Added a "Move to Lobby AM/PM" option to the Lobby crew\'s per-person ⋮ menu — Carlos\'s ask, after moving Sandra Silva to Lobby landed her on AM with no way to say PM. Works for anyone, any time, not just at the moment someone\'s first added (the only way to choose a side before this). Never offered for a one-day "cover" row (someone borrowed from another crew just for that day) — the code review that follows every fix now caught that flipping it there would have set a permanent preference off a single day\'s borrowed coverage, plus a separate gap where the whole AM/PM preference was never actually reaching Supabase at all (device-local only, same "fixed here, still broken there" class already hit a few times before) — both fixed before this ever shipped.']
@@ -28772,12 +28776,18 @@ function renderSchedule(){
            them at once — reuses schedSetLobbyShift, the exact same
            storage the AM/PM picker already writes to, so this and that
            can never disagree about where she actually is. */
-        /* Code review, 2026-11-17: never for a 'cover' row (see
-           schedToggleLobbyShiftFor's own comment on why — this would
-           otherwise treat one day's borrowed coverage as a permanent
-           shift assignment that then misjudges every later, unrelated
-           day she covers Lobby again). */
-        if(b.key==='lobby'&&p[2]!=='cover'){
+        /* A same-day code review flagged excluding 'cover' rows here
+           (worried a one-day borrow would wrongly get a "permanent"
+           shift preference) — reverted the same day, Carlos's real
+           report: Sandra S's real, week-spanning Lobby PM presence IS a
+           'cover' row (she has no permanent one, same as plain Sandra on
+           Laundry — see schedSyncLaundryCoverRow's own history), so
+           excluding 'cover' silently hid this exact menu option for the
+           main real-world case it exists for. A 'cover' row lasting days
+           or weeks is functionally no different from a permanent one;
+           the tag only ever meant "no dedicated row exists yet," not
+           "temporary." */
+        if(b.key==='lobby'){
           var curLobbyShift=schedLobbyShift(nm);
           html+=menuBtn(curLobbyShift==='pm'?'&#8645; Move to Lobby AM':'&#8645; Move to Lobby PM','schedToggleLobbyShiftFor(\''+nmJs+'\')',curLobbyShift==='pm');
         }

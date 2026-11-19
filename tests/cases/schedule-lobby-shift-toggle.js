@@ -4,18 +4,24 @@
    A single per-person "Move to Lobby AM/PM" menu option now lets him fix
    an already-placed person's side at any time.
 
-   Code review, 2026-11-17, caught two real bugs in the first version of
-   this feature before it shipped:
-   1. schedSetLobbyShift only wrote to localStorage, never to Supabase —
-      a shift set on one device would never reach any other (same "fixed
-      here, still broken there" class this app has hit repeatedly).
-   2. The toggle was offered even on a 'cover' row (someone from another
-      crew borrowed onto Lobby for ONE day) — clicking it would have set
-      her PERMANENT shift preference off a single day's borrowed coverage,
-      then silently misjudged every later, unrelated day she covers
-      Lobby again. The toggle is now only offered for a real Lobby member
-      (schedAddPerson's row, tag 'added' or a plain crew-list row), never
-      for a 'cover' row. */
+   Code review, 2026-11-17, caught a real bug in the first version before
+   it shipped: schedSetLobbyShift only wrote to localStorage, never to
+   Supabase — a shift set on one device would never reach any other (same
+   "fixed here, still broken there" class this app has hit repeatedly).
+   Fixed by pushing/pulling it through the normal supaPut/_syncFromSheetsPull
+   plumbing, same as hk_section_pin.
+
+   The SAME review also flagged, and this file originally excluded, 'cover'
+   rows (someone marked onto Lobby from another crew's cell, rather than
+   through the AM/PM picker) — worried that flipping the shift there would
+   wrongly set a "permanent" preference off what might be a single day's
+   borrowed coverage. Reverted the same day: Carlos's actual real-world
+   report (Sandra S) IS a 'cover' row — she has no dedicated/"added" row at
+   all, the exact same shape plain Sandra has on Laundry (see
+   schedSyncLaundryCoverRow's own history) — so excluding 'cover' silently
+   hid the menu option for the main case it exists for. A 'cover' row that
+   spans days or weeks is functionally no different from a permanent one;
+   the tag only ever meant "no dedicated row exists yet," never "temporary." */
 const { loadApp, fakeSession } = require('../_harness');
 
 const DATES = ['2026-11-21', '2026-11-22', '2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27'];
@@ -27,7 +33,7 @@ function seedWeek(extra) {
 }
 
 module.exports = {
-  name: 'Lobby crew: a per-person menu moves a real member between Lobby AM/PM (and pushes it to Supabase), but never offers it for a one-day cover row',
+  name: 'Lobby crew: a per-person menu moves anyone on the crew between Lobby AM/PM — a real member or a \'cover\' row alike — and pushes it to Supabase',
   async run(t) {
     const { win } = await loadApp({ seed: fakeSession() });
     win.schedViewWeekStart = new Date(2026, 10, 21);
@@ -68,26 +74,31 @@ module.exports = {
     t.eq(win.schedLobbyShift('Sandra Silva'), 'am', 'toggles back to AM');
     win.schedTogglePersonMenu('lobby', 'Sandra Silva'); // close before the next scenario
 
-    // ── A different person landed on Lobby via a 'cover' row (borrowed
-    // for one day from another crew, the auto-cover path) must NEVER be
-    // offered the toggle — flipping it would wrongly set a permanent
-    // preference off a single day's borrowed coverage. ──
-    win.dlSaveSchedule(seedWeek((ds) => ({ gra: [['Vanesa', 'LOBBY']] })));
+    // ── Sandra S's real shape: she lands on Lobby via a 'cover' row (her
+    // Room Attendant cell reads LOBBY, same as Carlos's actual report) —
+    // the toggle must still be offered and must still work. ──
+    win.dlSaveSchedule(seedWeek((ds) => ({ gra: [['Sandra S', 'LOBBY']] })));
     win.renderSchedule();
     const SCH2 = win.dlLoadSchedule();
     t.assert(
-      (SCH2.days['2026-11-21'].lobby || []).some((r) => r[0] === 'Vanesa' && r[2] === 'cover'),
-      'the self-heal created her Lobby row tagged \'cover\', from the LOBBY mark on her own crew'
+      (SCH2.days['2026-11-21'].lobby || []).some((r) => r[0] === 'Sandra S' && r[2] === 'cover'),
+      'the self-heal created her Lobby row tagged \'cover\' — she has no dedicated row, same as the real case'
     );
-    win.schedTogglePersonMenu('lobby', 'Vanesa');
+    win.schedTogglePersonMenu('lobby', 'Sandra S');
     html = win.document.getElementById('scheduleContent').innerHTML;
     // Her name alone appears many times on the page (warnings card,
     // "+ Add someone" option lists, day-off tooltips elsewhere) — anchor
     // on her row's own kebab button instead, which is unique to her.
-    const vanesaIdx = html.indexOf('More options for Vanesa');
-    const vanesaMenu = html.slice(vanesaIdx, vanesaIdx + 4000);
-    t.assert(/Remove from crew/.test(vanesaMenu), 'sanity check: her menu is actually open');
-    t.assert(!/Move to Lobby/.test(vanesaMenu), 'no AM/PM toggle offered for a one-day cover row');
+    let sandraSIdx = html.indexOf('More options for Sandra S');
+    let sandraSMenu = html.slice(sandraSIdx, sandraSIdx + 4000);
+    t.assert(/Move to Lobby PM/.test(sandraSMenu), 'the toggle IS offered for a \'cover\' row — this is the real-world case it exists for');
+
+    win.schedToggleLobbyShiftFor('Sandra S');
+    t.eq(win.schedLobbyShift('Sandra S'), 'pm', 'toggling a \'cover\' row\'s shift actually works');
+    html = win.document.getElementById('scheduleContent').innerHTML;
+    sandraSIdx = html.indexOf('More options for Sandra S');
+    sandraSMenu = html.slice(sandraSIdx, sandraSIdx + 4000);
+    t.assert(/Move to Lobby AM/.test(sandraSMenu), 'and the menu label flips to match, same as a real member');
 
     // ── Never offered on a non-Lobby crew (Laundry has no AM/PM split). ──
     win.dlSaveSchedule(seedWeek((ds) => ({ laundry: [['Some Laundry Person', '1', 'added']] })));
