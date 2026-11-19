@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.125.0"/>
+<meta name="app-version" content="7.126.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4889,6 +4889,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.126.0', date:'2026-11-19',
+    features:['Added "Weekend Rotation" to the Schedule page — Carlos\'s ask, a panoramic view of who\'s actually had Saturday and/or Sunday off, by crew, across several weeks at once (6/8/12), without flipping week to week to piece it together by hand. Individual Saturday and Sunday each show their own state (not just a full-weekend yes/no), and a quiet marker flags whoever\'s gone the longest without a full weekend, answering "whose turn is it" at a glance. Reads the saved schedule, not Request Off\'s logged asks — a deliberate distinction he asked for, since what someone requested isn\'t always what the schedule ended up showing. The code review that follows every fix now caught and fixed, before any of this shipped: a real pre-existing bug in the shared weekend-gap logic that could rank a brand-new hire as more "overdue" for a weekend off than someone with genuine longstanding history — which actually affects Auto-fill\'s own fairness decision for who gets the next weekend off, not just this new view — plus a narrower lookback that missed a real weekend sitting in the 11th or 12th column of the 12-week view, and a marker that shouldn\'t have been offered for Managers/Overnight (no days-off rule exists for either).']
+  },
   {
     v:'7.125.0', date:'2026-11-17',
     fixes:['Fixed "Move to Lobby AM/PM" not appearing at all for Sandra S — Carlos\'s real report. v7.124.0\'s own code review had just excluded \'cover\' rows from the toggle (worried a one-day borrow would get a permanent preference) — but Sandra S has no OTHER kind of Lobby row; a \'cover\' row is the only way she\'s ever been on Lobby at all, the same shape plain Sandra has always had on Laundry. Excluding \'cover\' silently hid the button for the main real case it exists for. Reverted — the toggle now appears for anyone on the Lobby crew, \'cover\' row or not.']
@@ -25429,12 +25433,39 @@ function schedHasFullWeekend(SCH,dates,bk,name){
    "we simply don't have enough history yet" — a fresh app, or someone
    new to a crew, should never come back flagged as overdue from silence
    alone. */
-function schedWeekendGap(SCH,bk,name,beforeWeekStart){
+function schedWeekendGap(SCH,bk,name,beforeWeekStart,maxBack){
+  /* maxBack: how many weeks back to look — defaults to 10 for every
+     pre-existing caller. Weekend Rotation's own 12-week view needs to
+     see further back than that default allows (code review, 2026-11-19:
+     with only 10 checked, a real full weekend sitting in the 11th or
+     12th visible column was invisible to this function, so the "longest
+     since" marker could land on the wrong person while the on-screen
+     grid plainly showed otherwise) — passing weekStarts.length from
+     there lets it see as far back as it's actually displaying. */
+  maxBack=maxBack||10;
   var w=new Date(beforeWeekStart), weeksChecked=0;
-  for(var back=1;back<=10;back++){
+  for(var back=1;back<=maxBack;back++){
     w.setDate(w.getDate()-7);
     var wdates=_schedDatesForWeekStart(w);
-    if(!SCH.days[wdates[0]])continue;
+    /* Code review, 2026-11-19: this used to check whether the CALENDAR
+       DAY existed at all (SCH.days[wdates[0]]), not whether THIS PERSON
+       had a row on it — so a week where her crewmates had data but she
+       hadn't joined the crew yet still counted as "checked", contrary to
+       this function's own promise above. Two real, already-shipped
+       consequences found: schedScheduleChecks' weekend reminder (below)
+       could flag a brand-new hire the same week she joins, and worse,
+       schedWeekendDueOrder — which Auto-fill uses to decide who gets the
+       next full weekend off — ranks anyone with weeksAgo===null as
+       equally/more overdue than someone with real history, so a new
+       hire with no weekend data yet could get prioritized AHEAD of
+       someone who's genuinely waited the longest. Now checks whether
+       `name` herself has an actual row that Saturday or Sunday — the
+       same hasRow pattern _schedRestOffCount already uses a few lines
+       up, for the identical reason. */
+    var daySat=SCH.days[wdates[0]],daySun=SCH.days[wdates[1]];
+    var hasRow=(daySat&&daySat[bk]&&daySat[bk].some(function(r){return dlNormAlias(r[0])===dlNormAlias(name);}))
+      ||(daySun&&daySun[bk]&&daySun[bk].some(function(r){return dlNormAlias(r[0])===dlNormAlias(name);}));
+    if(!hasRow)continue;
     weeksChecked++;
     if(schedHasFullWeekend(SCH,wdates,bk,name))return {weeksAgo:back,checked:weeksChecked};
   }
@@ -25507,6 +25538,198 @@ function _schedRestWeekStripHTML(SCH,week,bk,name,isRecent){
   html+='</div></div>';
   return html;
 }
+
+/* ══════════════════════════════════════════════════════
+   WEEKEND ROTATION — Carlos's ask, 2026-11-19: a panoramic view of who's
+   actually rested which Saturdays/Sundays, by crew, across several weeks
+   at once — without flipping week to week to piece it together by hand.
+   Deliberately reads the SAVED SCHEDULE (same schedIsOff/schedCellFor
+   every other weekend feature already uses), not Request Off's logged
+   requests — Carlos's own distinction: a request is what someone ASKED
+   for, this is what the schedule says actually happened. Shown him a
+   mockup first (dark-theme, same tokens as the rest of the app); he
+   approved it, then asked for individual Sat/Sun as well as the full
+   weekend, not just the full-weekend-only version the mockup started
+   from. ══════════════════════════════════════════════════════ */
+var schedWeekendRotationOpen=false;
+var schedWeekendRotationWeeks=8;
+var schedWeekendRotationCollapsed={};
+function schedToggleWeekendRotation(){
+  schedWeekendRotationOpen=!schedWeekendRotationOpen;
+  renderSchedule();
+}
+function schedSetWeekendRotationWeeks(n){
+  schedWeekendRotationWeeks=n;
+  renderSchedule();
+}
+function schedToggleWeekendRotationCrew(bk){
+  schedWeekendRotationCollapsed[bk]=!schedWeekendRotationCollapsed[bk];
+  renderSchedule();
+}
+/* 'off'/'work'/'none' — 'none' covers both "no report this week" and a
+   genuinely blank cell (never filled in), since a blank can't honestly
+   be called a work day either; distinguishing those two sub-cases isn't
+   useful here the way it is for schedRestWeeksFor's own counts. Reuses
+   schedCellFor's own row lookup (code review, 2026-11-19) rather than a
+   second hand-rolled copy of it — any future fix to how a moved/renamed
+   row is matched lands here automatically instead of needing to be
+   duplicated. */
+function _schedWeekendRotationDayState(SCH,ds,bk,name){
+  var v=schedCellFor(SCH,ds,bk,name);
+  if(v==='')return 'none';
+  return schedIsOff(v)?'off':'work';
+}
+/* The weeks shown, oldest first, anchored on the REAL current week
+   (getHotelWeekStart(new Date())) — independent of whichever week Carlos
+   last navigated to on the Schedule tab itself, since this view's whole
+   point is not being tied to week-by-week navigation. */
+function _schedWeekendRotationWeekStarts(n){
+  var anchor=getHotelWeekStart(new Date()),out=[];
+  for(var i=n-1;i>=0;i--){ var w=new Date(anchor); w.setDate(w.getDate()-7*i); out.push(w); }
+  return out;
+}
+/* Union of everyone who had a row on this crew on ANY of the examined
+   weeks, most-recently-seen first — someone who's since left still shows
+   (her real history doesn't disappear), someone brand new simply has
+   'none' for every week before she joined. One _schedCrewRef call over
+   every displayed date at once (code review, 2026-11-19: this used to
+   call it once per week and dedupe the results a second time by hand —
+   _schedCrewRef already dedupes by dlNormAlias internally, so flattening
+   the dates — most recent week first — gets the identical most-
+   recently-seen ordering in one pass instead of re-implementing it). */
+function _schedWeekendRotationPeople(SCH,bk,weekStarts){
+  var allDates=[];
+  for(var i=weekStarts.length-1;i>=0;i--)allDates=allDates.concat(_schedDatesForWeekStart(weekStarts[i]));
+  return _schedCrewRef(SCH,bk,allDates).map(function(p){return p[0];});
+}
+var SCHED_WEEKEND_OFF_COLOR='#1565C0'; /* same blue the pre-existing "had the full weekend off last week" dot already uses */
+function _schedWeekendRotationHalfHTML(state,isFull,label){
+  var cls=state==='off'?(isFull?'full':'half-off'):(state==='work'?'work':'none');
+  var S={
+    full:{bg:SCHED_WEEKEND_OFF_COLOR,border:SCHED_WEEKEND_OFF_COLOR,color:'#fff'},
+    'half-off':{bg:'rgba(21,101,192,.22)',border:'rgba(21,101,192,.45)',color:'var(--text1)'},
+    work:{bg:'transparent',border:'var(--border2)',color:'var(--text3)'},
+    none:{bg:'transparent',border:'var(--border)',color:'var(--border2)'}
+  };
+  var bg=S[cls].bg,border=S[cls].border,color=S[cls].color;
+  var style=cls==='none'?'border-style:dashed;':'';
+  return '<div title="'+label+'" style="flex:1;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;background:'+bg+';color:'+color+';border:1px solid '+border+';'+style+'">'+(cls==='none'?'&middot;':cls[0].toUpperCase())+'</div>';
+}
+function _buildWeekendRotationHTML(SCH){
+  var n=schedWeekendRotationWeeks;
+  var weekStarts=_schedWeekendRotationWeekStarts(n);
+  var html='<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">';
+  html+='<div><div style="font-size:16px;font-weight:800;color:var(--text1);">&#128197; Weekend Rotation</div>'
+    +'<div style="font-size:10.5px;color:var(--text3);margin-top:2px;max-width:46ch;">Who\'s actually had Saturday and/or Sunday off, by crew — from the saved schedule, not Request Off\'s logged asks.</div></div>';
+  html+='<div style="display:flex;align-items:center;gap:8px;">';
+  html+='<div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+  [6,8,12].forEach(function(opt){
+    html+='<button onclick="schedSetWeekendRotationWeeks('+opt+')" style="border:none;'+(opt!==6?'border-left:1px solid var(--border);':'')+'background:'+(n===opt?'var(--gt)':'var(--sur)')+';color:'+(n===opt?'var(--gd)':'var(--text2)')+';font-size:10.5px;font-weight:700;padding:6px 10px;cursor:pointer;">'+opt+' wk</button>';
+  });
+  html+='</div>';
+  html+='<button onclick="schedToggleWeekendRotation()" class="btn btn-ghost btn-sm">&larr; Back to Schedule</button>';
+  html+='</div></div>';
+
+  html+='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:10.5px;color:var(--text2);margin-bottom:12px;">'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;background:#1565C0;"></span>Full weekend off</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;background:rgba(21,101,192,.22);border:1px solid rgba(21,101,192,.45);"></span>One day off</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;border:1px solid var(--border2);"></span>Worked</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;border:1px dashed var(--border);"></span>No report</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--yellow);"></span>Longest since her last full weekend off</span>'
+    +'</div>';
+
+  SCHED_BLOCKS.forEach(function(b){
+    var people=_schedWeekendRotationPeople(SCH,b.key,weekStarts);
+    if(!people.length)return;
+    var collapsed=!!schedWeekendRotationCollapsed[b.key];
+
+    /* Who's gone longest without a full weekend, for the amber dot —
+       reuses schedWeekendGap exactly as the per-row "Last week" column
+       already does, just picking the single worst case per crew rather
+       than showing everyone's number. Only marked when there's more
+       than one person to compare and at least one has real history to
+       judge from. Skipped entirely for a crew with no days-off rule at
+       all (SCHED_MIN_OFF has no entry for it) — Managers and Overnight
+       are explicitly 100%-manual/fixed roles elsewhere in this file
+       (schedScheduleChecks' own `if(!minOff)return;` guard, Auto-fill's
+       own weekendDueOrder exclusion) with no weekend-fairness
+       expectation to flag against; this view shouldn't invent one. */
+    var worstName=null,worstAgo=-1;
+    if(people.length>1&&SCHED_MIN_OFF[b.key]){
+      /* +7, so back=1 lands ON the most recent displayed week (the
+         anchor) rather than one week before it — a deliberate departure
+         from schedScheduleChecks/schedWeekendDueOrder, which exclude the
+         week currently on screen because THERE it's the week still being
+         actively built (cells can still change before Carlos is done).
+         This view has no such "still being decided" week — it's a
+         read-only look back at what already happened, and the anchor
+         week's cells are just as real as any older one once they're
+         filled in. Excluding it would make someone who plainly rested
+         the most recent displayed weekend read as having "never" had
+         one at all, which is worse, not more correct (code review,
+         2026-11-19: tried excluding it to match the other callers, and
+         that's exactly what it did — confirmed via the test fixture
+         before shipping). */
+      var beforeWeekStart=new Date(weekStarts[weekStarts.length-1]); beforeWeekStart.setDate(beforeWeekStart.getDate()+7);
+      people.forEach(function(nm){
+        var gap=schedWeekendGap(SCH,b.key,nm,beforeWeekStart,weekStarts.length);
+        /* gap.checked now counts weeks SHE actually had a row for (see
+           schedWeekendGap's own 2026-11-19 fix) — too new to this crew
+           to judge fairly if she hasn't been present for at least half
+           the displayed window yet. */
+        if(gap.checked<Math.ceil(weekStarts.length/2))return;
+        var ago=gap.weeksAgo===null?(gap.checked+1):gap.weeksAgo;
+        if(ago>worstAgo){worstAgo=ago;worstName=nm;}
+      });
+    }
+
+    html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
+    html+='<div onclick="schedToggleWeekendRotationCrew(\''+b.key+'\')" style="cursor:pointer;background:var(--navy);color:var(--on-fill);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;">'
+      +'<span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(b.label)+'</span>'
+      +'<span style="font-size:10px;color:rgba(255,255,255,.5);">'+people.length+' people &#8201;'+(collapsed?'&#9656;':'&#9662;')+'</span></div>';
+    if(!collapsed){
+      html+='<div style="overflow-x:auto;"><div style="min-width:'+(170+n*58+100)+'px;">';
+      html+='<div style="display:grid;grid-template-columns:minmax(150px,1fr) repeat('+n+',56px) 92px;gap:4px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);">';
+      html+='<div></div>';
+      weekStarts.forEach(function(w){
+        var end=new Date(w); end.setDate(end.getDate()+1);
+        html+='<div style="text-align:center;"><div style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;">'
+          +w.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>'
+          +'<div style="display:flex;gap:2px;margin-top:2px;"><span style="flex:1;font-size:7.5px;font-weight:800;color:var(--text3);">SAT</span><span style="flex:1;font-size:7.5px;font-weight:800;color:var(--text3);">SUN</span></div></div>';
+      });
+      html+='<div style="text-align:center;font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;">Full / '+n+'</div>';
+      html+='</div>';
+
+      people.forEach(function(nm){
+        var fullCount=0;
+        var cellsHtml='';
+        weekStarts.forEach(function(w){
+          var dates=_schedDatesForWeekStart(w);
+          var satState=_schedWeekendRotationDayState(SCH,dates[0],b.key,nm);
+          var sunState=_schedWeekendRotationDayState(SCH,dates[1],b.key,nm);
+          var isFull=satState==='off'&&sunState==='off';
+          if(isFull)fullCount++;
+          var rangeLabel=w.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+          cellsHtml+='<div style="display:flex;gap:2px;">'
+            +_schedWeekendRotationHalfHTML(satState,isFull,'Sat '+rangeLabel)
+            +_schedWeekendRotationHalfHTML(sunState,isFull,'Sun '+rangeLabel)
+            +'</div>';
+        });
+        html+='<div style="display:grid;grid-template-columns:minmax(150px,1fr) repeat('+n+',56px) 92px;gap:4px;padding:6px 14px;align-items:center;border-bottom:1px solid var(--border);">';
+        html+='<div style="display:flex;align-items:center;gap:6px;min-width:0;">'
+          +(nm===worstName?'<span style="width:7px;height:7px;border-radius:50%;background:var(--yellow);flex-shrink:0;" title="Longest since her last full weekend off"></span>':'')
+          +'<span style="font-size:11.5px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(nm)+'</span></div>';
+        html+=cellsHtml;
+        html+='<div style="text-align:center;font-size:11.5px;font-weight:800;color:var(--text1);">'+fullCount+' <span style="font-size:9px;font-weight:700;color:var(--text3);">/ '+n+'</span></div>';
+        html+='</div>';
+      });
+      html+='</div></div>';
+    }
+    html+='</div>';
+  });
+  return html;
+}
+
 /* One pass over every crew that carries a days-off rule, for the week
    currently on screen. Returns plain warnings — text plus a `type` used
    only to pick a dot color — never touches the schedule itself. */
@@ -28347,6 +28570,17 @@ function renderSchedule(){
     el.innerHTML=html; return;
   }
 
+  /* Weekend Rotation is its own self-contained view, deliberately not
+     tied to whichever week the Prev/Next arrows below have navigated to
+     — it reads several weeks' worth of history at once, anchored on the
+     real current week. Short-circuits before any of the normal
+     week-grid HTML below gets built. */
+  if(schedWeekendRotationOpen){
+    html+=_buildWeekendRotationHTML(SCH);
+    el.innerHTML=html;
+    return;
+  }
+
   var dates=schedWeekDates();
   var start=parseLocalDate(dates[0]), end=parseLocalDate(dates[6]);
   var thisWeek=dateStr(getHotelWeekStart(new Date()));
@@ -28370,6 +28604,11 @@ function renderSchedule(){
   html+='</div>';
   html+='<button onclick="changeSchedWeek(1)" title="Next week" style="padding:6px 13px;border:1px solid var(--border);border-radius:8px;background:var(--sur);font-size:14px;cursor:pointer;color:var(--text1);">&rarr;</button>';
   html+='</div>';
+  /* Carlos's ask, 2026-11-19: a panoramic, cross-week view of weekend
+     rest history, reachable without leaving the Schedule page — see
+     _buildWeekendRotationHTML's own header comment. */
+  html+='<div style="text-align:right;margin-bottom:12px;">'
+    +'<button onclick="schedToggleWeekendRotation()" class="btn btn-ghost btn-sm">&#128197; Weekend Rotation</button></div>';
 
   if(!loaded.length){
     var refStartHere=schedLatestLoadedWeekStart(SCH);

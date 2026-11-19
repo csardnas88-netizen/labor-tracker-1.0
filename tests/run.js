@@ -154,6 +154,8 @@ const cases = [
   require('./cases/schedule-linked-people-no-permanent-row'),
   require('./cases/schedule-export-dailylineup-missing-cover-creation-pass'),
   require('./cases/schedule-lobby-shift-toggle'),
+  require('./cases/schedule-weekend-rotation'),
+  require('./cases/schedule-weekend-gap-presence'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
