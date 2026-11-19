@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.128.0"/>
+<meta name="app-version" content="7.129.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4889,6 +4889,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.129.0', date:'2026-11-19',
+    fixes:['Request Off, two of Carlos\'s real reports: (1) picking the wrong one of two same-first-name people (Susan Aguilar/Supervisors vs. Susan/Laundry) used to fail the exact same silent way as "the week just isn\'t built yet" — the save toast now tells the two apart plainly, naming who/what crew was picked, so a wrong pick is caught right away instead of discovered later. (2) Rebeca\'s whole batch of Request Off entries for the week of Nov 21-27, logged days before that week existed on the Schedule, all landed as "not in a built week yet" and then just sat there forever — nothing ever retried them once the week WAS built, so only the manual "Re-sync" button (easy to forget) could catch them up. The Schedule now catches these up automatically the moment the week they touch is opened, exactly like every other self-heal pass already running there — but only ever fills a cell that\'s still genuinely undecided (blank or the generic default), never overwriting a real decision made since.']
+  },
   {
     v:'7.128.0', date:'2026-11-19',
     features:['Weekend Rotation now delimits the months right on screen — Carlos\'s ask, so a question like "how did she rest in November" reads at a glance instead of counting date headers by hand. Each month gets its own spanning label over the weeks it actually covers, with a divider where one month ends and the next begins.']
@@ -27826,6 +27830,7 @@ function schedExportWarnings(SCH,dates){
   if(_schedCleanupLinkedCoverRows(SCH,dates))synced=true;
   if(schedApplyCrossCrewSync(SCH,dates))synced=true;
   if(schedPurgeDuplicateAliasRows(SCH))synced=true;
+  if(schedAutoApplyPendingReqNotebook(SCH,dates))synced=true;
   if(synced){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
   var out=[];
   SCHED_BLOCKS.forEach(function(b){
@@ -28152,6 +28157,51 @@ function schedCreateWeek(){
   dlSaveSchedule(SCH);
   renderSchedule();
   showToast('&#10003; Week built from the crew list — fill in the days');
+}
+/* Carlos's real report, 2026-11-19: Rebeca logged a whole batch of
+   Request Off entries (Gabriela Cuevas, Jazmy/"Jasmine", and over 20
+   others) for the week of Nov 21-27 several days BEFORE that week was
+   actually built on the Schedule — every one of them landed in
+   missingDates at capture time (genuinely "not in a built week yet",
+   confirmed against the real data, not a wrong pick), and nothing ever
+   retried them once the week WAS built days later. The only way to
+   catch up was the manual "Re-sync Request Off to this week" button
+   below, which nobody remembered to press — so they just sat there,
+   invisible, until Carlos happened to notice two of them missing.
+
+   This runs the same catch-up automatically, every time a week
+   renders. Unlike that button (which blindly overwrites whatever's in
+   the cell, by design, for when Carlos wants to force a reapply), this
+   only fills a cell that's still genuinely undecided (blank or the
+   generic default '1') — it can never silently overwrite a real
+   schedule decision made in the days since the request was captured.
+   Only ever touches a date still sitting in that entry's OWN
+   missingDates — an already-written (or already-skipped) date is never
+   re-touched, so this can't undo a deliberate reqClearFromSchedule. */
+function schedAutoApplyPendingReqNotebook(SCH,dates){
+  var loaded=dates.filter(function(ds){return !!SCH.days[ds];});
+  if(!loaded.length)return false;
+  var list=loadReqNotebook();
+  var changed=false,notebookChanged=false;
+  list.forEach(function(r){
+    var pending=(r.missingDates||[]).filter(function(ds){return loaded.indexOf(ds)!==-1;});
+    if(!pending.length)return;
+    var val=RN_TYPE_CELL[r.type]||'R-OFF';
+    var stillMissing=[];
+    pending.forEach(function(ds){
+      var found=_reqScheduleRow(SCH.days[ds],r.crewKey,r.name);
+      if(!found){ stillMissing.push(ds); return; }
+      var cur=String(found.row[1]||'').trim();
+      if(cur!==''&&cur!=='1'){ stillMissing.push(ds); return; } /* a real decision already sits here */
+      found.row[1]=val;
+      schedApplyCrossCrewSyncForDate(SCH,ds,{name:r.name,crew:found.crew});
+      r.writtenDates=(r.writtenDates||[]).concat(ds);
+      changed=true;notebookChanged=true;
+    });
+    r.missingDates=stillMissing.concat((r.missingDates||[]).filter(function(ds){return loaded.indexOf(ds)===-1;}));
+  });
+  if(notebookChanged)saveReqNotebook(list);
+  return changed;
 }
 /* Carlos's real recurring bug: several Request Off entries wrote
    through correctly at capture time, but the cell later drifted back
@@ -28606,6 +28656,16 @@ function renderSchedule(){
      mismatch (Sandra S./Sandra S — Carlos's real report) should self-heal
      the moment any device opens the week, not depend on a UI button. */
   if(SCH&&SCH.days&&schedPurgeDuplicateAliasRows(SCH)){
+    SCH.savedAt=new Date().toISOString();
+    try{ dlSaveSchedule(SCH); }catch(e){}
+  }
+  /* Same reach and same reason, for any Request Off entry captured
+     before this week existed — see schedAutoApplyPendingReqNotebook's
+     own header comment (Carlos's real report, Rebeca's Nov 21-27 batch,
+     2026-11-19). Pushed through dlSaveSchedule, same as the Call-Off/
+     cover-chain heals above, so it catches up on every device, not
+     just whichever one happens to open the week first. */
+  if(SCH&&SCH.days&&schedAutoApplyPendingReqNotebook(SCH,schedWeekDates())){
     SCH.savedAt=new Date().toISOString();
     try{ dlSaveSchedule(SCH); }catch(e){}
   }
@@ -29375,12 +29435,23 @@ function schedReleaseReqNotebookDate(bk,name,ds){
 function reqWriteToSchedule(name,crewKey,dates,type){
   var val=RN_TYPE_CELL[type]||'R-OFF';
   var SCH=dlLoadSchedule();
-  if(!SCH||!SCH.days)return {written:[],missing:dates.slice()};
-  var written=[],missing=[];
+  if(!SCH||!SCH.days)return {written:[],missing:dates.slice(),missingNoWeek:dates.slice(),missingNoMatch:[]};
+  var written=[],missingNoWeek=[],missingNoMatch=[];
   dates.forEach(function(ds){
     var day=SCH.days[ds];
+    /* Carlos's real report, 2026-11-19: "si alguno de los managers elige
+       la Susan incorrecta, el request off no va al horario" — both
+       failure reasons used to collapse into the same bare "missing",
+       and the toast that followed ("X days not in a built week yet")
+       is only true of the FIRST one. Split so the caller can tell them
+       apart: the week genuinely doesn't exist yet (day is undefined,
+       nothing anyone picked could have helped) vs. the week exists but
+       no row matches this exact name+crew (the actual symptom of
+       picking the wrong one of two same-first-name people, e.g. "Susan"
+       the Laundry attendant vs. "Susan Aguilar" the Supervisor). */
+    if(!day){ missingNoWeek.push(ds); return; }
     var found=_reqScheduleRow(day,crewKey,name);
-    if(!found){ missing.push(ds); return; }
+    if(!found){ missingNoMatch.push(ds); return; }
     found.row[1]=val;
     /* Reconciles her OTHER crew (if she has one) right away, same as
        schedApplyCallOff already does after its own write — otherwise a
@@ -29391,7 +29462,7 @@ function reqWriteToSchedule(name,crewKey,dates,type){
     written.push(ds);
   });
   if(written.length){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
-  return {written:written,missing:missing};
+  return {written:written,missing:missingNoWeek.concat(missingNoMatch),missingNoWeek:missingNoWeek,missingNoMatch:missingNoMatch};
 }
 /* Undoes a request's write-through, but only cells that still say
    exactly what this request wrote — if Carlos already changed one by
@@ -29993,7 +30064,16 @@ function rnAddRequest(){
   entry.missingDates=res.missing;
   var cellVal=RN_TYPE_CELL[rnSelectedType]||'R-OFF';
   if(res.written.length)msg+=' — '+cellVal+' written to '+res.written.length+' day'+(res.written.length===1?'':'s')+' on the Schedule';
-  if(res.missing.length)msg+=(res.written.length?', ':' — ')+res.missing.length+' day'+(res.missing.length===1?'':'s')+' not in a built week yet';
+  if(res.missingNoWeek.length)msg+=(res.written.length||res.missingNoMatch.length?', ':' — ')+res.missingNoWeek.length+' day'+(res.missingNoWeek.length===1?'':'s')+' not in a built week yet';
+  /* Carlos's real report, 2026-11-19: this is the "picked the wrong
+     Susan" symptom — the week IS built, but nothing on crewKey (or any
+     other crew) matches this exact name, so nothing was written and
+     nothing ever will be until the request is corrected. Said plainly,
+     right when it happens, naming who/where was picked — not folded
+     into the same vague "not in a built week yet" the other case uses,
+     which reads as "the app just needs to catch up" when the real fix
+     is "pick the other person with this first name." */
+  if(res.missingNoMatch.length)msg+=(res.written.length||res.missingNoWeek.length?', ':' — ')+'&#9888; '+res.missingNoMatch.length+' day'+(res.missingNoMatch.length===1?'':'s')+' found no match for '+escHtml(name)+' on '+escHtml(crewLabel)+' — wrong person picked?';
   var list=loadReqNotebook();
   list.unshift(entry);
   saveReqNotebook(list);
@@ -30199,6 +30279,7 @@ function renderDailyLineup(){
     if(schedApplyLinkedPeople(SCH,dlDates))dlSynced=true;
     if(_schedCleanupLinkedCoverRows(SCH,dlDates))dlSynced=true;
     if(schedPurgeDuplicateAliasRows(SCH))dlSynced=true;
+    if(schedAutoApplyPendingReqNotebook(SCH,dlDates))dlSynced=true;
     if(dlSynced){ SCH.savedAt=new Date().toISOString(); dlSaveSchedule(SCH); }
   }
   var html='';
