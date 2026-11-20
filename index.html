@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.129.0"/>
+<meta name="app-version" content="7.130.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4889,6 +4889,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.130.0', date:'2026-11-19',
+    fixes:['Carlos\'s real clarification after the Request Off duplicate-name report: "Susan Aguilar" and "Susan" aren\'t two people — she\'s one Supervisor ("Susan A") who covers Laundry on occasion, spelled plain "Susan" there, same spelling-drift shape as Gabriela Cuevas. Linked the two so the schedule stops creating a second, phantom "Susan A" row on Laundry alongside her real "Susan" one. Caught by this project\'s own test suite before shipping: a first attempt at the fix wired her into the same continuous absence-mirroring Gabriela Cuevas/Sandra get, and that silently overwrote her real, current Supervisor schedule whenever her mostly-unused Laundry row happened to sit on a stale OFF from some earlier week — she only covers Laundry occasionally, so that row is never meant to speak for where she really is day to day. Fixed to recognize the two spellings as one person for the duplicate-row guard only, without the absence-mirroring.']
+  },
   {
     v:'7.129.0', date:'2026-11-19',
     fixes:['Request Off, two of Carlos\'s real reports: (1) picking the wrong one of two same-first-name people (Susan Aguilar/Supervisors vs. Susan/Laundry) used to fail the exact same silent way as "the week just isn\'t built yet" — the save toast now tells the two apart plainly, naming who/what crew was picked, so a wrong pick is caught right away instead of discovered later. (2) Rebeca\'s whole batch of Request Off entries for the week of Nov 21-27, logged days before that week existed on the Schedule, all landed as "not in a built week yet" and then just sat there forever — nothing ever retried them once the week WAS built, so only the manual "Re-sync" button (easy to forget) could catch them up. The Schedule now catches these up automatically the moment the week they touch is opened, exactly like every other self-heal pass already running there — but only ever fills a cell that\'s still genuinely undecided (blank or the generic default), never overwriting a real decision made since.']
@@ -26851,6 +26855,24 @@ function schedSyncAllLobbyCoverRows(SCH,dates){
 var SCHED_LINKED_PEOPLE=[
   {a:{crew:'gra',name:'Gabriela Cuevas'}, b:{crew:'lobby',name:'Gabriela',awayLabel:'ROOMS'}},
   {a:{crew:'gra',name:'Sandra'}, b:{crew:'laundry',name:'Sandra'}},
+  /* Carlos's real report, 2026-11-19: she's one Supervisor who covers
+     Laundry on occasion — a different spelling per crew (her real
+     Laundry row has always been plain "Susan", never "Susan A").
+     Without this pair, the generic cover mechanism didn't recognize
+     "Susan A"@sup and "Susan"@laundry as the same person, and created a
+     second, phantom "Susan A" 'cover' row on Laundry alongside her real
+     one — the same duplicate-row shape as Gabriela Cuevas above,
+     confirmed against the live data (both spellings sitting in
+     day.laundry at once).
+     Unlike Gabriela Cuevas/Sandra, though, she does NOT get the
+     continuous absence-mirroring the rest of this list gets —
+     noAbsenceSync:true opts her out of schedApplyLinkedPeopleForDate
+     entirely (see its own comment). She only occasionally covers
+     Laundry; her Laundry row sitting on a stale OFF/whatever from
+     whichever week she last actually covered it is the NORMAL state,
+     not a real absence that should ever override her actual Supervisor
+     schedule. */
+  {a:{crew:'sup',name:'Susan A'}, b:{crew:'laundry',name:'Susan'}, noAbsenceSync:true},
   /* Sandra S USED to live here as two separate pairs (gra/lobby,
      gra/laundry) — removed 2026-09-08. Carlos's real report: with a
      THIRD crew in play, the two pairs didn't know about each other, so
@@ -26889,6 +26911,20 @@ function _schedIsUnavailable(v){ return schedIsOff(v)||schedStatusIs(v,'TAILOR')
 function schedApplyLinkedPeopleForDate(SCH,ds,edited){
   var changed=false;
   SCHED_LINKED_PEOPLE.forEach(function(pair){
+    /* noAbsenceSync: this pair exists only so the phantom-duplicate-row
+       guards (_schedLinkedTargetName/_schedLinkedRealRowExists,
+       _schedCleanupLinkedCoverRows below) recognize the two spellings as
+       one person — it is NOT a continuous dual-crew identity like
+       Gabriela Cuevas or Sandra, who genuinely work one crew or the
+       other every day. Susan A's Laundry row is a leftover from
+       whichever week she last actually covered it; most days it has
+       nothing to do with where she really is, so mirroring an absence
+       between the two sides here would overwrite her real, current
+       Supervisor status with a stale, inapplicable Laundry value (caught
+       by tests/cases/daily-lineup.js's own pinned "Susan"/"Susan A"
+       collision fixture, which has exactly this combination — working
+       Supervisor, 'OFF' on an unrelated old Laundry row — on purpose). */
+    if(pair.noAbsenceSync)return;
     var aCell=schedCellFor(SCH,ds,pair.a.crew,pair.a.name);
     var bCell=schedCellFor(SCH,ds,pair.b.crew,pair.b.name);
     if(aCell===''||bCell==='')return;

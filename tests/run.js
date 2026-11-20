@@ -158,6 +158,7 @@ const cases = [
   require('./cases/schedule-weekend-gap-presence'),
   require('./cases/schedule-weekend-rotation-months'),
   require('./cases/req-notebook-missing-reasons-and-autocatchup'),
+  require('./cases/schedule-linked-people-susan-no-absence-sync'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
