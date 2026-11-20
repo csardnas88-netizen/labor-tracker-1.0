@@ -78,11 +78,15 @@ module.exports = {
     });
 
     win.dlSaveSchedule(SCH);
-    win.schedWeekendRotationOpen = true;
+    win.currentPage = 'schedule';
     win.renderSchedule();
-    let html = win.document.getElementById('scheduleContent').innerHTML;
+    t.eq(win.document.getElementById('schedWeekendBubble').style.display, 'flex', 'the floating bubble shows while on the Schedule page');
+    t.eq(win.document.getElementById('schedWeekendPanel').style.display, 'none', 'closed by default');
+    win.schedToggleWeekendRotation();
+    t.eq(win.document.getElementById('schedWeekendPanel').style.display, 'flex', 'opens on click, as an overlay — not by replacing the Schedule page content');
+    let html = win.document.getElementById('schedWeekendPanelBody').innerHTML;
 
-    t.assert(/Weekend Rotation/.test(html), 'the panoramic view rendered');
+    t.assert(/actually had Saturday and\/or Sunday off/.test(html), 'the panoramic view rendered');
     t.assert(/AM Room Attendant/.test(html), 'grouped by crew/department');
 
     const anaIdx = html.indexOf('>Ana<');
@@ -108,22 +112,19 @@ module.exports = {
     const carlaRow = html.slice(carlaIdx, carlaIdx + 6000);
     t.assert(/border-style:dashed/.test(carlaRow), 'her weeks before joining show the dashed "no report" state, not a worked day');
 
-    // ── Toggling back to the Schedule returns the normal week view. ──
+    // ── Clicking the panel's own X (same toggle) collapses it back to
+    // just the bubble — Carlos's whole point: it's an overlay he can
+    // dismiss, not a page he has to navigate back out of. The Schedule
+    // page underneath was never touched, so there's no "normal view" to
+    // return to or re-check here. ──
     win.schedToggleWeekendRotation();
-    html = win.document.getElementById('scheduleContent').innerHTML;
-    // The entry-point button's own label also says "Weekend Rotation" on
-    // the normal view — check for the open view's subtitle instead,
-    // which only exists while it's actually open.
-    t.assert(!/actually had Saturday and\/or Sunday off/.test(html), 'back to the normal Schedule view');
-    t.assert(/Previous week|Next week/.test(html), 'the usual week-picker arrows are back');
-
-    // ── The "📅 Weekend Rotation" button on the normal view opens it. ──
-    t.assert(/schedToggleWeekendRotation\(\)/.test(html), 'the entry-point button exists on the normal Schedule view');
+    t.eq(win.document.getElementById('schedWeekendPanel').style.display, 'none', 'collapses back to the bubble');
+    t.eq(win.document.getElementById('schedWeekendBubble').style.display, 'flex', 'the bubble itself stays up — still on the Schedule page');
 
     // ── Changing the weeks-back window re-renders with a new column count. ──
     win.schedToggleWeekendRotation();
     win.schedSetWeekendRotationWeeks(6);
-    html = win.document.getElementById('scheduleContent').innerHTML;
+    html = win.document.getElementById('schedWeekendPanelBody').innerHTML;
     t.assert(/>6 wk</.test(html) && /active|var\(--gt\)/.test(html), 'the 6-week option is selectable and renders');
     const anaIdx6 = html.indexOf('>Ana<');
     t.assert(new RegExp('Ana[\\s\\S]{0,6000}0\\s*<span[^>]*>\\s*/\\s*6').test(html), 'with only 6 weeks shown, Ana\'s one full weekend (8 weeks back) has rolled off the window entirely');
@@ -147,13 +148,55 @@ module.exports = {
       fillWeek(win, SCHmgr, w, { Mgr1: working1, Mgr2: ['1', '1', '1', '1', '1', '1', '1'] }, 'mgr');
     });
     win.dlSaveSchedule(SCHmgr);
-    win.schedWeekendRotationOpen = true; // make sure we're actually looking at the rotation view, not the normal one
-    win.renderSchedule();
-    html = win.document.getElementById('scheduleContent').innerHTML;
+    win.renderSchedule(); // panel is still open from above, picks up the new schedule data
+    html = win.document.getElementById('schedWeekendPanelBody').innerHTML;
     t.assert(/actually had Saturday and\/or Sunday off/.test(html), 'sanity check: the rotation view is the one actually open');
     const mgrCardIdx = html.indexOf('>Managers<');
     t.assert(mgrCardIdx !== -1, 'the Managers crew card renders');
     t.assert(!/Longest since her last full weekend off/.test(html.slice(mgrCardIdx, mgrCardIdx + 11000)),
       'no "most overdue" marker is invented for Managers — it has no days-off rule to judge against');
+    t.assert(!/Suggested for the week of/.test(html.slice(mgrCardIdx, mgrCardIdx + 11000)),
+      'no "suggested" marker either — same no-days-off-rule gate covers both');
+    win.schedToggleWeekendRotation(); // close again, tidy for the next sub-test
+
+    // ── Carlos's follow-up ask, 2026-11-20: a forward-looking suggestion
+    // for whose turn it is on the week he's actually BUILDING right now
+    // — distinct from the backward-looking amber dot above, which always
+    // looks back from "today" regardless of which week is open on the
+    // Schedule tab. Reuses schedWeekendDueOrder, the exact function
+    // Auto-fill itself already uses to decide the same question. ──
+    const SCHsug = { days: {} };
+    const sugWeeks = buildWeekStarts(win, 8);
+    sugWeeks.forEach((w, i) => {
+      // Elena rested recently (the most recent displayed week); Dolores
+      // has never had a day off at all across the whole window — which
+      // schedWeekendGap/schedWeekendDueOrder treat as "never", ranking
+      // her as more overdue than anyone with even one known rest, by
+      // design (see schedWeekendDueOrder's own header comment).
+      const workingElena = ['1', '1', '1', '1', '1', '1', '1'];
+      if (i === sugWeeks.length - 1) { workingElena[0] = 'OFF'; workingElena[1] = 'OFF'; }
+      fillWeek(win, SCHsug, w, { Dolores: ['1', '1', '1', '1', '1', '1', '1'], Elena: workingElena }, 'laundry');
+    });
+    win.dlSaveSchedule(SCHsug);
+    // The week Carlos has open on the Schedule tab right now — a week
+    // AFTER the whole displayed 8-week window, exactly the "building a
+    // future week" case his real report described.
+    const buildingWeek = new Date(sugWeeks[sugWeeks.length - 1]);
+    buildingWeek.setDate(buildingWeek.getDate() + 7);
+    win.schedViewWeekStart = buildingWeek;
+    const expectedSuggested = win.schedWeekendDueOrder(SCHsug, 'laundry', ['Dolores', 'Elena'], win.dateStr(buildingWeek))[0];
+    t.eq(expectedSuggested, 'Dolores', 'sanity check on the fixture, via the same function Auto-fill uses: Dolores is the one due');
+
+    win.renderSchedule();
+    win.schedToggleWeekendRotation();
+    html = win.document.getElementById('schedWeekendPanelBody').innerHTML;
+    const dolIdx = html.indexOf('>Dolores<');
+    t.assert(dolIdx !== -1, 'Dolores renders');
+    const dolBlock = html.slice(Math.max(0, dolIdx - 900), dolIdx + 50);
+    t.assert(/Suggested for the week of/.test(dolBlock), 'the green suggestion marker lands on Dolores, for the week Carlos actually has open');
+    const eleIdx = html.indexOf('>Elena<');
+    t.assert(eleIdx !== -1, 'Elena renders');
+    const eleBlock = html.slice(Math.max(0, eleIdx - 900), eleIdx + 50);
+    t.assert(!/Suggested for the week of/.test(eleBlock), 'not on Elena');
   },
 };

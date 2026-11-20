@@ -51,9 +51,10 @@ module.exports = {
       dates.forEach((ds) => { SCH.days[ds] = { gra: [['Marta', '1']] }; });
     });
     win.dlSaveSchedule(SCH);
-    win.schedWeekendRotationOpen = true;
+    win.currentPage = 'schedule';
     win.renderSchedule();
-    const html = win.document.getElementById('scheduleContent').innerHTML;
+    win.schedToggleWeekendRotation();
+    const html = win.document.getElementById('schedWeekendPanelBody').innerHTML;
 
     groups.forEach((g) => {
       const re = new RegExp('grid-column:span ' + g.count + ';[^>]*>' + g.label + '<');

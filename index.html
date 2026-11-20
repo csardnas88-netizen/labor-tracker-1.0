@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.130.0"/>
+<meta name="app-version" content="7.131.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -2544,6 +2544,30 @@ Supervisor 3</textarea>
   <div id="laborSprintPanelBody" style="padding:4px 14px 14px;overflow-y:auto;"></div>
 </div>
 
+<!-- Weekend Rotation — same floating bubble + panel idea as Labor Focus
+     Sprint just above, Carlos's ask 2026-11-20: the panoramic view used
+     to replace the WHOLE Schedule page, so checking it mid-edit (say,
+     while building the Supervisors' week) cost him his scroll position,
+     landing back at the top on "Back to Schedule". This floats OVER
+     whatever crew card he's actually working on; a click outside
+     collapses it back to the bubble, same as Labor Sprint, leaving his
+     place on the page untouched. renderSchedWeekendBubble() shows/hides
+     both based on whether the Schedule page is the one on screen.
+     Wider than Labor Sprint's own panel on purpose — the rotation grid
+     needs real width for its week columns; its own overflow-x:auto
+     (inside _buildWeekendRotationHTML) still kicks in on a narrow
+     screen. -->
+<div id="schedWeekendBubble" onclick="schedToggleWeekendRotation()" style="display:none;position:fixed;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:280;width:58px;height:58px;border-radius:50%;background:var(--navy);box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer;flex-direction:column;align-items:center;justify-content:center;user-select:none;">
+  <div style="font-size:22px;line-height:1;">&#128197;</div>
+</div>
+<div id="schedWeekendPanel" style="display:none;position:fixed;right:18px;bottom:calc(154px + env(safe-area-inset-bottom));z-index:280;width:900px;max-width:calc(100vw - 36px);max-height:78vh;background:var(--white);border-radius:var(--radius);box-shadow:0 14px 36px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column;">
+  <div style="background:var(--navy);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;">
+    <div style="font-size:13px;font-weight:700;color:var(--on-fill);">&#128197; Weekend Rotation</div>
+    <button onclick="schedToggleWeekendRotation()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--on-fill);line-height:1;flex-shrink:0;">&#215;</button>
+  </div>
+  <div id="schedWeekendPanelBody" style="padding:10px 14px 14px;overflow-y:auto;"></div>
+</div>
+
 <div class="modal-overlay" id="pinGateOverlay" style="display:none;" onclick="if(event.target===this)cancelPinGate()">
   <div class="modal-box" style="max-width:320px;text-align:center;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
@@ -4889,6 +4913,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.131.0', date:'2026-11-20',
+    features:['Weekend Rotation moved to a floating bubble, same pattern as the Labor Focus Sprint checklist — Carlos\'s ask: checking it used to replace the whole Schedule page, costing him his scroll position mid-edit (say, while building the Supervisors\' week) and landing him back at the top on "Back to Schedule". Now it floats over whatever he\'s doing; a tap on the bubble opens it, a tap anywhere else collapses it back, leaving the crew card he was actually working on exactly as he left it. Also added a forward-looking suggestion: a green marker for whoever\'s actually due for the week he has open on the Schedule tab, using the same logic Auto-fill itself already uses to decide who gets the next weekend off — separate from the existing amber marker, which only looks backward from today.'],
+    fixes:['Found live while verifying the bubble above, before it ever reached Carlos: on a fresh load the panel\'s own layout styling made it ignore its "hidden by default" setting, so it sat open over the Dashboard\'s Birthdays card before anyone had even opened Schedule. Fixed at the same place Labor Focus Sprint\'s own bubble already guards against this.']
+  },
   {
     v:'7.130.0', date:'2026-11-19',
     fixes:['Carlos\'s real clarification after the Request Off duplicate-name report: "Susan Aguilar" and "Susan" aren\'t two people — she\'s one Supervisor ("Susan A") who covers Laundry on occasion, spelled plain "Susan" there, same spelling-drift shape as Gabriela Cuevas. Linked the two so the schedule stops creating a second, phantom "Susan A" row on Laundry alongside her real "Susan" one. Caught by this project\'s own test suite before shipping: a first attempt at the fix wired her into the same continuous absence-mirroring Gabriela Cuevas/Sandra get, and that silently overwrote her real, current Supervisor schedule whenever her mostly-unused Laundry row happened to sit on a stale OFF from some earlier week — she only covers Laundry occasionally, so that row is never meant to speak for where she really is day to day. Fixed to recognize the two spellings as one person for the duplicate-row guard only, without the absence-mirroring.']
@@ -12198,6 +12227,11 @@ function showPage(page){
      without this the floating bubble could stay stuck on screen over
      whatever page comes next. */
   try{renderLaborSprint();}catch(e){}
+  /* Same immediate-hide reasoning as the Labor Sprint call just above,
+     for the Weekend Rotation bubble/panel — page!=='schedule' doesn't
+     call renderSchedule() below, so without this it could stay stuck on
+     screen over whatever page comes next. */
+  try{renderSchedWeekendBubble();}catch(e){}
   closeSidebar();
   window.scrollTo({top:0,behavior:'smooth'});
   if(page==='dashboard')renderDashHub();
@@ -14671,6 +14705,18 @@ document.addEventListener('click',function(e){
   if(panel.contains(e.target)||(bubble&&bubble.contains(e.target)))return;
   localStorage.setItem('hk_ls_panel_open','0');
   renderLaborSprint();
+},true);
+/* Same outside-click-collapses behaviour as Labor Sprint's own listener
+   just above, for the Weekend Rotation bubble/panel — a separate
+   listener, not a shared one, so a click inside EITHER panel never gets
+   misread as an outside click on the OTHER. */
+document.addEventListener('click',function(e){
+  var panel=document.getElementById('schedWeekendPanel');
+  var bubble=document.getElementById('schedWeekendBubble');
+  if(!panel||panel.style.display==='none')return;
+  if(panel.contains(e.target)||(bubble&&bubble.contains(e.target)))return;
+  localStorage.setItem('hk_sched_wknd_panel_open','0');
+  renderSchedWeekendBubble();
 },true);
 /* Carlos's ask: a Start button + a running clock for how long today's
    routine takes, start to finish. Stored on the SAME per-date state
@@ -22737,6 +22783,25 @@ window.addEventListener('load',function(){
   try{var fv2=document.getElementById('footerVersion');if(fv2&&window.APP_VERSION)fv2.textContent='v'+window.APP_VERSION;}catch(e){}
   updateDashboardKPIs();
   try{renderLaborDash();}catch(ex){console.warn('labor:',ex);}
+  /* Carlos's real report, 2026-11-20 (found while verifying the new
+     Weekend Rotation bubble in a browser, not from a live complaint):
+     renderLaborDash() is called unconditionally right here at boot —
+     not gated on currentPage — purely so its OWN trailing
+     renderLaborSprint() call runs at least once and hides that bubble
+     by default (the default page is 'dashboard', so without this the
+     Labor Focus Sprint panel's raw HTML — display:none followed by a
+     later display:flex in the same style attribute, needed for its
+     flexbox layout once actually shown — would resolve to flex and sit
+     visibly on the Dashboard before anyone ever opens Labor). The new
+     Weekend Rotation bubble has the exact same raw-HTML shape and the
+     exact same problem, but nothing unconditionally called ITS hiding
+     function at boot — confirmed live: it sat open over the Dashboard,
+     Birthdays card and all, on a fresh load. renderSchedule() itself
+     would be the equivalent call, but it's expensive (builds the whole
+     week grid, runs every self-heal pass) to run just for this — calling
+     renderSchedWeekendBubble() directly is the cheap, side-effect-free
+     piece that's actually needed here. */
+  try{renderSchedWeekendBubble();}catch(ex){console.warn('sched wknd bubble:',ex);}
   try{renderDashHub();}catch(ex){console.warn('hub:',ex);}
   updateProjectsBadge();
   try{updateTrainHoursBadge();}catch(e){}
@@ -25567,20 +25632,54 @@ function _schedRestWeekStripHTML(SCH,week,bk,name,isRecent){
    approved it, then asked for individual Sat/Sun as well as the full
    weekend, not just the full-weekend-only version the mockup started
    from. ══════════════════════════════════════════════════════ */
-var schedWeekendRotationOpen=false;
 var schedWeekendRotationWeeks=8;
 var schedWeekendRotationCollapsed={};
+/* Carlos's ask, 2026-11-20: moved from a full-page replace to the same
+   floating bubble/panel pattern Labor Focus Sprint already uses — see
+   the bubble/panel markup and renderSchedWeekendBubble() below. Open/
+   closed is a local display preference, not shared progress, same
+   reasoning and same localStorage-not-a-JS-var approach as Labor
+   Sprint's own hk_ls_panel_open. */
 function schedToggleWeekendRotation(){
-  schedWeekendRotationOpen=!schedWeekendRotationOpen;
-  renderSchedule();
+  var cur=localStorage.getItem('hk_sched_wknd_panel_open')==='1';
+  localStorage.setItem('hk_sched_wknd_panel_open',cur?'0':'1');
+  renderSchedWeekendBubble();
 }
 function schedSetWeekendRotationWeeks(n){
   schedWeekendRotationWeeks=n;
-  renderSchedule();
+  renderSchedWeekendBubble();
 }
 function schedToggleWeekendRotationCrew(bk){
   schedWeekendRotationCollapsed[bk]=!schedWeekendRotationCollapsed[bk];
-  renderSchedule();
+  renderSchedWeekendBubble();
+}
+/* Shows/hides the floating bubble + panel based on whether the Schedule
+   page itself is on screen — same currentPage guard renderLaborSprint
+   already uses, for the same reason: renderSchedule() can run in the
+   background (a sync pull, a cross-crew edit on another device) while
+   some other page is actually showing, and without this check the
+   bubble could pop up over whatever page the manager actually has
+   open. Called from the top of renderSchedule() (every render, any
+   entry path) and from showPage() (to hide it immediately on navigating
+   away, before whichever page's own render function runs). */
+function renderSchedWeekendBubble(){
+  var bubble=document.getElementById('schedWeekendBubble');
+  var panel=document.getElementById('schedWeekendPanel');
+  if(!bubble||!panel)return;
+  var onSchedulePage=(typeof currentPage!=='undefined'&&currentPage==='schedule');
+  if(!onSchedulePage){
+    bubble.style.display='none';
+    panel.style.display='none';
+    return;
+  }
+  bubble.style.display='flex';
+  var open=localStorage.getItem('hk_sched_wknd_panel_open')==='1';
+  panel.style.display=open?'flex':'none';
+  if(!open)return;
+  var SCH=dlLoadSchedule();
+  document.getElementById('schedWeekendPanelBody').innerHTML=(SCH&&SCH.days)
+    ?_buildWeekendRotationHTML(SCH)
+    :'<div style="padding:20px;text-align:center;font-size:12px;color:var(--text3);">No schedule loaded yet.</div>';
 }
 /* 'off'/'work'/'none' — 'none' covers both "no report this week" and a
    genuinely blank cell (never filled in), since a blank can't honestly
@@ -25643,17 +25742,27 @@ function _schedWeekendRotationHalfHTML(state,isFull,label){
 function _buildWeekendRotationHTML(SCH){
   var n=schedWeekendRotationWeeks;
   var weekStarts=_schedWeekendRotationWeekStarts(n);
-  var html='<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">';
-  html+='<div><div style="font-size:16px;font-weight:800;color:var(--text1);">&#128197; Weekend Rotation</div>'
-    +'<div style="font-size:10.5px;color:var(--text3);margin-top:2px;max-width:46ch;">Who\'s actually had Saturday and/or Sunday off, by crew — from the saved schedule, not Request Off\'s logged asks.</div></div>';
-  html+='<div style="display:flex;align-items:center;gap:8px;">';
-  html+='<div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+  /* Panel header (title + the X that closes it) now lives in the fixed
+     #schedWeekendPanel markup itself, not here — this used to be its own
+     full-page view with its own title and a "Back to Schedule" button,
+     before the floating-bubble redesign (Carlos's ask, 2026-11-20). Only
+     the week-count selector is actually page-specific, so that's all
+     that's left up here. */
+  var html='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">';
+  html+='<div style="font-size:10.5px;color:var(--text3);max-width:44ch;">Who\'s actually had Saturday and/or Sunday off, by crew — from the saved schedule, not Request Off\'s logged asks.</div>';
+  html+='<div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-shrink:0;">';
   [6,8,12].forEach(function(opt){
     html+='<button onclick="schedSetWeekendRotationWeeks('+opt+')" style="border:none;'+(opt!==6?'border-left:1px solid var(--border);':'')+'background:'+(n===opt?'var(--gt)':'var(--sur)')+';color:'+(n===opt?'var(--gd)':'var(--text2)')+';font-size:10.5px;font-weight:700;padding:6px 10px;cursor:pointer;">'+opt+' wk</button>';
   });
-  html+='</div>';
-  html+='<button onclick="schedToggleWeekendRotation()" class="btn btn-ghost btn-sm">&larr; Back to Schedule</button>';
   html+='</div></div>';
+
+  /* The week currently open on the Schedule tab itself — the suggestion
+     marker below is deliberately anchored HERE, not on "today", so it
+     answers the question Carlos is actually asking while he's building
+     THAT week (which is often a future one), not whatever week real
+     life happens to be in right now. */
+  var buildingWeekDs=schedWeekDates()[0];
+  var buildingWeekLabel=parseLocalDate(buildingWeekDs).toLocaleDateString('en-US',{month:'short',day:'numeric'});
 
   html+='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:10.5px;color:var(--text2);margin-bottom:12px;">'
     +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;background:#1565C0;"></span>Full weekend off</span>'
@@ -25661,6 +25770,7 @@ function _buildWeekendRotationHTML(SCH){
     +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;border:1px solid var(--border2);"></span>Worked</span>'
     +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;border:1px dashed var(--border);"></span>No report</span>'
     +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--yellow);"></span>Longest since her last full weekend off</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--green);"></span>Suggested for the week of '+buildingWeekLabel+' (whichever you have open on Schedule)</span>'
     +'</div>';
 
   /* Carlos's ask, 2026-11-19: delimit the months right on screen, so he
@@ -25728,6 +25838,22 @@ function _buildWeekendRotationHTML(SCH){
       });
     }
 
+    /* Carlos's follow-up ask, 2026-11-20: not just how someone rested in
+       the PAST, but a suggestion for whose turn it is on the week he's
+       actually building right now — reuses schedWeekendDueOrder exactly
+       as Auto-fill itself already does to decide who gets the next
+       weekend off, so this is the same answer Auto-fill would give, just
+       surfaced here instead of buried inside a one-shot button. Same
+       SCHED_MIN_OFF/people.length>1 gate as the amber dot above — no
+       suggestion invented for Managers/Overnight, which have no
+       days-off rule to judge by. Deliberately a SEPARATE marker/color
+       from the amber dot: that one looks backward over the displayed
+       window ending "today", this one looks forward from whichever week
+       is actually open on the Schedule tab — they can legitimately point
+       at different people. */
+    var suggestedName=(people.length>1&&SCHED_MIN_OFF[b.key])
+      ?schedWeekendDueOrder(SCH,b.key,people,buildingWeekDs)[0]:null;
+
     html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
     html+='<div onclick="schedToggleWeekendRotationCrew(\''+b.key+'\')" style="cursor:pointer;background:var(--navy);color:var(--on-fill);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;">'
       +'<span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(b.label)+'</span>'
@@ -25777,6 +25903,7 @@ function _buildWeekendRotationHTML(SCH){
         html+='<div style="display:grid;grid-template-columns:minmax(150px,1fr) repeat('+n+',56px) 92px;gap:4px;padding:6px 14px;align-items:center;border-bottom:1px solid var(--border);">';
         html+='<div style="display:flex;align-items:center;gap:6px;min-width:0;">'
           +(nm===worstName?'<span style="width:7px;height:7px;border-radius:50%;background:var(--yellow);flex-shrink:0;" title="Longest since her last full weekend off"></span>':'')
+          +(nm===suggestedName?'<span style="width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;" title="Suggested for the week of '+buildingWeekLabel+'"></span>':'')
           +'<span style="font-size:11.5px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(nm)+'</span></div>';
         html+=cellsHtml;
         html+='<div style="text-align:center;font-size:11.5px;font-weight:800;color:var(--text1);">'+fullCount+' <span style="font-size:9px;font-weight:700;color:var(--text3);">/ '+n+'</span></div>';
@@ -28619,6 +28746,13 @@ function _schedCellCss(v,bk){
 function renderSchedule(){
   var el=document.getElementById('scheduleContent');
   if(!el)return;
+  /* Keeps the Weekend Rotation bubble/panel in sync on every render,
+     whatever triggered it — a live edit, a background sync pull, the
+     weeks-selector, etc. — same as renderLaborSprint being called
+     unconditionally from renderLaborDash. Safe to call this early:
+     it only depends on currentPage + localStorage + its own fresh
+     dlLoadSchedule() read, nothing computed further down here. */
+  try{renderSchedWeekendBubble();}catch(e){}
   var SCH=dlLoadSchedule();
   /* Repair a schedule imported before PM Houseman was normalised, so the
      0.75s go without waiting for the next upload. Saved locally only and
@@ -28717,17 +28851,6 @@ function renderSchedule(){
     el.innerHTML=html; return;
   }
 
-  /* Weekend Rotation is its own self-contained view, deliberately not
-     tied to whichever week the Prev/Next arrows below have navigated to
-     — it reads several weeks' worth of history at once, anchored on the
-     real current week. Short-circuits before any of the normal
-     week-grid HTML below gets built. */
-  if(schedWeekendRotationOpen){
-    html+=_buildWeekendRotationHTML(SCH);
-    el.innerHTML=html;
-    return;
-  }
-
   var dates=schedWeekDates();
   var start=parseLocalDate(dates[0]), end=parseLocalDate(dates[6]);
   var thisWeek=dateStr(getHotelWeekStart(new Date()));
@@ -28751,11 +28874,10 @@ function renderSchedule(){
   html+='</div>';
   html+='<button onclick="changeSchedWeek(1)" title="Next week" style="padding:6px 13px;border:1px solid var(--border);border-radius:8px;background:var(--sur);font-size:14px;cursor:pointer;color:var(--text1);">&rarr;</button>';
   html+='</div>';
-  /* Carlos's ask, 2026-11-19: a panoramic, cross-week view of weekend
-     rest history, reachable without leaving the Schedule page — see
-     _buildWeekendRotationHTML's own header comment. */
-  html+='<div style="text-align:right;margin-bottom:12px;">'
-    +'<button onclick="schedToggleWeekendRotation()" class="btn btn-ghost btn-sm">&#128197; Weekend Rotation</button></div>';
+  /* Carlos's ask, 2026-11-19 (panoramic weekend-rest view), redesigned
+     2026-11-20 into the floating bubble/panel (see its own markup and
+     renderSchedWeekendBubble) — no entry-point button needed here
+     anymore, the bubble is always on screen while this page is up. */
 
   if(!loaded.length){
     var refStartHere=schedLatestLoadedWeekStart(SCH);
