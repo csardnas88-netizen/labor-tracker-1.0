@@ -161,6 +161,7 @@ const cases = [
   require('./cases/schedule-linked-people-susan-no-absence-sync'),
   require('./cases/schedule-weekend-bubble-auto-collapse'),
   require('./cases/schedule-weekend-bubble-hidden-on-boot'),
+  require('./cases/schedule-holiday-rotation'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

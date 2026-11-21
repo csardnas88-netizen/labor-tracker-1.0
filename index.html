@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.131.0"/>
+<meta name="app-version" content="7.132.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -2568,6 +2568,27 @@ Supervisor 3</textarea>
   <div id="schedWeekendPanelBody" style="padding:10px 14px 14px;overflow-y:auto;"></div>
 </div>
 
+<!-- Holiday Rotation — same floating pattern as Weekend Rotation just
+     above, a separate bubble (Carlos's explicit call when asked whether
+     this should be its own bubble or a second tab on Weekend Rotation's
+     panel), its own bubble stacked just above the other's. Code review,
+     2026-11-20: the stacking offset alone isn't enough — Weekend
+     Rotation's PANEL, once open, is tall enough to reach well past this
+     bubble's own position, so the two bubble/panel pairs also enforce
+     mutual exclusion in code (schedToggleWeekendRotation/
+     schedToggleHolidayRotation each force the other's panel closed),
+     not just a vertical gap that only works while both stay collapsed. -->
+<div id="schedHolidayBubble" onclick="schedToggleHolidayRotation()" style="display:none;position:fixed;right:18px;bottom:calc(158px + env(safe-area-inset-bottom));z-index:280;width:58px;height:58px;border-radius:50%;background:var(--navy);box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer;flex-direction:column;align-items:center;justify-content:center;user-select:none;">
+  <div style="font-size:22px;line-height:1;">&#127881;</div>
+</div>
+<div id="schedHolidayPanel" style="display:none;position:fixed;right:18px;bottom:calc(224px + env(safe-area-inset-bottom));z-index:280;width:900px;max-width:calc(100vw - 36px);max-height:78vh;background:var(--white);border-radius:var(--radius);box-shadow:0 14px 36px rgba(0,0,0,.3);overflow:hidden;display:flex;flex-direction:column;">
+  <div style="background:var(--navy);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;">
+    <div style="font-size:13px;font-weight:700;color:var(--on-fill);">&#127881; Holiday Rotation</div>
+    <button onclick="schedToggleHolidayRotation()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--on-fill);line-height:1;flex-shrink:0;">&#215;</button>
+  </div>
+  <div id="schedHolidayPanelBody" style="padding:10px 14px 14px;overflow-y:auto;"></div>
+</div>
+
 <div class="modal-overlay" id="pinGateOverlay" style="display:none;" onclick="if(event.target===this)cancelPinGate()">
   <div class="modal-box" style="max-width:320px;text-align:center;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
@@ -4913,6 +4934,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.132.0', date:'2026-11-20',
+    features:['Holiday Rotation: a new floating bubble on the Schedule page, Carlos\'s follow-up ask right after Weekend Rotation — HM Alpha\'s 7 paid holidays (New Year\'s, MLK Day, Memorial Day, Independence Day, Labor Day, Thanksgiving, Christmas) should rotate fairly across each crew too, so everyone gets a real shot at one. Each year\'s exact date is computed from the holiday\'s own rule (fixed date, or the Nth/last weekday of a month), so this never needs re-entering — four of the seven move every year. Shows, per crew, who\'s actually had each one off from the saved schedule, an amber marker for whoever\'s gone longest without any holiday off, and a green marker suggesting who\'s due for the next real one coming up on the calendar — reusing the same kind of logic Weekend Rotation\'s own suggestion already uses. A separate bubble from Weekend Rotation (Carlos\'s call when asked), stacked just above it; opening either one always closes the other so the two floating panels never cover each other.'],
+    fixes:['Caught in this feature\'s own code review before it ever shipped: the green suggestion had no minimum-tenure guard, so a brand-new hire with zero holiday history could tie with — and sometimes outrank — someone genuinely overdue for years, purely by the coincidence of row order. Now requires the same real tenure the amber marker already does before anyone gets suggested at all.']
+  },
   {
     v:'7.131.0', date:'2026-11-20',
     features:['Weekend Rotation moved to a floating bubble, same pattern as the Labor Focus Sprint checklist — Carlos\'s ask: checking it used to replace the whole Schedule page, costing him his scroll position mid-edit (say, while building the Supervisors\' week) and landing him back at the top on "Back to Schedule". Now it floats over whatever he\'s doing; a tap on the bubble opens it, a tap anywhere else collapses it back, leaving the crew card he was actually working on exactly as he left it. Also added a forward-looking suggestion: a green marker for whoever\'s actually due for the week he has open on the Schedule tab, using the same logic Auto-fill itself already uses to decide who gets the next weekend off — separate from the existing amber marker, which only looks backward from today.'],
@@ -12232,6 +12258,8 @@ function showPage(page){
      call renderSchedule() below, so without this it could stay stuck on
      screen over whatever page comes next. */
   try{renderSchedWeekendBubble();}catch(e){}
+  /* Same, for the separate Holiday Rotation bubble/panel. */
+  try{renderSchedHolidayBubble();}catch(e){}
   closeSidebar();
   window.scrollTo({top:0,behavior:'smooth'});
   if(page==='dashboard')renderDashHub();
@@ -14717,6 +14745,15 @@ document.addEventListener('click',function(e){
   if(panel.contains(e.target)||(bubble&&bubble.contains(e.target)))return;
   localStorage.setItem('hk_sched_wknd_panel_open','0');
   renderSchedWeekendBubble();
+},true);
+/* Same idea, for the separate Holiday Rotation bubble/panel. */
+document.addEventListener('click',function(e){
+  var panel=document.getElementById('schedHolidayPanel');
+  var bubble=document.getElementById('schedHolidayBubble');
+  if(!panel||panel.style.display==='none')return;
+  if(panel.contains(e.target)||(bubble&&bubble.contains(e.target)))return;
+  localStorage.setItem('hk_sched_holiday_panel_open','0');
+  renderSchedHolidayBubble();
 },true);
 /* Carlos's ask: a Start button + a running clock for how long today's
    routine takes, start to finish. Stored on the SAME per-date state
@@ -22802,6 +22839,8 @@ window.addEventListener('load',function(){
      renderSchedWeekendBubble() directly is the cheap, side-effect-free
      piece that's actually needed here. */
   try{renderSchedWeekendBubble();}catch(ex){console.warn('sched wknd bubble:',ex);}
+  /* Same hidden-by-default boot guard, for the separate Holiday Rotation bubble. */
+  try{renderSchedHolidayBubble();}catch(ex){console.warn('sched holiday bubble:',ex);}
   try{renderDashHub();}catch(ex){console.warn('hub:',ex);}
   updateProjectsBadge();
   try{updateTrainHoursBadge();}catch(e){}
@@ -25643,7 +25682,16 @@ var schedWeekendRotationCollapsed={};
 function schedToggleWeekendRotation(){
   var cur=localStorage.getItem('hk_sched_wknd_panel_open')==='1';
   localStorage.setItem('hk_sched_wknd_panel_open',cur?'0':'1');
+  /* Code review, 2026-11-20: the Holiday Rotation bubble/panel added
+     right after this one sits close enough on screen (stacked just
+     above this panel's own bottom edge) that an open Weekend panel and
+     a merely-collapsed Holiday bubble visually overlapped, and both
+     panels open at once would nearly fully cover each other. Opening
+     this one always closes the other, so at most one of these two
+     floating panels is ever on screen together. */
+  if(!cur)localStorage.setItem('hk_sched_holiday_panel_open','0');
   renderSchedWeekendBubble();
+  try{renderSchedHolidayBubble();}catch(e){}
 }
 function schedSetWeekendRotationWeeks(n){
   schedWeekendRotationWeeks=n;
@@ -25907,6 +25955,262 @@ function _buildWeekendRotationHTML(SCH){
           +'<span style="font-size:11.5px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(nm)+'</span></div>';
         html+=cellsHtml;
         html+='<div style="text-align:center;font-size:11.5px;font-weight:800;color:var(--text1);">'+fullCount+' <span style="font-size:9px;font-weight:700;color:var(--text3);">/ '+n+'</span></div>';
+        html+='</div>';
+      });
+      html+='</div></div>';
+    }
+    html+='</div>';
+  });
+  return html;
+}
+
+/* ── Holiday Rotation ──
+   Carlos's ask, 2026-11-20: HM Alpha's 7 paid holidays should rotate
+   fairly across each crew too, same idea as Weekend Rotation just above
+   but for holidays instead of Saturdays/Sundays. Dates are computed from
+   each holiday's own rule (fixed day-of-month, or Nth/last weekday of a
+   month) so this never needs re-entering year to year — four of the
+   seven move every year (MLK, Memorial Day, Labor Day, Thanksgiving).
+   Deliberately no SCHED_MIN_OFF-style crew exclusion: unlike the weekly
+   days-off rule, which doesn't apply to Managers/Overnight, the goal
+   here — everyone gets a fair shot at a holiday off — applies to every
+   crew with no exception (Carlos's explicit call). */
+var SCHED_HOLIDAYS=[
+  {key:'newyear',      label:"New Year's Day",             rule:{type:'fixed',month:0, day:1}},
+  {key:'mlk',          label:'Martin Luther King Jr. Day', rule:{type:'nth',  month:0, weekday:1,n:3}},
+  {key:'memorial',     label:'Memorial Day',               rule:{type:'last',month:4, weekday:1}},
+  {key:'independence', label:'Independence Day',           rule:{type:'fixed',month:6, day:4}},
+  {key:'labor',        label:'Labor Day',                  rule:{type:'nth',  month:8, weekday:1,n:1}},
+  {key:'thanksgiving', label:'Thanksgiving Day',           rule:{type:'nth',  month:10,weekday:4,n:4}},
+  {key:'christmas',    label:'Christmas Day',               rule:{type:'fixed',month:11,day:25}}
+];
+var SCHED_HOLIDAY_ABBR={newyear:'New Year',mlk:'MLK Day',memorial:'Memorial Day',independence:'Independence',labor:'Labor Day',thanksgiving:'Thanksgiving',christmas:'Christmas'};
+function _schedHolidayDateForYear(rule,year){
+  if(rule.type==='fixed')return new Date(year,rule.month,rule.day);
+  if(rule.type==='nth'){
+    var d=new Date(year,rule.month,1),count=0;
+    while(true){
+      if(d.getDay()===rule.weekday){ count++; if(count===rule.n)return new Date(d); }
+      d.setDate(d.getDate()+1);
+    }
+  }
+  /* 'last' — walk backward from the month's last day to the target weekday. */
+  var d2=new Date(year,rule.month+1,0);
+  while(d2.getDay()!==rule.weekday)d2.setDate(d2.getDate()-1);
+  return d2;
+}
+/* Every holiday occurrence from `yearsBack` years ago through this year,
+   oldest first, excluding anything still in the future — a schedule that
+   happens to be pre-built past today would otherwise read a not-yet-
+   happened holiday as "worked" off a leftover placeholder '1', which
+   would be wrong. The forward-looking suggestion below is computed
+   separately, directly off the calendar, not from this list. */
+function _schedHolidayOccurrences(yearsBack){
+  var today=new Date(); today.setHours(0,0,0,0);
+  var curYear=today.getFullYear(),out=[];
+  for(var y=curYear-yearsBack+1;y<=curYear;y++){
+    SCHED_HOLIDAYS.forEach(function(h){
+      var d=_schedHolidayDateForYear(h.rule,y);
+      if(d<=today)out.push({key:h.key,label:h.label,date:d,ds:dateStr(d)});
+    });
+  }
+  out.sort(function(a,b){return a.date-b.date;});
+  return out;
+}
+/* The next real calendar holiday from today onward — scans this year and
+   next, since late December only has one or none left in the current
+   year. */
+function _schedNextHoliday(){
+  var today=new Date(); today.setHours(0,0,0,0);
+  var candidates=[];
+  [today.getFullYear(),today.getFullYear()+1].forEach(function(y){
+    SCHED_HOLIDAYS.forEach(function(h){
+      var d=_schedHolidayDateForYear(h.rule,y);
+      if(d>=today)candidates.push({key:h.key,label:h.label,date:d,ds:dateStr(d)});
+    });
+  });
+  candidates.sort(function(a,b){return a.date-b.date;});
+  return candidates[0]||null;
+}
+function _schedHolidayDayState(SCH,ds,bk,name){
+  var v=schedCellFor(SCH,ds,bk,name);
+  if(v==='')return 'none';
+  return schedIsOff(v)?'off':'work';
+}
+/* Mirrors schedWeekendGap, but walking discrete holiday occurrences
+   (newest first) instead of week-pairs — same "only count an occurrence
+   she actually had a row for" rule, same reason (a crew she joined after
+   a given holiday must never read as "worked through it"). Returns how
+   many CHECKED occurrences back her last holiday-off was, not a real
+   time distance — occurrences aren't evenly spaced, but every person on
+   the same crew is compared against the same occurrence list, so the
+   ranking is still apples-to-apples. */
+function schedHolidayGap(SCH,bk,name,occurrences){
+  var checked=0,nk=dlNormAlias(name);
+  for(var i=occurrences.length-1;i>=0;i--){
+    var occ=occurrences[i];
+    var day=SCH.days&&SCH.days[occ.ds];
+    var hasRow=day&&day[bk]&&day[bk].some(function(r){return dlNormAlias(r[0])===nk;});
+    if(!hasRow)continue;
+    checked++;
+    if(schedIsOff(schedCellFor(SCH,occ.ds,bk,name)))return {occBack:checked,checked:checked};
+  }
+  return {occBack:null,checked:checked};
+}
+var schedHolidayRotationYears=2;
+var schedHolidayRotationCollapsed={};
+function schedToggleHolidayRotation(){
+  var cur=localStorage.getItem('hk_sched_holiday_panel_open')==='1';
+  localStorage.setItem('hk_sched_holiday_panel_open',cur?'0':'1');
+  /* The other direction of the Weekend Rotation mutual-exclusion fix —
+     see schedToggleWeekendRotation's own comment. */
+  if(!cur)localStorage.setItem('hk_sched_wknd_panel_open','0');
+  renderSchedHolidayBubble();
+  try{renderSchedWeekendBubble();}catch(e){}
+}
+function schedSetHolidayRotationYears(n){
+  schedHolidayRotationYears=n;
+  renderSchedHolidayBubble();
+}
+function schedToggleHolidayRotationCrew(bk){
+  schedHolidayRotationCollapsed[bk]=!schedHolidayRotationCollapsed[bk];
+  renderSchedHolidayBubble();
+}
+/* Same bubble/panel pattern as renderSchedWeekendBubble — only shown
+   while the Schedule page itself is up, open state is a local display
+   preference in localStorage, not synced. */
+function renderSchedHolidayBubble(){
+  var bubble=document.getElementById('schedHolidayBubble');
+  var panel=document.getElementById('schedHolidayPanel');
+  if(!bubble||!panel)return;
+  var onSchedulePage=(typeof currentPage!=='undefined'&&currentPage==='schedule');
+  if(!onSchedulePage){
+    bubble.style.display='none';
+    panel.style.display='none';
+    return;
+  }
+  bubble.style.display='flex';
+  var open=localStorage.getItem('hk_sched_holiday_panel_open')==='1';
+  panel.style.display=open?'flex':'none';
+  if(!open)return;
+  var SCH=dlLoadSchedule();
+  document.getElementById('schedHolidayPanelBody').innerHTML=(SCH&&SCH.days)
+    ?_buildHolidayRotationHTML(SCH)
+    :'<div style="padding:20px;text-align:center;font-size:12px;color:var(--text3);">No schedule loaded yet.</div>';
+}
+function _buildHolidayRotationHTML(SCH){
+  var n=schedHolidayRotationYears;
+  /* The green "suggested" marker deliberately reads off the FULL
+     histOccurrences list, not the display-window one — it should
+     recommend off real history regardless of whether Carlos currently
+     has 1, 2 or 3 years on screen, the same way Auto-fill's own weekend
+     due-order isn't tied to Weekend Rotation's own window either.
+     occurrences (the display window) is always its most-recent tail —
+     both lookups share the same "today" cutoff and sort order — so it's
+     sliced out of the one computed list instead of a second independent
+     date-math pass. */
+  var histOccurrences=_schedHolidayOccurrences(10);
+  var cutoffYear=new Date().getFullYear()-n+1;
+  var occurrences=histOccurrences.filter(function(o){return o.date.getFullYear()>=cutoffYear;});
+  var nextHoliday=_schedNextHoliday();
+  var mostRecentFirst=occurrences.map(function(o){return o.ds;}).slice().reverse();
+
+  var html='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">';
+  html+='<div style="font-size:10.5px;color:var(--text3);max-width:50ch;">Who\'s actually had each paid holiday off, by crew — from the saved schedule.'
+    +(nextHoliday?(' The green mark suggests who\'s due for '+escHtml(nextHoliday.label)+' ('+nextHoliday.date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+').'):'')+'</div>';
+  html+='<div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-shrink:0;">';
+  [1,2,3].forEach(function(opt){
+    html+='<button onclick="schedSetHolidayRotationYears('+opt+')" style="border:none;'+(opt!==1?'border-left:1px solid var(--border);':'')+'background:'+(n===opt?'var(--gt)':'var(--sur)')+';color:'+(n===opt?'var(--gd)':'var(--text2)')+';font-size:10.5px;font-weight:700;padding:6px 10px;cursor:pointer;">'+opt+' yr</button>';
+  });
+  html+='</div></div>';
+
+  html+='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:10.5px;color:var(--text2);margin-bottom:12px;">'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;background:#1565C0;"></span>Had it off</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;border:1px solid var(--border2);"></span>Worked</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:13px;height:13px;border-radius:4px;border:1px dashed var(--border);"></span>No report</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--yellow);"></span>Longest since her last holiday off</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--green);"></span>Suggested for the next holiday</span>'
+    +'</div>';
+
+  if(!occurrences.length){
+    html+='<div style="padding:20px;text-align:center;font-size:12px;color:var(--text3);">No holiday has happened yet within the loaded schedule.</div>';
+    return html;
+  }
+
+  var cellPx=64;
+  SCHED_BLOCKS.forEach(function(b){
+    var people=_schedCrewRef(SCH,b.key,mostRecentFirst).map(function(p){return p[0];});
+    if(!people.length)return;
+    var collapsed=!!schedHolidayRotationCollapsed[b.key];
+
+    /* Collapsed crews skip the per-person gap walk entirely — nothing
+       below reads worstName/suggestedName outside the per-row markup,
+       which only gets built when the card is actually expanded, so this
+       was pure wasted O(people x occurrences) work on every render
+       (code review, 2026-11-20). */
+    var worstName=null,suggestedName=null;
+    if(!collapsed&&people.length>1){
+      var worstBack=-1;
+      people.forEach(function(nm){
+        var gap=schedHolidayGap(SCH,b.key,nm,occurrences);
+        if(gap.checked<Math.ceil(occurrences.length/2))return;
+        var back=gap.occBack==null?(gap.checked+1):gap.occBack;
+        if(back>worstBack){worstBack=back;worstName=nm;}
+      });
+      /* Same minimum-tenure guard as the amber marker just above (same
+         threshold too — half of the DISPLAY window, not half of the
+         10-year scan list behind it, which would demand more real
+         history than a small business normally keeps on file and leave
+         the green marker never lighting up at all) — code review,
+         2026-11-20: without it, a brand-new hire (occBack:null,
+         checked:1) and a genuinely overdue, long-tenured person
+         (occBack:null, checked:12) tie at key:9999, and whichever one
+         happens to sort first in `people` wins the suggestion. A new
+         hire must never outrank real overdue history just because
+         neither has a recorded holiday-off yet. */
+      if(nextHoliday){
+        var order=people.map(function(nm){
+          var gap=schedHolidayGap(SCH,b.key,nm,histOccurrences);
+          return {nm:nm,key:gap.occBack==null?9999:gap.occBack,checked:gap.checked};
+        }).filter(function(o){return o.checked>=Math.ceil(occurrences.length/2);})
+          .sort(function(x,y){return y.key-x.key;});
+        if(order.length)suggestedName=order[0].nm;
+      }
+    }
+
+    html+='<div class="card" style="padding:0;margin-bottom:12px;overflow:hidden;">';
+    html+='<div onclick="schedToggleHolidayRotationCrew(\''+b.key+'\')" style="cursor:pointer;background:var(--navy);color:var(--on-fill);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;">'
+      +'<span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">'+escHtml(b.label)+'</span>'
+      +'<span style="font-size:10px;color:rgba(255,255,255,.5);">'+people.length+' people &#8201;'+(collapsed?'&#9656;':'&#9662;')+'</span></div>';
+    if(!collapsed){
+      html+='<div style="overflow-x:auto;"><div style="min-width:'+(170+occurrences.length*cellPx+100)+'px;">';
+      html+='<div style="display:grid;grid-template-columns:minmax(150px,1fr) repeat('+occurrences.length+','+cellPx+'px) 92px;gap:4px;padding:6px 14px 8px;background:var(--surface);border-bottom:1px solid var(--border);">';
+      html+='<div></div>';
+      occurrences.forEach(function(o){
+        html+='<div style="text-align:center;"><div style="font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;line-height:1.2;">'
+          +escHtml(SCHED_HOLIDAY_ABBR[o.key]||o.label)+'</div>'
+          +'<div style="font-size:8px;color:var(--text3);">'+o.date.getFullYear()+'</div></div>';
+      });
+      html+='<div style="text-align:center;font-size:8.5px;font-weight:700;color:var(--text3);text-transform:uppercase;">Had / '+occurrences.length+'</div>';
+      html+='</div>';
+
+      people.forEach(function(nm){
+        var offCount=0,cellsHtml='';
+        occurrences.forEach(function(o){
+          var state=_schedHolidayDayState(SCH,o.ds,b.key,nm);
+          if(state==='off')offCount++;
+          var cls=state==='off'?'full':(state==='work'?'work':'none');
+          var S={full:{bg:'#1565C0',border:'#1565C0'},work:{bg:'transparent',border:'var(--border2)'},none:{bg:'transparent',border:'var(--border)'}};
+          var styleExtra=cls==='none'?'border-style:dashed;':'';
+          cellsHtml+='<div title="'+escHtml(o.label)+' '+o.date.getFullYear()+'" style="height:20px;border-radius:4px;background:'+S[cls].bg+';border:1px solid '+S[cls].border+';'+styleExtra+'"></div>';
+        });
+        html+='<div style="display:grid;grid-template-columns:minmax(150px,1fr) repeat('+occurrences.length+','+cellPx+'px) 92px;gap:4px;padding:6px 14px;align-items:center;border-bottom:1px solid var(--border);">';
+        html+='<div style="display:flex;align-items:center;gap:6px;min-width:0;">'
+          +(nm===worstName?'<span style="width:7px;height:7px;border-radius:50%;background:var(--yellow);flex-shrink:0;" title="Longest since her last holiday off"></span>':'')
+          +(nm===suggestedName?'<span style="width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;" title="Suggested for the next holiday'+(nextHoliday?(': '+escHtml(nextHoliday.label)):'')+'"></span>':'')
+          +'<span style="font-size:11.5px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(nm)+'</span></div>';
+        html+=cellsHtml;
+        html+='<div style="text-align:center;font-size:11.5px;font-weight:800;color:var(--text1);">'+offCount+' <span style="font-size:9px;font-weight:700;color:var(--text3);">/ '+occurrences.length+'</span></div>';
         html+='</div>';
       });
       html+='</div></div>';
@@ -28753,6 +29057,8 @@ function renderSchedule(){
      it only depends on currentPage + localStorage + its own fresh
      dlLoadSchedule() read, nothing computed further down here. */
   try{renderSchedWeekendBubble();}catch(e){}
+  /* Same, for the separate Holiday Rotation bubble/panel. */
+  try{renderSchedHolidayBubble();}catch(e){}
   var SCH=dlLoadSchedule();
   /* Repair a schedule imported before PM Houseman was normalised, so the
      0.75s go without waiting for the next upload. Saved locally only and
