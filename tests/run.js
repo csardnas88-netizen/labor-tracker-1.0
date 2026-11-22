@@ -162,6 +162,7 @@ const cases = [
   require('./cases/schedule-weekend-bubble-auto-collapse'),
   require('./cases/schedule-weekend-bubble-hidden-on-boot'),
   require('./cases/schedule-holiday-rotation'),
+  require('./cases/call-off-summary'),
 ];
 
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }

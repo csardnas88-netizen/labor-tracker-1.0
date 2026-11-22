@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.132.0"/>
+<meta name="app-version" content="7.133.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4934,6 +4934,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.133.0', date:'2026-11-21',
+    features:['Call-Offs gets a new "Summary" tab — Carlos\'s real ask after reviewing the old "Most Call-Offs" table (top 8 only, a raw total with no way to see who was proper vs. improper without opening every record). Summary lists EVERY employee with a Call-Off, each one\'s proper/improper/no-time-logged breakdown, and answers the exact question HR asks him in person: given a person\'s total, how much time did they happen across — e.g. did 3 of them land inside the same 90 days, or were they a year apart. Shown two ways: the plain first→last span across all of a person\'s call-offs, and the single busiest 90-day stretch found anywhere in their history (a sliding window, not just first-vs-last, so a real cluster buried in a longer history still surfaces even if an older, unrelated call-off makes the plain span look wide). Sortable by either Most Call-Offs or Busiest 90 Days, since the two can rank people very differently — two employees with the identical total of 3 can mean "evenly spread across a year" for one and "all three inside ten weeks" for the other.'],
+    fixes:['Caught in this feature\'s own code review before it ever shipped: a stray legacy call-off record with a missing or malformed date (no real "YYYY-MM-DD" on file) could have corrupted the new span/cluster math into a nonsense "~NaN years," and — separately — an employee\'s position shown in Summary was picked by whichever record happened to save last rather than her actual most recent dated one, which could show a stale, pre-promotion title.']
+  },
   {
     v:'7.132.0', date:'2026-11-20',
     features:['Holiday Rotation: a new floating bubble on the Schedule page, Carlos\'s follow-up ask right after Weekend Rotation — HM Alpha\'s 7 paid holidays (New Year\'s, MLK Day, Memorial Day, Independence Day, Labor Day, Thanksgiving, Christmas) should rotate fairly across each crew too, so everyone gets a real shot at one. Each year\'s exact date is computed from the holiday\'s own rule (fixed date, or the Nth/last weekday of a month), so this never needs re-entering — four of the seven move every year. Shows, per crew, who\'s actually had each one off from the saved schedule, an amber marker for whoever\'s gone longest without any holiday off, and a green marker suggesting who\'s due for the next real one coming up on the calendar — reusing the same kind of logic Weekend Rotation\'s own suggestion already uses. A separate bubble from Weekend Rotation (Carlos\'s call when asked), stacked just above it; opening either one always closes the other so the two floating panels never cover each other.'],
@@ -21530,7 +21535,7 @@ function _coKeyEmployees(list){
    absences already are. Tab choice isn't persisted across a reload,
    same as every other in-page filter in this app (COF_FILTER, LA_FILTER
    below) — it's a view state, not data. */
-var COF_TAB='calloffs'; // 'calloffs' | 'latearrivals' | 'overview'
+var COF_TAB='calloffs'; // 'calloffs' | 'latearrivals' | 'overview' | 'summary'
 function setCofTab(tab){ COF_TAB=tab; renderCallOffs(); }
 /* Jumps straight to a filtered employee view on the other tab — used by
    the Overview tab's "Call-Offs" / "Late Arrivals" links (Carlos's ask,
@@ -21551,6 +21556,7 @@ function _buildCofTabsHTML(){
   }
   return '<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--border);">'
     +tabBtn('calloffs','&#128222;','Call-Offs')
+    +tabBtn('summary','&#128203;','Summary')
     +tabBtn('latearrivals','&#9203;','Tardiness')
     +tabBtn('overview','&#9888;&#65039;','Overview')
     +'</div>';
@@ -21567,6 +21573,10 @@ function renderCallOffs(){
   }
   if(COF_TAB==='overview'){
     el.innerHTML=tabsHtml+_buildCofOverviewHTML();
+    return;
+  }
+  if(COF_TAB==='summary'){
+    el.innerHTML=tabsHtml+_buildCofSummaryHTML();
     return;
   }
 
@@ -22374,6 +22384,165 @@ function _buildCofOverviewHTML(){
       +(e.coCount>0?'<button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--ink-strong);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Call-Offs</button> ':'')
       +(e.laCount>0?'<button onclick="cofJumpToFilter(\'latearrivals\',\''+keyJs+'\')" style="background:none;border:none;color:var(--ink-strong);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">Tardiness</button>':'')
       +'</td>'
+      +'</tr>';
+  });
+  html+='</tbody></table></div></div>';
+  return html;
+}
+
+/* ── Summary tab: every employee with a Call-Off, proper/improper split
+   and how far apart they happened ──
+   Carlos's real ask, 2026-11-21: Most Call-Offs (on the main Call-Offs
+   tab) only ever showed the top 8, and only a raw total — no way to see
+   who was proper vs. improper without opening every single record, and
+   no way to tell "13 call-offs over 2 years" apart from "13 call-offs in
+   2 months" without counting dates by hand. That second question is the
+   one HR actually asks him in person: given a person's total, how much
+   time did they happen across — e.g. did 3 of them land inside the same
+   90 days, or were they a year apart. Answered here two ways at once:
+   the plain first→last span across ALL of a person's call-offs, AND the
+   single busiest 90-day stretch found anywhere in their history (a
+   sliding window, not just first-vs-last) — so three call-offs spread
+   evenly across a year and three crammed into six weeks both show
+   correctly, even though their plain span could otherwise look similar
+   if the 4th, unrelated call-off sits far outside that cluster. */
+/* Same kind of real, Carlos-sourced policy number as CALLOFF_IMPROPER_NOTICE_MIN
+   above — named here for the same reason: so a future "make it 60 days
+   instead" is a one-line edit, not a grep through prose comments. */
+var CALLOFF_CLUSTER_WINDOW_DAYS=90;
+/* Only a strict 'YYYY-MM-DD' string counts as a real date here — a blank,
+   malformed, or otherwise un-parseable value silently turns into an
+   Invalid Date (parseLocalDate never throws), and NaN comparisons are
+   always false, which would otherwise make the sliding window below
+   never shrink and the span math render "~NaN years". */
+function _coIsYmd(s){return/^\d{4}-\d{2}-\d{2}$/.test(s||'');}
+function _daysBetweenYmd(a,b){
+  try{return Math.round((parseLocalDate(b).getTime()-parseLocalDate(a).getTime())/86400000);}catch(e){return 0;}
+}
+function _daysToSpanText(days){
+  if(days<=0)return'same day';
+  /* Carlos's own examples were "90 días" and "un mes" — keep spans inside
+     that range as an exact day count (what HR actually asks for) rather
+     than rounding them away into "~2 months" before they even reach it. */
+  if(days<180)return days+' day'+(days===1?'':'s');
+  if(days<365){var m=Math.round(days/30);return'~'+m+' month'+(m===1?'':'s');}
+  var y=Math.floor(days/365),m2=Math.round((days%365)/30);
+  var s='~'+y+' year'+(y===1?'':'s');
+  if(m2>0)s+=' '+m2+' month'+(m2===1?'':'s');
+  return s;
+}
+/* Densest cluster anywhere in a sorted-ascending list of 'YYYY-MM-DD'
+   dates: the most call-offs that ever fell within any windowDays-wide
+   stretch, via a two-pointer sliding window (not just first-vs-last). */
+function _maxCallOffsInWindow(datesAsc,windowDays){
+  var times=datesAsc.map(function(d){try{return parseLocalDate(d).getTime();}catch(e){return 0;}});
+  var i=0,max=0,ms=windowDays*86400000;
+  for(var j=0;j<times.length;j++){
+    while(times[j]-times[i]>ms)i++;
+    if(j-i+1>max)max=j-i+1;
+  }
+  return max;
+}
+var COF_SUM_SORT='total'; // 'total' | 'busy90'
+function setCofSummarySort(val){ COF_SUM_SORT=val; renderCallOffs(); }
+function _buildCofSummaryHTML(){
+  var list=loadCallOffs();
+  if(!list.length){
+    return '<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
+      +'<div style="font-size:40px;margin-bottom:12px;">&#128203;</div>'
+      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No call-offs logged</div>'
+      +'<div style="font-size:13px;">The summary fills in once at least one call-off is on file.</div>'
+      +'</div>';
+  }
+  _coKeyEmployees(list);
+
+  var byEmp={};
+  list.forEach(function(c){
+    var key=c._coKey;
+    if(!byEmp[key])byEmp[key]={empName:c.empName,recs:[]};
+    byEmp[key].recs.push(c);
+  });
+
+  var rows=Object.keys(byEmp).map(function(key){
+    var e=byEmp[key];
+    var recs=e.recs;
+    /* "Current position" comes from whichever REAL-dated record is
+       chronologically most recent — not whichever record happens to sort
+       last in saveCallOffs()'s own storage order (which can't promise
+       date order after someone's role changes mid-history), and not from
+       a raw string sort across malformed dates either (a stray non-ISO
+       value like "N/A" can sort after every real "YYYY-MM-DD" string
+       purely on ASCII value, landing "last" with no real date behind it).
+       Only falls back to "any record with a pos, in whatever order" for
+       the rare case where nobody here has a single real dated record. */
+    var validByDate=recs.filter(function(r){return _coIsYmd(r.date);})
+      .sort(function(a,b){return a.date<b.date?-1:1;});
+    var pos='';
+    for(var pi=validByDate.length-1;pi>=0;pi--){ if(validByDate[pi].pos){pos=validByDate[pi].pos;break;} }
+    if(!pos){ for(var pj=recs.length-1;pj>=0;pj--){ if(recs[pj].pos){pos=recs[pj].pos;break;} } }
+    /* Everything else date-based (span, first/last, the cluster window) is
+       keyed off dates.length, NOT recs.length — a record with a missing
+       or malformed date still counts toward the Total column (it's a
+       real logged call-off) but must never silently pass as "today" or
+       distort a date comparison. */
+    var dates=validByDate.map(function(r){return r.date;});
+    var proper=recs.filter(function(r){return r.improper===false;}).length;
+    var improper=recs.filter(function(r){return r.improper===true;}).length;
+    var unlogged=recs.length-proper-improper;
+    var first=dates[0],last=dates[dates.length-1];
+    var multiDates=dates.length>1;
+    var spanDays=multiDates?_daysBetweenYmd(first,last):0;
+    var busy90=dates.length?_maxCallOffsInWindow(dates,CALLOFF_CLUSTER_WINDOW_DAYS):0;
+    return {key:key,empName:e.empName,pos:pos,total:recs.length,proper:proper,improper:improper,
+      unlogged:unlogged,first:first,last:last,hasDate:dates.length>0,multiDates:multiDates,
+      spanDays:spanDays,busy90:busy90};
+  });
+  rows.sort(function(a,b){
+    if(COF_SUM_SORT==='busy90'&&b.busy90!==a.busy90)return b.busy90-a.busy90;
+    if(b.total!==a.total)return b.total-a.total;
+    return a.empName.localeCompare(b.empName);
+  });
+
+  var totalCO=list.length;
+  function sortBtn(key,label){
+    var active=COF_SUM_SORT===key;
+    return '<button onclick="setCofSummarySort(\''+key+'\')" style="padding:7px 13px;border:1.5px solid '+(active?'var(--navy)':'var(--border)')+';background:'+(active?'var(--navy)':'var(--sur)')+';color:'+(active?'var(--on-fill)':'var(--text2)')+';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">'+label+'</button>';
+  }
+
+  var html='<div style="margin-bottom:14px;color:var(--text3);font-size:12.5px;">'
+    +'Every employee with a Call-Off, proper vs. improper, and the tightest 90-day stretch they ever fell into — a plain total can hide a cluster that a wide average doesn\'t.</div>';
+  html+='<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">';
+  html+='<div style="background:var(--surface);border-radius:10px;padding:10px 16px;text-align:center;min-width:110px;">'
+    +'<div style="font-size:22px;font-weight:800;color:var(--text1);">'+rows.length+'</div>'
+    +'<div style="font-size:10.5px;font-weight:700;color:var(--text2);">Employees</div></div>';
+  html+='<div style="background:var(--surface);border-radius:10px;padding:10px 16px;text-align:center;min-width:110px;">'
+    +'<div style="font-size:22px;font-weight:800;color:var(--text1);">'+totalCO+'</div>'
+    +'<div style="font-size:10.5px;font-weight:700;color:var(--text2);">Call-Offs, All Time</div></div>';
+  html+='<div style="flex:1;"></div>';
+  html+='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:2px;">Sort by</div>';
+  html+=sortBtn('total','Most Call-Offs')+sortBtn('busy90','Busiest 90 Days');
+  html+='</div>';
+
+  html+='<div class="card"><div class="tbl-wrap"><table><thead><tr>'
+    +'<th>Employee</th><th style="text-align:center;">Total</th><th>Breakdown</th>'
+    +'<th>First &rarr; Last</th><th>Span</th><th style="text-align:center;">Busiest 90 Days</th><th></th>'
+    +'</tr></thead><tbody>';
+  rows.forEach(function(e){
+    var keyJs=escHtml(schedJs(e.key));
+    var breakdown='<span class="badge b-green">&#10003; '+e.proper+' proper</span> '
+      +'<span class="badge b-red">&#9888; '+e.improper+' improper</span>'
+      +(e.unlogged>0?' <span class="badge b-gray">'+e.unlogged+' no time logged</span>':'');
+    var firstLast=e.multiDates?(fmtLongDate(e.first)+' &rarr; '+fmtLongDate(e.last)):(e.hasDate?fmtLongDate(e.first):'&mdash;');
+    var span=e.multiDates?_daysToSpanText(e.spanDays):'&mdash;';
+    var busyCell=e.multiDates?('<span class="badge '+(e.busy90>=3?'b-yellow':'b-gray')+'">'+e.busy90+'</span>'):'&mdash;';
+    html+='<tr>'
+      +'<td><b>'+escHtml(e.empName)+'</b>'+(e.pos?'<div style="font-size:11px;color:var(--text3);">'+escHtml(e.pos)+'</div>':'')+'</td>'
+      +'<td style="text-align:center;font-weight:800;font-size:15px;color:var(--red);">'+e.total+'</td>'
+      +'<td style="white-space:nowrap;">'+breakdown+'</td>'
+      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+firstLast+'</td>'
+      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+span+'</td>'
+      +'<td style="text-align:center;">'+busyCell+'</td>'
+      +'<td style="white-space:nowrap;text-align:right;"><button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--ink-strong);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">View</button></td>'
       +'</tr>';
   });
   html+='</tbody></table></div></div>';
