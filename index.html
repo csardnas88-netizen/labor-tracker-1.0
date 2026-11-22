@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.134.0"/>
+<meta name="app-version" content="7.135.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4934,6 +4934,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.135.0', date:'2026-11-22',
+    features:['Call-Offs and Summary, merged into one screen — Carlos\'s same-day follow-up: "¿Cuál es el propósito de tener el tab de call off y el tab de summary?" Having both meant the day-of-week chart, the employee filter, and a "+ New Call-Off" button each existed twice. Now there\'s a single Call-Offs screen: unfiltered shows the position-grouped breakdown (what Summary used to be, on its own tab) in place of the old "Most Call-Offs" top-8 table; filtering to one person narrows everything down to her — the same proper/improper/span/busiest-90 breakdown as a highlight banner, with her raw month-by-month log (still fully editable/deletable) right underneath instead of a second tab to flip to.'],
+    fixes:['Caught in this feature\'s own code review before shipping: the single-person highlight banner read its position subtitle from a simpler, storage-order-based lookup instead of the careful chronological resolution the breakdown right below it already used — so someone promoted mid-history could show a stale, pre-promotion position on the very banner sitting right under her correctly-titled position card.']
+  },
   {
     v:'7.134.0', date:'2026-11-22',
     features:['Call-Offs Summary, Carlos\'s follow-up right after seeing v7.133.0: he rejected a denser redesign (compact icon chips, Tardiness folded into the same rows, default sort changed) outright — "no me gusta" — and asked instead for the original word-badge design back, just split one card per position (Room Attendant, Supervisor, Turndown, Public Area, Laundry, House Attendant — same order every other position view in this app already uses), plus a "+ New Call-Off" button right on this screen so logging one doesn\'t mean leaving it. Saving from here reflects immediately, no tab switch needed.'],
@@ -21540,7 +21545,7 @@ function _coKeyEmployees(list){
    absences already are. Tab choice isn't persisted across a reload,
    same as every other in-page filter in this app (COF_FILTER, LA_FILTER
    below) — it's a view state, not data. */
-var COF_TAB='calloffs'; // 'calloffs' | 'latearrivals' | 'overview' | 'summary'
+var COF_TAB='calloffs'; // 'calloffs' | 'latearrivals' | 'overview'
 function setCofTab(tab){ COF_TAB=tab; renderCallOffs(); }
 /* Jumps straight to a filtered employee view on the other tab — used by
    the Overview tab's "Call-Offs" / "Late Arrivals" links (Carlos's ask,
@@ -21561,7 +21566,6 @@ function _buildCofTabsHTML(){
   }
   return '<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--border);">'
     +tabBtn('calloffs','&#128222;','Call-Offs')
-    +tabBtn('summary','&#128203;','Summary')
     +tabBtn('latearrivals','&#9203;','Tardiness')
     +tabBtn('overview','&#9888;&#65039;','Overview')
     +'</div>';
@@ -21578,10 +21582,6 @@ function renderCallOffs(){
   }
   if(COF_TAB==='overview'){
     el.innerHTML=tabsHtml+_buildCofOverviewHTML();
-    return;
-  }
-  if(COF_TAB==='summary'){
-    el.innerHTML=tabsHtml+_buildCofSummaryHTML();
     return;
   }
 
@@ -21647,9 +21647,21 @@ function renderCallOffs(){
   });
   html+='</div></div>';
 
+  /* Carlos's ask, 2026-11-22: "¿Cuál es el propósito de tener el tab de
+     call off y el tab de summary?" — having both meant the day-of-week
+     chart, the filter, and a "+ New Call-Off" button each existed
+     TWICE, and the old "Most Call-Offs — All Time" table (top 8, raw
+     total only) was already fully superseded by Summary's own richer
+     per-employee breakdown. Folded into one screen: unfiltered shows
+     the full position-grouped breakdown (what Summary used to be, on
+     its own tab); filtering to one person narrows everything here to
+     her — the same breakdown as a single highlight banner, with her raw
+     month-by-month log (unchanged, still editable/deletable) right
+     underneath instead of a second tab to flip to. */
   if(COF_FILTER==='all'){
     var mk=monthKey();
     var mtdCount=list.filter(function(c){return c.date&&c.date.substring(0,7)===mk;}).length;
+    var summaryRows=_cofBuildSummaryRows(list);
     html+='<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">';
     html+='<div style="flex:1;min-width:120px;background:var(--red-bg);border-radius:10px;padding:12px 16px;text-align:center;">'
       +'<div style="font-size:26px;font-weight:800;color:var(--red);">'+mtdCount+'</div>'
@@ -21657,26 +21669,35 @@ function renderCallOffs(){
     html+='<div style="flex:1;min-width:120px;background:var(--surface);border-radius:10px;padding:12px 16px;text-align:center;">'
       +'<div style="font-size:26px;font-weight:800;color:var(--text2);">'+list.length+'</div>'
       +'<div style="font-size:11px;font-weight:700;color:var(--text2);">&#128222; All Time</div></div>';
+    html+='<div style="flex:1;min-width:120px;background:var(--surface);border-radius:10px;padding:12px 16px;text-align:center;">'
+      +'<div style="font-size:26px;font-weight:800;color:var(--text2);">'+summaryRows.length+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--text2);">&#128101; Employees</div></div>';
     html+='</div>';
-
-    var topEmps=empKeys.map(function(k){return byEmp[k];}).sort(function(a,b){return b.count-a.count;}).slice(0,8);
-    if(topEmps.length>0){
-      html+='<div class="card" style="margin-bottom:14px;">';
-      html+='<div class="card-head"><div class="card-title">&#128202; Most Call-Offs — All Time</div></div>';
-      html+='<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Position</th><th style="text-align:center;">Call-Offs</th></tr></thead><tbody>';
-      topEmps.forEach(function(e){
-        html+='<tr><td><b>'+escHtml(e.empName)+'</b></td><td>'+escHtml(e.pos||'')+'</td>'
-          +'<td style="text-align:center;font-weight:800;">'+e.count+'</td></tr>';
-      });
-      html+='</tbody></table></div></div>';
-    }
+    html+=_buildCofPositionCardsHTML(summaryRows);
   }else{
     var emp=byEmp[COF_FILTER]||{empName:'',pos:'',count:filtered.length};
-    html+='<div style="background:var(--red-bg);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+    var personRow=_cofBuildSummaryRows(filtered)[0]; /* filtered already holds only her own records */
+    var disp=personRow?_cofRowDisplay(personRow):null;
+    /* The position shown here comes from personRow (the same
+       chronologically-resolved value the grouped cards above use), NOT
+       from the simpler byEmp map's "first record encountered wins" pos
+       — caught in this feature's own code review: after clicking "View"
+       from a card correctly titled with her CURRENT position, a stale
+       one from an older record could otherwise show right underneath it
+       on the very same screen. */
+    var bannerPos=personRow?personRow.pos:emp.pos;
+    html+='<div style="background:var(--red-bg);border-radius:10px;padding:14px 16px;margin-bottom:16px;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
       +'<div><div style="font-size:14px;font-weight:800;color:var(--text1);">'+escHtml(emp.empName)+'</div>'
-      +(emp.pos?'<div style="font-size:11px;color:var(--text3);">'+escHtml(emp.pos)+'</div>':'')+'</div>'
+      +(bannerPos?'<div style="font-size:11px;color:var(--text3);">'+escHtml(bannerPos)+'</div>':'')+'</div>'
       +'<div style="text-align:right;"><div style="font-size:26px;font-weight:800;color:var(--red);">'+filtered.length+'</div>'
       +'<div style="font-size:11px;font-weight:700;color:var(--red);">&#128222; Total Call-Offs</div></div>'
+      +'</div>'
+      +(disp?('<div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;padding-top:10px;border-top:1px solid var(--red-border);font-size:12px;color:var(--text2);">'
+        +'<div>'+disp.breakdown+'</div>'
+        +'<div>'+disp.firstLast+' <span style="color:var(--text3);">('+disp.span+')</span></div>'
+        +'<div>Busiest 90 days: '+disp.busyCell+'</div>'
+        +'</div>'):'')
       +'</div>';
   }
 
@@ -22450,24 +22471,17 @@ function _maxCallOffsInWindow(datesAsc,windowDays){
 }
 var COF_SUM_SORT='total'; // 'total' | 'busy90'
 function setCofSummarySort(val){ COF_SUM_SORT=val; renderCallOffs(); }
-function _buildCofSummaryHTML(){
-  var list=loadCallOffs();
-  if(!list.length){
-    return '<div style="text-align:center;padding:60px 20px;color:var(--text3);">'
-      +'<div style="font-size:40px;margin-bottom:12px;">&#128203;</div>'
-      +'<div style="font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px;">No call-offs logged</div>'
-      +'<div style="font-size:13px;">The summary fills in once at least one call-off is on file.</div>'
-      +'</div>';
-  }
-  _coKeyEmployees(list);
-
+/* Per-employee aggregates (proper/improper/unlogged, span, busiest-90-day
+   cluster) — shared by the Summary section AND the single-person
+   highlight banner below. Assumes _coKeyEmployees(list) already ran on
+   `list` (every caller here does this once, up in renderCallOffs). */
+function _cofBuildSummaryRows(list){
   var byEmp={};
   list.forEach(function(c){
     var key=c._coKey;
     if(!byEmp[key])byEmp[key]={empName:c.empName,recs:[]};
     byEmp[key].recs.push(c);
   });
-
   var rows=Object.keys(byEmp).map(function(key){
     var e=byEmp[key];
     var recs=e.recs;
@@ -22507,8 +22521,28 @@ function _buildCofSummaryHTML(){
     if(b.total!==a.total)return b.total-a.total;
     return a.empName.localeCompare(b.empName);
   });
-
-  var totalCO=list.length;
+  return rows;
+}
+/* The four derived display strings every view of a summary row needs —
+   the position-grouped table AND the single-person highlight banner —
+   factored out once so the "no notice at all" vs. "notice, but no
+   scheduled start" vs. "a real cluster" logic exists in exactly one
+   place. */
+function _cofRowDisplay(e){
+  var breakdown='<span class="badge b-green">&#10003; '+e.proper+' proper</span> '
+    +'<span class="badge b-red">&#9888; '+e.improper+' improper</span>'
+    +(e.unlogged>0?' <span class="badge b-gray">'+e.unlogged+' no time logged</span>':'');
+  var firstLast=e.multiDates?(fmtLongDate(e.first)+' &rarr; '+fmtLongDate(e.last)):(e.hasDate?fmtLongDate(e.first):'&mdash;');
+  var span=e.multiDates?_daysToSpanText(e.spanDays):'&mdash;';
+  var busyCell=e.multiDates?('<span class="badge '+(e.busy90>=3?'b-yellow':'b-gray')+'">'+e.busy90+'</span>'):'&mdash;';
+  return {breakdown:breakdown,firstLast:firstLast,span:span,busyCell:busyCell};
+}
+/* Sort-by controls + one card per position, canonical HK_WEEKLY_POSITIONS
+   order — Carlos's ask, so a position's own people sit together instead
+   of one long mixed list. Only shown for "— All employees —"; picking
+   one specific person replaces this with her own highlight banner (see
+   renderCallOffs) instead of a one-row table. */
+function _buildCofPositionCardsHTML(rows){
   function sortBtn(key,label){
     var active=COF_SUM_SORT===key;
     return '<button onclick="setCofSummarySort(\''+key+'\')" style="padding:7px 13px;border:1.5px solid '+(active?'var(--navy)':'var(--border)')+';background:'+(active?'var(--navy)':'var(--sur)')+';color:'+(active?'var(--on-fill)':'var(--text2)')+';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">'+label+'</button>';
@@ -22519,23 +22553,20 @@ function _buildCofSummaryHTML(){
      OR ad-hoc — is built by bucketing on each row's own resolved `pos`
      value (see posGroups below), so a row's position is, by construction,
      always identical to the card title it sits under. Repeating it per
-     row would only ever say the same thing twice. */
+     row would only ever say the same thing twice. The View button just
+     filters this same screen now (setCallOffFilter) — there's no longer
+     a separate tab to jump to. */
   function rowHTML(e){
     var keyJs=escHtml(schedJs(e.key));
-    var breakdown='<span class="badge b-green">&#10003; '+e.proper+' proper</span> '
-      +'<span class="badge b-red">&#9888; '+e.improper+' improper</span>'
-      +(e.unlogged>0?' <span class="badge b-gray">'+e.unlogged+' no time logged</span>':'');
-    var firstLast=e.multiDates?(fmtLongDate(e.first)+' &rarr; '+fmtLongDate(e.last)):(e.hasDate?fmtLongDate(e.first):'&mdash;');
-    var span=e.multiDates?_daysToSpanText(e.spanDays):'&mdash;';
-    var busyCell=e.multiDates?('<span class="badge '+(e.busy90>=3?'b-yellow':'b-gray')+'">'+e.busy90+'</span>'):'&mdash;';
+    var d=_cofRowDisplay(e);
     return '<tr>'
       +'<td><b>'+escHtml(e.empName)+'</b></td>'
       +'<td style="text-align:center;font-weight:800;font-size:15px;color:var(--red);">'+e.total+'</td>'
-      +'<td style="white-space:nowrap;">'+breakdown+'</td>'
-      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+firstLast+'</td>'
-      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+span+'</td>'
-      +'<td style="text-align:center;">'+busyCell+'</td>'
-      +'<td style="white-space:nowrap;text-align:right;"><button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--ink-strong);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">View</button></td>'
+      +'<td style="white-space:nowrap;">'+d.breakdown+'</td>'
+      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+d.firstLast+'</td>'
+      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+d.span+'</td>'
+      +'<td style="text-align:center;">'+d.busyCell+'</td>'
+      +'<td style="white-space:nowrap;text-align:right;"><button onclick="setCallOffFilter(\''+keyJs+'\')" style="background:none;border:none;color:var(--ink-strong);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">View</button></td>'
       +'</tr>';
   }
   function tableHTML(groupRows){
@@ -22545,28 +22576,17 @@ function _buildCofSummaryHTML(){
       +'</tr></thead><tbody>'+groupRows.map(rowHTML).join('')+'</tbody></table></div>';
   }
 
-  var html='<div style="margin-bottom:14px;color:var(--text3);font-size:12.5px;">'
-    +'Every employee with a Call-Off, proper vs. improper, and the tightest 90-day stretch they ever fell into — a plain total can hide a cluster that a wide average doesn\'t.</div>';
-  html+='<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">';
-  html+='<div style="background:var(--surface);border-radius:10px;padding:10px 16px;text-align:center;min-width:110px;">'
-    +'<div style="font-size:22px;font-weight:800;color:var(--text1);">'+rows.length+'</div>'
-    +'<div style="font-size:10.5px;font-weight:700;color:var(--text2);">Employees</div></div>';
-  html+='<div style="background:var(--surface);border-radius:10px;padding:10px 16px;text-align:center;min-width:110px;">'
-    +'<div style="font-size:22px;font-weight:800;color:var(--text1);">'+totalCO+'</div>'
-    +'<div style="font-size:10.5px;font-weight:700;color:var(--text2);">Call-Offs, All Time</div></div>';
-  html+='<div style="flex:1;"></div>';
-  html+='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:2px;">Sort by</div>';
+  var html='<div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">';
+  html+='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Sort by</div>';
   html+=sortBtn('total','Most Call-Offs')+sortBtn('busy90','Busiest 90 Days');
-  html+='<button onclick="showNewCallOffModal()" style="background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;padding:9px 16px;font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">&#43; New Call-Off</button>';
   html+='</div>';
 
   /* Grouped by position, same canonical order HK_WEEKLY_POSITIONS already
-     uses everywhere else (Unifocus, Weekly Pace) — Carlos's ask, so a
-     position's own people sit together instead of one long mixed list.
-     Caught in this feature's own code review: HK_WEEKLY_POSITIONS' short
-     display LABEL for Housekeeping Supervisor is literally "Supervisor"
-     — a record logged with the bare string "Supervisor" (rather than the
-     full canonical "Housekeeping Supervisor") used to spawn its own
+     uses everywhere else (Unifocus, Weekly Pace). Caught in this
+     feature's own code review: HK_WEEKLY_POSITIONS' short display LABEL
+     for Housekeeping Supervisor is literally "Supervisor" — a record
+     logged with the bare string "Supervisor" (rather than the full
+     canonical "Housekeeping Supervisor") used to spawn its own
      identically-titled second card with no way to tell the two apart.
      Folding an exact match against either the canonical key OR its
      label into that same group closes the real collision without
