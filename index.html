@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.133.0"/>
+<meta name="app-version" content="7.134.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4934,6 +4934,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.134.0', date:'2026-11-22',
+    features:['Call-Offs Summary, Carlos\'s follow-up right after seeing v7.133.0: he rejected a denser redesign (compact icon chips, Tardiness folded into the same rows, default sort changed) outright — "no me gusta" — and asked instead for the original word-badge design back, just split one card per position (Room Attendant, Supervisor, Turndown, Public Area, Laundry, House Attendant — same order every other position view in this app already uses), plus a "+ New Call-Off" button right on this screen so logging one doesn\'t mean leaving it. Saving from here reflects immediately, no tab switch needed.'],
+    fixes:['Caught in this feature\'s own code review before shipping: grouping by position could put two employees under two separately-titled "Supervisor" cards with no way to tell them apart, because the short display label for Housekeeping Supervisor is literally "Supervisor" — a legacy record logged with that bare string, instead of the full canonical one, used to spawn its own identical-looking second card. Now folds correctly into the one real group.']
+  },
   {
     v:'7.133.0', date:'2026-11-21',
     features:['Call-Offs gets a new "Summary" tab — Carlos\'s real ask after reviewing the old "Most Call-Offs" table (top 8 only, a raw total with no way to see who was proper vs. improper without opening every record). Summary lists EVERY employee with a Call-Off, each one\'s proper/improper/no-time-logged breakdown, and answers the exact question HR asks him in person: given a person\'s total, how much time did they happen across — e.g. did 3 of them land inside the same 90 days, or were they a year apart. Shown two ways: the plain first→last span across all of a person\'s call-offs, and the single busiest 90-day stretch found anywhere in their history (a sliding window, not just first-vs-last, so a real cluster buried in a longer history still surfaces even if an older, unrelated call-off makes the plain span look wide). Sortable by either Most Call-Offs or Busiest 90 Days, since the two can rank people very differently — two employees with the identical total of 3 can mean "evenly spread across a year" for one and "all three inside ten weeks" for the other.'],
@@ -22508,6 +22513,37 @@ function _buildCofSummaryHTML(){
     var active=COF_SUM_SORT===key;
     return '<button onclick="setCofSummarySort(\''+key+'\')" style="padding:7px 13px;border:1.5px solid '+(active?'var(--navy)':'var(--border)')+';background:'+(active?'var(--navy)':'var(--sur)')+';color:'+(active?'var(--on-fill)':'var(--text2)')+';border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">'+label+'</button>';
   }
+  /* One row's markup — shared by every position group's table below so
+     the template exists in exactly one place. No per-row position text
+     here (removed on purpose, not an oversight): every group — canonical
+     OR ad-hoc — is built by bucketing on each row's own resolved `pos`
+     value (see posGroups below), so a row's position is, by construction,
+     always identical to the card title it sits under. Repeating it per
+     row would only ever say the same thing twice. */
+  function rowHTML(e){
+    var keyJs=escHtml(schedJs(e.key));
+    var breakdown='<span class="badge b-green">&#10003; '+e.proper+' proper</span> '
+      +'<span class="badge b-red">&#9888; '+e.improper+' improper</span>'
+      +(e.unlogged>0?' <span class="badge b-gray">'+e.unlogged+' no time logged</span>':'');
+    var firstLast=e.multiDates?(fmtLongDate(e.first)+' &rarr; '+fmtLongDate(e.last)):(e.hasDate?fmtLongDate(e.first):'&mdash;');
+    var span=e.multiDates?_daysToSpanText(e.spanDays):'&mdash;';
+    var busyCell=e.multiDates?('<span class="badge '+(e.busy90>=3?'b-yellow':'b-gray')+'">'+e.busy90+'</span>'):'&mdash;';
+    return '<tr>'
+      +'<td><b>'+escHtml(e.empName)+'</b></td>'
+      +'<td style="text-align:center;font-weight:800;font-size:15px;color:var(--red);">'+e.total+'</td>'
+      +'<td style="white-space:nowrap;">'+breakdown+'</td>'
+      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+firstLast+'</td>'
+      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+span+'</td>'
+      +'<td style="text-align:center;">'+busyCell+'</td>'
+      +'<td style="white-space:nowrap;text-align:right;"><button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--ink-strong);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">View</button></td>'
+      +'</tr>';
+  }
+  function tableHTML(groupRows){
+    return '<div class="tbl-wrap"><table><thead><tr>'
+      +'<th>Employee</th><th style="text-align:center;">Total</th><th>Breakdown</th>'
+      +'<th>First &rarr; Last</th><th>Span</th><th style="text-align:center;">Busiest 90 Days</th><th></th>'
+      +'</tr></thead><tbody>'+groupRows.map(rowHTML).join('')+'</tbody></table></div>';
+  }
 
   var html='<div style="margin-bottom:14px;color:var(--text3);font-size:12.5px;">'
     +'Every employee with a Call-Off, proper vs. improper, and the tightest 90-day stretch they ever fell into — a plain total can hide a cluster that a wide average doesn\'t.</div>';
@@ -22521,31 +22557,43 @@ function _buildCofSummaryHTML(){
   html+='<div style="flex:1;"></div>';
   html+='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-right:2px;">Sort by</div>';
   html+=sortBtn('total','Most Call-Offs')+sortBtn('busy90','Busiest 90 Days');
+  html+='<button onclick="showNewCallOffModal()" style="background:var(--navy);color:var(--on-fill);border:none;border-radius:8px;padding:9px 16px;font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">&#43; New Call-Off</button>';
   html+='</div>';
 
-  html+='<div class="card"><div class="tbl-wrap"><table><thead><tr>'
-    +'<th>Employee</th><th style="text-align:center;">Total</th><th>Breakdown</th>'
-    +'<th>First &rarr; Last</th><th>Span</th><th style="text-align:center;">Busiest 90 Days</th><th></th>'
-    +'</tr></thead><tbody>';
-  rows.forEach(function(e){
-    var keyJs=escHtml(schedJs(e.key));
-    var breakdown='<span class="badge b-green">&#10003; '+e.proper+' proper</span> '
-      +'<span class="badge b-red">&#9888; '+e.improper+' improper</span>'
-      +(e.unlogged>0?' <span class="badge b-gray">'+e.unlogged+' no time logged</span>':'');
-    var firstLast=e.multiDates?(fmtLongDate(e.first)+' &rarr; '+fmtLongDate(e.last)):(e.hasDate?fmtLongDate(e.first):'&mdash;');
-    var span=e.multiDates?_daysToSpanText(e.spanDays):'&mdash;';
-    var busyCell=e.multiDates?('<span class="badge '+(e.busy90>=3?'b-yellow':'b-gray')+'">'+e.busy90+'</span>'):'&mdash;';
-    html+='<tr>'
-      +'<td><b>'+escHtml(e.empName)+'</b>'+(e.pos?'<div style="font-size:11px;color:var(--text3);">'+escHtml(e.pos)+'</div>':'')+'</td>'
-      +'<td style="text-align:center;font-weight:800;font-size:15px;color:var(--red);">'+e.total+'</td>'
-      +'<td style="white-space:nowrap;">'+breakdown+'</td>'
-      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+firstLast+'</td>'
-      +'<td style="white-space:nowrap;font-size:12.5px;color:var(--text2);">'+span+'</td>'
-      +'<td style="text-align:center;">'+busyCell+'</td>'
-      +'<td style="white-space:nowrap;text-align:right;"><button onclick="cofJumpToFilter(\'calloffs\',\''+keyJs+'\')" style="background:none;border:none;color:var(--ink-strong);font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:2px 4px;">View</button></td>'
-      +'</tr>';
+  /* Grouped by position, same canonical order HK_WEEKLY_POSITIONS already
+     uses everywhere else (Unifocus, Weekly Pace) — Carlos's ask, so a
+     position's own people sit together instead of one long mixed list.
+     Caught in this feature's own code review: HK_WEEKLY_POSITIONS' short
+     display LABEL for Housekeeping Supervisor is literally "Supervisor"
+     — a record logged with the bare string "Supervisor" (rather than the
+     full canonical "Housekeeping Supervisor") used to spawn its own
+     identically-titled second card with no way to tell the two apart.
+     Folding an exact match against either the canonical key OR its
+     label into that same group closes the real collision without
+     inventing a whole new alias system for near-miss spellings (typos,
+     abbreviations) this app hasn't actually seen hit Call-Offs yet.
+     Anyone whose logged position still doesn't match anything canonical
+     (blank, or a genuinely different label) still shows up, under its
+     own ad-hoc group — labeled with the raw string so it's clearly NOT
+     one of the six real positions — rather than silently vanishing. */
+  var canonByString={};
+  HK_WEEKLY_POSITIONS.forEach(function(p){ canonByString[p.key]=p; canonByString[p.label]=p; });
+  var byPos={};
+  rows.forEach(function(r){ (byPos[r.pos]||(byPos[r.pos]=[])).push(r); });
+  var posGroups=HK_WEEKLY_POSITIONS.map(function(p){return {label:p.label,rows:(byPos[p.key]||[]).slice()};});
+  var groupByKey={};
+  HK_WEEKLY_POSITIONS.forEach(function(p,i){ groupByKey[p.key]=posGroups[i]; });
+  Object.keys(byPos).forEach(function(pk){
+    if(HK_WEEKLY_POSITIONS.some(function(p){return p.key===pk;}))return; // already included above
+    var canon=canonByString[pk];
+    if(canon){ groupByKey[canon.key].rows=groupByKey[canon.key].rows.concat(byPos[pk]); return; }
+    posGroups.push({label:pk||'Other',rows:byPos[pk]});
   });
-  html+='</tbody></table></div></div>';
+  posGroups.filter(function(g){return g.rows.length>0;}).forEach(function(g){
+    html+='<div class="card" style="margin-bottom:14px;"><div class="card-head"><div class="card-title">'+escHtml(g.label)+'</div>'
+      +'<div class="card-sub">'+g.rows.length+' employee'+(g.rows.length===1?'':'s')+'</div></div>'
+      +tableHTML(g.rows)+'</div>';
+  });
   return html;
 }
 
