@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.136.0"/>
+<meta name="app-version" content="7.137.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4934,6 +4934,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.137.0', date:'2026-11-24',
+    features:['Section Rotation now has a "Room Attendant Section Owners" block — Carlos\'s ask: a place to say who owns each floor\'s section, split by building (Gallery Tower, floors 2-22, and Studio Towers, floors 3-10), each with its own name box. Unlike the three roles already on this page, this one doesn\'t rotate — it\'s a stable list that only changes when Carlos changes it: type any name (a brand-new hire doesn\'t need to exist anywhere else in the app first), clear a box to mark a floor as unowned, or type over a name to replace her with whoever took the floor. Confirmed with Carlos before building: reference only, same as Houseman/Supervisor/Turndown already are on this same page — the Daily Lineup\'s GRA Sections table keeps reading the Section Assignment Excel file exactly as it does today.'],
+    fixes:['Caught in this feature\'s own code review before shipping: the first save design let one device\'s push silently erase the OTHER building\'s data the instant both buildings existed in the saved record (exactly the whole-blob-overwrite class this app has hit before, on other features) — fixed with a per-floor timestamp, same idea the Schedule Draft already uses per day, so a push only ever overwrites a floor it actually changed. A second issue surfaced right behind it: the on-screen boxes never caught back up after that merge finished, so a later save — even minutes afterward, same open page — could mistake "my form still shows this blank" for "I meant to clear this" and erase a floor a teammate owns. Fixed by re-painting the boxes the moment the merge lands.']
+  },
   {
     v:'7.136.0', date:'2026-11-23',
     fixes:['Fixed a real data-loss bug on the Schedule Draft — Carlos\'s report: he changed several Room Attendants\' cells and one reverted, and separately, typing a run of "Drop to Tomorrow" numbers left some of them blank again once he finished. Root cause: every Schedule save fetches the cloud copy, merges it in, and (only when that merge actually changes something) writes the result back to local storage — a real network round trip. Carlos edits fast, tabbing to the next cell before the previous edit\'s round trip lands, and that overwrite used to replace local storage with a merge computed from a now-stale snapshot of what he\'d typed — discarding whatever he\'d since typed into a different cell. Network replies have no guaranteed order, so this wasn\'t even limited to the very next edit: an early edit\'s round trip finishing last could still wipe out something typed well after it. Fixed by re-merging against whatever is actually in local storage at that moment, right before any overwrite — reusing the exact same per-day merge the cloud pull already relies on, so a more recent edit\'s own timestamp always wins.',
@@ -24010,6 +24015,8 @@ function renderSectionRotation(){
   html+='<button class="btn btn-gold" onclick="saveSectionRotationFromUI()">Save rotation</button>';
   html+='</div>';
 
+  html+=renderSectionOwnersBlock();
+
   el.innerHTML=html;
 }
 function saveSectionRotationFromUI(){
@@ -24036,6 +24043,156 @@ function saveSectionRotationFromUI(){
   var next={anchor:anchor,periodMonths:periodMonths,roles:roles,fixed:fixed};
   saveSectionRotation(next);
   showToast('Section rotation saved');
+  renderSectionRotation();
+}
+
+/* ── Room Attendant Section Owners ──
+   Carlos's ask, 2026-11-24: a place to say who owns each floor's section —
+   unlike the three roles above, this isn't a rotating band; it's a stable,
+   hand-maintained list (a person keeps her floor until Carlos changes it),
+   so there's no anchor/period math here at all, just a flat floor->name map
+   per building. Explicitly reference-only, same as the rest of this page:
+   the Daily Lineup's GRA Sections table keeps reading the Section
+   Assignment Excel file exactly as it does today — Carlos's own call,
+   confirmed before building this, matching how Houseman/Supervisor/
+   Turndown already never auto-fill the Lineup either. */
+var SECTION_OWNER_BUILDINGS=[
+  {key:'gallery',label:'Gallery Tower',floorStart:2,floorEnd:22},
+  {key:'studio', label:'Studio Towers',floorStart:3,floorEnd:10}
+];
+function sectionOwnerFloors(b){
+  var out=[];
+  for(var f=b.floorStart;f<=b.floorEnd;f++)out.push(f);
+  return out;
+}
+function loadSectionOwners(){
+  try{
+    var s=localStorage.getItem('hk_section_owners');
+    if(s){ var r=JSON.parse(s); if(r&&typeof r==='object'&&!Array.isArray(r))return r; }
+  }catch(e){}
+  return {};
+}
+/* CLAUDE.md's own recurring-bug-class #3: a save that pushes the whole
+   record must never let a push blindly clobber what another device just
+   saved. saveSectionOwnersFromUI always resubmits every floor's CURRENT
+   box (even blank ones), so a shallow "local wins per building" merge
+   (tried first, caught by this feature's own test before shipping) still
+   let one device's untouched building silently erase the other's real
+   data the moment BOTH buildings exist in the local object at all. Fixed
+   with the same per-unit timestamp idiom _schedMergeRecord already uses
+   per DAY — applied here per FLOOR — so a push can tell "this floor
+   actually changed on this device" apart from "my form just always
+   mentions every floor," and a genuine clear still beats a stale
+   device's lingering value instead of losing to it. */
+function _sectionOwnerKey(building,floor){ return building+'_'+floor; }
+function _mergeSectionOwners(mine,theirs){
+  if(!theirs)return mine;
+  var mineAt=mine._at||{}, theirsAt=theirs._at||{};
+  var out={_at:Object.assign({},theirsAt,mineAt)};
+  SECTION_OWNER_BUILDINGS.forEach(function(b){
+    out[b.key]={};
+    sectionOwnerFloors(b).forEach(function(f){
+      var k=_sectionOwnerKey(b.key,f);
+      var mAt=mineAt[k]||0, tAt=theirsAt[k]||0;
+      var mVal=(mine[b.key]||{})[f]||'', tVal=(theirs[b.key]||{})[f]||'';
+      /* A tie (neither side has ever recorded a change to this exact
+         floor — legacy data from before _at existed, or genuinely
+         untouched by both) shouldn't blindly favor "mine": that would
+         erase a real remote value just because this device's form
+         happens to show the floor blank. Prefer whichever side actually
+         has something over blank. */
+      var val=mAt!==tAt?(mAt>tAt?mVal:tVal):(mVal||tVal);
+      if(val)out[b.key][f]=val;
+    });
+  });
+  return out;
+}
+function saveSectionOwners(cfg){
+  var prev=loadSectionOwners();
+  var at=Object.assign({},prev._at||{});
+  var now=Date.now();
+  SECTION_OWNER_BUILDINGS.forEach(function(b){
+    sectionOwnerFloors(b).forEach(function(f){
+      var k=_sectionOwnerKey(b.key,f);
+      var prevVal=(prev[b.key]||{})[f]||'';
+      var curVal=(cfg[b.key]||{})[f]||'';
+      if(prevVal!==curVal)at[k]=now;
+    });
+  });
+  cfg._at=at;
+  safeSetItem('hk_section_owners',JSON.stringify(cfg));
+  if(typeof SUPA_URL==='undefined'||typeof authedFetch!=='function'||typeof _fetchRemoteKey!=='function'){
+    if(typeof supaPut==='function'){try{supaPut('hk_section_owners',cfg);}catch(_){}}
+    return;
+  }
+  _fetchRemoteKey('hk_section_owners').then(function(remote){
+    var merged=_mergeSectionOwners(cfg,remote);
+    safeSetItem('hk_section_owners',JSON.stringify(merged));
+    supaPut('hk_section_owners',merged);
+    /* The merge above can genuinely change what's on screen — a floor a
+       peer device owns that this one's form never showed. Re-render so
+       the inputs catch up to it; otherwise the next save (even minutes
+       later, on the SAME still-open page) reads that floor's box as
+       still blank and stamps a fresh _at for it, which then reads as a
+       deliberate clear and wins over the peer's real value — caught by
+       this feature's own test before shipping. */
+    if(typeof renderSectionRotation==='function'&&document.getElementById('sectionRotationContent'))renderSectionRotation();
+  }).catch(function(){
+    try{supaPut('hk_section_owners',cfg);}catch(e){}
+  });
+}
+/* Autocomplete hint only, not a constraint — Carlos's ask explicitly
+   includes typing in someone brand new to the team, so the field stays a
+   plain text input (list=, not a <select>) and this just offers current
+   Room Attendants as suggestions. */
+function sectionOwnerRosterNames(){
+  var out=[],seen={};
+  (typeof getProjectEmployeeOptions==='function'?getProjectEmployeeOptions():[]).forEach(function(e){
+    if(e.pos!=='Room Attendant')return;
+    var k=dlNorm(e.name);
+    if(seen[k])return; seen[k]=1;
+    out.push(e.name);
+  });
+  out.sort(function(a,b){return a.localeCompare(b);});
+  return out;
+}
+function renderSectionOwnersBlock(){
+  var owners=loadSectionOwners();
+  var names=sectionOwnerRosterNames();
+  var html='<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;">';
+  html+='<div style="background:var(--navy);padding:10px 16px;">';
+  html+='<div style="font-size:13px;font-weight:700;color:var(--on-fill);">Room Attendant Section Owners</div>';
+  html+='<div style="font-size:11px;color:rgba(255,255,255,.7);">Who owns each floor — reference only, the Daily Lineup keeps reading the Section Assignment file exactly as before</div></div>';
+  html+='<div style="padding:4px 16px 12px;">';
+  SECTION_OWNER_BUILDINGS.forEach(function(b){
+    var ownersForBuilding=owners[b.key]||{};
+    html+='<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;">'+escHtml(b.label)+'</div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px;">';
+    sectionOwnerFloors(b).forEach(function(f){
+      html+='<tr><td style="padding:4px 8px;border-top:1px solid var(--border);width:30%;color:var(--text2);">Floor '+f+'</td>'
+        +'<td style="padding:4px 8px;border-top:1px solid var(--border);">'
+        +'<input type="text" list="raSectionOwnerNames" data-so="'+b.key+'-'+f+'" value="'+escHtml(ownersForBuilding[f]||'')+'" placeholder="—" style="width:100%;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:inherit;"></td></tr>';
+    });
+    html+='</table>';
+  });
+  html+='<datalist id="raSectionOwnerNames">'+names.map(function(n){return '<option value="'+escHtml(n)+'">';}).join('')+'</datalist>';
+  html+='<div style="font-size:11px;color:var(--text3);margin:6px 0 10px;line-height:1.5;">Type any name — a brand-new hire doesn\'t need to be anywhere else in the app first. Clear a box to mark a floor as having no owner yet.</div>';
+  html+='<button class="btn btn-gold" onclick="saveSectionOwnersFromUI()">Save section owners</button>';
+  html+='</div></div>';
+  return html;
+}
+function saveSectionOwnersFromUI(){
+  var cfg={};
+  SECTION_OWNER_BUILDINGS.forEach(function(b){
+    cfg[b.key]={};
+    sectionOwnerFloors(b).forEach(function(f){
+      var elIn=document.querySelector('[data-so="'+b.key+'-'+f+'"]');
+      var v=elIn?elIn.value.trim():'';
+      if(v)cfg[b.key][f]=v;
+    });
+  });
+  saveSectionOwners(cfg);
+  showToast('Section owners saved');
   renderSectionRotation();
 }
 /* Read-only reference card for the Daily Lineup page — shows whose turn

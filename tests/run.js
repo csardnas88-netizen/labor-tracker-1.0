@@ -152,6 +152,7 @@ const cases = [
   require('./cases/labor-dash-scroll-to-today-no-vertical-jump'),
   require('./cases/schedule-retry-pending-push'),
   require('./cases/schedule-save-race-in-flight-edit'),
+  require('./cases/section-owners'),
   require('./cases/daily-lineup-day-save-race-in-flight-edit'),
   require('./cases/daily-lineup-sections-save-race-in-flight-edit'),
   require('./cases/schedule-linked-people-no-permanent-row'),
