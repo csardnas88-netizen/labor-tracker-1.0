@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.135.0"/>
+<meta name="app-version" content="7.136.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4934,6 +4934,11 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.136.0', date:'2026-11-23',
+    fixes:['Fixed a real data-loss bug on the Schedule Draft — Carlos\'s report: he changed several Room Attendants\' cells and one reverted, and separately, typing a run of "Drop to Tomorrow" numbers left some of them blank again once he finished. Root cause: every Schedule save fetches the cloud copy, merges it in, and (only when that merge actually changes something) writes the result back to local storage — a real network round trip. Carlos edits fast, tabbing to the next cell before the previous edit\'s round trip lands, and that overwrite used to replace local storage with a merge computed from a now-stale snapshot of what he\'d typed — discarding whatever he\'d since typed into a different cell. Network replies have no guaranteed order, so this wasn\'t even limited to the very next edit: an early edit\'s round trip finishing last could still wipe out something typed well after it. Fixed by re-merging against whatever is actually in local storage at that moment, right before any overwrite — reusing the exact same per-day merge the cloud pull already relies on, so a more recent edit\'s own timestamp always wins.',
+    'Applied the same fix, proactively, to the Daily Lineup\'s per-day form (floater placements, Floors, the Lady rows, the bottom lists) — Carlos\'s ask right after seeing the Schedule fix: "¿no lo puedes correr para asegurarnos de que no pase en el futuro?" That save had the identical fast-typing exposure but had never had ANY protection against it, not even the weaker version the Schedule had before its own fix — fast tabbing across its fields could silently drop one. It now re-checks against what\'s actually on the device, the same way, before ever overwriting it.']
+  },
   {
     v:'7.135.0', date:'2026-11-22',
     features:['Call-Offs and Summary, merged into one screen — Carlos\'s same-day follow-up: "¿Cuál es el propósito de tener el tab de call off y el tab de summary?" Having both meant the day-of-week chart, the employee filter, and a "+ New Call-Off" button each existed twice. Now there\'s a single Call-Offs screen: unfiltered shows the position-grouped breakdown (what Summary used to be, on its own tab) in place of the old "Most Call-Offs" top-8 table; filtering to one person narrows everything down to her — the same proper/improper/span/busiest-90 breakdown as a highlight banner, with her raw month-by-month log (still fully editable/deletable) right underneath instead of a second tab to flip to.'],
@@ -23565,9 +23570,29 @@ function dlSaveSchedule(o){
      _monthPushShadow, just for this one record. */
   try{localStorage.setItem('hk_dl_schedule_savedat',String(Date.now()));}catch(e){}
   function _markPushed(){ try{localStorage.setItem('hk_dl_schedule_pushedat',String(Date.now()));}catch(e){} }
+  /* Carlos's real report, 2026-11-22: he changed several Room Attendants'
+     cells, then one reverted; separately, several "Drop to Tomorrow"
+     numbers he'd just typed came back blank. Root cause: this remote
+     fetch+merge is a real network round trip, and he edits fast — tabbing
+     to the next cell before the previous edit's round trip lands. The
+     overwrite below used to replace localStorage with a merge computed
+     from `o`, the snapshot frozen back when THIS call started — so a
+     later edit's own (already-saved) localStorage write could be stomped
+     the moment an earlier edit's callback finally resolved. Network
+     responses have no ordering guarantee, so "earlier" edits can easily
+     finish LAST, making this not even limited to the very next edit.
+     Re-merging against whatever is CURRENTLY in localStorage (not just
+     `o`) before overwriting closes that: anything saved after `o` was
+     snapshotted carries a newer per-day _at stamp, so _schedMergeRecord
+     (the exact same day-level merge already used for a remote pull)
+     keeps it instead of letting this stale snapshot win. */
   _fetchRemoteSchedule().then(function(remote){
     var m=_schedMergeRecord(o,remote);
-    if(m.changed)safeSetItem('hk_dl_schedule',JSON.stringify(m.rec));
+    if(m.changed){
+      var latest=dlLoadSchedule();
+      if(latest)m.rec=_schedMergeRecord(latest,m.rec).rec;
+      safeSetItem('hk_dl_schedule',JSON.stringify(m.rec));
+    }
     return supaPut('dl_schedule',m.rec);
   }).then(_markPushed).catch(function(){ supaPut('dl_schedule',o).then(_markPushed,_markPushed); });
 }
@@ -23694,7 +23719,71 @@ function dlFetchTemplate(){
    line he overrode by hand. Keyed by date so re-opening a past day shows
    what actually went out, not a fresh re-draft of it. */
 function dlLoadDay(ds){ try{var s=localStorage.getItem('hk_dl_day_'+ds);return s?JSON.parse(s):null;}catch(e){return null;} }
-function dlSaveDay(ds,o){ safeSetItem('hk_dl_day_'+ds,JSON.stringify(o)); try{supaPut('dl_day_'+ds,o);}catch(e){} }
+/* Found during review of the dl_schedule save-race fix (7.136.0): this had
+   ZERO merge protection — a raw local overwrite plus a raw cloud push, not
+   even the whole-blob fetch-merge dlSaveSchedule had before ITS fix.
+   Carlos tabs through this same form the same quick way (dlSetFloors/
+   dlSetLady/dlSetExtra/dlSetOcc all read a fresh dlLoadDay(ds), mutate ONE
+   field, then call this), so the identical race applied: an earlier edit's
+   remote round trip resolving AFTER a later edit's own already-saved
+   localStorage write could silently stomp the later edit.
+   Fixed the same way, adapted to this record's flat shape (no per-day keys
+   to compare like the Schedule has — this whole record IS one day): each
+   map field (floors/assign/lady/extras) is unioned key-by-key via
+   _dayMergeRecord, same idiom as _schedMergeRecord's own person-level maps;
+   a key only BOTH sides have falls back to whichever side's whole-record
+   savedAt is newer. And just like dlSaveSchedule, the merge result is
+   re-merged against whatever dlLoadDay(ds) currently holds right before any
+   overwrite, so a later edit saved while this round trip was in flight
+   isn't discarded once this (possibly slower, possibly out-of-order)
+   network reply finally lands. */
+var DAY_MAP_FIELDS=['floors','assign','lady','extras'];
+function _dayMergeRecord(local,remote){
+  if(!remote)return {rec:local,changed:false};
+  if(!local)return {rec:remote,changed:true};
+  var remoteNewer=String(remote.savedAt||'')>String(local.savedAt||'');
+  var merged=Object.assign({},remoteNewer?remote:local);
+  DAY_MAP_FIELDS.forEach(function(f){
+    var mf=Object.assign({},local[f]||{});
+    var rf=remote[f]||{};
+    Object.keys(rf).forEach(function(k){
+      if(!(k in mf)||remoteNewer)mf[k]=rf[k];
+    });
+    if(Object.keys(mf).length)merged[f]=mf; else delete merged[f];
+  });
+  return {rec:merged,changed:JSON.stringify(merged)!==JSON.stringify(local)};
+}
+function _fetchRemoteDay(ds){
+  var url=SUPA_URL+"/rest/v1/labor_data?select=value&key=eq.dl_day_"+ds;
+  function go(){ return authedFetch(url,{method:"GET"}); }
+  return go().then(function(r){
+    if(r.status===401){
+      return _authRefresh().then(function(ok){
+        if(!ok){ var e=new Error('session-expired'); throw e; }
+        return go();
+      });
+    }
+    return r;
+  }).then(function(r){
+    if(!r.ok)throw new Error('fetch-failed: '+r.status);
+    return r.json();
+  }).then(function(rows){
+    try{ return (rows&&rows[0])?JSON.parse(rows[0].value):null; }catch(e){ return null; }
+  });
+}
+function dlSaveDay(ds,o){
+  o.savedAt=new Date().toISOString();
+  safeSetItem('hk_dl_day_'+ds,JSON.stringify(o));
+  _fetchRemoteDay(ds).then(function(remote){
+    var m=_dayMergeRecord(o,remote);
+    if(m.changed){
+      var latest=dlLoadDay(ds);
+      if(latest)m.rec=_dayMergeRecord(latest,m.rec).rec;
+      safeSetItem('hk_dl_day_'+ds,JSON.stringify(m.rec));
+    }
+    return supaPut('dl_day_'+ds,m.rec);
+  }).catch(function(){ supaPut('dl_day_'+ds,o).catch(function(){}); });
+}
 
 /* ── Section Rotation (Houseman / Supervisor floor bands) ──
    Every periodMonths (4, by Carlos's standing schedule), the crew
