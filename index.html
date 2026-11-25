@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.139.0"/>
+<meta name="app-version" content="7.140.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4934,6 +4934,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.140.0', date:'2026-11-25',
+    fixes:['Carlos\'s report: Letty, Maritza, Fátima and Anabel — all new Room Attendants he\'d just placed on the Schedule — weren\'t appearing anywhere on the Daily Lineup. Root cause: the Lineup\'s floater list was read exclusively from the uploaded Section assignment Excel file\'s own column, which a brand-new hire has no way to be on until that file gets updated and re-uploaded. The Lineup now also reads Section Rotation\'s Floaters list (the one added in 7.138.0) as a second source — so typing a new name in there is enough to get her onto the Lineup\'s floater line the same week she\'s hired, no Excel re-upload needed. Listed in both places at once, she still only prints once; and like every floater, she only shows up on days she\'s actually marked working as Room Attendant on the Schedule.']
+  },
   {
     v:'7.139.0', date:'2026-11-24',
     fixes:['Fixed three real reports about the Schedule Draft\'s position-to-position sync not reflecting. Julia, moved from Room Attendant to cover Houseman: her relabel never showed on the Houseman crew\'s own card. Root cause: Julia (and Rubia) are blocked from the generic sync entirely, by name, so a totally separate Laundry-only relationship wouldn\'t fight the mechanism that already owns it — but that blocked EVERY crew pairing for them, Houseman included, not just Laundry. Scoped the block to only apply when Laundry is actually in play for her that day; a Room Attendant/Houseman pairing now reconciles normally. Sandra, given a real Laundry shift directly: it never relabeled her Room Attendant cell, and vice versa — "quiero que funcione en ambas direcciones." Her pairing was built assuming Room Attendant is always the side edited; turned on the two-way version already built for exactly this (used by nobody until now), so confirming her on either crew directly now relabels the other to match. Found while checking whether this applied everywhere: Gabriela Cuevas had the same one-way gap, worse in her case — editing her Lobby cell directly used to get silently reverted back a moment later rather than just failing to relabel. Fixed the same way, minus a wrinkle: Gabriela Cuevas does have one true home crew (Room Attendant always wins when a day is ambiguous, unlike Sandra), so the fix is narrower — a direct Lobby edit is respected and now relabels Room Attendant too, without disturbing that existing default.']
@@ -24626,7 +24630,22 @@ function dlBuildPlan(ds){
     else uncovered.push([fl,owner||null]);
   });
   P.gra=placed; P.uncovered=uncovered;
-  P.floaters=(S.gra_floaters||[]).filter(function(f){return dlIn(dlLook(day,'gra',f));});
+  /* Floater names come from two sources now: the uploaded Section
+     assignment Excel's own column, PLUS whoever Carlos has typed into
+     Section Owners' Floaters list (Section Rotation) — added so a
+     brand-new Room Attendant can show up on the lineup the same week
+     she's hired, without waiting for an updated Excel file to be
+     re-uploaded. Deduped by name so someone listed in both only prints
+     once; each still has to actually be marked working ('1') as GRA
+     that day to appear. */
+  var soFloaterNames=Object.values(loadSectionOwners().floaters||{}).filter(Boolean);
+  var floaterSeen={};
+  P.floaters=(S.gra_floaters||[]).concat(soFloaterNames).filter(function(f){
+    var k=dlNorm(f);
+    if(floaterSeen[k])return false;
+    floaterSeen[k]=1;
+    return dlIn(dlLook(day,'gra',f));
+  });
   P.pulled=day.gra.filter(function(p){return p[1]&&['1','OFF','R-OFF','CALL-OFF',''].indexOf(p[1])===-1;});
   /* Carlos's own decisions for this date, layered on top. */
   var saved=dlLoadDay(ds)||{};

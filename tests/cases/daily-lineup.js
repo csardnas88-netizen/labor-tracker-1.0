@@ -305,6 +305,30 @@ module.exports = {
     t.assert(Object.keys(win.dlFinalFloors(P)).indexOf('4th') === -1,
       'so the 4th stays empty until he says otherwise');
 
+    // ── A name typed into Section Owners' Floaters list (Section
+    // Rotation) also feeds the lineup, not just the uploaded Excel —
+    // Carlos's ask: a brand-new Room Attendant (Fatima) can show up as
+    // a floater the same week she's hired, without waiting for an
+    // updated Section assignment file to be re-uploaded. ──
+    const schForNewFloater = win.dlLoadSchedule();
+    schForNewFloater.days['2026-08-14'].gra.push(['Fatima', '1']);
+    win.dlSaveSchedule(schForNewFloater);
+    win.localStorage.setItem('hk_section_owners', JSON.stringify({ floaters: { f1: 'Fatima' }, _at: {} }));
+    const Pnew = win.dlBuildPlan('2026-08-14');
+    t.eq(Pnew.floaters.join(','), 'Ada,Mayra,Fatima',
+      "a name from Section Owners' Floaters list joins the Excel's own floaters, as long as she is actually marked working as GRA that day");
+    // Listed in BOTH places at once, she must still print only once.
+    const Sdup = Object.assign({}, win.dlLoadSections());
+    Sdup.gra_floaters = Sdup.gra_floaters.concat('Fatima');
+    win.dlSaveSections(Sdup);
+    const Pdup = win.dlBuildPlan('2026-08-14');
+    t.eq(Pdup.floaters.filter((f) => f === 'Fatima').length, 1, 'listed in both the Excel and Section Owners, she still only prints once');
+    win.dlSaveSections(S);
+    win.localStorage.removeItem('hk_section_owners');
+    const schRestoreNew = win.dlLoadSchedule();
+    schRestoreNew.days['2026-08-14'].gra = schRestoreNew.days['2026-08-14'].gra.filter((p) => p[0] !== 'Fatima');
+    win.dlSaveSchedule(schRestoreNew);
+
     // ── His decision, once made, sticks ──
     win.dlDate = '2026-08-14';
     win.dlAssignFloater('Mayra', '4th');
