@@ -552,11 +552,22 @@ module.exports = {
 
     // A split with no remainder gets no note — it would just repeat the
     // average and add noise on a day that happens to divide evenly.
-    // GRA Sections: 190 rooms / 5 ladies = 38 exactly, 130 departures /
-    // 5 ladies = 26 exactly.
-    const graBarHtml = splitHtml.match(/GRA Sections<\/span>.*?<\/div>/s);
-    t.assert(graBarHtml && /38\.00/.test(graBarHtml[0]), 'the even rooms average still shows');
-    t.assert(graBarHtml && !/\(\d+ at \d+/.test(graBarHtml[0]), 'but no split note, since 190 divides evenly across 5 ladies');
+    // GRA Sections' ladies count is 7 here, not just the day's 5 floor
+    // owners — Carlos's real ask, 2026-11-25: Ada and Mayra are both
+    // floaters genuinely working this day with no floor of their own
+    // yet, and they still split the rooms same as anyone with a floor,
+    // so dlLadiesCount counts them too (see its own comment). Isolated
+    // to its own occ/dep override, rather than reusing the shared
+    // splitHtml above (baseline 190/130 no longer divides evenly by 7),
+    // so Supervisors/Turndown's own checks above stay on the baseline
+    // they were written against.
+    win.dlSetOcc('occ', '210'); win.dlSetOcc('dep', '98');
+    win.renderDailyLineup();
+    const graEvenHtml = win.document.getElementById('dailyLineupContent').innerHTML;
+    const graEvenBar = graEvenHtml.match(/GRA Sections<\/span>.*?<\/div>/s);
+    t.assert(graEvenBar && /30\.00/.test(graEvenBar[0]), '210 rooms / 7 ladies (5 floor owners + Ada and Mayra, unplaced floaters) is exactly 30 each');
+    t.assert(graEvenBar && !/\(\d+ at \d+/.test(graEvenBar[0]), 'and no split note, since 210 divides evenly across 7');
+    win.dlSetOcc('occ', ''); win.dlSetOcc('dep', '');
 
     // The printed GRA Sections figure is its own hand-rolled line (not
     // routed through the shared each()/dlEach() helper the other roles
@@ -567,8 +578,8 @@ module.exports = {
     const realOpenGra = win.open;
     win.open = () => ({ document: { write: (h) => { graPrinted = h; }, close() {} }, focus() {}, print() {} });
     try { win.dlPrint(); } finally { win.open = realOpenGra; }
-    t.assert(/perlady">38\.20 rooms <span class="sn">\(4 at 38, 1 at 39\)/.test(graPrinted),
-      'and it shows up there too: 191 rooms / 5 ladies is not even, so the printed sheet says who gets the extra one');
+    t.assert(/perlady">27\.29 rooms <span class="sn">\(5 at 27, 2 at 28\)/.test(graPrinted),
+      'and it shows up there too: 191 rooms / 7 ladies is not even, so the printed sheet says who gets the extra one');
     win.dlSetOcc('occ', '');
 
     // ── Every floor stays on the sheet, covered or not ──

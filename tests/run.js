@@ -33,6 +33,7 @@ const cases = [
   require('./cases/training-autofill-refresh'),
   require('./cases/pdf-name-orphan-digit'),
   require('./cases/paychex-name-wrap'),
+  require('./cases/daily-lineup-ladies-count'),
   require('./cases/call-off-employee-list'),
   require('./cases/r106-departures-parse'),
   require('./cases/unifocus-houseperson'),
