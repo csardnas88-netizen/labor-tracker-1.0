@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.137.0"/>
+<meta name="app-version" content="7.139.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4935,6 +4935,16 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.139.0', date:'2026-11-24',
+    fixes:['Fixed three real reports about the Schedule Draft\'s position-to-position sync not reflecting. Julia, moved from Room Attendant to cover Houseman: her relabel never showed on the Houseman crew\'s own card. Root cause: Julia (and Rubia) are blocked from the generic sync entirely, by name, so a totally separate Laundry-only relationship wouldn\'t fight the mechanism that already owns it — but that blocked EVERY crew pairing for them, Houseman included, not just Laundry. Scoped the block to only apply when Laundry is actually in play for her that day; a Room Attendant/Houseman pairing now reconciles normally. Sandra, given a real Laundry shift directly: it never relabeled her Room Attendant cell, and vice versa — "quiero que funcione en ambas direcciones." Her pairing was built assuming Room Attendant is always the side edited; turned on the two-way version already built for exactly this (used by nobody until now), so confirming her on either crew directly now relabels the other to match. Found while checking whether this applied everywhere: Gabriela Cuevas had the same one-way gap, worse in her case — editing her Lobby cell directly used to get silently reverted back a moment later rather than just failing to relabel. Fixed the same way, minus a wrinkle: Gabriela Cuevas does have one true home crew (Room Attendant always wins when a day is ambiguous, unlike Sandra), so the fix is narrower — a direct Lobby edit is respected and now relabels Room Attendant too, without disturbing that existing default.']
+  },
+  {
+    v:'7.138.0', date:'2026-11-24',
+    fixes:['Fixed a real data-loss bug Carlos hit right after trying the new Section Owners boxes: typing names into several floors without clicking Save yet, one "disappeared out of nowhere." Root cause: a background refresh that keeps every page in sync with the cloud re-draws whichever page is open the instant ANY data changes anywhere in the app — even something completely unrelated — and Section Rotation (both the existing rotation editor and the new floor-owner boxes) is a type-several-then-click-Save form, unlike the rest of the app\'s immediate-autosave pages, so that redraw was wiping whatever hadn\'t been saved yet. Now skipped while a box on that page is actually focused; the very next refresh after Carlos clicks Save (or clicks away) still catches the page up normally.'],
+    improvements:['Redesigned the Room Attendant Section Owners boxes Carlos flagged right after trying them — "la barra... es muy larga... no apetecible visualmente." Each floor is now its own compact card in a grid instead of one long table row, so the name box is only ever as wide as its own small card. A floor with an owner picks up the app\'s own gold accent and a checkmark — a little visible win each time one gets covered — and each building shows a running "X / Y covered" count.'],
+    features:['Section Owners now has a Floaters list too — Carlos\'s same-day follow-up ask: a place for Room Attendants who don\'t own one floor but cover wherever needed. One shared list, not split by tower, and open-ended rather than a fixed count — "+ Add floater" adds a row to type into, and each row has its own remove button. Adding or removing never redraws the rest of the page, so it can\'t disturb anything else typed in at the same time.']
+  },
+  {
     v:'7.137.0', date:'2026-11-24',
     features:['Section Rotation now has a "Room Attendant Section Owners" block — Carlos\'s ask: a place to say who owns each floor\'s section, split by building (Gallery Tower, floors 2-22, and Studio Towers, floors 3-10), each with its own name box. Unlike the three roles already on this page, this one doesn\'t rotate — it\'s a stable list that only changes when Carlos changes it: type any name (a brand-new hire doesn\'t need to exist anywhere else in the app first), clear a box to mark a floor as unowned, or type over a name to replace her with whoever took the floor. Confirmed with Carlos before building: reference only, same as Houseman/Supervisor/Turndown already are on this same page — the Daily Lineup\'s GRA Sections table keeps reading the Section Assignment Excel file exactly as it does today.'],
     fixes:['Caught in this feature\'s own code review before shipping: the first save design let one device\'s push silently erase the OTHER building\'s data the instant both buildings existed in the saved record (exactly the whole-blob-overwrite class this app has hit before, on other features) — fixed with a per-floor timestamp, same idea the Schedule Draft already uses per day, so a push only ever overwrites a floor it actually changed. A second issue surfaced right behind it: the on-screen boxes never caught back up after that merge finished, so a later save — even minutes afterward, same open page — could mistake "my form still shows this blank" for "I meant to clear this" and erase a floor a teammate owns. Fixed by re-painting the boxes the moment the merge lands.']
@@ -9534,7 +9544,22 @@ function _syncFromSheetsPull(){
       if(typeof currentPage!=='undefined'&&currentPage==='schedule'){try{renderSchedule();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='reqnotebook'){try{renderReqNotebook();}catch(e){}}
       if(typeof currentPage!=='undefined'&&currentPage==='dailylineup'){try{renderDailyLineup();}catch(e){}}
-      if(typeof currentPage!=='undefined'&&currentPage==='sectionrotation'){try{renderSectionRotation();}catch(e){}}
+      /* Carlos's real report, 2026-11-24: typing names into several Section
+         Owners floor boxes without having clicked Save yet, something he'd
+         typed "disappeared out of nowhere." Root cause: unlike the Schedule
+         Draft's per-cell autosave, this page's inputs (rotation bands/names,
+         now also the floor-owner boxes) are a type-several-then-click-Save
+         form — but this handler re-renders the whole page the instant ANY
+         remote data changes anywhere in the app, even something completely
+         unrelated, wiping every box he hadn't saved yet. Skipped while focus
+         is actually inside the page's own content, so mid-typing survives;
+         the very next sync event after he clicks away (or Saves) still
+         catches the page up normally. */
+      if(typeof currentPage!=='undefined'&&currentPage==='sectionrotation'){
+        var _srcEl=document.getElementById('sectionRotationContent');
+        var _srcEditing=_srcEl&&document.activeElement&&_srcEl.contains(document.activeElement);
+        if(!_srcEditing){try{renderSectionRotation();}catch(e){}}
+      }
       try{updateTrainingBadge();}catch(e){}
     }
   });
@@ -24085,6 +24110,26 @@ function loadSectionOwners(){
    mentions every floor," and a genuine clear still beats a stale
    device's lingering value instead of losing to it. */
 function _sectionOwnerKey(building,floor){ return building+'_'+floor; }
+/* Floaters (added 2026-11-24, Carlos's ask right after the first version
+   shipped) merge the exact same way, generalized from "a fixed floor
+   range per building" to "whatever ids exist on either side" — a
+   floater has no fixed slot like a floor number does, so the merge
+   walks the UNION of ids instead of a precomputed range. Same per-id
+   _at tie-break, same reason: a genuine removal (the id simply isn't in
+   this device's current form) still has to beat a stale device's
+   lingering value for that id, not lose to it. */
+function _mergeSectionOwnerUnit(mineMap,theirsMap,mineAt,theirsAt,group){
+  var out={};
+  var ids=Object.assign({},mineMap||{},theirsMap||{});
+  Object.keys(ids).forEach(function(id){
+    var k=_sectionOwnerKey(group,id);
+    var mAt=mineAt[k]||0, tAt=theirsAt[k]||0;
+    var mVal=(mineMap||{})[id]||'', tVal=(theirsMap||{})[id]||'';
+    var val=mAt!==tAt?(mAt>tAt?mVal:tVal):(mVal||tVal);
+    if(val)out[id]=val;
+  });
+  return out;
+}
 function _mergeSectionOwners(mine,theirs){
   if(!theirs)return mine;
   var mineAt=mine._at||{}, theirsAt=theirs._at||{};
@@ -24105,6 +24150,7 @@ function _mergeSectionOwners(mine,theirs){
       if(val)out[b.key][f]=val;
     });
   });
+  out.floaters=_mergeSectionOwnerUnit(mine.floaters,theirs.floaters,mineAt,theirsAt,'floaters');
   return out;
 }
 function saveSectionOwners(cfg){
@@ -24118,6 +24164,13 @@ function saveSectionOwners(cfg){
       var curVal=(cfg[b.key]||{})[f]||'';
       if(prevVal!==curVal)at[k]=now;
     });
+  });
+  var floaterIds=Object.assign({},prev.floaters||{},cfg.floaters||{});
+  Object.keys(floaterIds).forEach(function(id){
+    var k=_sectionOwnerKey('floaters',id);
+    var prevVal=(prev.floaters||{})[id]||'';
+    var curVal=(cfg.floaters||{})[id]||'';
+    if(prevVal!==curVal)at[k]=now;
   });
   cfg._at=at;
   safeSetItem('hk_section_owners',JSON.stringify(cfg));
@@ -24135,8 +24188,14 @@ function saveSectionOwners(cfg){
        later, on the SAME still-open page) reads that floor's box as
        still blank and stamps a fresh _at for it, which then reads as a
        deliberate clear and wins over the peer's real value — caught by
-       this feature's own test before shipping. */
-    if(typeof renderSectionRotation==='function'&&document.getElementById('sectionRotationContent'))renderSectionRotation();
+       this feature's own test before shipping. But skip it while the
+       user already has focus in a box again (e.g. clicked Save, then
+       immediately kept typing the next floor while this round trip was
+       still in flight) — same reasoning as the background sync skip
+       right above this function. */
+    var _soEl=document.getElementById('sectionRotationContent');
+    var _soEditing=_soEl&&document.activeElement&&_soEl.contains(document.activeElement);
+    if(!_soEditing&&typeof renderSectionRotation==='function'&&_soEl)renderSectionRotation();
   }).catch(function(){
     try{supaPut('hk_section_owners',cfg);}catch(e){}
   });
@@ -24156,6 +24215,15 @@ function sectionOwnerRosterNames(){
   out.sort(function(a,b){return a.localeCompare(b);});
   return out;
 }
+/* Carlos's real feedback, 2026-11-24, right after trying it: a table row
+   per floor made the name box stretch the full width of the card — "muy
+   larga... un poco no apetecible visualmente." Replaced with a grid of
+   compact floor cards (same idea as the small stat tiles used elsewhere
+   in this app), so the box is only ever as wide as the card it's in,
+   never the whole page. A filled floor gets the app's own gold accent —
+   a visible little win each time one gets covered — instead of a
+   generic/semantic color that would clash with real warnings (red/
+   yellow) used elsewhere for things that actually need attention. */
 function renderSectionOwnersBlock(){
   var owners=loadSectionOwners();
   var names=sectionOwnerRosterNames();
@@ -24163,23 +24231,73 @@ function renderSectionOwnersBlock(){
   html+='<div style="background:var(--navy);padding:10px 16px;">';
   html+='<div style="font-size:13px;font-weight:700;color:var(--on-fill);">Room Attendant Section Owners</div>';
   html+='<div style="font-size:11px;color:rgba(255,255,255,.7);">Who owns each floor — reference only, the Daily Lineup keeps reading the Section Assignment file exactly as before</div></div>';
-  html+='<div style="padding:4px 16px 12px;">';
+  html+='<div style="padding:12px 16px 14px;">';
   SECTION_OWNER_BUILDINGS.forEach(function(b){
     var ownersForBuilding=owners[b.key]||{};
-    html+='<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;">'+escHtml(b.label)+'</div>';
-    html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px;">';
-    sectionOwnerFloors(b).forEach(function(f){
-      html+='<tr><td style="padding:4px 8px;border-top:1px solid var(--border);width:30%;color:var(--text2);">Floor '+f+'</td>'
-        +'<td style="padding:4px 8px;border-top:1px solid var(--border);">'
-        +'<input type="text" list="raSectionOwnerNames" data-so="'+b.key+'-'+f+'" value="'+escHtml(ownersForBuilding[f]||'')+'" placeholder="—" style="width:100%;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:inherit;"></td></tr>';
+    var floors=sectionOwnerFloors(b);
+    var ownedCount=floors.filter(function(f){return !!ownersForBuilding[f];}).length;
+    html+='<div style="display:flex;align-items:baseline;justify-content:space-between;margin:14px 0 8px;">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;">'+escHtml(b.label)+'</div>'
+      +'<div style="font-size:10px;font-weight:800;color:'+(ownedCount===floors.length?'var(--gd)':'var(--text3)')+';">'+ownedCount+' / '+floors.length+' covered</div>'
+      +'</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:8px;">';
+    floors.forEach(function(f){
+      var v=ownersForBuilding[f]||'';
+      var hasOwner=!!v;
+      html+='<div style="border:1px '+(hasOwner?'solid var(--gd)':'dashed var(--border)')+';background:'+(hasOwner?'var(--gt)':'transparent')+';border-radius:10px;padding:7px 8px;">'
+        +'<div style="font-size:9px;font-weight:800;color:'+(hasOwner?'var(--gd)':'var(--text3)')+';text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">'+(hasOwner?'&#10003; ':'')+'Floor '+f+'</div>'
+        +'<input type="text" list="raSectionOwnerNames" data-so="'+b.key+'-'+f+'" value="'+escHtml(v)+'" placeholder="No owner yet" style="width:100%;padding:5px 6px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:inherit;">'
+        +'</div>';
     });
-    html+='</table>';
+    html+='</div>';
   });
+  /* Floaters, Carlos's follow-up ask right after trying the floor boxes:
+     a place for Room Attendants who don't own one floor but cover
+     wherever needed that day. One shared list (his own call, not split
+     per tower), open-ended rather than a fixed number of slots — add or
+     remove entries freely, same spirit as the floor boxes. Each row's
+     own id (not its position in the list) is what the merge above keys
+     on, so adding/removing rows on two devices can't collide the way
+     reusing array indexes would. */
+  html+='<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin:18px 0 8px;">Floaters</div>';
+  html+='<div id="soFloatersList" style="display:flex;flex-direction:column;gap:6px;">';
+  Object.keys(owners.floaters||{}).forEach(function(id){
+    html+=_sectionOwnerFloaterRowHTML(id,owners.floaters[id]);
+  });
+  html+='</div>';
+  html+='<button type="button" class="btn btn-ghost btn-sm" onclick="sectionOwnerAddFloaterRow()" style="margin-top:8px;">+ Add floater</button>';
   html+='<datalist id="raSectionOwnerNames">'+names.map(function(n){return '<option value="'+escHtml(n)+'">';}).join('')+'</datalist>';
-  html+='<div style="font-size:11px;color:var(--text3);margin:6px 0 10px;line-height:1.5;">Type any name — a brand-new hire doesn\'t need to be anywhere else in the app first. Clear a box to mark a floor as having no owner yet.</div>';
+  html+='<div style="font-size:11px;color:var(--text3);margin:14px 0 10px;line-height:1.5;">Type any name — a brand-new hire doesn\'t need to be anywhere else in the app first. Clear a floor\'s box, or remove a floater row, to mark it empty.</div>';
   html+='<button class="btn btn-gold" onclick="saveSectionOwnersFromUI()">Save section owners</button>';
   html+='</div></div>';
   return html;
+}
+function _sectionOwnerFloaterRowHTML(id,name){
+  return '<div data-floater-row="'+id+'" style="display:flex;gap:6px;align-items:center;">'
+    +'<input type="text" list="raSectionOwnerNames" data-floater="'+id+'" value="'+escHtml(name||'')+'" placeholder="Floater name" style="flex:1;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;font-family:inherit;">'
+    +'<button type="button" onclick="sectionOwnerRemoveFloaterRow(this)" title="Remove" aria-label="Remove floater" style="border:none;background:transparent;color:var(--text3);font-size:16px;font-weight:800;cursor:pointer;padding:2px 8px;line-height:1;">&times;</button>'
+    +'</div>';
+}
+/* Both of these touch the DOM directly instead of going through a full
+   renderSectionRotation() — a re-render here would blow away whatever
+   else Carlos is mid-typing elsewhere on this same page (the exact bug
+   just fixed above for the background-sync case). A row only becomes
+   permanent — or permanently gone — once "Save section owners" is
+   clicked; until then this is purely a client-side list edit. */
+function sectionOwnerAddFloaterRow(){
+  var list=document.getElementById('soFloatersList');
+  if(!list)return;
+  var id='new'+Date.now()+Math.random().toString(36).slice(2,8);
+  var wrap=document.createElement('div');
+  wrap.innerHTML=_sectionOwnerFloaterRowHTML(id,'');
+  var row=wrap.firstChild;
+  list.appendChild(row);
+  var input=row.querySelector('[data-floater]');
+  if(input)input.focus();
+}
+function sectionOwnerRemoveFloaterRow(btn){
+  var row=btn.closest('[data-floater-row]');
+  if(row)row.remove();
 }
 function saveSectionOwnersFromUI(){
   var cfg={};
@@ -24190,6 +24308,11 @@ function saveSectionOwnersFromUI(){
       var v=elIn?elIn.value.trim():'';
       if(v)cfg[b.key][f]=v;
     });
+  });
+  cfg.floaters={};
+  document.querySelectorAll('[data-floater]').forEach(function(elIn){
+    var v=elIn.value.trim();
+    if(v)cfg.floaters[elIn.getAttribute('data-floater')]=v;
   });
   saveSectionOwners(cfg);
   showToast('Section owners saved');
@@ -27767,8 +27890,41 @@ function schedSyncAllLobbyCoverRows(SCH,dates){
    count toward Lobby's own headcount, since schedDayTotal only counts
    a number or that crew's own cover label. */
 var SCHED_LINKED_PEOPLE=[
+  /* NOT symmetric:true — tried that first (2026-11-24, same day as
+     Sandra's fix), reverted within the hour. Unlike Sandra, Gabriela
+     Cuevas genuinely has a privileged home crew (gra) — Carlos's own
+     established rule, already pinned by tests above: with no edit named
+     at all (a render-time self-heal — a day already saved with both
+     cells on '1' repairs itself on open), gra ALWAYS wins with no
+     ambiguity, no "which side is newer" needed. symmetric:true's generic
+     fallback requires a named edited side before touching anything
+     ambiguous (correct for Sandra, who has no privileged side) — turning
+     it on here silently disabled that unconditional self-heal, breaking
+     3 passing tests. The actual gap (editing her Lobby cell directly
+     got silently reverted back to ROOMS moments later) is fixed instead
+     by schedApplyLinkedPeopleForDate's own editedIsB-aware branches
+     below, which respect a direct Lobby edit without touching the
+     privileged-gra self-heal default this pair still needs. */
   {a:{crew:'gra',name:'Gabriela Cuevas'}, b:{crew:'lobby',name:'Gabriela',awayLabel:'ROOMS'}},
-  {a:{crew:'gra',name:'Sandra'}, b:{crew:'laundry',name:'Sandra'}},
+  /* Carlos's real report, 2026-11-24: confirming Sandra on a real Laundry
+     shift never relabeled her Room Attendant cell, and vice versa —
+     "quiero que funcione en ambas direcciones." This pair was built
+     assuming gra is always the side he edits (no awayLabel on either
+     side, matching the plain, one-way Gabriela Cuevas shape above), but
+     he genuinely edits BOTH sides directly for her. symmetric:true turns
+     on logic that was already built for exactly this (see
+     schedApplyLinkedPeopleForDate's own "pair.symmetric" branches,
+     unused by any pair until now) — whichever side he actually edited
+     relabels the OTHER with ITS away-label dynamically
+     (SCHED_CREW_AWAY_LABEL[src.crew]), instead of one static field that
+     only ever worked in one direction. Deliberately NOT migrated to
+     schedApplyCrossCrewSyncForDate (tried first, reverted the same
+     session): removing her from this list entirely also stops
+     _schedCleanupLinkedCoverRows from ever recognizing a genuine
+     duplicate cover row under her name again, since that sweep walks
+     this very list — this flag gets the two-way behavior without
+     losing that. */
+  {a:{crew:'gra',name:'Sandra'}, b:{crew:'laundry',name:'Sandra'}, symmetric:true},
   /* Carlos's real report, 2026-11-19: she's one Supervisor who covers
      Laundry on occasion — a different spelling per crew (her real
      Laundry row has always been plain "Susan", never "Susan A").
@@ -27949,7 +28105,7 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
         var bRowCover=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
         if(bRowCover){ bRowCover[1]='1'; bCell='1'; changed=true; }
       }
-    } else if(pair.b.awayLabel&&!aOff&&!bOff&&bCell==='1'){
+    } else if(pair.b.awayLabel&&!aOff&&!bOff&&bCell==='1'&&!editedIsB){
       /* Carlos's rule, asked for outright after having to retype it by
          hand: whenever she is working her home crew (a), the other
          crew's row must say WHERE she is rather than a plain '1', which
@@ -27957,9 +28113,28 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
          deliberate: to put her genuinely on Lobby, change the ROOM
          ATTENDANT cell (blank or OFF), not the Lobby one. A '1' left on
          Room Attendant always wins. Only a plain '1' is replaced, so a
-         PM shift or a cover label typed on the Lobby cell survives. */
+         PM shift or a cover label typed on the Lobby cell survives.
+         !editedIsB added 2026-11-24, Carlos's real report: this ran
+         unconditionally, with no notion of "this is the side he just
+         edited" — so typing a deliberate '1' directly onto the Lobby
+         cell got silently reverted back to the away-label moments
+         later. Excluded only when Lobby is the side actually edited;
+         the render-time self-heal (no edit at all) and an edit to her
+         home crell still trigger this exactly as before. */
       var bRowAway=schedRawCell(SCH,ds,pair.b.crew,pair.b.name);
       if(bRowAway){ bRowAway[1]=pair.b.awayLabel; bCell=pair.b.awayLabel; changed=true; }
+    } else if(editedIsB&&pair.b.awayLabel&&aCell==='1'&&!_schedIsUnavailable(bCell)&&!schedStatusIs(aCell,'TRAINING')){
+      /* The mirror image of the branch above, Carlos's real gap this one
+         closes: confirming her working Lobby DIRECTLY is just as much a
+         fact as a plain '1' on Room Attendant always was. A still-plain
+         '1' on Room Attendant (never anything else she deliberately put
+         there — OFF, PM, a cover label all survive untouched, same
+         restraint as every other write in this function) relabels to
+         wherever she's really working, same convention schedSetCell's
+         own redirect labels already use (SCHED_CREW_AWAY_LABEL keyed by
+         the crew she's actually on). */
+      var aRowAway=schedRawCell(SCH,ds,pair.a.crew,pair.a.name);
+      if(aRowAway){ aRowAway[1]=SCHED_CREW_AWAY_LABEL[pair.b.crew]; aCell=SCHED_CREW_AWAY_LABEL[pair.b.crew]; changed=true; }
     }
     var bothSame=(aOff===bOff);
     /* Both resting or both working, with no edit behind it: nothing to
@@ -27980,6 +28155,18 @@ function schedApplyLinkedPeopleForDate(SCH,ds,edited){
        LAUNDRY...) — the other crew goes to its awayLabel if it has one,
        otherwise to a plain working day. */
     var srcOff=_schedIsUnavailable(srcCell);
+    /* Carlos's real report, 2026-11-24 (Sandra's symmetric pair, right
+       after turning symmetric:true on): srcCell can ALREADY be a text
+       redirect confirming she's genuinely on dst's own crew (e.g. 'LAUNDRY'
+       sitting on her gra cell) — settled by the symmetric branch above (or
+       by schedSyncLaundryCoverRow entirely outside this function) before
+       this fallback ever runs. Without this guard, aOff/bOff both read
+       "working" (a redirect label isn't _schedIsUnavailable), so the
+       fallback below re-decided the relationship from scratch and
+       clobbered a cover row's correct '1' with gra's own away-label —
+       treating an already-settled redirect as if it meant "she's really
+       on gra instead." */
+    if(srcCell===SCHED_CREW_AWAY_LABEL[dst.crew])return;
     /* Symmetric pairs relabel with wherever the SOURCE side really is
        (SCHED_CREW_AWAY_LABEL[src.crew]) regardless of which side that
        turns out to be — the whole point of Carlos's ask. One-way pairs
@@ -28118,6 +28305,29 @@ function _schedCrossCrewExcluded(name){
   if(SCHED_CROSS_CREW_EXTRA_EXCLUDED.some(function(n){ return dlNorm(n)===nk; }))return true;
   return false;
 }
+/* Carlos's real report, 2026-11-24: Julia moved from Room Attendant to
+   cover Houseman (a manual relabel, not Auto-fill's own schedApplyHpOverflow,
+   which only runs during Auto-fill) never reflected on the Houseman crew's
+   own card. Root cause: _schedCrossCrewExcluded's blanket exclusion for
+   Rubia/Julia was only ever meant to protect their Laundry-cover
+   relationship (see its own comment, and the regression test it was added
+   for — schedSetCell('laundry',...,'Rubia',...) on a gra row reading
+   'LAUNDRY') — but a plain per-NAME check can't tell "this is that
+   relationship" apart from "this is a completely different crew pairing
+   for the same person," so it silently blocked EVERY pairing, Houseman
+   included. Scoped here to only defer when a 'laundry' entry is actually
+   present in this day's group for her; Sarahi/Andrea's own Lobby/Turndown
+   exclusion stays blanket via the function above — nothing has asked for
+   that one to be narrower, and unconditional is the proven-safe default
+   for a relationship nobody has needed to loosen. */
+var SCHED_CROSS_CREW_LAUNDRY_SCOPED_NAMES=['Rubia','Julia'];
+function _schedCrossCrewSyncExcludedForGroup(name,crews){
+  var nk=dlNorm(name);
+  if(SCHED_CROSS_CREW_LAUNDRY_SCOPED_NAMES.some(function(n){ return dlNorm(n)===nk; })){
+    return crews.indexOf('laundry')!==-1;
+  }
+  return _schedCrossCrewExcluded(name);
+}
 function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
   var day=SCH.days&&SCH.days[ds]; if(!day)return false;
   var byName={};
@@ -28149,7 +28359,6 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
          what this generic pass would otherwise do). Letting this pass
          also touch it would fight that mechanism over the same cell. */
       if(row[2]==='cover')return;
-      if(_schedCrossCrewExcluded(nm))return;
       /* dlNormAlias, not dlNorm — bridges known per-employee spelling
          drift between crews (Carlos's real report: "Sandra S" vs
          "Sandra S." kept several mechanisms from recognizing her as one
@@ -28157,13 +28366,18 @@ function schedApplyCrossCrewSyncForDate(SCH,ds,edited){
          needs an entry added to SCHED_NAME_ALIASES, not a new pair. */
       var nk=dlNormAlias(nm);
       if(!byName[nk])byName[nk]=[];
-      byName[nk].push({crew:b.key,row:row});
+      byName[nk].push({crew:b.key,row:row,name:nm});
     });
   });
   var changed=false;
   Object.keys(byName).forEach(function(nk){
     var entries=byName[nk];
     if(entries.length<2)return;
+    /* Moved here (from the row-collection loop above) so Rubia/Julia's
+       scoped exclusion can see every crew this name actually spans
+       today before deciding — see _schedCrossCrewSyncExcludedForGroup's
+       own comment for why a blanket per-name check isn't enough. */
+    if(_schedCrossCrewSyncExcludedForGroup(entries[0].name,entries.map(function(e){ return e.crew; })))return;
     /* Pick the authoritative entry: the one just edited, else whichever
        already reads a real absence (the safe default with no edit
        behind it — the same "absence wins" rule SCHED_LINKED_PEOPLE

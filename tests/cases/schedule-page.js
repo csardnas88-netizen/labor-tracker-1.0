@@ -1463,11 +1463,44 @@ module.exports = {
     win.schedApplyLinkedPeopleForDate(SCH21rm3, ds21[0], { crew: 'gra', name: 'Gabriela Cuevas' });
     t.eq(SCH21rm3.days[ds21[0]].lobby[0][1], 'PM', 'a PM shift on the Lobby row is a real decision and is never relabeled ROOMS');
 
-    // Sandra has no awayLabel (Room Attendant / Laundry) — both working
-    // is a legitimate state there and nothing is relabeled.
+    // ── Carlos's real report, 2026-11-24: editing her Lobby cell DIRECTLY
+    // (not the usual, documented Room-Attendant-side workflow) used to get
+    // silently reverted back to ROOMS moments later by the branch just
+    // above — it ran unconditionally, with no notion of "this is the side
+    // he just edited." Tried symmetric:true first (Sandra's own fix),
+    // reverted within the hour: Gabriela Cuevas genuinely has a privileged
+    // home crew (gra always wins on an ambiguous self-heal, pinned by
+    // SCH21rm2 above), unlike Sandra's genuinely-equal pair — turning on
+    // the generic symmetric fallback silently disabled that self-heal
+    // instead. Fixed with a narrower, editedIsB-aware pair of branches:
+    // a direct Lobby edit is no longer reverted, AND her still-plain Room
+    // Attendant '1' now relabels LOBBY to match — the actual gap Carlos
+    // hit, closed without touching the privileged-gra self-heal default
+    // this pair still needs (SCH21rm2's own assertion is unchanged by
+    // this fix, still passing). ──
+    const SCH21rmLobbyEdit = { days: { [ds21[0]]: { gra: [['Gabriela Cuevas', '1']], lobby: [['Gabriela', '1']] } } };
+    t.assert(win.schedApplyLinkedPeopleForDate(SCH21rmLobbyEdit, ds21[0], { crew: 'lobby', name: 'Gabriela' }),
+      'confirming her working Lobby directly reports a real change');
+    t.eq(SCH21rmLobbyEdit.days[ds21[0]].lobby[0][1], '1', "editing Lobby directly to a real '1' survives — it is NOT silently reverted back to ROOMS, the actual bug Carlos reported");
+    t.eq(SCH21rmLobbyEdit.days[ds21[0]].gra[0][1], 'LOBBY', "and her still-plain Room Attendant '1' relabels to LOBBY to match — the reverse direction, now working for the first time");
+
+    // ── Carlos's ask, 2026-11-24: "quiero que funcione en ambas
+    // direcciones" — Sandra's pair is now symmetric:true (a genuinely
+    // different shape from Gabriela Cuevas's privileged-home-crew pair
+    // above — she has no privileged side at all). This REPLACES the old
+    // expectation pinned here (both reading '1' used to be left alone,
+    // back when this pair had no awayLabel at all and only ever worked
+    // one-way); both working is no longer a legitimate double-booked
+    // state for her either. ──
     const SCH21rm4 = { days: { [ds21[0]]: { gra: [['Sandra', '1']], laundry: [['Sandra', '1']] } } };
-    t.assert(!win.schedApplyLinkedPeopleForDate(SCH21rm4, ds21[0], { crew: 'gra', name: 'Sandra' }), 'a linked pair with no away-label defined is left alone when both sides are working');
-    t.eq(SCH21rm4.days[ds21[0]].laundry[0][1], '1', "Sandra's Laundry row keeps its plain '1'");
+    t.assert(win.schedApplyLinkedPeopleForDate(SCH21rm4, ds21[0], { crew: 'gra', name: 'Sandra' }), 'confirming Sandra working Room Attendant now relabels her still-plain Laundry row too');
+    t.eq(SCH21rm4.days[ds21[0]].laundry[0][1], 'ROOMS', "Sandra's Laundry row is relabeled ROOMS — symmetric pairs relabel with wherever the edited side really is");
+
+    // The other direction works too — confirming her on LAUNDRY directly
+    // relabels a still-plain Room Attendant '1' to LAUNDRY.
+    const SCH21rm4b = { days: { [ds21[0]]: { gra: [['Sandra', '1']], laundry: [['Sandra', '1']] } } };
+    t.assert(win.schedApplyLinkedPeopleForDate(SCH21rm4b, ds21[0], { crew: 'laundry', name: 'Sandra' }), 'confirming Sandra working Laundry now relabels her still-plain Room Attendant row too');
+    t.eq(SCH21rm4b.days[ds21[0]].gra[0][1], 'LAUNDRY', "Sandra's Room Attendant row is relabeled LAUNDRY — the reverse direction, now that she's a symmetric pair");
 
     // Same in the other direction — editing the Lobby side back to
     // working releases Room Attendant's R-OFF.

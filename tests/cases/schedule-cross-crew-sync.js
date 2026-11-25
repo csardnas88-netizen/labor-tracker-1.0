@@ -203,5 +203,27 @@ module.exports = {
     t.eq(SCH8.days[ds].gra[0][1], 'LOBBY', "her real Lobby cover assignment on Room Attendant survives — this was the reported bug, it was getting stomped by Laundry's unrelated OFF");
     t.eq(SCH8.days[ds].lobby[0][1], '1', 'her real Lobby row stays a plain 1');
     t.eq(SCH8.days[ds].laundry[0][1], 'LOBBY', "her stale Laundry OFF releases to LOBBY too — she's confirmed working Lobby today, so an OFF elsewhere is stale leftover data, not a separate deliberate fact (same 'absence always cascades' rule every other pair already uses)");
+
+    // ── Carlos's real report, 2026-11-24: Julia moved from Room Attendant
+    // to cover Houseman (a manual relabel, not Auto-fill's own
+    // schedApplyHpOverflow, which only runs during Auto-fill) — this never
+    // reflected on the Houseman crew's own card, because Rubia/Julia's
+    // blanket exclusion above blocked EVERY crew pairing for them, not
+    // just the Laundry one it actually exists to protect. Confirming her
+    // on Houseman must now relabel her Room Attendant cell to HOUSEMAN,
+    // same as it already does for anyone else with no special exclusion. ──
+    const SCH9 = { days: { [ds]: { gra: [['Julia', '1']], hp: [['Julia', '1']] } } };
+    t.assert(win.schedApplyCrossCrewSyncForDate(SCH9, ds, { crew: 'hp', name: 'Julia' }),
+      'reports a change — Houseman confirmed, so Room Attendant must relabel');
+    t.eq(SCH9.days[ds].gra[0][1], 'HOUSEMAN', "Julia's Room Attendant cell relabels to HOUSEMAN once she's confirmed working Houseman — the exact fix for Carlos's real report");
+    t.eq(SCH9.days[ds].hp[0][1], '1', 'her real Houseman row stays a plain 1');
+
+    // ── The ORIGINAL Rubia/Julia protection (SCH7's own Laundry case,
+    // above) must still hold exactly as before — the scoped exclusion only
+    // narrows which crew PAIRINGS defer, it must not stop deferring the
+    // one pairing it still has to. ──
+    t.assert(!win.schedApplyCrossCrewSyncForDate(
+      { days: { [ds]: { gra: [['Julia', 'LAUNDRY']], laundry: [['Julia', '1', 'added']] } } }, ds, { crew: 'laundry', name: 'Julia' }),
+      "Julia's Laundry-cover relationship (an 'added' row alongside a LAUNDRY relabel) is still deferred to schedSyncLaundryCoverRow, same as before this fix");
   },
 };
