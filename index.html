@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.141.0"/>
+<meta name="app-version" content="7.142.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4935,6 +4935,10 @@ function playConfettiSound(){
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
   {
+    v:'7.142.0', date:'2026-11-25',
+    fixes:['Carlos\'s report: the Section Owners floaters he\'d just typed in (Fatima, Anabel, etc.) showed up fine on the computer where he saved them, but his laptop showed none of them — neither on the Section Rotation page nor on the Daily Lineup. Root cause: Section Owners\' own save already pulls down whatever another device saved, merges, and pushes back — but that only happens on a SAVE. A device that never saves (just opens the page, or just opens the Lineup, to look) had no way to receive a peer\'s edit at all, because the app\'s regular background sync — the one every other shared list in this app (Section Rotation\'s own rotation order, Labor Model, etc.) already rides — had simply never been taught about this particular key. It now pulls and merges Section Owners the same way those others do, so a floater typed on one device reaches every other device the normal way, not only through that one device\'s own next save.']
+  },
+  {
     v:'7.141.0', date:'2026-11-25',
     fixes:['Carlos\'s report: Sandra Silva shows as Lobby PM right on the Schedule page, but the Excel he exported still printed her working 7:00 AM onward. Two separate bugs, both real. First, the Section assignment file spells her "Sandra Silva" while the Schedule Draft spells her "Sandra S" — the export\'s AM/PM check compared the two names directly with no spelling tolerance, so it never recognized her as the same person (the Daily Lineup already had this exact alias bridged; the export never did). Second and more direct: he\'s actually been using the newer "Move to Lobby PM" per-person toggle to set her, not an Excel upload at all — but that toggle (added 2026-11-17) only ever updated what the Schedule page itself shows, and the export\'s shift-time check predates it and was never taught to look at it. It now checks the same toggle the screen already reflects, before ever falling back to the Excel — so whichever way her shift gets set, the exported time matches what he sees on screen.']
   },
@@ -8049,7 +8053,7 @@ var KEY_LABELS={
   'projects_data':'Projects','projects_deleted_ids':'Projects',
   'calloffs_data':'Call-Offs','calloffs_deleted_ids':'Call-Offs',
   'hk_roster_overrides':'Roster','hk_trainings':'Trainings',
-  'hk_labor_model':'Labor Model','hk_section_rotation':'Section Rotation','hk_staffing_actual':'Staffing',
+  'hk_labor_model':'Labor Model','hk_section_rotation':'Section Rotation','hk_section_owners':'Section Owners','hk_staffing_actual':'Staffing',
   'hk_staffing_input':'Staffing','hk_emp_dates':'Employee Dates',
   'hk_poscheck_notes':'Position Check',
   'hk_section_pin':'Section PIN',
@@ -9470,6 +9474,25 @@ function _syncFromSheetsPull(){
             updated=true;
           }
         }
+        /* Carlos's real report, 2026-11-25: a Section Owners floaters edit
+           (Letty/Maritza/Fatima/Anabel, saved on his other computer) never
+           reached this laptop — the Daily Lineup floater fix (7.140.0) only
+           ever reads whatever loadSectionOwners() finds in THIS device's own
+           localStorage, and nothing in this background pull loop knew about
+           'hk_section_owners' at all. saveSectionOwners already merges
+           remote-into-local on its own SAVE, but a device that never saves
+           (just opens the page to look, or opens the Lineup) had no other
+           way to ever pull a peer's edit down. Reuses the exact same
+           _mergeSectionOwners this key's own save path already trusts, so a
+           genuine local edit still wins a real conflict instead of a pull
+           silently clobbering it. */
+        if(key==="hk_section_owners"){
+          var remoteSO=all[key];
+          if(remoteSO&&typeof remoteSO==='object'){
+            safeSetItem('hk_section_owners',JSON.stringify(_mergeSectionOwners(loadSectionOwners(),remoteSO)));
+            updated=true;
+          }
+        }
         if(key==="hk_paychex_report"){
           var remotePR=all[key];
           if(remotePR&&remotePR.byPos){
@@ -9595,7 +9618,7 @@ function forceSyncToSupabase(){
     'project_entries_deleted_keys','hk_roster_overrides','hk_labor_model',
     'hk_staffing_actual','hk_staffing_input','hk_trainings','hk_emp_dates',
     'hk_section_pin','hk_poscheck_notes','hk_break_notes','hk_paychex_report','hk_wtc_report','hk_dl_lobby_shift',
-    'hk_section_rotation'];
+    'hk_section_rotation','hk_section_owners'];
   Object.keys(localStorage).forEach(function(k){
     try{
       if(k.indexOf("hk_month_")===0){
