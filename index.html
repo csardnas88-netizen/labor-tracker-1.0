@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.140.0"/>
+<meta name="app-version" content="7.141.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -4934,6 +4934,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.141.0', date:'2026-11-25',
+    fixes:['Carlos\'s report: Sandra Silva shows as Lobby PM right on the Schedule page, but the Excel he exported still printed her working 7:00 AM onward. Two separate bugs, both real. First, the Section assignment file spells her "Sandra Silva" while the Schedule Draft spells her "Sandra S" — the export\'s AM/PM check compared the two names directly with no spelling tolerance, so it never recognized her as the same person (the Daily Lineup already had this exact alias bridged; the export never did). Second and more direct: he\'s actually been using the newer "Move to Lobby PM" per-person toggle to set her, not an Excel upload at all — but that toggle (added 2026-11-17) only ever updated what the Schedule page itself shows, and the export\'s shift-time check predates it and was never taught to look at it. It now checks the same toggle the screen already reflects, before ever falling back to the Excel — so whichever way her shift gets set, the exported time matches what he sees on screen.']
+  },
   {
     v:'7.140.0', date:'2026-11-25',
     fixes:['Carlos\'s report: Letty, Maritza, Fátima and Anabel — all new Room Attendants he\'d just placed on the Schedule — weren\'t appearing anywhere on the Daily Lineup. Root cause: the Lineup\'s floater list was read exclusively from the uploaded Section assignment Excel file\'s own column, which a brand-new hire has no way to be on until that file gets updated and re-uploaded. The Lineup now also reads Section Rotation\'s Floaters list (the one added in 7.138.0) as a second source — so typing a new name in there is enough to get her onto the Lineup\'s floater line the same week she\'s hired, no Excel re-upload needed. Listed in both places at once, she still only prints once; and like every floater, she only shows up on days she\'s actually marked working as Room Attendant on the Schedule.']
@@ -28946,9 +28950,34 @@ function schedIsLobbyPm(name){
      actual TIME TEXT is SCHED_ANDREA_LOBBY_TIME, read directly in
      schedShiftTimeText, not this function's flat PM default. */
   if(dlNorm(name)===dlNorm('Andrea'))return true;
+  /* Carlos's real report, 2026-11-25: Sandra Silva/Sandra S shows as
+     Lobby PM on screen — he moved her there himself with the per-person
+     "Move to Lobby PM" toggle (schedToggleLobbyShiftFor, built 2026-11-17)
+     — but the exported Excel still printed her AM time. Root cause: this
+     function predates that toggle by months and was never taught about
+     it; it only ever read the Section assignment upload directly. The
+     toggle's own map (hk_dl_lobby_shift) is the actual source of truth
+     the rest of the app already shows on screen for her, so it must win
+     here too, before ever falling back to the Excel. */
+  var explicit=schedLobbyShiftMap()[dlNormAlias(name)];
+  if(explicit)return explicit==='pm';
   var sec=dlLoadSections();
   if(!sec||!sec.lobby)return false;
-  return sec.lobby.some(function(p){ return /PM/.test(p[0])&&dlNorm(p[1])===dlNorm(name); });
+  /* Carlos's real report, 2026-11-25: Sandra Silva (her spelling on the
+     Section assignment file's own Lobby PM row) is "Sandra S" on the
+     Schedule Draft — the exact spelling drift DL_ALIAS already exists
+     to bridge for the Daily Lineup, but this check never used that
+     table at all, so a raw dlNorm match against her never fired and
+     she fell through to Lobby's flat AM default in the exported Excel.
+     Checking the alias both ways — Section spelling resolved through
+     DL_ALIAS, same as dlLook already does — fixes her without widening
+     this into a fuzzy match that could wrongly catch someone else. */
+  return sec.lobby.some(function(p){
+    if(!/PM/.test(p[0]))return false;
+    if(dlNorm(p[1])===dlNorm(name))return true;
+    var alias=DL_ALIAS[dlNorm(p[1])];
+    return !!(alias&&dlNorm(alias)===dlNorm(name));
+  });
 }
 function schedShiftTimeText(bk,ds,name){
   /* Paty (Turndown, and covering PM Houseman on Yesenia's days off)

@@ -1190,6 +1190,41 @@ module.exports = {
     t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Someone Not In Sections'), '7:00 AM - 3:30 PM',
       'someone with no match at all in Section Assignments falls back to the plain AM lobby time, same as before this fix');
 
+    // ── Carlos's real report, 2026-11-25: Sandra Silva/Sandra S shows as
+    // Lobby PM on screen, but the exported Excel still printed her AM
+    // time. Two distinct bugs, both real:
+    // 1) The Section Assignments check above never resolved the
+    //    DL_ALIAS spelling drift between the upload ("Sandra Silva") and
+    //    the Schedule Draft's own spelling ("Sandra S") — a raw dlNorm
+    //    match never fired for her. ──
+    win.localStorage.setItem('hk_dl_sections', JSON.stringify({
+      lobby: [['Lobby AM', 'Maria M'], ['Lobby PM', 'Sandra Silva']]
+    }));
+    t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Sandra S'), '2:30 PM - 11:00 PM',
+      "Sandra Silva on the Section file resolves, through DL_ALIAS, to the Schedule's own 'Sandra S' — her export time is PM's, not the AM default");
+
+    // 2) Separately: the per-person "Move to Lobby PM" toggle Carlos
+    // actually used (schedToggleLobbyShiftFor, hk_dl_lobby_shift) predates
+    // neither — it was built months later and this check was never taught
+    // about it, so it kept reading only the Excel even once he'd moved
+    // someone with the toggle instead. The toggle's own map must win,
+    // since it's the same source of truth already shown on screen. ──
+    win.localStorage.setItem('hk_dl_sections', JSON.stringify({ lobby: [] })); // no Excel entry for her at all
+    win.schedSetLobbyShift('Sandra S', 'pm');
+    t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Sandra S'), '2:30 PM - 11:00 PM',
+      'the explicit on-screen toggle alone is enough to get her PM time in the export, with no Section Assignments entry needed at all');
+    win.schedSetLobbyShift('Sandra S', 'am');
+    t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Sandra S'), '7:00 AM - 3:30 PM',
+      'and toggling her back to AM on screen is reflected in the export too — the toggle wins in either direction');
+    // The toggle also wins OVER a stale/contradicting Excel entry, not
+    // just when the Excel is silent.
+    win.localStorage.setItem('hk_dl_sections', JSON.stringify({
+      lobby: [['Lobby PM', 'Sandra Silva']]
+    }));
+    t.eq(win.schedShiftTimeText('lobby', ds21[3], 'Sandra S'), '7:00 AM - 3:30 PM',
+      "his on-screen 'AM' toggle overrides even an Excel upload that still lists her as Lobby PM");
+    win.localStorage.removeItem('hk_dl_lobby_shift');
+
     // ── Carlos's real report, 2026-09-28: Andrea's exported Lobby shift
     // printed 7:00 AM - 3:30 PM (the AM default) instead of her real PM
     // time — her Lobby row only ever exists as a day-specific cover for
