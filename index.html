@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Labor"/>
-<meta name="app-version" content="7.142.0"/>
+<meta name="app-version" content="7.143.0"/>
 <meta name="theme-color" content="#1B2230"/>
 <title>Labor</title>
 <link rel="manifest" href="./manifest.json"/>
@@ -3464,6 +3464,42 @@ function parsePaychex(items){
           }
         }
         
+        /* Trailing name wrap: Carlos's real report, 2026-11-25 (Ramirez
+           Gonzalez — and Casia Chavez, Ana Leticia the same day). The
+           opposite of Case 3 above: the ID row already carries the
+           numbers AND, often, the first word or two of the name — but a
+           long name still overflows the column onto the NEXT line, which
+           then has no ID and no numbers of its own. Nothing downstream
+           ever revisits this row's name once it's built, so without this,
+           that overflow is silently dropped — worst case (nothing at all
+           follows the comma on the ID row, as in Ramirez Gonzalez's real
+           case) the employee's entire first name goes missing, not just
+           part of it. Only ever looks ONE row past wherever the numbers
+           actually were (li may have already moved in the lookahead just
+           above), and only claims it when that row has no ID/numbers of
+           its own and isn't a total/header/dept-continuation line — the
+           same shape pendingLines already screens for on the other side
+           of this wrap. */
+        if(li+1<block.length){
+          var trailRow=block[li+1], trailTxt=trailRow.text;
+          if(!trailTxt.match(EID)&&!isGrand(trailTxt)&&!isTotal(trailTxt)&&!isHeader(trailTxt)&&!extractNums(trailRow)){
+            var trailName=cleanName(trailTxt);
+            var isTrailDeptCont=/\b(housekeeping|supervisor|attendant|laundry|turndown|banquet|public|area)\b/i.test(trailName)
+              &&trailName.split(/\s+/).length<=3;
+            if(trailName.length>1&&!isTrailDeptCont){
+              /* Keep the PDF's own "Last, First" comma: if the comma that
+                 separated them landed exactly at the end of the ID row
+                 (Ramirez Gonzalez's real case — nothing at all follows it
+                 there), cleanName's own trailing-punctuation strip above
+                 already removed it, so it has to be put back here rather
+                 than just space-joined into "Ramirez Gonzalez Fatima". */
+              var needsComma=fullName.indexOf(',')===-1&&rowTxt.indexOf(',')!==-1;
+              fullName=(fullName+(needsComma?', ':' ')+trailName).replace(/\s+/g," ").trim();
+              li++;
+            }
+          }
+        }
+
         /* Validate */
         if(!h){li++;continue;}
         if(h.paid>18||h.paid<0){li++;continue;}
@@ -4934,6 +4970,10 @@ function playConfettiSound(){
    can see, in plain language, what changed.
    ══════════════════════════════════════════════════════ */
 var CHANGELOG=[
+  {
+    v:'7.143.0', date:'2026-11-25',
+    fixes:['Carlos\'s report: the first time two new Room Attendants (Casia Chavez and Ramirez Gonzalez) showed up in the Labor Distribution Report, the app only picked up their two surnames — no first name at all. Confirmed against the actual PDF: a long name wraps onto a second line that carries no ID and no hours of its own, with the ID row itself holding the numbers plus, sometimes, the first word of the name. The parser only ever looked BACKWARD for a name that wraps before its ID row (the far more common case) — never forward for one that overflows after it. It now also checks the line right after, worst case (nothing at all follows the comma on the ID row, Ramirez Gonzalez\'s exact case) recovering a first name that used to go missing entirely. This fixes how the Labor Distribution Report itself reads a new employee\'s name going forward — it has no effect on Training Hours, Roster, or the Schedule, which Carlos already keeps first-name-only there on purpose, for privacy.']
+  },
   {
     v:'7.142.0', date:'2026-11-25',
     fixes:['Carlos\'s report: the Section Owners floaters he\'d just typed in (Fatima, Anabel, etc.) showed up fine on the computer where he saved them, but his laptop showed none of them — neither on the Section Rotation page nor on the Daily Lineup. Root cause: Section Owners\' own save already pulls down whatever another device saved, merges, and pushes back — but that only happens on a SAVE. A device that never saves (just opens the page, or just opens the Lineup, to look) had no way to receive a peer\'s edit at all, because the app\'s regular background sync — the one every other shared list in this app (Section Rotation\'s own rotation order, Labor Model, etc.) already rides — had simply never been taught about this particular key. It now pulls and merges Section Owners the same way those others do, so a floater typed on one device reaches every other device the normal way, not only through that one device\'s own next save.']

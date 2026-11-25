@@ -32,6 +32,7 @@ const cases = [
   require('./cases/no-self-signup'),
   require('./cases/training-autofill-refresh'),
   require('./cases/pdf-name-orphan-digit'),
+  require('./cases/paychex-name-wrap'),
   require('./cases/call-off-employee-list'),
   require('./cases/r106-departures-parse'),
   require('./cases/unifocus-houseperson'),
